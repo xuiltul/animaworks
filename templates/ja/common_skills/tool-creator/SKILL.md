@@ -272,7 +272,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 
 1. `core/tools/{name}.py` を追加（`_` 始まりはスキャン対象外）。
 2. `TOOL_MODULES` は `discover_core_tools()` で自動登録。`core/tools/__init__.py` の手動リストは不要。
-3. **Mode S（MCP）** に載せるのは `core/mcp/server.py` の `_EXPOSED_TOOL_NAMES` のみ（厳選）。2026-03 時点の例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`, `completion_gate`（最終回答前の自己検証）。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
+3. **Mode S（MCP）** に載せるのは `core/mcp/server.py` の `_EXPOSED_TOOL_NAMES` のみ（厳選）。2026-03 時点の例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
 4. テストを `tests/` に追加。スキーマやリファレンス文書を自動生成している場合は `scripts/generate_reference.py` の対象も確認。
 5. 破壊的操作は `gated: True` と permissions 側の説明更新を検討。
 

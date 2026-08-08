@@ -40,8 +40,6 @@
 - 새 스킬을 만들기 전에 `read_memory_file(path="common_skills/skill-creator/SKILL.md")`를 읽기
 - 기존 스킬 문서·CLI 매뉴얼은 **read_memory_file**로 카탈로그 경로를 지정해 읽기
 
-### 완료 전 검증
-- **completion_gate**: 최종 응답을 제공하기 전에 이 도구를 호출하세요. 사용한 스킬/절차는 `applied_skill_refs` / `applied_procedure_refs`에 넣고, 재사용 가능 능력의 생성 판단은 `skill_creation`에 넣으세요.
 
 ### 기타 CLI 도구
 슈퍼바이저 관리, vault, 채널 관리, 백그라운드 태스크, 전체 외부 도구:

@@ -40,8 +40,6 @@
 - 新規スキル作成前に `read_memory_file(path="common_skills/skill-creator/SKILL.md")` を読む
 - 既存のスキル文書・CLIマニュアルは **read_memory_file** でカタログのパスを指定して読む
 
-### Pre-Completion Verification
-- **completion_gate**: 最終回答を出す前にこのツールを呼んでください。完了前チェックリストが返されます。
 
 ### Other Tools via CLI
 スーパーバイザー管理、vault、チャネル管理、バックグラウンドタスク、全外部ツール:

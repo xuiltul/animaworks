@@ -115,13 +115,6 @@ DOC_SOURCE_MAP: dict[str, list[str]] = {
     "common_knowledge/operations/task-board-guide.md": [
         "server/routes/tasks.py",
     ],
-    "common_knowledge/operations/completion-gate-guide.md": [
-        "core/execution/_completion_gate.py",
-        "core/execution/_sdk_hooks.py",
-        "core/execution/_sdk_options.py",
-        "core/tooling/schemas/completion_gate.py",
-        "core/i18n/strings/tooling.py",
-    ],
     "reference/operations/mode-s-auth-guide.md": [
         "core/execution/agent_sdk.py",
         "core/execution/_sdk_security.py",

@@ -57,13 +57,6 @@ async def _collect_events(async_gen) -> list[dict[str, Any]]:
     return events
 
 
-@pytest.fixture(autouse=True)
-def _bypass_completion_gate_for_streaming_tests():
-    """Most streaming tests are not about completion_gate retry behavior."""
-    with patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False):
-        yield
-
-
 def _make_llm_response(content: str = "hello") -> MagicMock:
     """Build a fake LiteLLM response object with message content."""
     msg = MagicMock()
@@ -637,146 +630,6 @@ class TestA2TokenLevelTextOnly:
         assert done[0]["result_message"] is None
 
 
-class TestA2CompletionGateRetry:
-    """The gate retry must not drop the answer written before the reminder."""
-
-    async def test_token_level_retry_keeps_pre_gate_answer(self, litellm_executor) -> None:
-        tracker = MagicMock(spec=ContextTracker)
-
-        call_count = 0
-
-        async def mock_acompletion(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _fake_async_stream(
-                    [
-                        FakeStreamChunk(text="first answer"),
-                        FakeStreamChunk(finish_reason="stop"),
-                    ]
-                )
-            return _fake_async_stream(
-                [
-                    FakeStreamChunk(text="final answer"),
-                    FakeStreamChunk(finish_reason="stop"),
-                ]
-            )
-
-        with (
-            patch("litellm.acompletion", side_effect=mock_acompletion),
-            patch.object(litellm_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution._completion_gate.gate_marker_exists", side_effect=[False, True]),
-        ):
-            events = await _collect_events(
-                litellm_executor.execute_streaming(
-                    system_prompt="sys",
-                    prompt="Hi",
-                    tracker=tracker,
-                    trigger="message:tester",
-                )
-            )
-
-        done = [e for e in events if e["type"] == "done"]
-        assert len(done) == 1
-        assert done[0]["full_text"] == "first answer\n\nfinal answer"
-
-    async def test_ollama_retry_keeps_pre_gate_answer(self, ollama_executor) -> None:
-        tracker = MagicMock(spec=ContextTracker)
-
-        mock_acompletion = AsyncMock(
-            side_effect=[
-                _make_litellm_a2_response(content="first answer", tool_calls=None),
-                _make_litellm_a2_response(content="final answer", tool_calls=None),
-            ],
-        )
-
-        with (
-            patch("litellm.acompletion", mock_acompletion),
-            patch.object(ollama_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution._completion_gate.gate_marker_exists", side_effect=[False, True]),
-        ):
-            events = await _collect_events(
-                ollama_executor.execute_streaming(
-                    system_prompt="sys",
-                    prompt="Hi",
-                    tracker=tracker,
-                    trigger="message:tester",
-                )
-            )
-
-        done = [e for e in events if e["type"] == "done"]
-        assert len(done) == 1
-        assert done[0]["full_text"] == "first answer\n\nfinal answer"
-
-    async def test_token_level_empty_retry_restores_pre_gate_answer(self, litellm_executor) -> None:
-        """An empty gate retry must not discard the answer written before it."""
-        tracker = MagicMock(spec=ContextTracker)
-
-        call_count = 0
-
-        async def mock_acompletion(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _fake_async_stream(
-                    [
-                        FakeStreamChunk(text="complete answer"),
-                        FakeStreamChunk(finish_reason="stop"),
-                    ]
-                )
-            return _fake_async_stream([FakeStreamChunk(finish_reason="length")])
-
-        with (
-            patch("litellm.acompletion", side_effect=mock_acompletion),
-            patch.object(litellm_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution._completion_gate.gate_marker_exists", side_effect=[False, True]),
-        ):
-            events = await _collect_events(
-                litellm_executor.execute_streaming(
-                    system_prompt="sys",
-                    prompt="Hi",
-                    tracker=tracker,
-                    trigger="message:tester",
-                )
-            )
-
-        done = [e for e in events if e["type"] == "done"]
-        assert len(done) == 1
-        assert done[0]["full_text"] == "complete answer"
-
-    async def test_ollama_empty_retry_restores_pre_gate_answer(self, ollama_executor) -> None:
-        tracker = MagicMock(spec=ContextTracker)
-
-        mock_acompletion = AsyncMock(
-            side_effect=[
-                _make_litellm_a2_response(content="complete answer", tool_calls=None),
-                _make_litellm_a2_response(content="", tool_calls=None),
-            ],
-        )
-
-        with (
-            patch("litellm.acompletion", mock_acompletion),
-            patch.object(ollama_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution._completion_gate.gate_marker_exists", side_effect=[False, True]),
-        ):
-            events = await _collect_events(
-                ollama_executor.execute_streaming(
-                    system_prompt="sys",
-                    prompt="Hi",
-                    tracker=tracker,
-                    trigger="message:tester",
-                )
-            )
-
-        done = [e for e in events if e["type"] == "done"]
-        assert len(done) == 1
-        assert done[0]["full_text"] == "complete answer"
-
-
 class TestA2TokenLevelWithToolCall:
     """Token-level streaming with tool call deltas."""
 
@@ -900,7 +753,6 @@ class TestA2StreamingRunawayGuard:
             patch("litellm.acompletion", side_effect=mock_acompletion),
             patch.object(litellm_executor, "_preflight_clamp", return_value={}),
             patch.object(litellm_executor, "_process_streaming_tool_calls", mock_process),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False),
         ):
             events = await _collect_events(
                 litellm_executor.execute_streaming(
@@ -945,7 +797,6 @@ class TestA2StreamingRunawayGuard:
             patch("litellm.acompletion", side_effect=mock_acompletion),
             patch.object(litellm_executor, "_preflight_clamp", return_value={}),
             patch.object(litellm_executor, "_process_streaming_tool_calls", mock_process),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False),
         ):
             events = await _collect_events(
                 litellm_executor.execute_streaming(
@@ -997,7 +848,6 @@ class TestA2StreamingRunawayGuard:
             patch.object(ollama_executor, "_preflight_clamp", return_value={}),
             patch.object(ollama_executor, "_process_streaming_tool_calls", mock_process),
             patch("core.execution._litellm_streaming.RunawayGuard", SmallWindowGuard),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1036,7 +886,6 @@ class TestA2StreamingRunawayGuard:
             patch("litellm.acompletion", mock_acompletion),
             patch.object(ollama_executor, "_preflight_clamp", return_value={}),
             patch.object(ollama_executor, "_process_streaming_tool_calls", mock_process),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1052,7 +901,7 @@ class TestA2StreamingRunawayGuard:
         assert mock_acompletion.call_count == 202
         assert process_count == 201
 
-    async def test_runaway_grace_answer_bypasses_completion_gate(self, ollama_executor) -> None:
+    async def test_runaway_grace_answer_returns_final(self, ollama_executor) -> None:
         tracker = MagicMock(spec=ContextTracker)
         repeated = _make_litellm_a2_response(
             content="",
@@ -1063,8 +912,6 @@ class TestA2StreamingRunawayGuard:
         with (
             patch("litellm.acompletion", mock_acompletion),
             patch.object(ollama_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution._completion_gate.gate_marker_exists", return_value=False),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1087,7 +934,6 @@ class TestA2StreamingRunawayGuard:
         with (
             patch("litellm.acompletion", mock_acompletion),
             patch.object(ollama_executor, "_preflight_clamp", return_value={}),
-            patch("core.execution._completion_gate.completion_gate_applies_to_trigger", return_value=False),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1152,10 +998,6 @@ class TestA2IterationLevelTextOnly:
         with (
             patch("litellm.acompletion", mock_acompletion),
             patch.object(ollama_executor, "_preflight_clamp", return_value={}),
-            patch(
-                "core.execution._completion_gate.completion_gate_applies_to_trigger",
-                return_value=False,
-            ),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1217,10 +1059,6 @@ class TestA2IterationLevelWithToolCall:
                 "_execute_tool_call",
                 side_effect=mock_execute_tool_call,
             ),
-            patch(
-                "core.execution._completion_gate.completion_gate_applies_to_trigger",
-                return_value=False,
-            ),
         ):
             events = await _collect_events(
                 ollama_executor.execute_streaming(
@@ -1272,10 +1110,6 @@ class TestA2IterationLevelWithToolCall:
                 ollama_executor,
                 "_execute_tool_call",
                 side_effect=mock_execute_tool_call,
-            ),
-            patch(
-                "core.execution._completion_gate.completion_gate_applies_to_trigger",
-                return_value=False,
             ),
         ):
             events = await _collect_events(

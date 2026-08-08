@@ -258,10 +258,10 @@ def join_answer_parts(parts: Iterable[str]) -> str:
 
     A single reply is often written across several assistant turns: text
     emitted alongside a tool call, then the final turn's text.  When a forced
-    retry (e.g. the completion gate) makes the model restate its answer, the
-    same paragraphs arrive twice, so paragraphs already present are skipped.
-    Turns that end with a section rule would otherwise pile those rules up at
-    the end of the merged answer, so trailing rules are dropped.
+    retry makes the model restate its answer, the same paragraphs arrive
+    twice, so paragraphs already present are skipped.  Turns that end with a
+    section rule would otherwise pile those rules up at the end of the merged
+    answer, so trailing rules are dropped.
     """
     seen: set[str] = set()
     merged: list[str] = []

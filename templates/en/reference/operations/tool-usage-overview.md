@@ -25,7 +25,7 @@ Tools are organized in three layers:
 
 Only names listed in `_EXPOSED_TOOL_NAMES` in `core/mcp/server.py` are passed through MCP. The canonical source is the set definition in that file.
 
-`search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `completion_gate`
+`search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`
 
 Schemas on MCP are **only** the above (`_build_mcp_tools` filters with `_EXPOSED_TOOL_NAMES`). Other supervisor-style tools such as `org_dashboard` are **not** MCP-exposed (in Mode S they use other routes such as Claude Code tools or Bash).
 
@@ -125,11 +125,6 @@ The following summarizes tools handled directly by `ToolHandler` (some are condi
 | **create_skill** | Create `skills/{name}/SKILL.md` or `common_skills/{name}/SKILL.md`; can also set `allowed_tools`, trust/provenance/category/policy/routing metadata when useful |
 | **refresh_tools** / **share_tool** | Reload/share personal or common tools |
 
-### Pre-completion verification
-
-| Tool | Description |
-|------|-------------|
-| **completion_gate** | Self-verification checklist before the final answer. In Mode S the Stop hook auto-injects it; in Mode A a retry is forced if not called. Disabled for `heartbeat` and `inbox:*` triggers |
 
 Load full skill and procedure text with **`read_memory_file`** using the relative paths shown in the system prompt skill catalog (e.g. `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`).
 Before authoring a new skill, read **`read_memory_file(path="common_skills/skill-creator/SKILL.md")`** and use `create_skill` rather than writing only a flat `skills/foo.md` file.

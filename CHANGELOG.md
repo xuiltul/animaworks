@@ -7,6 +7,10 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- `completion_gate` ツールと enforcement 機構を全面削除（Mode A リトライ注入・Mode S Stop フック・マーカー IPC・関連テンプレート/テスト）
+
 ## [0.11.0] - 2026-07-28
 
 ### Added

@@ -49,7 +49,6 @@ After reading, use the index below to find details on each topic.
 | Problem | Reference |
 |---------|-----------|
 | Don't know how to manage tasks | `reference/operations/task-management.md` |
-| Want to know how completion_gate verification works | `operations/completion-gate-guide.md` |
 | Want to use the task board (human-facing dashboard) | `operations/task-board-guide.md` |
 | Don't know how to configure Heartbeat or cron | `reference/operations/heartbeat-cron-guide.md` |
 | Want pre-action checks before sending, posting, or memory writes | `operations/action-rules-guide.md` |
@@ -154,7 +153,6 @@ After reading, use the index below to find details on each topic.
 | `heartbeat-cron-guide.md` | Scheduling and running Heartbeat and cron (how Heartbeat works, cron definitions, self-updates) |
 | `action-rules-guide.md` | Action rules (`[ACTION-RULE]`, `trigger_tools`, pre-send checks, required `read_memory_file`) |
 | `tool-usage-overview.md` | Tool usage overview (S/C/D/G/A/B mode tool sets, internal/external tools, how to call them) |
-| `completion-gate-guide.md` | Pre-completion verification guide (completion_gate concepts, per-mode behavior, trigger rules) |
 | `background-tasks.md` | Background task guide (using submit, when to use it, how to get results) |
 | `workspace-guide.md` | Workspace guide (concept, registration, tool usage, troubleshooting) |
 | `model-guide.md` | → Moved to `reference/operations/model-guide.md`. Model selection and configuration |
@@ -259,7 +257,6 @@ Per-role templates under `team-design/infrastructure/{director,monitor}/`: `inje
 | task, current_state, pending, progress, priority | `reference/operations/task-management.md` |
 | task queue, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
 | task board, dashboard, human-facing | `operations/task-board-guide.md` |
-| completion_gate, pre-completion verification, Stop hook | `operations/completion-gate-guide.md` |
 | config, status.json, SSoT, reload, settings | `reference/operations/project-setup.md` |
 | Heartbeat, heartbeat, periodic check | `reference/operations/heartbeat-cron-guide.md` |
 | cron, schedule, scheduled task | `reference/operations/heartbeat-cron-guide.md` |

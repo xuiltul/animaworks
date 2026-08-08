@@ -44,7 +44,6 @@ const TOOL_ACTIVITY_LABELS = [
   [/delegate_task/, "委任手配中"],
   [/search_memory|read_memory/, "調べ物中"],
   [/write_memory|archive_memory/, "記録整理中"],
-  [/completion_gate/, "仕上げ確認中"],
   [/report_knowledge|report_procedure/, "知識整理中"],
   [/list_tasks|update_task|^goal$/, "タスク管理中"],
   [/skill/, "スキル整備中"],

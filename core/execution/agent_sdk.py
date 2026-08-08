@@ -19,7 +19,7 @@ Implementation is split across submodules for readability:
   - ``_sdk_security``: Security checks and output size guards
   - ``_sdk_session``: Session persistence, SDK input helpers, cleanup
   - ``_sdk_stream``: Tool logging/sanitization, stream block processing
-  - ``_sdk_hooks``: PreToolUse/PreCompact/Stop hooks, subordinate management
+  - ``_sdk_hooks``: PreToolUse/PreCompact hooks, subordinate management
   - ``_sdk_options``: SDK option building (Mixin)
   - ``_sdk_interrupt``: Graceful interrupt helpers
 """
@@ -48,14 +48,10 @@ from core.execution._sdk_patch import apply_sdk_transport_patch
 apply_sdk_transport_patch()
 
 # ── Re-exports from submodules (backward compatibility) ──────
-from core.execution._completion_gate import (  # noqa: F401
-    cleanup_gate_marker as _cleanup_gate_marker,
-)
 from core.execution._sdk_hooks import (  # noqa: F401
     _build_post_tool_hook,
     _build_pre_compact_hook,
     _build_pre_tool_hook,
-    _build_stop_hook,
     _cache_subordinate_paths,
     _read_status_json,
 )
@@ -447,7 +443,6 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         self._rate_guard_preflight()
         _cw = self._resolve_cw()
         session_stats = self._init_session_stats(system_prompt, prompt, trigger)
-        _cleanup_gate_marker(self._anima_dir)
         session_type = _resolve_session_type(trigger)
         if session_type in _RESUMABLE_SESSION_TYPES:
             session_id_to_resume = _load_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -594,7 +589,6 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         self._rate_guard_preflight()
         _cw = self._resolve_cw()
         session_stats = self._init_session_stats(system_prompt, prompt, trigger)
-        _cleanup_gate_marker(self._anima_dir)
         session_type = _resolve_session_type(trigger)
         if session_type in _RESUMABLE_SESSION_TYPES:
             session_id_to_resume = _load_session_id(self._anima_dir, session_type, thread_id=thread_id)

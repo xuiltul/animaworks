@@ -40,8 +40,6 @@ You have a unified tool set available across all modes.
 - Before creating a new skill, read `read_memory_file(path="common_skills/skill-creator/SKILL.md")`
 - For existing skill docs and CLI manuals, use **read_memory_file** with paths from the catalog
 
-### Pre-Completion Verification
-- **completion_gate**: Call this tool before providing your final answer. Include applied skills/procedures in `applied_skill_refs` / `applied_procedure_refs`, and report reusable-capability creation status in `skill_creation`.
 
 ### Other Tools via CLI
 For supervisor management, vault, channel management, background tasks, and all external tools:

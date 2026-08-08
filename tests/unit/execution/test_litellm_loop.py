@@ -13,8 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
 from core.memory.shortterm import ShortTermMemory
 from core.prompt.context import ContextTracker
 from core.schemas import ModelConfig
@@ -24,15 +22,7 @@ from tests.helpers.mocks import (
     make_tool_call,
 )
 
-
-@pytest.fixture(autouse=True)
-def _bypass_completion_gate():
-    """Disable completion_gate enforcement so tests don't need extra mock responses."""
-    with patch(
-        "core.execution.litellm_loop.completion_gate_applies_to_trigger",
-        return_value=False,
-    ):
-        yield
+pytestmark = pytest.mark.asyncio
 
 
 # ── litellm sys.modules mock ─────────────────────────────────

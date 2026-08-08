@@ -269,7 +269,5 @@ class TestBaseToolCount:
         assert "set_skill_lifecycle" in names
         # AW-essential: planning
         assert "todo_write" in names
-        # AW-essential: completion gate
-        assert "completion_gate" in names
         # Mode B only — must NOT be in Mode A
         assert "use_tool" not in names

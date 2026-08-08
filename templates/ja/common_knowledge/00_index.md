@@ -49,7 +49,6 @@ Heartbeat / Cron / machine / チーム設計 / 記憶 / コスト最適化の要
 | 困りごと | 参照先 |
 |---------|--------|
 | タスク管理の方法がわからない | `reference/operations/task-management.md` |
-| 完了前検証（completion_gate）の仕組みを知りたい | `operations/completion-gate-guide.md` |
 | タスクボード（人間向けダッシュボード）を使いたい | `operations/task-board-guide.md` |
 | ハートビートやcronの設定がわからない | `reference/operations/heartbeat-cron-guide.md` |
 | 送信・投稿・記憶書き込み前に確認ルールを入れたい | `operations/action-rules-guide.md` |
@@ -154,7 +153,6 @@ Heartbeat / Cron / machine / チーム設計 / 記憶 / コスト最適化の要
 | `heartbeat-cron-guide.md` | 定期実行の設定と運用（ハートビートの仕組み、cron タスク定義、自己更新） |
 | `action-rules-guide.md` | アクションルール（`[ACTION-RULE]`、`trigger_tools`、送信前確認、必須 `read_memory_file`） |
 | `tool-usage-overview.md` | ツール使用の概要（S/C/D/G/A/B モード別のツール体系、内部/外部ツール、呼び出し方法） |
-| `completion-gate-guide.md` | 完了前検証ガイド（completion_gate の概念・モード別動作・トリガー適用ルール） |
 | `background-tasks.md` | バックグラウンドタスク実行ガイド（submit の使い方、判断基準、結果の受け取り方） |
 | `workspace-guide.md` | ワークスペースガイド（概念・登録・ツールでの使用・トラブルシューティング） |
 | `model-guide.md` | → `reference/operations/model-guide.md` に移動。モデル選択・設定ガイド |
@@ -259,7 +257,6 @@ Heartbeat / Cron / machine / チーム設計 / 記憶 / コスト最適化の要
 | タスク, current_state, pending, 進捗, 優先順位 | `reference/operations/task-management.md` |
 | タスクキュー, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
 | タスクボード, ダッシュボード, 人間向け | `operations/task-board-guide.md` |
-| completion_gate, 完了検証, 事前チェック, Stop hook | `operations/completion-gate-guide.md` |
 | 設定, config, status.json, SSoT, reload | `reference/operations/project-setup.md` |
 | ハートビート, heartbeat, 定期チェック | `reference/operations/heartbeat-cron-guide.md` |
 | cron, スケジュール, 定時タスク | `reference/operations/heartbeat-cron-guide.md` |

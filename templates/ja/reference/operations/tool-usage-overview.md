@@ -25,7 +25,7 @@ description: "ツール体系の全体像と使い方ガイド"
 
 `core/mcp/server.py` の `_EXPOSED_TOOL_NAMES` に列挙されたものだけが MCP 経由で渡ります。一次情報は同ファイルの集合定義です。
 
-`search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `completion_gate`
+`search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`
 
 MCP に載るスキーマは上記 **のみ**（`_build_mcp_tools` が `_EXPOSED_TOOL_NAMES` でフィルタ）。`org_dashboard` 等のその他スーパーバイザー系は **MCP 公開対象外**（Mode S では Claude Code 側ツールや Bash 経由など別ルート）。
 
@@ -126,11 +126,6 @@ Mode A/B の統合スキーマでは **PascalCase 名**です。`ToolHandler` �
 | **create_skill** | `skills/{name}/SKILL.md` または `common_skills/{name}/SKILL.md` を作成。`allowed_tools`、信頼・出自・分類・policy・routing補助メタデータも必要に応じて設定可能 |
 | **refresh_tools** / **share_tool** | 個人/共通ツールの再読込・共有 |
 
-### 完了前検証
-
-| ツール | 説明 |
-|--------|------|
-| **completion_gate** | 最終回答前の自己検証チェックリスト。Mode Sでは Stop hookが自動注入、Mode Aでは未呼び出し時にリトライ強制。`heartbeat`・`inbox:*` トリガーでは無効 |
 
 スキル本文・手続きの全文は **`read_memory_file`** で相対パスを指定して読み込む（システムプロンプトのスキルカタログに `skills/.../SKILL.md`, `common_skills/.../SKILL.md`, `procedures/...` 等のパスが示される）。
 新規スキルを作る前に **`read_memory_file(path="common_skills/skill-creator/SKILL.md")`** を読み、`write_memory_file` で `skills/foo.md` だけを作らず `create_skill` を使う。

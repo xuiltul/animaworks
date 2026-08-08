@@ -30,12 +30,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.exceptions import ConfigError, LLMAPIError, ToolExecutionError  # noqa: F401
-from core.execution._completion_gate import (
-    cleanup_gate_marker,
-    completion_gate_applies_to_trigger,
-    gate_marker_exists,
-    is_gate_only_turn,
-)
 from core.execution._litellm_context import ContextMixin, _extract_tool_uses_from_messages
 from core.execution._litellm_streaming import StreamingMixin
 
@@ -196,8 +190,6 @@ class LiteLLMExecutor(
 
         chain_count = 0
         usage_acc = TokenUsage()
-        cleanup_gate_marker(self._anima_dir)
-        _gate_attempted = False
         _empty_tracker = EmptyResponseTracker()
 
         def _salvage_text() -> str:
@@ -391,31 +383,6 @@ class LiteLLMExecutor(
                     tool_calls = [_syn_tc]
                     _content = ""
             if not tool_calls:
-                # ── completion_gate enforcement ──
-                if (
-                    not is_final_iteration
-                    and not _gate_attempted
-                    and completion_gate_applies_to_trigger(trigger)
-                    and not gate_marker_exists(self._anima_dir)
-                ):
-                    _gate_attempted = True
-                    from core.i18n import t
-
-                    _, _gate_text = strip_thinking_tags(message.content or "")
-                    if _gate_text.strip():
-                        all_response_text.append(_gate_text)
-                    messages.append({"role": "assistant", "content": message.content or ""})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": SystemReminderQueue.format_reminder(
-                                t("completion_gate.tool_call_reminder"),
-                            ),
-                        }
-                    )
-                    logger.info("A completion_gate not called; injecting retry at iteration=%d", iteration)
-                    continue
-
                 final_text = message.content or ""
                 _, final_text = strip_thinking_tags(final_text)
 
@@ -428,7 +395,6 @@ class LiteLLMExecutor(
                             reason="empty_grace_response",
                         )
                         logger.error("A grace turn returned no answer at iteration=%d", iteration)
-                        cleanup_gate_marker(self._anima_dir)
                         return ExecutionResult(
                             text=_salvage_text(),
                             tool_call_records=all_tool_records,
@@ -460,7 +426,6 @@ class LiteLLMExecutor(
                         mode="A",
                         reason="empty_response_after_reprompts",
                     )
-                    cleanup_gate_marker(self._anima_dir)
                     return ExecutionResult(
                         text=_salvage_text(),
                         tool_call_records=all_tool_records,
@@ -468,7 +433,6 @@ class LiteLLMExecutor(
                         truncated=True,
                     )
 
-                cleanup_gate_marker(self._anima_dir)
                 all_response_text.append(final_text)
                 logger.debug("A final response at iteration=%d", iteration)
                 # Drain undelivered reminders; do not append to user-facing text.
@@ -527,7 +491,6 @@ class LiteLLMExecutor(
                     mode="A",
                     reason="tool_call_during_grace_turn",
                 )
-                cleanup_gate_marker(self._anima_dir)
                 return ExecutionResult(
                     text=_salvage_text(),
                     tool_call_records=all_tool_records,
@@ -610,9 +573,7 @@ class LiteLLMExecutor(
             if _content:
                 _, _content = strip_thinking_tags(_content)
                 # Text written alongside the tool call belongs to the reply.
-                if _content.strip() and not (
-                    all_response_text and is_gate_only_turn([tc["name"] for tc in parsed_calls])
-                ):
+                if _content.strip():
                     all_response_text.append(_content)
             messages.append(
                 {

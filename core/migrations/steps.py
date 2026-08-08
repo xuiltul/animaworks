@@ -1400,7 +1400,7 @@ def step_common_knowledge_team_design_resync(data_dir: Path, dry_run: bool, verb
 
 
 def step_v062_skill_removal_and_activity_log(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
-    """v0.6.2: Resync templates for skill tool removal, activity_log scope, completion_gate.
+    """v0.6.2: Resync templates for skill tool removal, activity_log scope, pre-completion guide.
 
     Covers:
     - common_knowledge/ resync (Channel D removal, skill→read_memory_file, activity_log scope)
@@ -1452,6 +1452,47 @@ def step_v063_behavior_rules_action_rules_skill_sync(
         details.extend(result.details)
         if result.error:
             errors.append(f"{resync_fn.__name__}: {result.error}")
+
+    error = "; ".join(errors) if errors else None
+    return StepResult(changed=total, skipped=skipped, details=details, error=error)
+
+
+def step_remove_precompletion_guide(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Resync templates after pre-completion verification removal and delete the guide file.
+
+    Covers:
+    - common_knowledge / common_skills / prompts / reference resync
+      (tool guides, 00_index, tool-usage-overview, tool-creator skill)
+    - remove stale common_knowledge/operations/completion-gate-guide.md
+    """
+    details: list[str] = []
+    total = 0
+    skipped = 0
+    errors: list[str] = []
+
+    for resync_fn in (
+        step_common_knowledge_resync,
+        step_common_skills_resync,
+        step_prompt_resync,
+        step_reference_resync,
+    ):
+        result = resync_fn(data_dir, dry_run, verbose)
+        total += result.changed
+        skipped += result.skipped
+        details.extend(result.details)
+        if result.error:
+            errors.append(f"{resync_fn.__name__}: {result.error}")
+
+    stale = data_dir / "common_knowledge" / "operations" / "completion-gate-guide.md"
+    if stale.is_file():
+        if dry_run:
+            details.append("Would remove stale common_knowledge/operations/completion-gate-guide.md")
+        else:
+            stale.unlink()
+            details.append("Removed stale common_knowledge/operations/completion-gate-guide.md")
+        total += 1
+    else:
+        skipped += 1
 
     error = "; ".join(errors) if errors else None
     return StepResult(changed=total, skipped=skipped, details=details, error=error)
@@ -1605,7 +1646,7 @@ def register_all_steps(runner: Any) -> None:
         ),
         MigrationStep(
             "v062_skill_removal_and_activity_log",
-            "v0.6.2: Skill tool removal + activity_log scope + completion_gate",
+            "v0.6.2: Skill tool removal + activity_log scope + pre-completion guide",
             "template_sync",
             step_v062_skill_removal_and_activity_log,
         ),
@@ -1614,6 +1655,12 @@ def register_all_steps(runner: Any) -> None:
             "v0.6.3: Behavior/action rules + skill docs runtime sync",
             "template_sync",
             step_v063_behavior_rules_action_rules_skill_sync,
+        ),
+        MigrationStep(
+            "remove_precompletion_guide",
+            "Remove pre-completion verification guide and resync tool templates",
+            "template_sync",
+            step_remove_precompletion_guide,
         ),
         MigrationStep(
             "legacy_flat_skill_migration",

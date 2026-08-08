@@ -144,16 +144,6 @@ class StreamingMixin:
         _final_reminder_sent = False
         _finalization_failed = False
 
-        from core.execution._completion_gate import (
-            cleanup_gate_marker,
-            completion_gate_applies_to_trigger,
-            gate_marker_exists,
-            is_gate_only_turn,
-        )
-
-        cleanup_gate_marker(self._anima_dir)
-        _gate_attempted = False
-
         # Inject synthetic thinking_blocks into prior assistant messages
         # that have tool_calls but no thinking_blocks.  Without this,
         # LiteLLM drops the thinking param for the entire session because
@@ -617,35 +607,8 @@ class StreamingMixin:
 
                 # ── No tool calls (or repetition detected): final response ──
                 if not tool_calls_acc or _repetition_detected:
-                    # ── completion_gate enforcement ──
-                    if (
-                        not is_final_iteration
-                        and not _gate_attempted
-                        and not _repetition_detected
-                        and completion_gate_applies_to_trigger(trigger)
-                        and not gate_marker_exists(self._anima_dir)
-                    ):
-                        _gate_attempted = True
-                        from core.i18n import t
-
-                        _assist_text = "".join(iter_text_parts)
-                        if _assist_text.strip():
-                            all_response_text.append(_assist_text)
-                        messages.append({"role": "assistant", "content": _assist_text})
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": SystemReminderQueue.format_reminder(
-                                    t("completion_gate.tool_call_reminder"),
-                                ),
-                            }
-                        )
-                        logger.info("A stream completion_gate not called; injecting retry at iteration=%d", iteration)
-                        continue
-
                     if iter_text:
                         all_response_text.append(iter_text)
-                    cleanup_gate_marker(self._anima_dir)
                     full_text = join_answer_parts(all_response_text)
                     # Safety net: strip any residual <think> tags that the
                     # streaming filter missed (e.g. vLLM returning thinking
@@ -820,9 +783,7 @@ class StreamingMixin:
                 # ``iter_text_parts`` may have been cleared by the text-format
                 # tool call detection above, so re-read it here.
                 iter_text = "".join(iter_text_parts)
-                if iter_text.strip() and not (
-                    all_response_text and is_gate_only_turn([tc["name"] for tc in parsed_calls])
-                ):
+                if iter_text.strip():
                     all_response_text.append(iter_text)
 
                 assistant_msg: dict[str, Any] = {
@@ -922,22 +883,6 @@ class StreamingMixin:
         _force_final_ol = False
         _final_reminder_sent_ol = False
         _finalization_failed_ol = False
-
-        from core.execution._completion_gate import (
-            cleanup_gate_marker as _cg_cleanup,
-        )
-        from core.execution._completion_gate import (
-            completion_gate_applies_to_trigger as _cg_applies,
-        )
-        from core.execution._completion_gate import (
-            gate_marker_exists as _cg_exists,
-        )
-        from core.execution._completion_gate import (
-            is_gate_only_turn as _cg_only_turn,
-        )
-
-        _cg_cleanup(self._anima_dir)
-        _gate_attempted_ol = False
 
         async with stream_error_boundary(
             all_response_text,
@@ -1149,9 +1094,7 @@ class StreamingMixin:
                     _ol_text_tc = try_parse_text_tool_call(iter_text, iter_tools)
 
                 if iter_text and not _ol_text_tc:
-                    if tool_calls and not (
-                        all_response_text and _cg_only_turn([tc.function.name or "" for tc in tool_calls])
-                    ):
+                    if tool_calls:
                         all_response_text.append(iter_text)
                     yield {"type": "text_delta", "text": iter_text}
 
@@ -1184,33 +1127,6 @@ class StreamingMixin:
 
                 # ── Check for tool calls ──
                 if not tool_calls:
-                    # ── completion_gate enforcement ──
-                    if (
-                        not is_final_iteration
-                        and not _gate_attempted_ol
-                        and _cg_applies(trigger)
-                        and not _cg_exists(self._anima_dir)
-                    ):
-                        _gate_attempted_ol = True
-                        from core.i18n import t
-
-                        if iter_text.strip():
-                            all_response_text.append(iter_text)
-                        messages.append({"role": "assistant", "content": message.content or ""})
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": SystemReminderQueue.format_reminder(
-                                    t("completion_gate.tool_call_reminder"),
-                                ),
-                            }
-                        )
-                        logger.info(
-                            "A ollama stream completion_gate not called; injecting retry at iteration=%d", iteration
-                        )
-                        continue
-                    _cg_cleanup(self._anima_dir)
-
                     if iter_text and not _ol_text_tc:
                         all_response_text.append(iter_text)
                     full_text = join_answer_parts(all_response_text)

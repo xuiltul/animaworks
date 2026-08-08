@@ -272,7 +272,6 @@ class ToolHandler(
             "list_tasks": self._handle_list_tasks,
             "submit_tasks": self._handle_submit_tasks,
             "todo_write": self._handle_todo_write,
-            "completion_gate": self._handle_completion_gate,
             "use_tool": self._handle_use_tool,
             "check_background_task": self._handle_check_background_task,
             "list_background_tasks": self._handle_list_background_tasks,
@@ -365,39 +364,6 @@ class ToolHandler(
                 "todos": "\n".join(lines),
             }
         )
-
-    def _handle_completion_gate(self, args: dict[str, Any]) -> str:
-        """Record pre-completion verification and return the checklist text."""
-        marker = self._anima_dir / "run" / "completion_gate_called"
-        try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("", encoding="utf-8")
-        except OSError as e:
-            logger.warning("completion_gate: failed to write marker: %s", e)
-
-        usage_recorded: list[str] = []
-        usage_warnings: list[str] = []
-        try:
-            from core.tooling.completion_gate_usage import record_completion_gate_usage
-
-            usage = record_completion_gate_usage(self._anima_dir, args)
-            usage_recorded = usage.recorded
-            usage_warnings = usage.warnings
-        except Exception:
-            logger.debug("Failed to record completion_gate skill usage", exc_info=True)
-            usage_warnings.append("usage recording failed")
-
-        self._activity.log(
-            event_type="tool_use",
-            tool="completion_gate",
-            summary=t("completion_gate.activity_log_summary"),
-        )
-        result = t("completion_gate.checklist")
-        if usage_recorded:
-            result += "\n\nusage recorded: " + ", ".join(usage_recorded)
-        if usage_warnings:
-            result += "\n\nwarnings: " + "; ".join(usage_warnings)
-        return result
 
     # ── Properties and session management ─────────────────────
 

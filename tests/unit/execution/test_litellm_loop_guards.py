@@ -33,23 +33,6 @@ class _AuthError(Exception):
 
 
 @pytest.fixture(autouse=True)
-def _bypass_completion_gate():
-    # litellm_loop imports the gate check at module level; the streaming
-    # mixin imports it dynamically from _completion_gate — patch both.
-    with (
-        patch(
-            "core.execution.litellm_loop.completion_gate_applies_to_trigger",
-            return_value=False,
-        ),
-        patch(
-            "core.execution._completion_gate.completion_gate_applies_to_trigger",
-            return_value=False,
-        ),
-    ):
-        yield
-
-
-@pytest.fixture(autouse=True)
 def _fast_backoff():
     """Zero backoff so retry tests do not sleep."""
     with patch("core.execution.litellm_loop.decorrelated_jitter", return_value=0.0):
@@ -213,20 +196,6 @@ class TestEmptyResponseRecovery:
         # The reprompt reminder was injected into the 2nd call's history
         reprompt = msg_empty_response()
         assert any(m.get("role") == "user" and reprompt in str(m.get("content")) for m in _messages_of_call(mock, 1))
-
-    async def test_empty_gate_retry_restores_pre_gate_answer(self, model_config, anima_dir, tool_handler, memory):
-        """An empty completion_gate retry must not discard the answer before it."""
-        executor = _make_executor(model_config, anima_dir, tool_handler, memory)
-        answered = make_litellm_response(content="complete answer", tool_calls=None)
-        empty = make_litellm_response(content="", tool_calls=None)
-        mock = AsyncMock(side_effect=[answered, empty, empty, empty])
-        with (
-            patch("litellm.acompletion", mock),
-            patch("core.execution.litellm_loop.completion_gate_applies_to_trigger", return_value=True),
-            patch("core.execution.litellm_loop.gate_marker_exists", return_value=False),
-        ):
-            result = await executor.execute("test", system_prompt="sys", trigger="message:tester")
-        assert result.text == "complete answer"
 
     async def test_thinking_only_response_counts_as_empty(self, executor):
         thinking_only = make_litellm_response(content="<think>pondering...</think>", tool_calls=None)

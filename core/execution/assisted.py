@@ -499,10 +499,6 @@ class AssistedExecutor(BaseExecutor):
             len(prompt),
             trigger,
         )
-        from core.execution._completion_gate import cleanup_gate_marker
-
-        cleanup_gate_marker(self._anima_dir)
-
         # ── 1. Build tool spec and augment system prompt ─────
         tool_spec = self._build_tool_spec_text(trigger=trigger)
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec
@@ -843,10 +839,6 @@ class AssistedExecutor(BaseExecutor):
             "Mode B streaming START prompt_len=%d",
             len(prompt),
         )
-        from core.execution._completion_gate import cleanup_gate_marker
-
-        cleanup_gate_marker(self._anima_dir)
-
         # ── 1. Build tool spec and augment system prompt ─────
         tool_spec = self._build_tool_spec_text(trigger=trigger)
         full_system = system_prompt + "\n\n" + tool_spec if system_prompt else tool_spec

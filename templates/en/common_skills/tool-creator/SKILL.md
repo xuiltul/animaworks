@@ -296,7 +296,7 @@ Add the following to permissions.json for tool creation and sharing:
 
 ## Mode S (MCP) exposure for core tools
 
-When adding a module under `core/tools/`, only names listed in `core/mcp/server.py` `_EXPOSED_TOOL_NAMES` are exposed to Claude Code via MCP (curated subset). As of 2026-03, that set includes: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`, `completion_gate` (pre-completion self-check). External-service core tools such as Slack, Gmail, and `web_search` are **not** on the MCP list; they are reached via `use_tool`, Bash (`animaworks-tool`), or skills.
+When adding a module under `core/tools/`, only names listed in `core/mcp/server.py` `_EXPOSED_TOOL_NAMES` are exposed to Claude Code via MCP (curated subset). As of 2026-03, that set includes: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`. External-service core tools such as Slack, Gmail, and `web_search` are **not** on the MCP list; they are reached via `use_tool`, Bash (`animaworks-tool`), or skills.
 
 ## Notes
 

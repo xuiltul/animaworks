@@ -58,7 +58,6 @@ _COMPACT_COMM_TOOLS: frozenset[str] = frozenset(
         "write_memory_file",
         "send_message",
         "post_channel",
-        "completion_gate",
     }
 )
 
@@ -239,12 +238,6 @@ def build_unified_tool_list(
 
     # AW-essential: session todo (planning aid for Mode A)
     tools.extend(_session_todo_tools())
-
-    # completion_gate: pre-completion verification (applicable triggers only)
-    if not is_consolidation:
-        from core.tooling.schemas.completion_gate import _completion_gate_tools
-
-        tools.extend(_completion_gate_tools())
 
     tools = apply_prompt_descriptions(tools)
 

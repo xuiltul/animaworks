@@ -51,12 +51,6 @@ def shared_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     invalidate_cache()
 
 
-@pytest.fixture(autouse=True)
-def _bypass_completion_gate():
-    with patch("core.execution.litellm_loop.completion_gate_applies_to_trigger", return_value=False):
-        yield
-
-
 def _make_executor(anima_dir: Path):
     from core.execution.litellm_loop import LiteLLMExecutor
     from core.memory import MemoryManager

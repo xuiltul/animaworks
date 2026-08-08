@@ -87,8 +87,6 @@ _EXPOSED_TOOL_NAMES: frozenset[str] = frozenset(
         "set_skill_lifecycle",
         # Admin: hire subordinate (gated by newstaff skill at list/call time)
         "create_anima",
-        # Mode S: pre-completion verification
-        "completion_gate",
     }
 )
 
@@ -199,7 +197,6 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         _background_task_tools,
         _channel_tools,
         _check_permissions_tools,
-        _completion_gate_tools,
         _create_skill_schemas,
         _curator_skill_schemas,
         _goal_tools,
@@ -215,7 +212,6 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *MEMORY_TOOLS,
         *_channel_tools(),
         *WORKSPACE_TOOLS,
-        *_completion_gate_tools(),
         *_task_tools(),
         *_goal_tools(),
         *_notification_tools(),
