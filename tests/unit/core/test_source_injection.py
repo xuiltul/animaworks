@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
-from core.schemas import CycleResult, EXTERNAL_PLATFORM_SOURCES
+from core.schemas import EXTERNAL_PLATFORM_SOURCES, CycleResult
 from core.tooling.handler import active_session_type
 
 
@@ -125,6 +126,23 @@ class TestProcessMessageSource:
         await dp.process_message("My unique message", from_person="human", source="googlechat")
 
         assert "My unique message" in captured_prompts[0]
+
+    @pytest.mark.parametrize("from_person", ["fugaku", "shokotan", "operator"])
+    async def test_line_trigger_survives_session_guard(self, data_dir, make_anima, from_person: str):
+        """The source-qualified LINE trigger is used by both execution and its guard."""
+        dp = _setup_anima(make_anima, data_dir)
+        captured_triggers: list[str] = []
+
+        async def _capture_run_cycle(prompt, **kwargs):
+            del prompt
+            captured_triggers.append(kwargs["trigger"])
+            return _make_cycle_result(trigger=kwargs["trigger"], thread_id="default")
+
+        dp.agent.run_cycle = _capture_run_cycle
+        response = await dp.process_message("Hello", from_person=from_person, source="line")
+
+        assert captured_triggers == [f"message:line:{from_person}"]
+        assert response == "ok"
 
 
 class TestProcessMessageStreamSource:
