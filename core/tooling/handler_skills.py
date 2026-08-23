@@ -850,6 +850,20 @@ class SkillsToolsMixin:
                     f"Task missing required fields (task_id, title, description): {t.get('task_id', '?')}",
                 )
 
+        from core.config.model_catalog import validate_model_override
+
+        for t in tasks:
+            t_model = t.get("model") if isinstance(t.get("model"), str) else ""
+            if not t_model.strip():
+                continue
+            model_err = validate_model_override(self._anima_name, t_model)
+            if model_err:
+                return _error_result(
+                    "InvalidArguments",
+                    f"Task '{t.get('task_id', '?')}' model: {model_err}. "
+                    "現行リストは available-models を確認",
+                )
+
         # Cycle detection via topological sort
         from core.supervisor.pending_executor import _topological_sort
 

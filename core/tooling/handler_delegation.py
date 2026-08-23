@@ -199,6 +199,16 @@ class DelegationMixin(OrgHelpersMixin):
         if err:
             return err
 
+        if model:
+            from core.config.model_catalog import validate_model_override
+
+            model_err = validate_model_override(target_name, model)
+            if model_err:
+                return _error_result(
+                    "InvalidArguments",
+                    f"{model_err}. 現行リストは available-models を確認",
+                )
+
         from core.company import check_company_boundary
         from core.memory.task_queue import TaskQueueManager
         from core.paths import get_animas_dir
