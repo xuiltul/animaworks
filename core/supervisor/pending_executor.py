@@ -2034,6 +2034,81 @@ class PendingTaskExecutor:
         )
         return result
 
+    def _task_model_config_override(self, task_desc: dict[str, Any]) -> Any:
+        """Build a per-task ModelConfig override when the task specifies a model.
+
+        When ``task_desc["model"]`` is set and valid, an override is built on
+        top of the anima's current model config (model / execution_mode
+        replaced, credential and fallback_models inherited from the base), so
+        the new model can fall back when rate-guarded.  Invalid or unparseable
+        values are logged and ignored — the task continues with the anima
+        default and is never failed.  Returns ``None`` when no override
+        applies.
+        """
+        from core.memory.activity import ActivityLogger
+
+        requested = task_desc.get("model")
+        if not isinstance(requested, str) or not requested.strip():
+            return None
+        requested = requested.strip()
+
+        anima = getattr(self, "_anima", None)
+        base = getattr(anima, "model_config", None)
+        if base is None:
+            return None
+
+        try:
+            from core.config import load_config
+            from core.config.model_config import build_model_override_config
+            from core.config.model_mode import parse_fallback_entry
+
+            cfg = load_config()
+        except Exception as exc:
+            logger.warning(
+                "[%s] Could not load config for per-task model override; using default: %s",
+                self._anima_name,
+                exc,
+            )
+            return None
+
+        parsed = parse_fallback_entry(requested, cfg)
+        if parsed is None:
+            logger.warning(
+                "[%s] Ignoring invalid per-task model override %r; using anima default",
+                self._anima_name,
+                requested,
+            )
+            return None
+        mode, model = parsed
+
+        override = build_model_override_config(base, mode, model, cfg)
+        if override is None:
+            logger.warning(
+                "[%s] No credential for per-task model override %r; using anima default",
+                self._anima_name,
+                requested,
+            )
+            return None
+        try:
+            ActivityLogger(self._anima_dir).log(
+                "model_override",
+                summary=t(
+                    "pending_executor.model_override",
+                    requested=requested,
+                    resolved=model,
+                ),
+                ctx=f"task:{task_desc.get('task_id', 'unknown')}",
+                meta={
+                    "task_id": task_desc.get("task_id", "unknown"),
+                    "requested_model": requested,
+                    "resolved_model": override.model,
+                    "resolved_mode": override.resolved_mode,
+                },
+            )
+        except Exception:
+            logger.debug("pending_executor: failed to log model_override activity", exc_info=True)
+        return override
+
     async def _run_llm_task_under_agent_session_context(
         self,
         task_desc: dict[str, Any],
@@ -2161,6 +2236,8 @@ class PendingTaskExecutor:
         journal = StreamingJournal(self._anima_dir, session_type="task", thread_id=task_id)
         journal.open(trigger=trigger)
 
+        model_config_override = self._task_model_config_override(task_desc)
+
         accumulated_text = ""
         result_summary = ""
         tool_call_records: list[dict[str, Any]] = []
@@ -2202,6 +2279,7 @@ class PendingTaskExecutor:
                         prompt,
                         trigger=trigger,
                         thread_id=task_id,
+                        model_config_override=model_config_override,
                     ):
                         chunk_type = chunk.get("type")
                         if chunk_type == "text_delta":
@@ -2329,6 +2407,7 @@ class PendingTaskExecutor:
                                 t("pending_executor.declaration_probe", task_id=task_id),
                                 trigger=trigger,
                                 thread_id=task_id,
+                                model_config_override=model_config_override,
                             ):
                                 chunk_type = chunk.get("type")
                                 if chunk_type == "error":

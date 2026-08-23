@@ -131,6 +131,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "タスク実行開始: {title}",
         "en": "Task execution started: {title}",
     },
+    "pending_executor.model_override": {
+        "ja": "タスクのモデル上書き: {requested} で実行（解決: {resolved}）",
+        "en": "Task model override: running with {requested} (resolved: {resolved})",
+        "ko": "태스크 모델 오버라이드: {requested}로 실행 (해결: {resolved})",
+    },
     "pending_executor.task_fail_notify": {
         "ja": (
             "[タスク失敗通知]\nタスクID: {task_id}\nタスク: {title}\nエラー: {error}\n"

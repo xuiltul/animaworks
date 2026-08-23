@@ -90,6 +90,7 @@ class DelegationMixin(OrgHelpersMixin):
         persist_sub: bool,
         persist_tracking: bool,
         persist_pending: bool,
+        model: str = "",
     ) -> str | None:
         """Persist delegation via /api/internal/delegate-task when local FS is read-only.
 
@@ -114,6 +115,7 @@ class DelegationMixin(OrgHelpersMixin):
             "persist_sub": persist_sub,
             "persist_tracking": persist_tracking,
             "persist_pending": persist_pending,
+            "model": model,
         }
         timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
         url = f"{_server_base_url()}/api/internal/delegate-task"
@@ -177,6 +179,11 @@ class DelegationMixin(OrgHelpersMixin):
                     f"Workspace resolution failed: {e}",
                     suggestion=str(e),
                 )
+
+        model = args.get("model")
+        if model is not None and not isinstance(model, str):
+            return _error_result("InvalidArguments", "model must be a string")
+        model = model.strip() if isinstance(model, str) else ""
 
         if not target_name:
             return _error_result("InvalidArguments", "name is required")
@@ -259,6 +266,7 @@ class DelegationMixin(OrgHelpersMixin):
                 "source": "delegation",
                 "working_directory": resolved_wd,
                 "exclusive_key": exclusive_key,
+                "model": model,
             }
             pending_dir = target_dir / "state" / "pending"
             pending_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +295,7 @@ class DelegationMixin(OrgHelpersMixin):
                 persist_sub=not persisted_sub,
                 persist_tracking=not persisted_tracking,
                 persist_pending=not persisted_pending,
+                model=model,
             )
             if fb_err is not None:
                 logger.error(

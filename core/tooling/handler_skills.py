@@ -899,6 +899,7 @@ class SkillsToolsMixin:
                 "submitted_at": submitted_at,
                 "reply_to": t.get("reply_to", self._anima_name),
                 "working_directory": resolved_wd,
+                "model": t.get("model") if isinstance(t.get("model"), str) else "",
             }
 
             # Layer 1: Write JSON to state/pending/

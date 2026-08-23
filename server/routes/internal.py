@@ -145,6 +145,7 @@ class DelegateTaskPersistRequest(BaseModel):
     persist_sub: bool = True  # write to subordinate queue
     persist_tracking: bool = True  # write delegated entry on delegator queue
     persist_pending: bool = True  # create state/pending/<id>.json
+    model: str = ""  # optional per-task LLM model override
 
 
 class InternalSendMessageRequest(BaseModel):
@@ -714,6 +715,7 @@ def create_internal_router() -> APIRouter:
                     "source": "delegation",
                     "working_directory": body.workspace,
                     "exclusive_key": body.exclusive_key,
+                    "model": body.model,
                 }
                 pending_dir = target_dir / "state" / "pending"
                 pending_dir.mkdir(parents=True, exist_ok=True)

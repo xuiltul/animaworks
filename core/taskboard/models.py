@@ -80,6 +80,7 @@ class BoardTask(BaseModel):
     relay_chain: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     queue_updated_at: str | None = None
+    model: str | None = None
 
     visibility: AttentionVisibility
     column: BoardColumn

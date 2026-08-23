@@ -28,6 +28,7 @@ class ExternalTask(BaseModel):
     created_at: str
     last_updated_at: str
     priority: int
+    model: str | None = None
 
 
 class SourceHealth(BaseModel):

@@ -65,6 +65,10 @@ def _submit_tasks_tools() -> list[dict[str, Any]]:
                                     "type": "string",
                                     "description": "Name of the Anima to notify on completion (default: submitter)",
                                 },
+                                "model": {
+                                    "type": "string",
+                                    "description": "Optional LLM model override for this task (e.g. 'claude-sonnet-4-6' or 'c:codex/gpt-5.6-sol'). Leave empty to use the Anima default.",
+                                },
                                 "workspace": {
                                     "type": "string",
                                     "description": "Workspace alias or alias#hash for the task's working directory",
