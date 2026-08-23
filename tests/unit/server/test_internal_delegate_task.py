@@ -74,6 +74,40 @@ def anyio_backend() -> str:
 
 class TestInternalDelegateTask:
     @pytest.mark.anyio
+    async def test_model_override_persisted_in_meta_and_pending(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """H-3: a per-task model must be stored in both the queue meta and the
+        pending task_desc (the fields the blocked-recovery path restores from)."""
+        animas = _setup_animas(tmp_path)
+        monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
+
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+        with patch(
+            "core.tooling.handler_delegation._record_taskboard_delegation"
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/internal/delegate-task",
+                    json=_base_payload(model="c:codex/gpt-5.6-sol"),
+                )
+
+        assert resp.status_code == 200
+
+        sub_queue = animas / "natsume" / "state" / "task_queue.jsonl"
+        sub_entry = json.loads(sub_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        assert sub_entry["meta"]["model"] == "c:codex/gpt-5.6-sol"
+
+        own_queue = animas / "rin" / "state" / "task_queue.jsonl"
+        own_entry = json.loads(own_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        assert own_entry["meta"]["model"] == "c:codex/gpt-5.6-sol"
+
+        pending = animas / "natsume" / "state" / "pending" / "aabbccddeeff.json"
+        pending_data = json.loads(pending.read_text(encoding="utf-8"))
+        assert pending_data["model"] == "c:codex/gpt-5.6-sol"
+
+    @pytest.mark.anyio
     async def test_success_writes_queues_and_pending(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -266,6 +266,11 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Optional LLM model override for this task (e.g. 'claude-sonnet-4-6' or 'c:codex/gpt-5.6-sol'). The manager can specify based on task weight. Usually leave unset (uses the Anima default model)",
         "ko": "이 태스크를 실행할 LLM 모델 오버라이드 (예: 'claude-sonnet-4-6' 또는 'c:codex/gpt-5.6-sol'). 관리자가 태스크 무게에 따라 지정할 수 있다. 보통은 미지정(기본 모델 사용)",
     },
+    "schema.submit_tasks.task_model": {
+        "ja": "このタスクを実行するLLMモデルの上書き指定（例: 'claude-sonnet-4-6' や 'c:codex/gpt-5.6-sol'）。通常は未指定でよい（未指定ならanimaのデフォルトモデルを使う）",
+        "en": "Optional LLM model override for this task (e.g. 'claude-sonnet-4-6' or 'c:codex/gpt-5.6-sol'). Leave empty to use the Anima default model",
+        "ko": "이 태스크를 실행할 LLM 모델 오버라이드 (예: 'claude-sonnet-4-6' 또는 'c:codex/gpt-5.6-sol'). 보통은 미지정(기본 모델 사용)",
+    },
     "schema.disable_subordinate.desc": {
         "ja": "配下のAnimaを休止させる（プロセス停止 + 自動復帰防止）。自分の配下であれば操作可能。",
         "en": ("Disable a descendant Anima (stop process + prevent auto-restart). Any descendant can be targeted."),

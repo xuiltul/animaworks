@@ -883,6 +883,7 @@ class SkillsToolsMixin:
                         suggestion=str(e),
                     )
 
+            t_model = t.get("model") if isinstance(t.get("model"), str) else ""
             task_desc = {
                 "task_type": "llm",
                 "task_id": t["task_id"],
@@ -899,7 +900,7 @@ class SkillsToolsMixin:
                 "submitted_at": submitted_at,
                 "reply_to": t.get("reply_to", self._anima_name),
                 "working_directory": resolved_wd,
-                "model": t.get("model") if isinstance(t.get("model"), str) else "",
+                "model": t_model,
             }
 
             # Layer 1: Write JSON to state/pending/
@@ -923,6 +924,7 @@ class SkillsToolsMixin:
                         "batch_id": batch_id,
                         "depends_on": t.get("depends_on", []),
                         "parallel": t.get("parallel", False),
+                        "model": t_model,
                         "task_desc": {
                             "title": t["title"],
                             "description": t["description"],
@@ -932,6 +934,7 @@ class SkillsToolsMixin:
                             "context": t.get("context", ""),
                             "reply_to": t.get("reply_to", self._anima_name),
                             "working_directory": resolved_wd,
+                            "model": t_model,
                         },
                     },
                 )

@@ -67,7 +67,7 @@ def _submit_tasks_tools() -> list[dict[str, Any]]:
                                 },
                                 "model": {
                                     "type": "string",
-                                    "description": "Optional LLM model override for this task (e.g. 'claude-sonnet-4-6' or 'c:codex/gpt-5.6-sol'). Leave empty to use the Anima default.",
+                                    "description": _t("schema.submit_tasks.task_model"),
                                 },
                                 "workspace": {
                                     "type": "string",

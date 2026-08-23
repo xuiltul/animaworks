@@ -87,6 +87,15 @@ def create_chat_router() -> APIRouter:
                 status_code=413,
             )
 
+        # Guard: validate the per-message model override at the wall
+        from server.routes.config_routes import validate_chat_model
+
+        model_error = validate_chat_model(name, body.model)
+        if model_error:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail=model_error)
+
         # Guard: validate image attachments
         if body.images:
             img_error = _validate_images(body.images)
@@ -230,6 +239,15 @@ def create_chat_router() -> APIRouter:
                 status_code=413,
                 detail=t("chat.message_too_large", size_mb=message_size // 1024 // 1024),
             )
+
+        # Guard: validate the per-message model override at the wall
+        from server.routes.config_routes import validate_chat_model
+
+        model_error = validate_chat_model(name, body.model)
+        if model_error:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=422, detail=model_error)
 
         # Guard: validate image attachments
         if body.images:

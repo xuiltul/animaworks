@@ -43,14 +43,18 @@ export async function initChatModelPicker() {
     logger.error("Failed to load chat model picker options", { error: err?.message });
     return;
   }
-  const defaultOpt = `<option value="">${t("chat.model_default")}</option>`;
-  const options = models
-    .filter(m => m && m.id)
-    .map(m => {
-      const label = modelAlias(m.id) || m.label || m.id;
-      return `<option value="${escapeHtml(m.id)}">${escapeHtml(label)}</option>`;
-    });
-  select.innerHTML = defaultOpt + options.join("");
+  // Build the picker with DOM APIs (not innerHTML string interpolation) so
+  // external model IDs (e.g. Ollama names) cannot break out of an attribute.
+  const fragment = document.createDocumentFragment();
+  const defaultOpt = new Option(t("chat.model_default"), "");
+  defaultOpt.selected = true;
+  fragment.append(defaultOpt);
+  for (const m of models) {
+    if (!m || !m.id) continue;
+    const label = modelAlias(m.id) || m.label || m.id;
+    fragment.append(new Option(label, m.id));
+  }
+  select.replaceChildren(fragment);
 }
 
 function _mgr() { return ChatSessionManager.getInstance(); }

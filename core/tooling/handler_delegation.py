@@ -235,6 +235,7 @@ class DelegationMixin(OrgHelpersMixin):
                 deadline=deadline,
                 relay_chain=[self._anima_name],
                 task_id=sub_task_id,
+                meta={"model": model} if model else None,
             )
             persisted_sub = True
             own_tqm.add_delegated_task(
@@ -247,6 +248,7 @@ class DelegationMixin(OrgHelpersMixin):
                 meta={
                     "delegated_to": target_name,
                     "delegated_task_id": sub_task_id,
+                    **({"model": model} if model else {}),
                 },
             )
             persisted_tracking = True

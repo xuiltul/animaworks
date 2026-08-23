@@ -685,6 +685,7 @@ def create_internal_router() -> APIRouter:
                     deadline=body.deadline,
                     relay_chain=[body.delegator],
                     task_id=body.sub_task_id,
+                    meta={"model": body.model} if body.model else None,
                 )
             if body.persist_tracking:
                 TaskQueueManager(delegator_dir).add_delegated_task(
@@ -697,6 +698,7 @@ def create_internal_router() -> APIRouter:
                     meta={
                         "delegated_to": body.target,
                         "delegated_task_id": body.sub_task_id,
+                        **({"model": body.model} if body.model else {}),
                     },
                 )
             if body.persist_pending:

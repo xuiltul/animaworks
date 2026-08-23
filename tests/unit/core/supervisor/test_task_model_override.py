@@ -90,7 +90,8 @@ def _config_with_anthropic() -> AnimaWorksConfig:
 
 class TestTaskModelOverrideConstruction:
     def test_explicit_cli_mode(self, tmp_path):
-        # CLI-auth engines (C/D/G/X) preserve base credential fields.
+        # CLI-auth engines (C/D/G/X) clear (not preserve) base credential
+        # fields — each authenticates via its own CLI store.
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
             override = executor._task_model_config_override(
@@ -100,9 +101,9 @@ class TestTaskModelOverrideConstruction:
         assert override.model == "codex/gpt-5.6-sol"
         assert override.resolved_mode == "C"
         assert override.execution_mode == "C"
-        # base fallback_models and credential are inherited for CLI modes
+        # base fallback_models are inherited; credential is cleared for CLI modes
         assert override.fallback_models == ["b:ollama/qwen3:14b"]
-        assert override.credential == "main-cred"
+        assert override.credential is None
 
     def test_s_mode_replaces_credential(self, tmp_path):
         # S-mode resolves the family credential and replaces credential fields.
@@ -202,7 +203,7 @@ class TestModelConfigHelper:
         cand = build_model_override_config(base, "c", "codex/gpt-5.6-sol", cfg)
         assert cand is not None
         assert cand.model == "codex/gpt-5.6-sol"
-        assert cand.credential == "main-cred"  # CLI keeps base credential
+        assert cand.credential is None  # CLI clears base credential
         assert cand.fallback_models == []
 
     def test_shared_helper_s_mode_replaces_credential(self):

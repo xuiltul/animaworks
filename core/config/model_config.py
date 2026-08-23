@@ -167,20 +167,33 @@ def build_model_override_config(
 
     Shared candidate construction for fallback selection and per-task model
     overrides.  CLI-auth engines (C/D/G/X) authenticate via their own CLI
-    credential stores, so the base credential fields are preserved and only
-    ``model`` / ``execution_mode`` / ``resolved_mode`` are replaced.  Other
-    modes (S/A/etc.) resolve a family credential via
+    credential stores, so the base credential fields are explicitly cleared
+    (only ``model`` / ``execution_mode`` / ``resolved_mode`` are replaced and
+    any inherited credential fields are reset to keep stale keys from leaking
+    across providers).  Other modes (S/A/etc.) resolve a family credential via
     :func:`_fallback_credential_name` and replace the credential fields;
     returns ``None`` when no credential can be resolved (caller should fall
     back to the base config rather than risk an auth error).
     """
     resolved_mode = mode.upper()
     if resolved_mode in {"C", "D", "G", "X"}:
+        # CLI-auth engines (codex/cursor/gemini/grok) authenticate via their own
+        # CLI credential stores, so the base credential fields are stale here.
+        # Clear them explicitly: e.g. an Anthropic-credential anima using a
+        # ``g:gemini/...`` override would otherwise leak the Anthropic API key
+        # to Google (gemini_cli._resolve_api_key prefers model_config.api_key).
+        # Gemini falls back to the OS env var GEMINI_API_KEY, which is correct.
         return base.model_copy(
             update={
                 "model": model,
                 "execution_mode": resolved_mode,
                 "resolved_mode": resolved_mode,
+                "credential": None,
+                "credential_type": None,
+                "api_key": None,
+                "api_key_env": None,
+                "api_base_url": None,
+                "extra_keys": {},
             },
         )
     credential_name = _fallback_credential_name(model)
