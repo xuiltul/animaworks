@@ -8,10 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-import json
 import logging
-import os
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -24,6 +21,7 @@ from core.i18n import t
 from core.memory.task_queue import TaskQueueManager
 from core.messenger import Messenger
 from core.paths import get_animas_dir, get_shared_dir
+import core.review_multipass as review_multipass
 from core.tasks_dispatch import FAILING_CI_CONCLUSIONS, dispatch_direct_task
 
 logger = logging.getLogger("animaworks.github_gateway")
@@ -37,18 +35,7 @@ def _now_iso() -> str:
 
 
 def _default_state() -> dict[str, Any]:
-    return {
-        "prs": {},
-        "last_comment_check": _now_iso(),
-        "seen_comments": {},
-        "ci_notified": {},
-        "ci_failure_signatures": {},
-        "conflict_notified": {},
-        "failed_task_retries": {},
-        "review_tasks": {},
-        "stale_watch": {},
-        "consecutive_failures": 0,
-    }
+    return review_multipass.default_state()
 
 
 @contextmanager
@@ -56,54 +43,11 @@ def locked_dispatch_state(state_file: Path) -> Iterator[dict[str, Any]]:
     """Read, mutate, and persist dispatcher state under an exclusive flock.
 
     A stable sidecar inode is locked while the JSON is atomically replaced.
-    The fallback cron uses the same sidecar, so neither process can overwrite
-    state loaded by the other.
+    The fallback cron uses the same sidecar (via ``core.review_multipass``),
+    so neither process can overwrite state loaded by the other.
     """
-    state_file.parent.mkdir(parents=True, exist_ok=True)
-    lock_file = state_file.with_suffix(".lock")
-    with lock_file.open("a+", encoding="utf-8") as lock_handle:
-        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-        try:
-            try:
-                raw = state_file.read_text(encoding="utf-8")
-            except FileNotFoundError:
-                raw = ""
-            try:
-                state = json.loads(raw) if raw.strip() else _default_state()
-            except json.JSONDecodeError:
-                logger.warning("GitHub dispatcher state is invalid JSON; starting fresh")
-                state = _default_state()
-            if not isinstance(state, dict):
-                state = _default_state()
-            state.setdefault("prs", {})
-            state.setdefault("seen_comments", {})
-            state.setdefault("ci_notified", {})
-            state.setdefault("ci_failure_signatures", {})
-            state.setdefault("conflict_notified", {})
-            state.setdefault("failed_task_retries", {})
-            state.setdefault("review_tasks", {})
-            state.setdefault("stale_watch", {})
-            yield state
-            temp_path: Path | None = None
-            try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    encoding="utf-8",
-                    dir=state_file.parent,
-                    prefix=f".{state_file.name}.",
-                    delete=False,
-                ) as temp_handle:
-                    json.dump(state, temp_handle, indent=1, ensure_ascii=False)
-                    temp_handle.write("\n")
-                    temp_handle.flush()
-                    os.fsync(temp_handle.fileno())
-                    temp_path = Path(temp_handle.name)
-                temp_path.replace(state_file)
-            finally:
-                if temp_path is not None and temp_path.exists():
-                    temp_path.unlink()
-        finally:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    with review_multipass.locked_state(state_file) as state:
+        yield state
 
 
 class GitHubWebhookManager:
@@ -272,19 +216,31 @@ class GitHubWebhookManager:
                 self._debounce_tasks.pop(key, None)
 
     def _dispatch_review_if_current(self, key: str, sha: str, title: str) -> None:
+        models = list(getattr(self._config, "review_multipass_models", None) or [])
         with locked_dispatch_state(self._require_state_file()) as state:
             entry = state["prs"].get(key)
             if not entry or entry.get("sha") != sha or entry.get("notified_sha") == sha:
                 return
-            quiet = self._format_quiet_period()
-            content = t(
-                "github_gateway.review_dispatch",
-                pr_key=key,
-                sha=sha[:8],
-                title=title,
-                quiet=quiet,
-            )
-            self._send(self._config.reviewer_anima, content, "review", key)
+            if models:
+                repo, _, number = key.partition("#")
+                review_multipass.dispatch_multipass_reviews(
+                    state,
+                    [{"repo": repo, "number": int(number or 0), "sha": sha, "title": title}],
+                    reviewer=self._config.reviewer_anima,
+                    models=models,
+                    quiet_seconds=self._config.quiet_seconds,
+                    dispatch=dispatch_direct_task,
+                )
+            else:
+                quiet = self._format_quiet_period()
+                content = t(
+                    "github_gateway.review_dispatch",
+                    pr_key=key,
+                    sha=sha[:8],
+                    title=title,
+                    quiet=quiet,
+                )
+                self._send(self._config.reviewer_anima, content, "review", key)
             entry["notified_sha"] = sha
 
     def _format_quiet_period(self) -> str:

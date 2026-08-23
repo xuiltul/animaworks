@@ -630,6 +630,12 @@ class GitHubWebhookConfig(BaseModel):
     # Treated like bot_login for comment exclusion and FRC review dispatch.
     reviewer_login: str = ""
     quiet_seconds: float = Field(default=180, ge=0)
+    # Multi-pass FRC review: "mode:model" entries, one review pass each.  Empty
+    # preserves the historic single (model-less) dispatch.  Squares with the
+    # cron fallback env override PR_DISPATCH_REVIEW_MODELS.
+    review_multipass_models: list[str] = Field(default_factory=list)
+    # Model used for the final synthesis pass; None uses the reviewer default.
+    review_synth_model: str | None = None
 
 
 class EventExportConfig(BaseModel):
