@@ -65,6 +65,10 @@ def _submit_tasks_tools() -> list[dict[str, Any]]:
                                     "type": "string",
                                     "description": "Name of the Anima to notify on completion (default: submitter)",
                                 },
+                                "model": {
+                                    "type": "string",
+                                    "description": _t("schema.submit_tasks.task_model"),
+                                },
                                 "workspace": {
                                     "type": "string",
                                     "description": "Workspace alias or alias#hash for the task's working directory",

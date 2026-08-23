@@ -35,10 +35,14 @@ def regenerate_pending_json(
     if (pending_dir / task_file).exists() or (pending_dir / "processing" / task_file).exists():
         return True
 
-    task_desc_meta = entry.meta.get("task_desc", {})
+    task_desc_meta = entry.meta.get("task_desc", {}) or {}
     description = task_desc_meta.get("description", entry.original_instruction)
     if description_suffix:
         description = f"{description}\n\n{description_suffix}"
+    # Restore the per-task model override so blocked-recovery re-execution keeps it.
+    # SSoT is the pending task_desc (task_desc_meta.model) with a fallback to the
+    # queue entry meta (entry.meta.model) for direct-dispatch submissions.
+    model = entry.meta.get("model") or task_desc_meta.get("model")
     task_desc = {
         "task_type": "llm",
         "task_id": entry.task_id,
@@ -55,6 +59,7 @@ def regenerate_pending_json(
         "submitted_at": now_iso(),
         "reply_to": task_desc_meta.get("reply_to", anima_name),
         "working_directory": task_desc_meta.get("working_directory", ""),
+        "model": model if isinstance(model, str) else "",
     }
     atomic_write_text(
         pending_dir / task_file,

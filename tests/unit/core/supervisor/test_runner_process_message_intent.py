@@ -46,6 +46,7 @@ async def test_handle_process_message_normalizes_none_intent(tmp_path: Path):
         voice_mode=False,
         meeting_room_id="",
         meeting_participants=None,
+        model=None,
     )
 
 

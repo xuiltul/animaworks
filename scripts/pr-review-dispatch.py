@@ -8,13 +8,11 @@ delivery made by either process is not repeated by the other.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import re
 import subprocess
 import sys
-import tempfile
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -37,6 +35,14 @@ BOT_LOGIN = os.environ.get("PR_DISPATCH_BOT_LOGIN", "")
 # Dedicated review-bot login (e.g. animaworks-reviewer); treated like BOT_LOGIN.
 REVIEWER_LOGIN = os.environ.get("PR_DISPATCH_REVIEWER_LOGIN", "")
 REVIEWER = os.environ.get("PR_DISPATCH_REVIEWER", "sumire")
+# Multi-pass FRC review: comma-separated "mode:model" list emitted as one review
+# pass per entry.  Unset/empty keeps the historic single (model-less) dispatch.
+PR_DISPATCH_REVIEW_MODELS = [
+    e.strip() for e in os.environ.get("PR_DISPATCH_REVIEW_MODELS", "").split(",") if e.strip()
+]
+# Model used for the final synthesis pass; ``None`` falls back to the reviewer
+# default model.
+PR_DISPATCH_SYNTH_MODEL = os.environ.get("PR_DISPATCH_SYNTH_MODEL", "").strip() or None
 DISPATCHER = os.environ.get("PR_DISPATCH_DISPATCHER", "rin")
 FIXER = os.environ.get("PR_DISPATCH_FIXER", "natsume")
 ESCALATION_TARGET = os.environ.get("PR_DISPATCH_ESCALATION", "sakura")
@@ -63,6 +69,7 @@ sys.path.insert(
     os.environ.get("ANIMAWORKS_REPO_ROOT", str(Path(__file__).resolve().parents[1])),
 )
 
+import core.review_multipass as review_multipass
 from core.memory.task_queue import TaskQueueManager
 from core.paths import get_animas_dir
 from core.tasks_dispatch import FAILING_CI_CONCLUSIONS, dispatch_direct_task
@@ -208,37 +215,12 @@ def dispatch_task(**kwargs: Any) -> bool:
 
 
 def default_state() -> dict:
-    return {
-        "prs": {},
-        "last_comment_check": iso(now_utc()),
-        "seen_comments": {},
-        "ci_notified": {},
-        "ci_failure_signatures": {},
-        "conflict_notified": {},
-        "failed_task_retries": {},
-        "review_tasks": {},
-        "stale_watch": {},
-        "consecutive_failures": 0,
-    }
+    return review_multipass.default_state()
 
 
 def load_state() -> dict:
-    if STATE_FILE.exists():
-        try:
-            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(state, dict):
-                state.setdefault("prs", {})
-                state.setdefault("seen_comments", {})
-                state.setdefault("ci_notified", {})
-                state.setdefault("ci_failure_signatures", {})
-                state.setdefault("conflict_notified", {})
-                state.setdefault("failed_task_retries", {})
-                state.setdefault("review_tasks", {})
-                state.setdefault("stale_watch", {})
-                return state
-        except (json.JSONDecodeError, OSError):
-            log("state file unreadable; starting fresh")
-    return default_state()
+    return review_multipass.load_state(STATE_FILE)
+
 
 
 def parse_gh_time(value: str | None) -> datetime | None:
@@ -1031,44 +1013,45 @@ def check_unaddressed(state: dict) -> None:
 
 
 def save_state(state: dict) -> None:
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=STATE_FILE.parent,
-            prefix=f".{STATE_FILE.name}.",
-            delete=False,
-        ) as handle:
-            json.dump(state, handle, indent=1, ensure_ascii=False)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-            temp_path = Path(handle.name)
-        temp_path.replace(STATE_FILE)
-    finally:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink()
+    review_multipass.save_state(STATE_FILE, state)
 
 
 @contextmanager
 def locked_state() -> Iterator[dict]:
     """Lock the shared state across the complete read/modify/write cycle."""
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with STATE_LOCK.open("a+", encoding="utf-8") as lock_handle:
-        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-        try:
-            state = load_state()
-            yield state
-            save_state(state)
-        finally:
-            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+    with review_multipass.locked_state(STATE_FILE) as state:
+        yield state
+
+
+def _review_models() -> list[str]:
+    """Effective multipass model list: env override, else config (SSoT)."""
+    if PR_DISPATCH_REVIEW_MODELS:
+        return PR_DISPATCH_REVIEW_MODELS
+    try:
+        from core.config.models import load_config
+
+        return list(getattr(load_config().github_webhook, "review_multipass_models", None) or [])
+    except Exception:
+        return []
+
+
+def _synth_model() -> str | None:
+    """Effective synthesis model: env override, else config (SSoT)."""
+    if PR_DISPATCH_SYNTH_MODEL:
+        return PR_DISPATCH_SYNTH_MODEL
+    try:
+        from core.config.models import load_config
+
+        return getattr(load_config().github_webhook, "review_synth_model", None)
+    except Exception:
+        return None
 
 
 def check_commits(state: dict) -> None:
     """Detect a stable PR head and dispatch it once to the reviewer."""
     now = now_utc()
-    ready: list[str] = []
+    ready: list[dict] = []
+    ready_lines: list[str] = []
     open_keys: set[str] = set()
 
     for repo in REPOS:
@@ -1107,26 +1090,34 @@ def check_commits(state: dict) -> None:
                 continue
             seen_at = datetime.strptime(entry["sha_seen_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
             if now - seen_at >= timedelta(seconds=QUIET_SECONDS):
-                ready.append(f"- {key} {sha[:8]}: {entry.get('title', '')}")
+                ready.append(
+                    {"repo": repo, "number": pr["number"], "sha": sha, "title": entry.get("title", "")}
+                )
+                ready_lines.append(f"- {key} {sha[:8]}: {entry.get('title', '')}")
                 entry["notified_sha"] = sha
 
     state["prs"] = {key: value for key, value in state["prs"].items() if key in open_keys}
     if ready:
-        send(
-            REVIEWER,
-            "【PR新規コミット検出（push静穏確認済み）】\n\n"
-            + "\n".join(ready)
-            + "\n\n"
-            + f"最終pushから{QUIET_SECONDS // 60}分以上静穏を確認済みです。"
-            "上記PRの current HEAD に対する差分レビュー/FRCを直ちに実施してください。"
-            "過去HEADへのレビューは新push時点で無効です。"
-            "2回目以降のレビューは収束ルール（heartbeat.md記載・2026-07-15 taka指示）に従い、"
-            "前回blocking findingsの解消確認と新push差分に限定してください。"
-            "full PRの再レビューをやり直さないこと。"
-            "同一PRのHOLDが通算3回に達している場合は自動レビューを停止し、rinへエスカレーションしてください。"
-            "複数件ある場合はbackgroundタスクとして並列に処理して構いません。",
-        )
-        log(f"review dispatch -> {REVIEWER}: {len(ready)} PR(s)")
+        models = _review_models()
+        if models:
+            review_multipass.dispatch_multipass_reviews(
+                state,
+                ready,
+                reviewer=REVIEWER,
+                models=models,
+                quiet_seconds=QUIET_SECONDS,
+                dispatch=dispatch_task,
+                logger=log,
+            )
+        else:
+            send(
+                REVIEWER,
+                "【PR新規コミット検出（push静穏確認済み）】\n\n"
+                + "\n".join(ready_lines)
+                + "\n\n"
+                + review_multipass.review_instruction_base(QUIET_SECONDS),
+            )
+            log(f"review dispatch -> {REVIEWER}: {len(ready)} PR(s)")
 
 
 def check_comments(state: dict) -> None:
@@ -1471,6 +1462,14 @@ def main() -> int:
         try:
             reopen_stalled_dispatches(state)
             check_commits(state)
+            review_multipass.check_multipass_synth(
+                state,
+                reviewer=REVIEWER,
+                synth_model=_synth_model(),
+                quiet_seconds=QUIET_SECONDS,
+                dispatch=dispatch_task,
+                logger=log,
+            )
             check_comments(state)
             check_ci(state)
             check_conflicts(state)

@@ -764,3 +764,44 @@ class TestSharedStateLocking:
         restored = json.loads(state_file.read_text(encoding="utf-8"))
         assert set(("prs", "seen_comments", "ci_notified")) <= restored.keys()
         assert restored["seen_comments"]["review:1"] == "now"
+
+
+def test_multipass_branch_suppresses_single_dm_and_dispatches_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """H-4: 設定時に webhook 正本経路がマルチパス発行し、単発通知は抑止される。"""
+    shared_dir = tmp_path / "shared"
+    state_file = shared_dir / github_gateway.STATE_FILENAME
+    config = GitHubWebhookConfig(
+        enabled=True,
+        repos=[REPO],
+        reviewer_anima="sumire",
+        dispatcher_anima="rin",
+        review_multipass_models=["c:gpt-5.6-sol", "s:gpt-5.6-sol"],
+        review_synth_model="c:gpt-5.6-sol",
+    )
+    manager = GitHubWebhookManager(config=config, shared_dir=shared_dir, state_file=state_file)
+    sends: list[str] = []
+    direct_task = MagicMock(return_value=True)
+    monkeypatch.setattr(manager, "_send", lambda to, content, kind, key: sends.append(kind))
+    monkeypatch.setattr(github_gateway, "dispatch_direct_task", direct_task)
+
+    key = f"{REPO}#17"
+    with locked_dispatch_state(state_file) as state:
+        state["prs"][key] = {
+            "sha": SHA_1,
+            "sha_seen_at": "2026-07-14T00:00:00Z",
+            "notified_sha": "",
+            "title": "t",
+        }
+
+    manager._dispatch_review_if_current(key, SHA_1, "t")
+
+    assert sends == []  # 単発DMは送られない
+    assert direct_task.call_count == 2
+    base = f"gh-ci-example-org-example-repo#17-{SHA_1[:8]}"
+    ids = {c.kwargs["task_id"] for c in direct_task.call_args_list}
+    assert ids == {f"{base}-m-c-gpt-5-6-sol", f"{base}-m-s-gpt-5-6-sol"}
+    state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert state["prs"][key]["notified_sha"] == SHA_1
+    assert state["multi_model_passes"][base]["attempt"] == 1

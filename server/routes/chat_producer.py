@@ -75,6 +75,7 @@ async def _run_producer(
                 "images": _to_image_data(body.images),
                 "attachment_paths": saved_paths,
                 "thread_id": body.thread_id,
+                "model": body.model,
             },
             timeout=_timeout,
         ):

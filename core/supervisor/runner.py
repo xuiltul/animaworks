@@ -861,6 +861,7 @@ class AnimaRunner:
         voice_mode = params.get("voice_mode") is True
         meeting_room_id = params.get("meeting_room_id", "")
         meeting_participants = params.get("meeting_participants") or None
+        model = params.get("model") or None
 
         result = await self.anima.process_message(
             message,
@@ -874,6 +875,7 @@ class AnimaRunner:
             voice_mode=voice_mode,
             meeting_room_id=meeting_room_id,
             meeting_participants=meeting_participants,
+            model=model,
         )
         cycle_result: dict[str, Any] = {}
         response_text = result

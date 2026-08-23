@@ -118,6 +118,80 @@ def _resolve_voice_model_config(model_config: Any, voice_mode: bool) -> Any:
     return model_config.model_copy(update={"thinking_effort": effort})
 
 
+def _apply_chat_model_override(
+    owner: Any,
+    base_config: Any,
+    requested_model: str,
+    *,
+    thread_id: str,
+) -> Any:
+    """Build and log a per-message model override (Cursor-style).
+
+    On unparseable input or unresolvable credential the override is skipped
+    (with a warning) and *base_config* is returned unchanged so chat always
+    continues with the default model.  ``fallback_models`` is inherited from
+    *base_config* via the shared ``build_model_override_config`` so the
+    existing rate_guard fallback walk keeps working.
+    """
+    if not requested_model or not isinstance(base_config, ModelConfig):
+        return base_config
+    try:
+        from core.config.io import load_config
+        from core.config.model_config import build_model_override_config
+        from core.config.model_mode import parse_fallback_entry
+
+        config = load_config()
+        parsed = parse_fallback_entry(requested_model, config)
+        if parsed is None:
+            logger.warning(
+                "[%s] Ignoring chat model override: unparseable %r",
+                owner.name,
+                requested_model,
+            )
+            return base_config
+        mode, model = parsed
+        override = build_model_override_config(base_config, mode, model, config)
+        if override is None:
+            logger.warning(
+                "[%s] Ignoring chat model override: no resolvable credential for %r (mode=%s)",
+                owner.name,
+                model,
+                mode,
+            )
+            return base_config
+        owner._activity.log(
+            "model_override",
+            summary=(
+                f"Chat model override: {base_config.model} -> "
+                f"{override.resolved_mode}:{override.model}"
+            ),
+            channel="chat",
+            meta={
+                "requested": requested_model,
+                "resolved": f"{override.resolved_mode}:{override.model}",
+                "thread_id": thread_id,
+            },
+            safe=True,
+        )
+        logger.info(
+            "[%s] Chat model override applied: %s -> %s:%s",
+            owner.name,
+            base_config.model,
+            override.resolved_mode,
+            override.model,
+        )
+        return override
+    except Exception:
+        logger.warning(
+            "[%s] Ignoring chat model override for %r",
+            owner.name,
+            requested_model,
+            exc_info=True,
+        )
+        return base_config
+
+
+
 def _resolve_chat_retry_config(
     owner: Any,
     primary_config: Any,
@@ -651,6 +725,7 @@ class MessagingMixin:
         meeting_room_id: str = "",
         meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
+        model: str | None = None,
     ) -> str | dict[str, Any]:
         self._validate_thread_id(thread_id)
         # Auto-interrupt: if a session is already running on this thread,
@@ -717,6 +792,20 @@ class MessagingMixin:
                     primary_model_config,
                     phase="preflight",
                 )
+
+                # Optional per-message model override (Cursor-style). Skipped
+                # (with a warning) when the model can't be resolved, so chat
+                # always continues on the default model.  The override also
+                # becomes the fallback context so rate_guard re-routing keeps
+                # working within the requested model's family.
+                if model:
+                    base_model_config = _apply_chat_model_override(
+                        self,
+                        base_model_config,
+                        model,
+                        thread_id=thread_id,
+                    )
+                    primary_model_config = base_model_config
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)
@@ -957,6 +1046,7 @@ class MessagingMixin:
         meeting_room_id: str = "",
         meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
+        model: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -1044,6 +1134,20 @@ class MessagingMixin:
                     primary_model_config,
                     phase="preflight",
                 )
+
+                # Optional per-message model override (Cursor-style). Skipped
+                # (with a warning) when the model can't be resolved, so chat
+                # always continues on the default model.  The override also
+                # becomes the fallback context so rate_guard re-routing keeps
+                # working within the requested model's family.
+                if model:
+                    base_model_config = _apply_chat_model_override(
+                        self,
+                        base_model_config,
+                        model,
+                        thread_id=thread_id,
+                    )
+                    primary_model_config = base_model_config
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)
