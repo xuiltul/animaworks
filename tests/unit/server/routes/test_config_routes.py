@@ -300,7 +300,7 @@ class TestOpenAIAuthSettings:
 
         with (
             patch("server.routes.config_routes.load_config", return_value=config),
-            patch("server.routes.config_routes.is_codex_login_available", return_value=True),
+            patch("core.config.model_catalog.is_codex_login_available", return_value=True),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/system/available-models")
@@ -321,8 +321,8 @@ class TestOpenAIAuthSettings:
 
         with (
             patch("server.routes.config_routes.load_config", return_value=config),
-            patch("server.routes.config_routes.is_codex_login_available", return_value=False),
-            patch("server.routes.config_routes.is_grok_authenticated", return_value=True),
+            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
+            patch("core.config.model_catalog.is_grok_authenticated", return_value=True),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/system/available-models")

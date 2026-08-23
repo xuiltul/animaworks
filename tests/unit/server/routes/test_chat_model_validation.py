@@ -37,8 +37,8 @@ class TestAvailableModelsCanonicalIds:
         if credential not in ("openai", "google", "anthropic"):
             pytest.skip()
         with (
-            patch("server.routes.config_routes.is_codex_login_available", return_value=False),
-            patch("server.routes.config_routes.is_grok_authenticated", return_value=False),
+            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
+            patch("core.config.model_catalog.is_grok_authenticated", return_value=False),
         ):
             models = _build_static_model_catalog(config)
         if credential == "openai":
@@ -58,8 +58,8 @@ class TestAvailableModelsCanonicalIds:
         from core.config.model_mode import resolve_execution_mode
 
         with (
-            patch("server.routes.config_routes.is_codex_login_available", return_value=False),
-            patch("server.routes.config_routes.is_grok_authenticated", return_value=False),
+            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
+            patch("core.config.model_catalog.is_grok_authenticated", return_value=False),
         ):
             ids = available_model_id_set(provider_config)
 
@@ -78,7 +78,7 @@ class TestValidateChatModel:
         stack = ExitStack()
         stack.enter_context(
             patch(
-                "server.routes.config_routes.available_model_id_set",
+                "core.config.model_catalog.available_model_id_set",
                 return_value=set(allowed_set),
             )
         )
