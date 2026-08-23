@@ -37,6 +37,14 @@ BOT_LOGIN = os.environ.get("PR_DISPATCH_BOT_LOGIN", "")
 # Dedicated review-bot login (e.g. animaworks-reviewer); treated like BOT_LOGIN.
 REVIEWER_LOGIN = os.environ.get("PR_DISPATCH_REVIEWER_LOGIN", "")
 REVIEWER = os.environ.get("PR_DISPATCH_REVIEWER", "sumire")
+# Multi-pass FRC review: comma-separated "mode:model" list emitted as one review
+# pass per entry.  Unset/empty keeps the historic single (model-less) dispatch.
+PR_DISPATCH_REVIEW_MODELS = [
+    e.strip() for e in os.environ.get("PR_DISPATCH_REVIEW_MODELS", "").split(",") if e.strip()
+]
+# Model used for the final synthesis pass; ``None`` falls back to the reviewer
+# default model.
+PR_DISPATCH_SYNTH_MODEL = os.environ.get("PR_DISPATCH_SYNTH_MODEL", "").strip() or None
 DISPATCHER = os.environ.get("PR_DISPATCH_DISPATCHER", "rin")
 FIXER = os.environ.get("PR_DISPATCH_FIXER", "natsume")
 ESCALATION_TARGET = os.environ.get("PR_DISPATCH_ESCALATION", "sakura")
@@ -1065,10 +1073,137 @@ def locked_state() -> Iterator[dict]:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
 
+_REVIEW_INSTRUCTION_BASE = (
+    f"最終pushから{QUIET_SECONDS // 60}分以上静穏を確認済みです。"
+    "上記PRの current HEAD に対する差分レビュー/FRCを直ちに実施してください。"
+    "過去HEADへのレビューは新push時点で無効です。"
+    "2回目以降のレビューは収束ルール（heartbeat.md記載・2026-07-15 taka指示）に従い、"
+    "前回blocking findingsの解消確認と新push差分に限定してください。"
+    "full PRの再レビューをやり直さないこと。"
+    "同一PRのHOLDが通算3回に達している場合は自動レビューを停止し、rinへエスカレーションしてください。"
+    "複数件ある場合はbackgroundタスクとして並列に処理して構いません。"
+)
+
+
+def _model_slug(entry: str) -> str:
+    """Normalize a ``mode:model`` entry into a lowercase ``[a-z0-9-]`` slug.
+
+    The mode prefix is stripped so ``x:grok/grok-4.5`` -> ``grok-grok-4-5``,
+    keeping the slug short and file-safe.
+    """
+    model_part = entry.split(":", 1)[1] if ":" in entry else entry
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", model_part).strip("-").lower()
+    return slug or "model"
+
+
+def _review_task(task_id: str):
+    """Return the reviewer's task record, or ``None`` when absent."""
+    if DRY_RUN:
+        return None
+    target_dir = get_animas_dir() / REVIEWER
+    if not target_dir.is_dir():
+        return None
+    return TaskQueueManager(target_dir).get_task_by_id(task_id)
+
+
+def _dispatch_multipass_reviews(state: dict, items: list[dict]) -> None:
+    """Emit one review task per configured model, then arm the synthesis step."""
+    multipass = state.setdefault("multi_model_passes", {})
+    for it in items:
+        base_id = _ci_task_id(it["repo"], it["number"], it["sha"])
+        if base_id in multipass:
+            continue
+        sha = it["sha"]
+        number = it["number"]
+        repo = it["repo"]
+        model_tasks: list[str] = []
+        for entry in PR_DISPATCH_REVIEW_MODELS:
+            slug = _model_slug(entry)
+            task_id = f"{base_id}-m-{slug}"
+            instruction = (
+                f"GitHub の {repo}#{number}（{it.get('title', '')}）の review 依頼。\n\n"
+                + _REVIEW_INSTRUCTION_BASE
+                + f"\n\nこれは {entry} によるレビューパスである。最終判定（APPROVE操作等）はこのパスでは行わず、"
+                "指摘の列挙に徹すること。原文の句読点を変えずに事実を挙げ、各指摘に file:line を添えること。"
+                f"FRCファイルは reviews/pr{number}-frc-{REVIEWER}-{sha}-{slug}.md に書くこと。"
+            )
+            dispatch_task(
+                target=REVIEWER,
+                task_id=task_id,
+                summary=f"PRマルチパスレビュー {repo}#{number} ({entry})",
+                instruction=instruction,
+                model=entry,
+                meta={"repo": repo, "number": number, "sha": sha, "model": entry, "multipass": True},
+            )
+            model_tasks.append(task_id)
+        multipass[base_id] = {
+            "repo": repo,
+            "number": number,
+            "sha": sha,
+            "models": list(PR_DISPATCH_REVIEW_MODELS),
+            "task_ids": model_tasks,
+            "synth_dispatched": False,
+        }
+        log(
+            f"multi-pass review dispatch -> {REVIEWER}: {repo}#{number} "
+            f"models={','.join(PR_DISPATCH_REVIEW_MODELS)} tasks={','.join(model_tasks)}"
+        )
+
+
+def check_multipass_synth(state: dict) -> None:
+    """Dispatch the final synthesis task once every model pass is terminal."""
+    if not PR_DISPATCH_REVIEW_MODELS:
+        return
+    multipass = state.setdefault("multi_model_passes", {})
+    for base_id, info in list(multipass.items()):
+        if info.get("synth_dispatched"):
+            continue
+        records = {tid: _review_task(tid) for tid in info["task_ids"]}
+        if any(record is None or record.status not in TERMINAL_TASK_STATUSES for record in records.values()):
+            continue  # still running or unpublished; wait for the next cron sweep
+        done = [tid for tid, rec in records.items() if rec.status == "done"]
+        if not done:
+            continue  # all passes failed -> rely on the reality-check redispatch path
+        failed = [tid for tid, rec in records.items() if rec.status != "done"]
+        repo = info["repo"]
+        number = info["number"]
+        sha = info["sha"]
+        synth_id = f"{base_id}-synth"
+        file_paths = "\n".join(
+            f"- reviews/pr{number}-frc-{REVIEWER}-{sha}-{_model_slug(m)}.md" for m in info["models"]
+        )
+        if failed:
+            failed_notes = (
+                "\n\n注意: 以下のモデルパスは失敗（terminalだがdoneでない）したためファイルが欠落している。"
+                f"\n{chr(10).join('- ' + t for t in failed)}"
+            )
+        else:
+            failed_notes = ""
+        instruction = (
+            f"各モデルパスのFRCファイル（下記パス）を読み、指摘をマージ・重複排除し、最終判定を "
+            f"reviews/pr{number}-frc-{REVIEWER}-{sha}.md （従来のファイル名）に書く。"
+            "GitHub上のレビュー操作（APPROVE・CHANGES_REQUESTED等）はこの統合パスで行う。"
+            f"\n\n対象ファイル:\n{file_paths}\n"
+        ) + failed_notes
+        dispatch_task(
+            target=REVIEWER,
+            task_id=synth_id,
+            summary=f"PRレビュー統合判定 {repo}#{number}",
+            instruction=instruction,
+            model=PR_DISPATCH_SYNTH_MODEL,
+            meta={"repo": repo, "number": number, "sha": sha, "multipass": "synth"},
+        )
+        log(f"multi-pass synth dispatch -> {REVIEWER}: {synth_id} models={','.join(info['models'])}")
+        # Drop the entry so state stays bounded to in-flight PRs; same-sha
+        # re-dispatch is prevented by notified_sha and add_task_if_absent.
+        multipass.pop(base_id, None)
+
+
 def check_commits(state: dict) -> None:
     """Detect a stable PR head and dispatch it once to the reviewer."""
     now = now_utc()
-    ready: list[str] = []
+    ready: list[dict] = []
+    ready_lines: list[str] = []
     open_keys: set[str] = set()
 
     for repo in REPOS:
@@ -1107,26 +1242,25 @@ def check_commits(state: dict) -> None:
                 continue
             seen_at = datetime.strptime(entry["sha_seen_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
             if now - seen_at >= timedelta(seconds=QUIET_SECONDS):
-                ready.append(f"- {key} {sha[:8]}: {entry.get('title', '')}")
+                ready.append(
+                    {"repo": repo, "number": pr["number"], "sha": sha, "title": entry.get("title", "")}
+                )
+                ready_lines.append(f"- {key} {sha[:8]}: {entry.get('title', '')}")
                 entry["notified_sha"] = sha
 
     state["prs"] = {key: value for key, value in state["prs"].items() if key in open_keys}
     if ready:
-        send(
-            REVIEWER,
-            "【PR新規コミット検出（push静穏確認済み）】\n\n"
-            + "\n".join(ready)
-            + "\n\n"
-            + f"最終pushから{QUIET_SECONDS // 60}分以上静穏を確認済みです。"
-            "上記PRの current HEAD に対する差分レビュー/FRCを直ちに実施してください。"
-            "過去HEADへのレビューは新push時点で無効です。"
-            "2回目以降のレビューは収束ルール（heartbeat.md記載・2026-07-15 taka指示）に従い、"
-            "前回blocking findingsの解消確認と新push差分に限定してください。"
-            "full PRの再レビューをやり直さないこと。"
-            "同一PRのHOLDが通算3回に達している場合は自動レビューを停止し、rinへエスカレーションしてください。"
-            "複数件ある場合はbackgroundタスクとして並列に処理して構いません。",
-        )
-        log(f"review dispatch -> {REVIEWER}: {len(ready)} PR(s)")
+        if PR_DISPATCH_REVIEW_MODELS:
+            _dispatch_multipass_reviews(state, ready)
+        else:
+            send(
+                REVIEWER,
+                "【PR新規コミット検出（push静穏確認済み）】\n\n"
+                + "\n".join(ready_lines)
+                + "\n\n"
+                + _REVIEW_INSTRUCTION_BASE,
+            )
+            log(f"review dispatch -> {REVIEWER}: {len(ready)} PR(s)")
 
 
 def check_comments(state: dict) -> None:
@@ -1471,6 +1605,7 @@ def main() -> int:
         try:
             reopen_stalled_dispatches(state)
             check_commits(state)
+            check_multipass_synth(state)
             check_comments(state)
             check_ci(state)
             check_conflicts(state)
