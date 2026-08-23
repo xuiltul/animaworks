@@ -143,6 +143,7 @@ class StreamingIPCHandler:
         voice_mode = request.params.get("voice_mode") is True
         meeting_room_id = request.params.get("meeting_room_id", "")
         meeting_participants = request.params.get("meeting_participants") or None
+        model = request.params.get("model") or None
         full_response = ""
 
         # Track bootstrap state to detect completion
@@ -187,6 +188,7 @@ class StreamingIPCHandler:
                     voice_mode=voice_mode,
                     meeting_room_id=meeting_room_id,
                     meeting_participants=meeting_participants,
+                    model=model,
                 ):
                     event_type = chunk.get("type", "unknown")
 

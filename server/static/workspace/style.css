@@ -1570,6 +1570,34 @@ html, body {
   padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
 }
 
+/* ── Per-message model selector (workspace) ── */
+.ws-conv-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px 8px;
+}
+
+.ws-conv-model-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.ws-conv-model {
+  min-width: 0;
+  max-width: 220px;
+  font-size: 12px;
+  color: #333;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
 /* ── Textarea + Buttons Container (workspace) ── */
 
 .ws-conv-input-area .chat-input-wrap {

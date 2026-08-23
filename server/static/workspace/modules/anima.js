@@ -37,7 +37,7 @@ function statusLabel(status) {
 /**
  * Map a full model name to a short display alias.
  */
-function modelAlias(model) {
+export function modelAlias(model) {
   if (!model) return "";
   const m = model.toLowerCase();
   // S: Claude models

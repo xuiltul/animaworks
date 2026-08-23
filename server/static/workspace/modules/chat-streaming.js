@@ -13,6 +13,8 @@ import { renderStreamingBubbleInner, updateStreamingZone, TextAnimator, stripThi
 import { renderWsThreadTabs } from "./chat-thread.js";
 import { wsSaveDraft, wsClearDraft, isMobileView } from "./chat-mobile.js";
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
+import { fetchAvailableModels } from "./api.js";
+import { modelAlias } from "./anima.js";
 
 const logger = createLogger("ws-chat-streaming");
 let _getDom = () => ({});
@@ -23,6 +25,32 @@ let _convLatestStreamingMsg = null;
 export function initStreaming({ getDom, getImageManager }) {
   _getDom = getDom;
   _getImageManager = getImageManager;
+}
+
+/**
+ * Populate the per-message model picker from GET /api/system/available-models.
+ * The empty option (“anima既定”) sends no model so the anima default is used.
+ */
+export async function initChatModelPicker() {
+  const dom = _getDom();
+  const select = dom.convModel;
+  if (!select) return;
+  let models = [];
+  try {
+    const data = await fetchAvailableModels();
+    models = data?.models || [];
+  } catch (err) {
+    logger.error("Failed to load chat model picker options", { error: err?.message });
+    return;
+  }
+  const defaultOpt = `<option value="">${t("chat.model_default")}</option>`;
+  const options = models
+    .filter(m => m && m.id)
+    .map(m => {
+      const label = modelAlias(m.id) || m.label || m.id;
+      return `<option value="${escapeHtml(m.id)}">${escapeHtml(label)}</option>`;
+    });
+  select.innerHTML = defaultOpt + options.join("");
 }
 
 function _mgr() { return ChatSessionManager.getInstance(); }
@@ -165,6 +193,11 @@ export function addToQueue() {
   wsShowPendingIndicator(); wsUpdateSendButton(anima ? _mgr().isStreamingFor(anima, thread) : false);
 }
 
+function _modelSelection() {
+  const dom = _getDom();
+  return dom.convModel?.value || "";
+}
+
 async function _sendConversation(text, overrideImages = null) {
   const dom = _getDom();
   const im = _getImageManager();
@@ -196,6 +229,7 @@ async function _sendConversation(text, overrideImages = null) {
   let _thinkingAnimator = null;
 
   const { success, error } = await mgr.sendChat(anima, thread, text, {
+    model: _modelSelection() || undefined,
     images,
     displayImages,
     callbacks: {

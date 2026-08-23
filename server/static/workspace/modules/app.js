@@ -58,6 +58,7 @@ function cacheDom() {
   dom.convMessages = document.getElementById("wsConvMessages");
   dom.convInput = document.getElementById("wsConvInput");
   dom.convSend = document.getElementById("wsConvSend");
+  dom.convModel = document.getElementById("wsConvModel");
   dom.convPreviewBar = document.getElementById("wsConvPreviewBar");
   dom.convAttachBtn = document.getElementById("wsConvAttachBtn");
   dom.convFileInput = document.getElementById("wsConvFileInput");

@@ -877,5 +877,7 @@
   "ws.trigger_cron": "定時タスク",
   "ws.trigger_heartbeat": "定期巡回",
   "ws.turns": "ターン",
-  "ws.view_toggle_title": "ビュー切替"
+  "ws.view_toggle_title": "ビュー切替",
+  "chat.model_default": "anima既定",
+  "chat.model_selector": "このメッセージのモデル"
 }

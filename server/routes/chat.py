@@ -110,6 +110,7 @@ def create_chat_router() -> APIRouter:
                     "images": _to_image_data(body.images),
                     "attachment_paths": saved_paths,
                     "thread_id": body.thread_id,
+                    "model": body.model,
                 },
                 timeout=float(
                     __import__("core.config", fromlist=["load_config"]).load_config().server.ipc_stream_timeout

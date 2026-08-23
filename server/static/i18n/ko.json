@@ -823,5 +823,7 @@
   "ws.trigger_cron": "정기 태스크",
   "ws.trigger_heartbeat": "정기 순회",
   "ws.turns": "턴",
-  "ws.view_toggle_title": "뷰 전환"
+  "ws.view_toggle_title": "뷰 전환",
+  "chat.model_default": "아니마 기본",
+  "chat.model_selector": "이 메시지의 모델"
 }
