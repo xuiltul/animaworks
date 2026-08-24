@@ -393,6 +393,8 @@ class ExecutorFactoryMixin:
 
         if self.model_config.api_key:
             return self.model_config.api_key
+        if not self.model_config.api_key_env:
+            return None
         return os.environ.get(self.model_config.api_key_env)
 
     def _get_retriever(self) -> object | None:

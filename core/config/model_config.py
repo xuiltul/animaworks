@@ -191,7 +191,9 @@ def build_model_override_config(
                 "credential": None,
                 "credential_type": None,
                 "api_key": None,
-                "api_key_env": None,
+                # "" (not None): schema declares str, and readers pass this to
+                # os.environ.get(), which raises TypeError on None.
+                "api_key_env": "",
                 "api_base_url": None,
                 "extra_keys": {},
             },
