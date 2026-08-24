@@ -15,6 +15,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -144,6 +145,50 @@ class TestStreamingHandlerBaseException:
         assert len(error_responses) == 1
         assert error_responses[0].error["code"] == "FATAL_STREAM_ERROR"
         assert "KeyboardInterrupt" in error_responses[0].error["message"]
+
+    @pytest.mark.asyncio
+    async def test_cycle_done_drains_generator_in_its_context(self):
+        """The upstream generator finalizes in the producer Context."""
+        from core.supervisor.streaming_handler import StreamingIPCHandler
+
+        scoped = contextvars.ContextVar("stream_scope", default="outer")
+        finalized = asyncio.Event()
+        reset_error: list[BaseException] = []
+
+        async def mock_stream(*args, **kwargs):
+            token = scoped.set("inner")
+            try:
+                yield {
+                    "type": "cycle_done",
+                    "cycle_result": {"summary": "complete"},
+                }
+            finally:
+                try:
+                    scoped.reset(token)
+                except BaseException as exc:  # capture the historical failure
+                    reset_error.append(exc)
+                finalized.set()
+
+        anima = MagicMock()
+        anima.process_message_stream = mock_stream
+        anima.needs_bootstrap = False
+        handler = StreamingIPCHandler(anima=anima, anima_name="test-anima", anima_dir="/tmp/test")
+        request = IPCRequest(
+            id="req-context",
+            method="process_message",
+            params={"message": "test", "stream": True},
+        )
+
+        responses = []
+        with patch("core.config.load_config") as mock_config:
+            mock_config.return_value.server.keepalive_interval = 30
+            async for response in handler.handle_stream(request):
+                responses.append(response)
+
+        await asyncio.wait_for(finalized.wait(), timeout=1)
+        assert reset_error == []
+        assert sum(response.done for response in responses) == 1
+        assert responses[-1].result["response"] == "complete"
 
 
 # ── B1: ProcessSupervisor RESTARTING state ──────────

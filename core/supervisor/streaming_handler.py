@@ -163,6 +163,7 @@ class StreamingIPCHandler:
         async def _stream_producer() -> None:
             """Read Agent SDK stream and enqueue IPCResponse chunks."""
             nonlocal full_response
+            cycle_done_seen = False
             try:
                 # Emit bootstrap_start if anima needs bootstrap
                 if was_bootstrapping:
@@ -204,6 +205,7 @@ class StreamingIPCHandler:
                         )
 
                     elif event_type == "cycle_done":
+                        cycle_done_seen = True
                         cycle_result = chunk.get("cycle_result", {})
                         full_response = cycle_result.get(
                             "summary",
@@ -235,7 +237,17 @@ class StreamingIPCHandler:
                                 },
                             )
                         )
-                        return
+                        # Do not return here.  ``run_cycle_streaming`` owns
+                        # ContextVar reset tokens and must be resumed once more
+                        # so its async-generator ``finally`` blocks execute in
+                        # this producer task's Context.  Returning immediately
+                        # leaves Python to close the generator later from an
+                        # ``async_generator_athrow`` task, where reset(token)
+                        # raises "token was created in a different Context".
+                        # Draining the generator is safe: cycle_done is the
+                        # protocol's final event and no further item is emitted
+                        # to the client.
+                        continue
 
                     elif event_type == "bootstrap_busy":
                         # Anima is already bootstrapping — forward as-is
@@ -271,19 +283,20 @@ class StreamingIPCHandler:
                             )
                         )
 
-                # Stream ended without cycle_done — done=False切断パス
-                self._clear_stream_abort_state("stream ended without cycle_done (done=False)", thread_id)
-                await _enqueue(
-                    IPCResponse(
-                        id=request.id,
-                        stream=True,
-                        done=True,
-                        result={
-                            "response": full_response,
-                            "replied_to": [],
-                        },
+                if not cycle_done_seen:
+                    # Stream ended without cycle_done — done=False切断パス
+                    self._clear_stream_abort_state("stream ended without cycle_done (done=False)", thread_id)
+                    await _enqueue(
+                        IPCResponse(
+                            id=request.id,
+                            stream=True,
+                            done=True,
+                            result={
+                                "response": full_response,
+                                "replied_to": [],
+                            },
+                        )
                     )
-                )
 
             except TimeoutError as e:
                 logger.error("Timeout in streaming process_message: %s", e)
