@@ -510,18 +510,21 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     return ExecutionResult(
                         text="\n".join(response_text) or f"[Agent SDK Error: {retry_exc}]",
                         tool_call_records=_finalize_pending_records(pending_records),
+                        error=True,
                     )
             else:
                 logger.exception("Agent SDK execution error")
                 return ExecutionResult(
                     text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
                     tool_call_records=_finalize_pending_records(pending_records),
+                    error=True,
                 )
         except Exception as e:
             logger.exception("Agent SDK execution error")
             return ExecutionResult(
                 text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
                 tool_call_records=_finalize_pending_records(pending_records),
+                error=True,
             )
         finally:
             _kill_sdk_process(sdk_pid, sdk_pid_create_time)
@@ -554,6 +557,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                 return ExecutionResult(
                     text=f"[Agent SDK Error: {retry_exc}]",
                     tool_call_records=[],
+                    error=True,
                 )
             finally:
                 _kill_sdk_process(sdk_pid, sdk_pid_create_time)
@@ -569,6 +573,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             tool_call_records=all_tool_records,
             force_chain=session_stats.get("force_chain", False),
             usage=usage_acc,
+            error=bool(getattr(result_message, "is_error", False)),
         )
 
     # ── Streaming execution ──────────────────────────────────

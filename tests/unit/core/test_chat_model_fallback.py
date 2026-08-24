@@ -128,6 +128,48 @@ async def test_blocking_content_policy_error_does_not_fallback() -> None:
 
 
 @pytest.mark.asyncio
+async def test_blocking_unknown_structured_error_still_falls_back() -> None:
+    primary, fallback = _configs()
+    owner = MagicMock()
+    owner.agent.run_cycle = AsyncMock(
+        side_effect=[
+            CycleResult(
+                trigger="message:human",
+                action="error",
+                summary="A future provider failure we have never seen before",
+                reason="unknown",
+            ),
+            CycleResult(trigger="message:human", action="responded", summary="fallback succeeded"),
+        ]
+    )
+
+    with (
+        patch(
+            "core.execution.fallback_activity.resolve_effective_model_config",
+            return_value=fallback,
+        ),
+        patch(
+            "core.execution.fallback_activity.fallback_event_meta",
+            return_value=_fallback_meta(),
+        ),
+    ):
+        result = await _run_chat_cycle_with_fallback(
+            owner,
+            prompt="hello",
+            trigger="message:human",
+            message_intent="",
+            images=None,
+            prior_messages=None,
+            thread_id="default",
+            primary_config=primary,
+            active_config=primary,
+        )
+
+    assert result.summary == "fallback succeeded"
+    assert owner.agent.run_cycle.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_blocking_retry_failure_uses_normal_error_path_without_third_attempt() -> None:
     primary, fallback = _configs()
     owner = MagicMock()

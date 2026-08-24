@@ -1003,8 +1003,17 @@ class CycleMixin:
         )
         return CycleResult(
             trigger=trigger,
-            action="responded",
+            action="error" if result.error else "responded",
+            stop_kind="stream_error" if result.error else "normal",
             summary=accumulated_text,
+            reason=(
+                _resolve_error_category(result.reason, accumulated_text) or "unknown"
+                if result.error
+                else ""
+            ),
+            error_category=(
+                _resolve_error_category(result.reason, accumulated_text) if result.error else None
+            ),
             duration_ms=duration_ms,
             context_usage_ratio=tracker.usage_ratio,
             context_window=tracker.context_window,
