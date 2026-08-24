@@ -188,41 +188,72 @@ async def run_with_model_fallback(
     active_config: ModelConfig,
     channel: str,
 ) -> _T:
-    """Run once, then re-resolve and retry once after a fallback-safe failure."""
-    failure: Exception | None = None
-    try:
-        result = await run(active_config)
-    except Exception as exc:
-        failure = exc
-        reason, hint = classify_llm_error(exc)
-        if not hint.fallback_ok:
-            raise
-    else:
-        data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
-        if not isinstance(data, dict) or not (data.get("action") == "error" or data.get("reason")):
-            return result
-        reason, hint = classify_llm_error_message(str(data.get("summary") or ""))
-        if not hint.fallback_ok:
-            return result
+    """Walk the configured priority list until one model succeeds.
 
-    report_capacity_block(active_config, reason, hint)
-    retry_config = resolve_effective_model_config(primary_config)
-    if all(
-        getattr(retry_config, field, None) == getattr(active_config, field, None)
-        for field in ("model", "execution_mode", "resolved_mode", "credential")
-    ):
-        if failure is not None:
-            raise failure
-        return result
+    Some CLI executors return provider failures as ordinary response text
+    (not an exception or ``action=error``).  Classify every result summary so
+    those responses cannot escape as a successful chat reply.
+    """
+    current_config = active_config
+    seen: set[tuple[Any, ...]] = set()
+    last_result: _T | None = None
+    last_failure: Exception | None = None
 
-    log_model_fallback(
-        activity,
-        primary_config,
-        retry_config,
-        channel=channel,
-        phase="runtime_retry",
-    )
-    return await run(retry_config)
+    while True:
+        key = tuple(
+            getattr(current_config, field, None)
+            for field in ("model", "execution_mode", "resolved_mode", "credential")
+        )
+        if key in seen:
+            if last_failure is not None:
+                raise last_failure
+            assert last_result is not None
+            return last_result
+        seen.add(key)
+
+        last_failure = None
+        try:
+            result = await run(current_config)
+        except Exception as exc:
+            last_failure = exc
+            reason, hint = classify_llm_error(exc)
+            if not hint.fallback_ok:
+                raise
+        else:
+            last_result = result
+            data = result.model_dump(mode="json") if hasattr(result, "model_dump") else result
+            if not isinstance(data, dict):
+                return result
+            error_text = str(data.get("summary") or "")
+            reason, hint = classify_llm_error_message(
+                f"{data.get('reason') or ''} {error_text}".strip()
+            )
+            explicit_error = data.get("action") == "error" or bool(data.get("reason"))
+            if reason is FailoverReason.UNKNOWN and not explicit_error:
+                return result
+            if not hint.fallback_ok:
+                return result
+
+        report_capacity_block(current_config, reason, hint)
+        retry_config = resolve_effective_model_config(primary_config)
+        retry_key = tuple(
+            getattr(retry_config, field, None)
+            for field in ("model", "execution_mode", "resolved_mode", "credential")
+        )
+        if retry_key in seen:
+            if last_failure is not None:
+                raise last_failure
+            assert last_result is not None
+            return last_result
+
+        log_model_fallback(
+            activity,
+            primary_config,
+            retry_config,
+            channel=channel,
+            phase="runtime_retry",
+        )
+        current_config = retry_config
 
 
 __all__ = [

@@ -34,7 +34,11 @@ from core.execution.error_classifier import (
     classify_llm_error,
     classify_llm_error_message,
 )
-from core.execution.fallback_activity import log_model_fallback, run_with_model_fallback
+from core.execution.fallback_activity import (
+    log_model_fallback,
+    report_capacity_block,
+    run_with_model_fallback,
+)
 from core.execution.session_types import resolve_runtime_session_type
 from core.i18n import t
 from core.image_artifacts import extract_image_artifacts_from_tool_records, resolve_local_image_paths
@@ -57,8 +61,6 @@ def _chat_fallback_reason_from_exception(exc: Exception) -> FailoverReason | Non
 def _chat_fallback_reason_from_result(result: CycleResult | dict[str, Any]) -> FailoverReason | None:
     """Return a chat-retry reason from a terminal cycle result, if any."""
     data = result.model_dump(mode="json") if isinstance(result, CycleResult) else result
-    if data.get("action") != "error":
-        return None
     raw_reason = data.get("reason")
     if isinstance(raw_reason, str):
         try:
@@ -70,7 +72,12 @@ def _chat_fallback_reason_from_result(result: CycleResult | dict[str, Any]) -> F
                 f"{reason.value.replace('_', ' ')} {data.get('summary') or ''}"
             )
             return reason if hint.fallback_ok else None
+    # Mode S can surface quota/overload failures as a normal assistant result.
+    # Always inspect the final text; the classifier only opts in known,
+    # fallback-safe provider failures.
     reason, hint = classify_llm_error_message(str(data.get("summary") or ""))
+    if reason is FailoverReason.UNKNOWN and data.get("action") != "error":
+        return None
     return reason if hint.fallback_ok else None
 
 
@@ -201,6 +208,8 @@ def _resolve_chat_retry_config(
     """Re-evaluate fallback selection and return a different config once."""
     if reason is None or not isinstance(primary_config, ModelConfig):
         return None
+    _classified, hint = classify_llm_error_message(reason.value.replace("_", " "))
+    report_capacity_block(active_config, reason, hint)
     retry_config = resolve_effective_model_config(primary_config)
     if _same_effective_model(retry_config, active_config):
         return None
@@ -226,7 +235,7 @@ async def _run_chat_cycle_with_fallback(
     primary_config: Any,
     active_config: Any,
 ) -> CycleResult:
-    """Run a blocking chat cycle, retrying once on quota/rate fallback."""
+    """Run a blocking chat cycle, walking fallbacks on capacity failures."""
 
     async def _run(config: Any) -> CycleResult:
         return await owner.agent.run_cycle(
@@ -262,11 +271,17 @@ async def _run_chat_stream_with_fallback(
     primary_config: Any,
     active_config: Any,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Stream a chat cycle, restarting at most once on terminal quota/rate errors."""
+    """Stream a chat cycle, walking fallbacks on terminal capacity errors."""
     current_config = active_config
-    retry_used = False
+    attempted: set[tuple[Any, ...]] = set()
 
     while True:
+        attempted.add(
+            tuple(
+                getattr(current_config, field, None)
+                for field in ("model", "execution_mode", "resolved_mode", "credential")
+            )
+        )
         retry_config = None
         emitted_payload = False
         try:
@@ -291,7 +306,7 @@ async def _run_chat_stream_with_fallback(
                     if isinstance(raw_result, dict):
                         reason = _chat_fallback_reason_from_result(raw_result)
 
-                if not retry_used and not emitted_payload:
+                if not emitted_payload:
                     retry_config = _resolve_chat_retry_config(
                         owner,
                         primary_config,
@@ -299,26 +314,39 @@ async def _run_chat_stream_with_fallback(
                         reason,
                     )
                     if retry_config is not None:
+                        retry_key = tuple(
+                            getattr(retry_config, field, None)
+                            for field in ("model", "execution_mode", "resolved_mode", "credential")
+                        )
+                        if retry_key in attempted:
+                            retry_config = None
+                    if retry_config is not None:
                         break
 
                 if chunk_type in {"text_delta", "tool_start", "tool_end"}:
                     emitted_payload = True
                 yield chunk
         except Exception as exc:
-            if not retry_used and not emitted_payload:
+            if not emitted_payload:
                 retry_config = _resolve_chat_retry_config(
                     owner,
                     primary_config,
                     current_config,
                     _chat_fallback_reason_from_exception(exc),
                 )
+                if retry_config is not None:
+                    retry_key = tuple(
+                        getattr(retry_config, field, None)
+                        for field in ("model", "execution_mode", "resolved_mode", "credential")
+                    )
+                    if retry_key in attempted:
+                        retry_config = None
             if retry_config is None:
                 raise
 
         if retry_config is None:
             return
         current_config = retry_config
-        retry_used = True
 
 
 def _agent_session_context(owner: Any):

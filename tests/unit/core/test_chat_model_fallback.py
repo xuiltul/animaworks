@@ -165,6 +165,63 @@ async def test_blocking_retry_failure_uses_normal_error_path_without_third_attem
 
 
 @pytest.mark.asyncio
+async def test_blocking_walks_all_fallbacks_until_one_is_alive() -> None:
+    primary, first_fallback = _configs()
+    second_fallback = primary.model_copy(
+        update={
+            "model": "openai/deepseek-v4-flash-0731",
+            "execution_mode": "a",
+            "resolved_mode": "A",
+            "credential": "deepseek",
+        }
+    )
+    owner = MagicMock()
+    owner.agent.run_cycle = AsyncMock(
+        side_effect=[
+            CycleResult(
+                trigger="message:human",
+                action="responded",
+                summary="You've reached your Fable 5 limit. Switch to another model.",
+            ),
+            LLMAPIError("API Error: 529 Overloaded"),
+            CycleResult(
+                trigger="message:human",
+                action="responded",
+                summary="deepseek succeeded",
+            ),
+        ]
+    )
+
+    with (
+        patch(
+            "core.execution.fallback_activity.resolve_effective_model_config",
+            side_effect=[first_fallback, second_fallback],
+        ),
+        patch(
+            "core.execution.fallback_activity.fallback_event_meta",
+            return_value=_fallback_meta(),
+        ),
+    ):
+        result = await _run_chat_cycle_with_fallback(
+            owner,
+            prompt="hello",
+            trigger="message:human",
+            message_intent="",
+            images=None,
+            prior_messages=None,
+            thread_id="default",
+            primary_config=primary,
+            active_config=primary,
+        )
+
+    assert result.summary == "deepseek succeeded"
+    assert owner.agent.run_cycle.await_count == 3
+    overrides = [call.kwargs["model_config_override"] for call in owner.agent.run_cycle.await_args_list]
+    assert overrides == [primary, first_fallback, second_fallback]
+    assert owner._activity.log.call_count == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "reason",
     ["quota_exhausted", "rate_limit", "overloaded"],
@@ -273,6 +330,62 @@ async def test_stream_retry_failure_is_exposed_without_third_attempt() -> None:
     assert len(chunks) == 1
     assert chunks[0]["type"] == "error"
     assert chunks[0]["terminal"] is True
+
+
+@pytest.mark.asyncio
+async def test_stream_walks_multiple_fallbacks() -> None:
+    primary, first_fallback = _configs()
+    second_fallback = primary.model_copy(
+        update={"model": "deepseek/deepseek-chat", "execution_mode": "a", "resolved_mode": "A"}
+    )
+    owner = MagicMock()
+    seen_configs: list[ModelConfig] = []
+
+    async def _stream(*args, **kwargs):
+        config = kwargs["model_config_override"]
+        seen_configs.append(config)
+        if len(seen_configs) < 3:
+            yield {
+                "type": "error",
+                "message": "provider overloaded",
+                "terminal": True,
+                "reason": "overloaded",
+            }
+            return
+        yield {"type": "text_delta", "text": "ok"}
+        yield {
+            "type": "cycle_done",
+            "cycle_result": {"trigger": "message:human", "action": "responded", "summary": "ok"},
+        }
+
+    owner.agent.run_cycle_streaming = _stream
+    with (
+        patch(
+            "core._anima_messaging.resolve_effective_model_config",
+            side_effect=[first_fallback, second_fallback],
+        ),
+        patch(
+            "core.execution.fallback_activity.fallback_event_meta",
+            return_value=_fallback_meta(),
+        ),
+    ):
+        chunks = [
+            chunk
+            async for chunk in _run_chat_stream_with_fallback(
+                owner,
+                prompt="hello",
+                trigger="message:human",
+                message_intent="",
+                images=None,
+                prior_messages=None,
+                thread_id="default",
+                primary_config=primary,
+                active_config=primary,
+            )
+        ]
+
+    assert seen_configs == [primary, first_fallback, second_fallback]
+    assert [chunk["type"] for chunk in chunks] == ["text_delta", "cycle_done"]
 
 
 def test_preflight_fallback_records_activity_event() -> None:
