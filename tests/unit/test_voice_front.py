@@ -477,3 +477,12 @@ def test_is_repeating_detects_looped_paragraph() -> None:
     assert _is_repeating(para) is False
     assert _is_repeating(para + para) is True
     assert _is_repeating("短い") is False
+
+
+def test_reasoning_model_flags_and_api_version() -> None:
+    lane = VoiceFrontLane(
+        model="azure/gpt-5.6-luna", api_base="https://x", system_prompt="s", api_version="2025-04-01-preview"
+    )
+    assert lane._reasoning_model
+    assert lane._api_version == "2025-04-01-preview"
+    assert not VoiceFrontLane(model="openai/qwen3.6-35b-a3b", api_base="http://x", system_prompt="s")._reasoning_model

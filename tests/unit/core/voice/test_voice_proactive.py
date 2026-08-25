@@ -679,3 +679,13 @@ def test_wav_seconds_parses_duration() -> None:
     assert _wav_seconds(buf.getvalue()) == pytest.approx(0.5)
     assert _wav_seconds(b"not wav") is None
     assert _wav_seconds(b"") is None
+
+
+def test_zakkan_corner_rotates_seed_and_skips_memory_hint() -> None:
+    first = build_proactive_prompt(3)
+    second = build_proactive_prompt(8)
+
+    assert "ツールは使わない" in first and "ツールは使わない" in second
+    assert "今回のお題は「今の時間帯」" in first
+    assert "今回のお題は「今の季節や天気」" in second
+    assert "少し前の記憶" not in second

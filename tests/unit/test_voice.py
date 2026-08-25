@@ -317,6 +317,18 @@ class TestSanitizeForTTS:
         # sanitize keeps the display copy readable — no kana conversion.
         assert sanitize_for_tts("2003年です", keep_emoji=True) == "2003年です"
 
+    def test_ruby_reading_for_alphabet_terms(self) -> None:
+        from core.voice.session import apply_reading_rules, resolve_ruby, strip_ruby
+
+        text = "GitHub（ギットハブ）のPR(ピーアール)とClaude Code（クロード コード）を見た"
+        assert resolve_ruby(text) == "ギットハブのピーアールとクロード コードを見た"
+        assert strip_ruby(text) == "GitHubのPRとClaude Codeを見た"
+        # Ruby feeds the TTS copy through apply_reading_rules too.
+        assert apply_reading_rules("API（エーピーアイ）です") == "エーピーアイです"
+        # Japanese parentheticals are not ruby.
+        assert resolve_ruby("東京（とうきょう）") == "東京（とうきょう）"
+        assert strip_ruby("GitHub（設定）") == "GitHub（設定）"
+
     def test_yomi_dict_substitution(self, tmp_path, monkeypatch) -> None:
         import core.voice.session as vs
 

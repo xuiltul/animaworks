@@ -119,6 +119,7 @@ class VoiceFrontLane:
         timeout: float = 120.0,
         num_retries: int = 1,
         api_key: str = "local",
+        api_version: str | None = None,
         tool_executor: Callable[[str], str] | None = None,
     ) -> None:
         self._model = model
@@ -126,6 +127,11 @@ class VoiceFrontLane:
         # litellm's openai provider requires an api_key even for local
         # llama.cpp endpoints; "local" is a harmless placeholder.
         self._api_key = api_key
+        self._api_version = api_version
+        # ponytail: gpt-5.x (Azure/OpenAI) rejects temperature != 1 and would
+        # spend the small max_tokens budget on reasoning; substring match is
+        # enough until a second reasoning family shows up.
+        self._reasoning_model = "gpt-5" in model
         self._system_prompt = system_prompt
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -232,6 +238,12 @@ class VoiceFrontLane:
         if self._api_base:
             kwargs["api_base"] = self._api_base
             kwargs["api_key"] = self._api_key
+        if self._api_version:
+            kwargs["api_version"] = self._api_version
+        if self._reasoning_model:
+            kwargs.pop("temperature")
+            kwargs.pop("extra_body")
+            kwargs["reasoning_effort"] = "none"
         if tools:
             kwargs["tools"] = tools
 

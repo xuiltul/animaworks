@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import io
 import json
 import logging
@@ -85,6 +86,20 @@ _MONOLOGUE_FRAME_JA = (
     "返事を求めない。作業の依頼や実行はしない。{blocklist}）",
     "すでに話した話題（同じ話題・同じ固有名詞・同じ言い回しは使わない）: {topics}。",
     "少し前の記憶や、手順・知識の中から意外なものを掘り出して。",
+    "今回のお題は「{seed}」。いまは{now}。",
+    "%H時%M分",
+)
+# The no-tool corner gets an explicit sub-topic that rotates per visit;
+# otherwise its prompt is byte-identical every time and a small model drifts
+# to the same persona hobby (identity.md) on every pass.
+_MONOLOGUE_ZAKKAN_SEEDS_JA = (
+    "今の時間帯",
+    "今の季節や天気",
+    "最近の気分",
+    "自分の癖や性格",
+    "好きな食べ物や飲み物",
+    "休みの日の過ごし方",
+    "最近ちょっと気になっていること",
 )
 # Which corner reads memory (index-aligned with ``_MONOLOGUE_CORNERS_JA``).
 # Those turns force the tool call — small models otherwise skip it and invent
@@ -116,8 +131,16 @@ def build_proactive_prompt(count: int, recent: list[str] | tuple[str, ...] = ())
     """
     if count == 0:
         return _MONOLOGUE_FIRST_JA[0]
-    corner = _MONOLOGUE_CORNERS_JA[(count - 1) % len(_MONOLOGUE_CORNERS_JA)]
-    if count >= 4:
+    idx = (count - 1) % len(_MONOLOGUE_CORNERS_JA)
+    corner = _MONOLOGUE_CORNERS_JA[idx]
+    if not _MONOLOGUE_CORNER_USES_MEMORY[idx]:
+        visit = (count - 1) // len(_MONOLOGUE_CORNERS_JA)
+        seed = _MONOLOGUE_ZAKKAN_SEEDS_JA[visit % len(_MONOLOGUE_ZAKKAN_SEEDS_JA)]
+        # The system prompt is static (prefix cache); the only clock the
+        # model has is this line, otherwise it guesses "午後十時" at 15:30.
+        now = datetime.datetime.now().strftime(_MONOLOGUE_FRAME_JA[4])
+        corner += _MONOLOGUE_FRAME_JA[3].format(seed=seed, now=now)
+    elif count >= 4:
         corner += _MONOLOGUE_FRAME_JA[2]
     # Topic words only — quoting the previous line verbatim (emoji included)
     # makes a small model imitate it instead of avoiding it.
@@ -264,6 +287,10 @@ VOICE_MODE_SUFFIX = (
     "これ以外（😃😀😅❤️✨等）は読みを乱すので使わない。"
     "感情を乗せたい短い文の先頭に同じ絵文字を2〜3個重ねると効果的です。"
     "大きい数字・年号は読み上げられる形（「三千八百億」等）で書いてください。"
+    "アルファベット表記の語（英単語・略語・製品名・サービス名・人名・コマンド名など）は"
+    "例外なく直後に全角丸括弧でカタカナの読みを付けてください: "
+    "GitHub（ギットハブ）、API（エーピーアイ）、PR（ピーアール）、Claude Code（クロードコード）。"
+    "読みは音声にだけ使われ字幕には出ません。"
     "Markdown記法（見出し・太字・リスト・コードブロック等）は使わないでください。"
     "調査・実装・資料作成など時間のかかる依頼はその場で実行せず、自分宛てにタスクを作成して、"
     "『タスクに積んでやっておきますね』のように短く返答してください。"
@@ -431,6 +458,24 @@ def read_years(text: str) -> str:
     return re.sub(r"(?<=[〇一二三四五六七八九十百千])・(?=[〇一二三四五六七八九])", "てん", text)
 
 
+# Inline reading the model writes for alphabet terms: ``GitHub（ギットハブ）``.
+# TTS gets the kana, subtitles get the alphabet.
+_RUBY_RE = re.compile(
+    r"([A-Za-z][A-Za-z0-9&+#./\-]*(?: [A-Za-z][A-Za-z0-9&+#./\-]*)*)"
+    r"[（(]([ァ-ヶーぁ-ん・ ]+)[）)]"
+)
+
+
+def resolve_ruby(text: str) -> str:
+    """``GitHub（ギットハブ）`` → ``ギットハブ`` (TTS copy)."""
+    return _RUBY_RE.sub(r"\2", text)
+
+
+def strip_ruby(text: str) -> str:
+    """``GitHub（ギットハブ）`` → ``GitHub`` (display copy)."""
+    return _RUBY_RE.sub(r"\1", text)
+
+
 # Fleet-global pronunciation dictionary (TSV: 表記<TAB>読み), applied
 # longest-first right before synthesis. Irodori has no furigana input, so
 # this is the only lever against misread proper nouns.
@@ -503,6 +548,7 @@ def apply_reading_rules(text: str) -> str:
     which reads correctly but looks bad in subtitles — apply this only to
     the string sent to the TTS engine, never to the display copy.
     """
+    text = resolve_ruby(text)
     for src, dst in load_yomi():
         text = text.replace(src, dst)
     return read_years(text)
@@ -1098,9 +1144,22 @@ class VoiceSession:
                 anima_dir,
                 anima_name=self._anima_name,
             )
+            api_base, api_key, api_version = self._front_api_base or "", "local", None
+            if not api_base and "/" in self._front_model:
+                # No explicit endpoint: use the provider credential from
+                # config.json (e.g. ``azure/<deployment>``).
+                from core.config import load_config
+
+                cred = load_config().credentials.get(self._front_model.split("/", 1)[0])
+                if cred is not None:
+                    api_base = cred.base_url or ""
+                    api_key = cred.api_key or "local"
+                    api_version = cred.keys.get("api_version")
             self._front_lane = VoiceFrontLane(
                 model=self._front_model,
-                api_base=self._front_api_base or "",
+                api_base=api_base,
+                api_key=api_key,
+                api_version=api_version,
                 system_prompt=system_prompt,
             )
         return self._front_lane
@@ -1216,6 +1275,7 @@ class VoiceSession:
                     said = re.sub(r"<!--.*?-->", "", spoken, flags=re.DOTALL).strip()
                     if said:
                         self._monologue_log.append(said[:60])
+                    logger.info("Monologue #%d (%s): %s", self._proactive_count, self._anima_name, said[:120])
                 # Always rewind the idle timer — success spoke just now, and a
                 # failure or down-lane must back off a full delay window.
                 self._last_activity = time.monotonic()
@@ -1577,7 +1637,8 @@ class VoiceSession:
             return
         # Subtitle keeps the original kanji; only the TTS input gets
         # yomi/kana substitutions (kana-heavy text is hard to read).
-        spoken = apply_reading_rules(text) if keep_emoji else text
+        spoken = apply_reading_rules(text) if keep_emoji else resolve_ruby(text)
+        text = strip_ruby(text)
         try:
             # text rides along so the client can show a playback-synced subtitle
             self._recent_tts_text.append(text)
