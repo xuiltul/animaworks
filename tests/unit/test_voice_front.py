@@ -134,7 +134,8 @@ class TestBuildVoiceFrontPrompt:
         # No dynamic timestamp / current-state style content that would break
         # prefix caching if it changed between requests.
         assert "current_state" not in prompt.lower()
-        assert "tool" not in prompt.lower()
+        # The ask_anima tool instructions are static text, not per-turn state.
+        assert "ask_anima" in prompt
 
 
 # ── Emotion extraction ─────────────────────────────────────────
