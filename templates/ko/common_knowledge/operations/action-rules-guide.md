@@ -40,6 +40,7 @@ keywords: 이메일, 초안, 중복 확인
 | `animaworks-tool gmail draft` | `gmail_draft` |
 | `animaworks-tool gmail send` | `gmail_send` |
 | `animaworks-tool chatwork send` | `chatwork_send` |
+| `animaworks-tool chatwork upload` | `chatwork_send` |
 | `animaworks-tool slack send` | `slack_send` |
 | `animaworks-tool discord send` | `discord_send` |
 | `animaworks-tool call_human` | `call_human` |

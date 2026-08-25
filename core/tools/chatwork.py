@@ -16,6 +16,7 @@ Provides:
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from core.tools._base import ToolConfigError
@@ -38,6 +39,8 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
     "messages": {"expected_seconds": 30, "background_eligible": False},
     # gated: requires explicit "chatwork_send" in permissions allow list.
     "send": {"expected_seconds": 10, "background_eligible": False, "gated": True},
+    # gated under chatwork_send (upload = message with attachment)
+    "upload": {"expected_seconds": 30, "background_eligible": False, "gated": True, "gated_as": "send"},
     "search": {"expected_seconds": 30, "background_eligible": False},
     "unreplied": {"expected_seconds": 60, "background_eligible": False},
     "sync": {"expected_seconds": 60, "background_eligible": True},
@@ -100,6 +103,11 @@ def dispatch(name: str, args: dict[str, Any]) -> Any:
         room_id = client.resolve_room_id(args["room"])
         message = md_to_chatwork(args["message"])
         return client.post_message(room_id, message)
+    if name == "chatwork_upload":
+        check_write_allowed(as_identity, anima_dir=anima_dir)
+        room_id = client.resolve_room_id(args["room"])
+        message = md_to_chatwork(args["message"]) if args.get("message") else None
+        return client.upload_file(room_id, Path(args["file"]).expanduser(), message)
     if name == "chatwork_messages":
         room_id = client.resolve_room_id(args["room"])
         cache = MessageCache(db_path=resolve_cache_db_path(client))
