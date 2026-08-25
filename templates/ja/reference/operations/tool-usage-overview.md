@@ -72,8 +72,8 @@ Mode A/B の統合スキーマでは **PascalCase 名**です。`ToolHandler` �
 
 禁止（いずれも終わりません）:
 
-- `glob.glob('/home/main/.animaworks/**/...', recursive=True)` — Python の `**` は symlink 先へも降りるため、実質無限に広がる
-- `os.walk('/home/main/.animaworks')` を上位から回す
+- `glob.glob('~/.animaworks/**/...', recursive=True)` — Python の `**` は symlink 先へも降りるため、実質無限に広がる
+- `os.walk('~/.animaworks')` を上位から回す
 - `find ~/.animaworks`、`du -sh ~/.animaworks`、`rg` をパス指定なしで `~/.animaworks` 直下から
 
 代わりに:

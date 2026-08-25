@@ -71,8 +71,8 @@ In Mode A/B unified schemas, names are **PascalCase**. Inside `ToolHandler` they
 
 Forbidden (none of these terminate):
 
-- `glob.glob('/home/main/.animaworks/**/...', recursive=True)` — Python's `**` descends through symlinks, so the search expands without bound
-- `os.walk('/home/main/.animaworks')` starting from the top
+- `glob.glob('~/.animaworks/**/...', recursive=True)` — Python's `**` descends through symlinks, so the search expands without bound
+- `os.walk('~/.animaworks')` starting from the top
 - `find ~/.animaworks`, `du -sh ~/.animaworks`, or `rg` rooted at `~/.animaworks` with no path narrowing
 
 Instead:
