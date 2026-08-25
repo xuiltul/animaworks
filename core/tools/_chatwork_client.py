@@ -183,6 +183,26 @@ class ChatworkClient:
         params = {"create_download_url": 1 if create_download_url else 0}
         return self.get(f"/rooms/{room_id}/files/{file_id}", params=params)
 
+    def upload_file(self, room_id: str, file_path: Path, message: str | None = None) -> dict:
+        """Upload a file (max 5MB) to a room, optionally with a message."""
+        if not file_path.exists() or not file_path.is_file():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        max_size = 5 * 1024 * 1024
+        size = file_path.stat().st_size
+        if size > max_size:
+            raise ValueError(
+                f"File too large: {file_path} is {size} bytes (max {max_size} bytes / 5MB)"
+            )
+        if message is not None and len(message) > 10000:
+            raise ValueError(f"Message exceeds 10,000 characters ({len(message)} chars)")
+        with open(file_path, "rb") as f:
+            return self._request(
+                "POST",
+                f"/rooms/{room_id}/files",
+                files={"file": (file_path.name, f)},
+                data={"message": message} if message else None,
+            )
+
     def download_file(self, download_url: str, output_path: Path) -> int:
         """Download a file to *output_path*. Returns the number of bytes written."""
         _require_requests()

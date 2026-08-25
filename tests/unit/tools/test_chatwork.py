@@ -187,6 +187,39 @@ class TestChatworkClient:
         tasks = client.my_tasks()
         assert len(tasks) == 1
 
+    def test_upload_file(self, tmp_path: Path):
+        self._mock_session.request.return_value = self._make_response(
+            json_data={"file_id": 1}
+        )
+        file_path = tmp_path / "report.pdf"
+        file_path.write_bytes(b"%PDF-1.4 fake content")
+        client = ChatworkClient(api_token="test-cw-token")
+        result = client.upload_file("123", file_path, message="here it is")
+        assert result == {"file_id": 1}
+        self._mock_session.request.assert_called_once()
+        args, kwargs = self._mock_session.request.call_args
+        assert args[0] == "POST"
+        assert args[1] == "https://api.chatwork.com/v2/rooms/123/files"
+        files = kwargs["files"]
+        assert "file" in files
+        assert files["file"][0] == "report.pdf"
+        assert kwargs["data"] == {"message": "here it is"}
+
+    def test_upload_file_too_large(self, tmp_path: Path):
+        file_path = tmp_path / "big.pdf"
+        with file_path.open("wb") as f:
+            f.truncate(5 * 1024 * 1024 + 1)
+        client = ChatworkClient(api_token="test-cw-token")
+        with pytest.raises(ValueError):
+            client.upload_file("123", file_path)
+        self._mock_session.request.assert_not_called()
+
+    def test_upload_file_missing(self, tmp_path: Path):
+        client = ChatworkClient(api_token="test-cw-token")
+        with pytest.raises(FileNotFoundError):
+            client.upload_file("123", tmp_path / "nope.pdf")
+        self._mock_session.request.assert_not_called()
+
 
 # ── MessageCache ──────────────────────────────────────────────────
 
@@ -608,7 +641,7 @@ class TestExecutionProfile:
         from core.tools.chatwork import EXECUTION_PROFILE
 
         expected = {
-            "rooms", "messages", "send", "search", "unreplied",
+            "rooms", "messages", "send", "upload", "search", "unreplied",
             "sync", "me", "members", "contacts", "task",
             "mytasks", "tasks", "mentions", "stats", "files", "download",
             "delete",

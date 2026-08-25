@@ -97,6 +97,7 @@ animaworks-tool chatwork mytasks [--done]
 animaworks-tool chatwork tasks <ルーム名またはID> [--done]
 animaworks-tool chatwork files <ルーム名またはID> [--account-id ID]
 animaworks-tool chatwork download <ルーム名またはID> <file_id> [-o 保存先パス]
+animaworks-tool chatwork upload <ルーム名またはID> <ファイルパス> [-m "添付メッセージ"]  # 5MBまで
 animaworks-tool chatwork stats
 ```
 全サブコマンドで `--as <identity>` を指定すると、委任されたidentityとして実行できます。"""
@@ -205,6 +206,12 @@ def cli_main(argv: list[str] | None = None) -> None:
             help="Output file path (default: original filename in current directory)",
         )
 
+        # upload
+        p = sub.add_parser("upload", help="Upload a file to a room")
+        p.add_argument("room", help="Room name or ID")
+        p.add_argument("file", help="File path to upload")
+        p.add_argument("-m", "--message", help="Attachment message (optional)")
+
         # stats
         sub.add_parser("stats", help="Show cache statistics")
 
@@ -224,7 +231,7 @@ def cli_main(argv: list[str] | None = None) -> None:
 
         try:
             identity = resolve_identity(args.as_identity)
-            if args.command in {"send", "delete", "task"}:
+            if args.command in {"send", "upload", "delete", "task"}:
                 check_write_allowed(args.as_identity)
             client = ChatworkClient(api_token=identity.token)
         except ToolConfigError as exc:
@@ -585,6 +592,17 @@ def cli_main(argv: list[str] | None = None) -> None:
                     size = f.get("filesize", 0)
                     name = f.get("filename", "?")
                     print(f"{f['file_id']:>12}  {size:>10}  {ts}  {uploader:20}  {name}")
+
+        elif args.command == "upload":
+            try:
+                room_id = client.resolve_room_id(args.room)
+                message = md_to_chatwork(args.message) if args.message else None
+                result = client.upload_file(room_id, Path(args.file).expanduser(), message)
+                name = Path(args.file).name
+                print(f"Uploaded '{name}' (file_id: {result['file_id']})")
+            except (FileNotFoundError, ValueError) as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
 
         elif args.command == "download":
             room_id = client.resolve_room_id(args.room)
