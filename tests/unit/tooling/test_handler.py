@@ -772,6 +772,9 @@ class TestExecuteCommand:
         assert parsed["error_type"] == "PermissionDenied"
 
     def test_injection_semicolon_rejected(self, handler: ToolHandler):
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         with patch("core.tooling.handler_perms.load_permissions") as mock_load:
             mock_load.return_value = _perms_config_from_md("## コマンド実行\n- ls: OK")
             result = handler.handle("execute_command", {"command": "ls; rm -rf /"})
@@ -1038,10 +1041,22 @@ class TestCommandPermissions:
         assert "Empty" in parsed["message"]
 
     def test_injection_semicolon(self, handler: ToolHandler):
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         result = handler._check_command_permission("ls; echo hi")
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
         assert "injection" in parsed["message"].lower()
+
+    def test_injection_semicolon_log_mode_passes(self, handler: ToolHandler):
+        """Default ``log`` mode must not block — same rollout switch as the SDK path."""
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        assert GlobalPermissionsCache.get().config.sdk_bash_injection.mode == "log"
+        with patch("core.tooling.handler_perms.load_permissions") as mock_load:
+            mock_load.return_value = _perms_config_from_md("## コマンド実行\n全般的なコマンド")
+            assert handler._check_command_permission("ls; echo hi") is None
 
     def test_backtick_allowed(self, handler: ToolHandler):
         with patch("core.tooling.handler_perms.load_permissions") as mock_load:
