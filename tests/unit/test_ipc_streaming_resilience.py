@@ -163,6 +163,10 @@ class TestStreamingHandlerBaseException:
                 }
             finally:
                 try:
+                    # Model an async context-manager exit after cycle_done.
+                    # Publishing the terminal response early would let the
+                    # consumer cancel the producer during this suspension.
+                    await asyncio.sleep(0.01)
                     scoped.reset(token)
                 except BaseException as exc:  # capture the historical failure
                     reset_error.append(exc)
