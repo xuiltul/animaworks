@@ -141,8 +141,28 @@ def write_processing_lease(
 
 
 def _read_proc_cmdline(pid: int) -> str:
-    raw = (Path("/proc") / str(pid) / "cmdline").read_bytes()
-    return raw.replace(b"\0", b" ").decode(errors="replace")
+    """Read a process command line on Linux and non-/proc platforms.
+
+    ``/proc`` is the preferred source because it does not add a runtime
+    dependency to the lease fast path.  macOS has no procfs, however, and
+    treating every existing PID there as live defeats the PID-reuse fence and
+    can leave an interrupted TaskExec descriptor stuck forever.  psutil is an
+    existing optional dependency used by the stronger process-start-time
+    fence, so use it as the portable fallback.
+    """
+    proc_path = Path("/proc") / str(pid) / "cmdline"
+    if proc_path.exists():
+        raw = proc_path.read_bytes()
+        return raw.replace(b"\0", b" ").decode(errors="replace")
+
+    try:
+        import psutil
+    except ImportError as exc:
+        raise OSError("process command line is unavailable") from exc
+    try:
+        return " ".join(psutil.Process(pid).cmdline())
+    except Exception as exc:
+        raise OSError("process command line is unavailable") from exc
 
 
 def _is_positive_int(value: Any) -> bool:
@@ -237,9 +257,6 @@ def _classify_v1(payload: dict[str, Any]) -> LeaseLiveness:
     if exists is None:
         return "unknown"
 
-    proc_root = Path("/proc")
-    if not proc_root.is_dir():
-        return "live"
     try:
         cmdline = _read_proc_cmdline(pid)
     except OSError:
@@ -290,9 +307,6 @@ def _classify_v2(
             return "dead"
     # If create_time is unavailable, fall through to cmdline checks.
 
-    proc_root = Path("/proc")
-    if not proc_root.is_dir():
-        return "live"
     try:
         cmdline = _read_proc_cmdline(int(task_pid))
     except OSError:
