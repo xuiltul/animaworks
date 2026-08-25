@@ -5,6 +5,22 @@ import { basePath } from '/shared/base-path.js';
 
 const MAX_RECORD_MS = 60_000;
 const ECHO_TAIL_MS = 1200;
+// vad-web v5 uses 32 ms frames and is more accurate than the legacy model.
+const VAD_MODEL = 'v5';
+// Normal listening sensitivity when TTS is not playing.
+const VAD_POSITIVE_THRESHOLD = 0.5;
+const VAD_NEGATIVE_THRESHOLD = 0.35;
+const VAD_MIN_SPEECH_MS = 400;
+// During TTS, require sustained high-confidence speech before probing.
+const BARGE_PROB_THRESHOLD = 0.75;
+const BARGE_MIN_MS = 600;
+const VAD_FRAME_MS = 32;
+// Resume playback if the server never returns a probe verdict.
+const BARGE_PROBE_TIMEOUT_MS = 2000;
+
+export function accumulateBargeMs(prevMs, probability, frameMs) {
+  return probability >= BARGE_PROB_THRESHOLD ? prevMs + frameMs : prevMs;
+}
 
 export class VoiceManager {
   constructor() {
@@ -22,6 +38,9 @@ export class VoiceManager {
     this._aecAll = false;
     this._heldPcm = [];
     this._holdPcm = false;
+    this._bargeCandidateMs = 0;
+    this._bargeProbeActive = false;
+    this._bargeProbeTimer = null;
     this._streamGeneration = 0;
     this._maxRecordTimer = null;
     this._playback = new VoicePlayback();
@@ -102,6 +121,7 @@ export class VoiceManager {
   }
 
   disconnect() {
+    this._cancelBargeProbe();
     this._streamGeneration++;
     this._mediaStreamPromise = null;
     this._pendingStop = true;
@@ -310,6 +330,7 @@ export class VoiceManager {
   }
 
   interrupt() {
+    this._cancelBargeProbe();
     this._pendingCaption = null;
     this._playback.stop();
     this._ttsPlaying = false;
@@ -374,6 +395,10 @@ export class VoiceManager {
       return;
     }
     const vad = new VoiceVAD({
+      model: VAD_MODEL,
+      positiveSpeechThreshold: VAD_POSITIVE_THRESHOLD,
+      negativeSpeechThreshold: VAD_NEGATIVE_THRESHOLD,
+      minSpeechMs: VAD_MIN_SPEECH_MS,
       getStream: () => this._ensureMediaStream(),
       pauseStream: async () => {},
       resumeStream: () => this._ensureMediaStream(),
@@ -381,15 +406,26 @@ export class VoiceManager {
         if (this._outputActive() && (!this._aecAll || !this._playback.aecActive)) return;
         this._holdPcm = this._playbackActive();
         this._heldPcm = [];
+        this._bargeCandidateMs = 0;
         this.startRecording();
       },
       onSpeechRealStart: () => {
-        if (!this._holdPcm) return;
-        this.interrupt();
-        this._flushHeldPcm();
+        // Playback-time speech is confirmed by probability accumulation and
+        // server-side STT; normal speech already streams without being held.
+        if (this._playbackActive()) return;
+        if (this._holdPcm) this._flushHeldPcm();
       },
-      onSpeechEnd: () => this.stopRecording(),
-      onMisfire: () => this.discardRecording(),
+      onFrameProcessed: (probabilities) => {
+        if (!this._holdPcm || this._bargeProbeActive) return;
+        this._bargeCandidateMs = accumulateBargeMs(
+          this._bargeCandidateMs,
+          probabilities.isSpeech,
+          VAD_FRAME_MS,
+        );
+        if (this._bargeCandidateMs >= BARGE_MIN_MS) this._startBargeProbe();
+      },
+      onSpeechEnd: () => this._finishVADRecording(),
+      onMisfire: () => this._finishVADRecording(),
     });
     this._vad = vad;
     let started = false;
@@ -409,6 +445,50 @@ export class VoiceManager {
     }
   }
 
+  _finishVADRecording() {
+    if (this._bargeProbeActive || !this._holdPcm) this.stopRecording();
+    else this.discardRecording();
+    this._bargeCandidateMs = 0;
+  }
+
+  _startBargeProbe() {
+    if (this._bargeProbeActive || !this._holdPcm) return;
+    if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
+    this._bargeProbeActive = true;
+    this._playback.pause();
+    this._ws.send(JSON.stringify({ type: 'barge_probe' }));
+    this._flushHeldPcm();
+    this._bargeProbeTimer = setTimeout(
+      () => this._resolveBargeProbe(false),
+      BARGE_PROBE_TIMEOUT_MS,
+    );
+  }
+
+  _resolveBargeProbe(interrupt) {
+    if (!this._bargeProbeActive) return;
+    this._cancelBargeProbe();
+    this._bargeCandidateMs = 0;
+    this._clearHeldPcm();
+    if (interrupt) {
+      this._pendingCaption = null;
+      this._playback.stop();
+      this._ttsPlaying = false;
+      this._emit('interrupted');
+      return;
+    }
+    this._playback.resume();
+    if (this._recording || this._startingRecording) this.discardRecording();
+  }
+
+  _cancelBargeProbe() {
+    if (this._bargeProbeTimer) {
+      clearTimeout(this._bargeProbeTimer);
+      this._bargeProbeTimer = null;
+    }
+    this._bargeProbeActive = false;
+    this._bargeCandidateMs = 0;
+  }
+
   _handleMessage(event) {
     if (event.data instanceof ArrayBuffer) {
       // First chunk after a tts_start carries that sentence's subtitle.
@@ -424,6 +504,9 @@ export class VoiceManager {
           break;
         case 'transcript_partial':
           this._emit('transcriptPartial', { text: msg.text });
+          break;
+        case 'barge_verdict':
+          this._resolveBargeProbe(Boolean(msg.interrupt));
           break;
         case 'response_start':
           this._emit('responseStart');

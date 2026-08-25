@@ -39,12 +39,17 @@ export class VoiceVAD {
     this._onSpeechStart = options.onSpeechStart || (() => {});
     this._onSpeechRealStart = options.onSpeechRealStart || (() => {});
     this._onSpeechEnd = options.onSpeechEnd || (() => {});
+    this._onFrameProcessed = options.onFrameProcessed || (() => {});
     // vad-web fires onVADMisfire *instead of* onSpeechEnd when the utterance
-    // was shorter than minSpeechFrames — without it a noise blip leaves the
+    // was shorter than minSpeechMs — without it a noise blip leaves the
     // caller's recording running forever.
     this._onMisfire = options.onMisfire || (() => {});
     this._positiveSpeechThreshold = options.positiveSpeechThreshold;
-    this._minSpeechFrames = options.minSpeechFrames;
+    this._negativeSpeechThreshold = options.negativeSpeechThreshold;
+    this._minSpeechMs = options.minSpeechMs;
+    this._redemptionMs = options.redemptionMs;
+    this._preSpeechPadMs = options.preSpeechPadMs;
+    this._model = options.model;
     this._getStream = options.getStream;
     this._pauseStream = options.pauseStream;
     this._resumeStream = options.resumeStream;
@@ -91,13 +96,20 @@ export class VoiceVAD {
         onVADMisfire: () => {
           if (this._active) this._onMisfire();
         },
+        onFrameProcessed: (probabilities) => {
+          if (this._active) this._onFrameProcessed(probabilities);
+        },
       };
       if (this._positiveSpeechThreshold != null) {
         vadOpts.positiveSpeechThreshold = this._positiveSpeechThreshold;
       }
-      if (this._minSpeechFrames != null) {
-        vadOpts.minSpeechFrames = this._minSpeechFrames;
+      if (this._negativeSpeechThreshold != null) {
+        vadOpts.negativeSpeechThreshold = this._negativeSpeechThreshold;
       }
+      if (this._minSpeechMs != null) vadOpts.minSpeechMs = this._minSpeechMs;
+      if (this._redemptionMs != null) vadOpts.redemptionMs = this._redemptionMs;
+      if (this._preSpeechPadMs != null) vadOpts.preSpeechPadMs = this._preSpeechPadMs;
+      if (this._model != null) vadOpts.model = this._model;
       if (this._getStream) vadOpts.getStream = this._getStream;
       if (this._pauseStream) vadOpts.pauseStream = this._pauseStream;
       if (this._resumeStream) vadOpts.resumeStream = this._resumeStream;

@@ -1101,6 +1101,99 @@ def _make_session(*, ws=None, stt=None, tts=None, supervisor=None):
     return VoiceSession("test", ws, stt, tts, tts_config, supervisor, voice_config)
 
 
+class TestBargeProbe:
+    def test_self_echo_containment(self) -> None:
+        from core.voice.session import _is_self_echo
+
+        recent = ["今日はいい天気ですね。散歩に行きませんか"]
+        assert _is_self_echo("こんにちは、今日はいい天気ですね", recent) is True
+        assert _is_self_echo("ちょっと待って", recent) is False
+        assert _is_self_echo("今日はいい天気ですね", []) is False
+
+    def test_self_echo_short_text(self) -> None:
+        from core.voice.session import _is_self_echo
+
+        assert _is_self_echo("天気", ["今日はいい天気です"]) is True
+        assert _is_self_echo("待て", ["今日はいい天気です"]) is False
+        assert _is_self_echo("", ["今日はいい天気です"]) is False
+
+    @pytest.mark.asyncio
+    async def test_probe_accepts_audio_while_tts_playing(self) -> None:
+        session = _make_session()
+        session._tts_playing = True
+        session._processing = True
+
+        await session.handle_barge_probe()
+        await session.handle_audio_chunk(b"\x00\x01\x02\x03")
+
+        assert bytes(session._audio_buffer) == b"\x00\x01\x02\x03"
+        await session.close()
+
+    @pytest.mark.asyncio
+    async def test_false_probe_verdict_discards_audio(self) -> None:
+        ws = AsyncMock()
+        session = _make_session(ws=ws)
+        await session.handle_barge_probe()
+        session._recent_tts_text.append("今日はいい天気ですね。散歩に行きませんか")
+        session._audio_buffer.extend(b"probe audio")
+
+        interrupted = await session._judge_probe("こんにちは、今日はいい天気ですね")
+
+        assert interrupted is False
+        ws.send_json.assert_awaited_with({"type": "barge_verdict", "interrupt": False})
+        assert session._audio_buffer == bytearray()
+        assert session._interrupted is False
+
+    @pytest.mark.asyncio
+    async def test_true_probe_verdict_preserves_audio(self) -> None:
+        ws = AsyncMock()
+        session = _make_session(ws=ws)
+        await session.handle_barge_probe()
+        session._recent_tts_text.append("今日はいい天気ですね。散歩に行きませんか")
+        session._audio_buffer.extend(b"probe audio")
+
+        interrupted = await session._judge_probe("ちょっと待って")
+
+        assert interrupted is True
+        ws.send_json.assert_awaited_with({"type": "barge_verdict", "interrupt": True})
+        assert session._interrupted is True
+        assert bytes(session._audio_buffer) == b"probe audio"
+
+    @pytest.mark.asyncio
+    async def test_short_partial_keeps_probe_open(self) -> None:
+        ws = AsyncMock()
+        session = _make_session(ws=ws)
+        session._tts_playing = True
+        session._processing = True
+        session._recent_tts_text.append("今日はいい天気ですね")
+
+        await session.handle_barge_probe()
+        # "うん" alone can't be judged — the probe must stay open for more text.
+        assert await session._judge_probe("うん", final=False) is False
+        assert session._probe_active is True
+        ws.send_json.assert_not_called()
+        # Enough non-echo text on a later partial confirms the interruption.
+        assert await session._judge_probe("うん、ちょっと待って", final=False) is True
+        assert session._probe_active is False
+        ws.send_json.assert_called_with({"type": "barge_verdict", "interrupt": True})
+        await session.close()
+
+    @pytest.mark.asyncio
+    async def test_probe_timeout_resumes_tts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import core.voice.session as voice_session
+
+        monkeypatch.setattr(voice_session, "PROBE_TIMEOUT_SEC", 0.01)
+        ws = AsyncMock()
+        session = _make_session(ws=ws)
+
+        await session.handle_barge_probe()
+        await asyncio.sleep(0.03)
+
+        ws.send_json.assert_awaited_with({"type": "barge_verdict", "interrupt": False})
+        assert session._probe_active is False
+        assert session._interrupted is False
+
+
 class TestTTSPrefetchPipeline:
     """Sentence TTS producer/consumer queue (prefetch pipeline)."""
 

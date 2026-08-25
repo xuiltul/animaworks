@@ -11,6 +11,8 @@ import json
 import logging
 import re
 import time
+import unicodedata
+from collections import deque
 from typing import Any
 
 from core.i18n import t
@@ -31,6 +33,9 @@ SILENCE_RMS_THRESHOLD = 0.008
 # Prefetch depth for sentence TTS. TTS backend is serial; larger values only
 # buffer more text when synthesis is faster than realtime.
 TTS_QUEUE_MAXSIZE = 8
+PROBE_TIMEOUT_SEC = 1.5
+ECHO_SIMILARITY_THRESHOLD = 0.5
+PROBE_MIN_CHARS = 3
 
 # Concurrency cap for fire-and-forget ``ask_anima`` delegation. When this
 # many jobs are still running, further requests get a "please wait" ACK.
@@ -323,6 +328,30 @@ def _normalized_rms_from_pcm16(audio_data: bytes) -> float:
     return (sum_sq / count) ** 0.5
 
 
+def _normalize_probe_text(text: str) -> str:
+    """Normalize STT/TTS text to comparable letters and numbers."""
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(char for char in normalized if unicodedata.category(char)[0] in {"L", "M", "N"})
+
+
+def _is_self_echo(text: str, recent: deque[str] | list[str] | tuple[str, ...]) -> bool:
+    """Return whether *text* is substantially contained in recent TTS."""
+    candidate = _normalize_probe_text(text)
+    reference = _normalize_probe_text("".join(recent))
+    if not candidate or not reference:
+        return False
+    if len(candidate) <= 2:
+        candidate_units = set(candidate)
+        reference_units = set(reference)
+    else:
+        candidate_units = {candidate[i : i + 2] for i in range(len(candidate) - 1)}
+        reference_units = {reference[i : i + 2] for i in range(len(reference) - 1)}
+    if not candidate_units:
+        return False
+    containment = len(candidate_units & reference_units) / len(candidate_units)
+    return containment >= ECHO_SIMILARITY_THRESHOLD
+
+
 # ── VoiceSession ────────────────────────────────────────────────
 
 
@@ -376,6 +405,11 @@ class VoiceSession:
         self._tts_playing = False
         self._interrupted = False
         self._processing = False
+        self._recent_tts_text: deque[str] = deque(maxlen=6)
+        self._probe_active = False
+        self._probe_started = 0.0
+        self._probe_task: asyncio.Task[None] | None = None
+        self._probe_followup_pending = False
         self._tts_available: bool | None = None
         self._splitter = StreamingSentenceSplitter()
         self._consecutive_tts_failures: int = 0
@@ -414,7 +448,7 @@ class VoiceSession:
         # We are talking: whatever the mic hears is our own TTS leaking through
         # the speakers. The client suppresses it too, but its playback flag can
         # lag a frame or two — dropping here makes self-transcription impossible.
-        if self._tts_playing:
+        if self._tts_playing and not self._probe_active:
             return
         if len(self._audio_buffer) + len(data) > MAX_AUDIO_BUFFER_BYTES:
             self._audio_buffer.clear()
@@ -431,7 +465,12 @@ class VoiceSession:
     def _maybe_start_streaming_stt(self) -> None:
         """Start the streaming decode loop if a decode is due and none is running
         already (prevents overlapping / double decodes)."""
-        if self._streaming_busy or self._stream_task is not None or self._processing or self._finalizing:
+        if (
+            self._streaming_busy
+            or self._stream_task is not None
+            or (self._processing and not self._probe_active)
+            or self._finalizing
+        ):
             return
         if not self._streamer.ready():
             return
@@ -448,24 +487,42 @@ class VoiceSession:
             except Exception:
                 logger.debug("Streaming STT task error (%s)", self._anima_name, exc_info=True)
         # Catch up on audio that accumulated while we were busy.
-        if not self._finalizing and not self._processing:
+        if not self._finalizing and (not self._processing or self._probe_active):
             self._maybe_start_streaming_stt()
 
     async def _stream_stt_loop(self) -> None:
         """Re-decode the rolling buffer off the event loop, emitting committed
         partials. Exits when caught up, finalizing, or processing a reply."""
         while True:
-            if self._finalizing or self._processing:
+            if self._finalizing or (self._processing and not self._probe_active):
                 break
             loop = asyncio.get_running_loop()
             committed = await loop.run_in_executor(None, self._streamer.run_decode)
             if committed:
-                await self._ws.send_json({"type": "transcript_partial", "text": committed})
+                if self._probe_active:
+                    await self._judge_probe(committed, final=False)
+                else:
+                    await self._ws.send_json({"type": "transcript_partial", "text": committed})
             if not self._streamer.ready():
                 break
 
     async def handle_speech_end(self, from_person: str = "human") -> None:
         """Process accumulated audio: STT -> optional refine -> Chat -> TTS."""
+        if self._probe_active:
+            await self._finish_probe()
+            return
+        if self._probe_followup_pending:
+            deadline = time.monotonic() + 2.0
+            while self._processing and time.monotonic() < deadline:
+                await asyncio.sleep(0.02)
+            if self._processing:
+                logger.warning("Probe follow-up still waiting for current turn (%s)", self._anima_name)
+                return
+            self._probe_followup_pending = False
+            # The previous turn may have reset the rolling decoder after the
+            # probe. Transcribe the preserved full buffer to avoid losing its
+            # beginning.
+            self._streamer.reset()
         if self._processing:
             logger.debug("speech_end ignored — already processing (%s)", self._anima_name)
             return
@@ -506,6 +563,7 @@ class VoiceSession:
 
     async def _do_speech_end(self, from_person: str) -> None:
         """Inner speech_end logic, guarded by _processing flag."""
+        self._recent_tts_text.clear()
         audio_data = bytes(self._audio_buffer)
         self._audio_buffer.clear()
 
@@ -1221,6 +1279,7 @@ class VoiceSession:
         is stopped because the WS is gone.
         """
         self._closed = True
+        self._cancel_probe_timeout()
         watcher = self._delegation_watcher
         self._delegation_watcher = None
         if watcher is not None and not watcher.done():
@@ -1260,6 +1319,7 @@ class VoiceSession:
         spoken = apply_reading_rules(text) if keep_emoji else text
         try:
             # text rides along so the client can show a playback-synced subtitle
+            self._recent_tts_text.append(text)
             await self._ws.send_json({"type": "tts_start", "text": text})
             async for audio_chunk in self._tts.synthesize(spoken, self._tts_config):
                 if self._interrupted:
@@ -1337,6 +1397,8 @@ class VoiceSession:
 
     async def handle_interrupt(self) -> None:
         """Handle barge-in: stop TTS, drop queued sentences, prepare for new STT."""
+        self._probe_active = False
+        self._cancel_probe_timeout()
         self._interrupted = True
         # Reopen the mic immediately — handle_audio_chunk drops input while we
         # are talking, and the turn's own finally may be a beat behind.
@@ -1344,6 +1406,90 @@ class VoiceSession:
         self._audio_buffer.clear()
         self._streamer.reset()
         self._clear_tts_queue()
+
+    async def handle_barge_probe(self) -> None:
+        """Accept mic audio while TTS plays and request an STT verdict."""
+        self._cancel_probe_timeout()
+        self._probe_active = True
+        self._probe_started = time.monotonic()
+        self._probe_followup_pending = False
+        self._audio_buffer.clear()
+        self._streamer.reset()
+        self._probe_task = asyncio.create_task(
+            self._probe_timeout(),
+            name=f"barge-probe-timeout-{self._anima_name}",
+        )
+
+    async def _probe_timeout(self) -> None:
+        try:
+            await asyncio.sleep(PROBE_TIMEOUT_SEC)
+            if self._probe_active:
+                await self._judge_probe("")
+        except asyncio.CancelledError:
+            pass
+
+    def _cancel_probe_timeout(self) -> None:
+        task = self._probe_task
+        self._probe_task = None
+        if task is not None and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+
+    async def _finish_probe(self) -> None:
+        """Finalize probe audio at speech_end and process a confirmed turn."""
+        audio_data = bytes(self._audio_buffer)
+        self._finalizing = True
+        task = self._stream_task
+        if task is not None and task is not asyncio.current_task():
+            try:
+                await task
+            except Exception:
+                pass
+        if not self._probe_active:
+            self._finalizing = False
+            return
+        try:
+            if self._streamer.has_content():
+                loop = asyncio.get_running_loop()
+                text = (await loop.run_in_executor(None, self._streamer.finalize)).strip()
+            elif audio_data:
+                result = await self._stt.transcribe_buffer_async(audio_data)
+                text = result.get("raw_text", "").strip()
+            else:
+                text = ""
+        except Exception:
+            logger.exception("Probe STT failed (%s)", self._anima_name)
+            text = ""
+        finally:
+            self._finalizing = False
+        interrupted = await self._judge_probe(text)
+        if interrupted:
+            await self.handle_speech_end()
+
+    async def _judge_probe(self, text: str, *, final: bool = True) -> bool:
+        """Resolve an active probe exactly once and notify the browser.
+
+        A streaming partial (``final=False``) that is still too short to judge
+        leaves the probe open: "うん" may be the start of "うん、ちょっと待って".
+        """
+        if not self._probe_active:
+            return False
+        normalized = _normalize_probe_text(text)
+        if not final and len(normalized) < PROBE_MIN_CHARS:
+            return False
+        self._probe_active = False
+        self._cancel_probe_timeout()
+        if len(normalized) < PROBE_MIN_CHARS or _is_self_echo(text, self._recent_tts_text):
+            self._audio_buffer.clear()
+            self._streamer.reset()
+            await self._ws.send_json({"type": "barge_verdict", "interrupt": False})
+            return False
+
+        preserved_audio = bytes(self._audio_buffer)
+        await self.handle_interrupt()
+        self._audio_buffer.extend(preserved_audio)
+        self._probe_followup_pending = True
+        await self._ws.send_json({"type": "barge_verdict", "interrupt": True})
+        return True
 
     async def handle_discard_audio(self) -> None:
         """Drop buffered mic input without touching the current turn.
