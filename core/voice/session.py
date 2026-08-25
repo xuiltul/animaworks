@@ -13,6 +13,7 @@ import re
 import time
 import unicodedata
 from collections import deque
+from pathlib import Path
 from typing import Any
 
 from core.i18n import t
@@ -46,14 +47,212 @@ ASK_ANIMA_MAX_RESULT_CHARS = 1000
 # message came from the voice front lane.
 ASK_ANIMA_DELEGATION_NOTE = "\n\n[voice front からの委譲]"
 
-# Synthetic instruction used for proactive (silence-triggered) self-turns.
-# It is NOT recorded as a human turn in the conversation — only the assistant
-# reply is appended (see ``record_user`` on ``_run_front_turn``).
-PROACTIVE_SYNTHETIC_PROMPT = (
+# Silence-triggered monologue. Modelled on AI-VTuber solo-talk routines:
+# rotate through fixed "corners" so consecutive turns differ in kind, and
+# hand the model an explicit block-list of what it already said — feeding
+# recent output back only as history makes small models loop on one topic.
+_MONOLOGUE_FIRST_JA = (
     "（システム: ユーザーがしばらく黙っている。これまでの会話の流れを踏まえて、"
     "続きを促すか、関連する軽い一言を短く1文だけ話しかけて。新しい重い話題は振らない。"
-    "会話がまだ無ければ時間帯に合った軽い挨拶をして。引き止めや罪悪感を誘う言い方は禁止）"
+    "会話がまだ無ければ時間帯に合った軽い挨拶をして。引き止めや罪悪感を誘う言い方は禁止）",
 )
+_MONOLOGUE_CORNERS_JA = (
+    # a. today's recap — pick one event, react to it
+    "コーナー「今日の振り返り」: read_memory を query 空で呼んで最近の出来事を読み、"
+    "その中から一つだけ選んで、それについて感じたことを話す。",
+    # b. dig into a proper noun
+    "コーナー「記憶の深掘り」: 気になる固有名詞や案件名を一つ決めて read_memory にその語を渡し、"
+    "背景や経緯を思い出して「そういえば…」と語る。",
+    # c. no tool — feelings, season, own habits
+    "コーナー「雑感」: ツールは使わない。今の時間帯・季節・自分の性格や癖・最近の気分について、"
+    "配信者の雑談のように軽く話す。",
+    # d. trivia from procedures / knowledge
+    "コーナー「豆知識」: read_memory に「手順」か「メモ」か気になる語を渡して、"
+    "手順や知識ノートから意外な一件を掘り出し、豆知識として紹介する。",
+    # e. what to do when the user is back — no asking
+    "コーナー「次にやりたいこと」: read_memory を query 空で呼んで、"
+    "戻ってきたら一緒にやりたいことを一つ独り言でつぶやく（返事は求めない）。",
+)
+_MONOLOGUE_FRAME_JA = (
+    "（システム: ユーザーは席を外しているか作業中で返事はない。独り言モード。{corner} "
+    "配信者の一人喋りのように、状況→感想→ひとこと落ち、の流れで2文以内。冒頭の絵文字や"
+    "出だしの言い回しも毎回変える。話し言葉で、"
+    "「〜が未完了です」のような報告調は禁止。read_memory を使ったときは、その結果に"
+    "書いてあることだけを話す。人名・案件名・出来事を創作しない。結果が薄ければ"
+    "「特に何もない日」として雑感にする。ユーザーに質問しない、引き止めない、"
+    "返事を求めない。作業の依頼や実行はしない。{blocklist}）",
+    "すでに話した話題（同じ話題・同じ固有名詞・同じ言い回しは使わない）: {topics}。",
+    "少し前の記憶や、手順・知識の中から意外なものを掘り出して。",
+)
+# Which corner reads memory (index-aligned with ``_MONOLOGUE_CORNERS_JA``).
+# Those turns force the tool call — small models otherwise skip it and invent
+# "memories" instead.
+_MONOLOGUE_CORNER_USES_MEMORY = (True, True, False, True, True)
+# Two spoken sentences; also caps the damage when a small model degenerates.
+MONOLOGUE_MAX_TOKENS = 160
+# Hotter than a user turn: with no history, a cool model re-derives the same
+# line from the same memory page every time.
+MONOLOGUE_TEMPERATURE = 0.9
+# Content words only (kanji / katakana / ASCII runs). Hiragana carries the
+# phrasing, and a small model imitates any phrasing it is shown.
+_MONOLOGUE_TOPIC_RE = re.compile(r"[\u30a0-\u30ff\u4e00-\u9fff]{2,}|[A-Za-z0-9_]{3,}")
+
+
+def proactive_turn_uses_memory(count: int) -> bool:
+    """True when the monologue corner for ``count`` must start with read_memory."""
+    if count == 0:
+        return False
+    return _MONOLOGUE_CORNER_USES_MEMORY[(count - 1) % len(_MONOLOGUE_CORNERS_JA)]
+
+
+def build_proactive_prompt(count: int, recent: list[str] | tuple[str, ...] = ()) -> str:
+    """Build the silence-triggered prompt for the current monologue count.
+
+    ``count == 0`` is the conversational nudge; later counts rotate through
+    ``_MONOLOGUE_CORNERS_JA`` and carry ``recent`` (snippets of what was
+    already said) as an explicit block-list.
+    """
+    if count == 0:
+        return _MONOLOGUE_FIRST_JA[0]
+    corner = _MONOLOGUE_CORNERS_JA[(count - 1) % len(_MONOLOGUE_CORNERS_JA)]
+    if count >= 4:
+        corner += _MONOLOGUE_FRAME_JA[2]
+    # Topic words only — quoting the previous line verbatim (emoji included)
+    # makes a small model imitate it instead of avoiding it.
+    entries: list[str] = []
+    for said in recent:
+        words = list(dict.fromkeys(_MONOLOGUE_TOPIC_RE.findall(said)))[:4]
+        if words:
+            entries.append(" ".join(words))
+    topics = "／".join(entries)
+    blocklist = _MONOLOGUE_FRAME_JA[1].format(topics=topics) if topics else ""
+    return _MONOLOGUE_FRAME_JA[0].format(corner=corner, blocklist=blocklist)
+
+
+_MEMORY_TEXT_JA = (
+    "## 最近の出来事 ({filename})\n{body}",
+    "## 知っていること ({filename})\n{body}",
+    "（記憶はまだない）",
+    "（「{query}」に関する記憶は見つからなかった）",
+    "（記憶の読み取りに失敗した）",
+)
+
+
+_EPISODE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
+_NOISE_LINE_RE = re.compile(r"^#+ Raw notes.*$\n?", re.MULTILINE)
+
+
+def _read_memory_file(path: Path) -> str:
+    """Read a memory file safely, limiting large files to their final 200 KiB."""
+    if path.stat().st_size > 1024 * 1024:
+        with path.open("rb") as file_handle:
+            file_handle.seek(-200 * 1024, 2)
+            text = file_handle.read().decode("utf-8", errors="replace")
+    else:
+        text = path.read_text(encoding="utf-8")
+
+    if text.startswith("---"):
+        frontmatter_end = re.search(r"\n---(?:\r?\n|$)", text[3:])
+        if frontmatter_end is not None:
+            text = text[3 + frontmatter_end.end() :]
+    return text.strip()
+
+
+def _memory_files(anima_dir: Path) -> list[Path]:
+    """Return searchable memory files, excluding archived knowledge."""
+    files: list[Path] = []
+    for scope in ("knowledge", "episodes", "procedures"):
+        scope_dir = anima_dir / scope
+        if not scope_dir.is_dir():
+            continue
+        for path in scope_dir.rglob("*.md"):
+            relative_parts = path.relative_to(scope_dir).parts
+            if scope == "knowledge" and "archive" in relative_parts:
+                continue
+            files.append(path)
+    return files
+
+
+def read_memory_snippets(anima_dir: Path, query: str, *, max_chars: int = 1800, page: int = 0) -> str:
+    """Read recent or keyword-matched memory snippets without using the RAG DB.
+
+    ``page`` (empty query only) walks backwards through the latest episode and
+    rotates the knowledge picks, so repeated "what happened lately" reads do not
+    hand a monologue the same material every time.
+    """
+    try:
+        clean_query = (query or "").strip()
+        if not clean_query:
+            sections: list[str] = []
+            episodes_dir = anima_dir / "episodes"
+            # Date-named files first (``recovered_*`` sorts after digits).
+            episodes = sorted(
+                episodes_dir.rglob("*.md") if episodes_dir.is_dir() else [],
+                key=lambda path: (bool(_EPISODE_DATE_RE.match(path.name)), path.name),
+                reverse=True,
+            )
+            if episodes:
+                episode = episodes[0]
+                episode_text = _read_memory_file(episode)
+                episode_limit = int(max_chars * 0.6)
+                windows = max(1, -(-len(episode_text) // episode_limit))
+                end = len(episode_text) - (page % windows) * episode_limit
+                sections.append(
+                    _MEMORY_TEXT_JA[0].format(
+                        filename=episode.name,
+                        body=episode_text[max(0, end - episode_limit) : end],
+                    )
+                )
+
+            knowledge_dir = anima_dir / "knowledge"
+            knowledge_files = []
+            if knowledge_dir.is_dir():
+                knowledge_files = [
+                    path
+                    for path in knowledge_dir.rglob("*.md")
+                    if "archive" not in path.relative_to(knowledge_dir).parts
+                ]
+                knowledge_files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+            if knowledge_files:
+                offset = (page * 3) % len(knowledge_files)
+                knowledge_files = knowledge_files[offset:] + knowledge_files[:offset]
+            for knowledge in knowledge_files[:3]:
+                sections.append(
+                    _MEMORY_TEXT_JA[1].format(
+                        filename=knowledge.name,
+                        body=_read_memory_file(knowledge)[:200],
+                    )
+                )
+            result = "\n\n".join(sections) or _MEMORY_TEXT_JA[2]
+            return result[:max_chars]
+
+        # ponytail: keyword match only; switch to MemoryManager.search_memory_text if recall quality falls short
+        terms = clean_query.casefold().split()
+        matches: list[tuple[int, Path, str, int]] = []
+        for path in _memory_files(anima_dir):
+            text = _NOISE_LINE_RE.sub("", _read_memory_file(path))
+            folded = text.casefold()
+            positions = [folded.find(term) for term in terms if folded.find(term) >= 0]
+            if not positions:
+                continue
+            match_count = sum(folded.count(term) for term in terms)
+            matches.append((match_count, path, text, min(positions)))
+
+        if not matches:
+            return _MEMORY_TEXT_JA[3].format(query=clean_query)[:max_chars]
+        # Newest files first, match count second — old daily logs are huge
+        # and would otherwise always win on raw hit count.
+        matches.sort(key=lambda match: (-match[1].stat().st_mtime, -match[0]))
+        sections = []
+        for _count, path, text, position in matches[:4]:
+            start = max(0, position - 300)
+            end = min(len(text), position + 300)
+            sections.append(f"## {path.relative_to(anima_dir)}\n{text[start:end]}")
+        return "\n\n".join(sections)[:max_chars]
+    except Exception:
+        logger.debug("Failed to read voice memory snippets from %s", anima_dir, exc_info=True)
+        return _MEMORY_TEXT_JA[4][:max_chars]
+
 
 VOICE_MODE_SUFFIX = (
     "\n\n[voice-mode: 音声会話です。感情が伝わる話し言葉で200文字以内で簡潔に回答してください。"
@@ -429,7 +628,9 @@ class VoiceSession:
         # when it ages past ``_proactive_delay`` the idle watcher may speak.
         self._last_activity: float = time.monotonic()
         self._proactive_count: int = 0
-        self._proactive_delay: float = float(getattr(voice_config, "proactive_initial_delay_sec", 50.0))
+        # What the monologue already said (block-list for the next prompt).
+        self._monologue_log: deque[str] = deque(maxlen=5)
+        self._proactive_delay: float = float(getattr(voice_config, "proactive_initial_delay_sec", 10.0))
         self._idle_watcher: asyncio.Task | None = None
         self._idle_tick_sec: float = 5.0
         self._closed = False
@@ -526,10 +727,10 @@ class VoiceSession:
         if self._processing:
             logger.debug("speech_end ignored — already processing (%s)", self._anima_name)
             return
-        # A real user turn resets the proactive escalation state so the next
-        # round starts from the initial delay and up to 2 self-turns again.
+        # A real user turn resets the proactive state so the next silence
+        # period begins with the conversational first prompt again.
         self._proactive_count = 0
-        self._proactive_delay = float(getattr(self._voice_config, "proactive_initial_delay_sec", 50.0))
+        self._proactive_delay = float(getattr(self._voice_config, "proactive_initial_delay_sec", 10.0))
         self._processing = True
         try:
             await self._do_speech_end(from_person)
@@ -919,8 +1120,6 @@ class VoiceSession:
             return False
         if not self._front_model:
             return False
-        if self._proactive_count >= 2:
-            return False
         if time.monotonic() - self._last_activity < self._proactive_delay:
             return False
         if self._tts_playing:
@@ -941,9 +1140,11 @@ class VoiceSession:
     async def _idle_watcher_loop(self) -> None:
         """Poll for sustained silence and run a proactive self-turn when due.
 
-        Escalates the delay (doubles per self-turn) and stops after two
-        consecutive self-turns until the user responds (resets the state).
+        Successful self-turns repeat at a constant interval until the user
+        responds, while the count selects progressively varied prompts.
         """
+        from core.voice.front import READ_MEMORY_TOOL
+
         while not self._closed:
             await asyncio.sleep(self._idle_tick_sec)
             if not self._should_proactive():
@@ -972,11 +1173,16 @@ class VoiceSession:
                 try:
                     turn_ok = await self._run_front_turn(
                         lane,
-                        PROACTIVE_SYNTHETIC_PROMPT,
+                        build_proactive_prompt(self._proactive_count, list(self._monologue_log)),
                         "human",
                         await self._check_tts_health(),
                         record_user=False,
-                        tools=[],
+                        record=False,
+                        tools=[READ_MEMORY_TOOL],
+                        tool_choice="required" if proactive_turn_uses_memory(self._proactive_count) else None,
+                        keep_history=False,
+                        max_tokens=MONOLOGUE_MAX_TOKENS,
+                        temperature=MONOLOGUE_TEMPERATURE,
                         drain_results=False,
                     )
                 except asyncio.CancelledError:
@@ -986,7 +1192,10 @@ class VoiceSession:
                     turn_ok = False
                 if turn_ok:
                     self._proactive_count += 1
-                    self._proactive_delay *= 2
+                    spoken = lane.last_full_text if isinstance(lane.last_full_text, str) else ""
+                    said = re.sub(r"<!--.*?-->", "", spoken, flags=re.DOTALL).strip()
+                    if said:
+                        self._monologue_log.append(said[:60])
                 # Always rewind the idle timer — success spoke just now, and a
                 # failure or down-lane must back off a full delay window.
                 self._last_activity = time.monotonic()
@@ -1048,16 +1257,20 @@ class VoiceSession:
         tts_ok: bool,
         *,
         record_user: bool = True,
+        record: bool = True,
         tools: list | None = None,
+        tool_choice: str | None = None,
+        keep_history: bool = True,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         drain_results: bool = True,
     ) -> bool:
         """Stream one front-lane turn into TTS + WebSocket, then finish.
 
-        ``record_user=False`` (proactive self-turn) skips recording the synthetic
-        instruction as a human conversation turn — only the assistant reply is
-        persisted.  ``tools=[]`` with ``drain_results=False`` (proactive) keeps
-        a silence turn from starting its own ask_anima jobs or snatching
-        pending delegation results (M2).
+        ``record=False`` keeps proactive monologues out of conversation.json.
+        ``record_user=False`` remains available to omit a synthetic user turn.
+        ``drain_results=False`` keeps a silence turn from snatching pending
+        delegation results (M2).
 
         Self-turns (proactive / delegation watcher) reach here without a live
         TTS worker; they own the full terminal-frame contract here (a leading
@@ -1068,7 +1281,7 @@ class VoiceSession:
 
         Returns ``True`` when the terminal response frames were emitted.
         """
-        from core.voice.front import ASK_ANIMA_TOOL, extract_emotion
+        from core.voice.front import ASK_ANIMA_TOOL, READ_MEMORY_TOOL, extract_emotion
 
         if drain_results:
             results = self._drain_delegation_results()
@@ -1087,14 +1300,26 @@ class VoiceSession:
             self._tts_playing = True
 
         if tools is None:
-            tools = [ASK_ANIMA_TOOL]
+            tools = [ASK_ANIMA_TOOL, READ_MEMORY_TOOL]
 
         lane.reset_turn()
         full: list[str] = []
         response_done_sent = False
         try:
             try:
-                async for delta in lane.stream(text, tools=tools, tool_executor=self._ask_anima):
+                async for delta in lane.stream(
+                    text,
+                    tools=tools,
+                    tool_executor=self._ask_anima,
+                    tool_executors={
+                        "ask_anima": lambda args: self._ask_anima(str(args.get("request", ""))),
+                        "read_memory": self._read_memory,
+                    },
+                    tool_choice=tool_choice,
+                    keep_history=keep_history,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                ):
                     if self._interrupted:
                         return False
                     await self._emit_text_delta(delta, tts_ok)
@@ -1115,7 +1340,8 @@ class VoiceSession:
                 # proactive turn count it as a spoken one.
                 logger.warning("Voice front turn produced no text (%s)", self._anima_name)
                 return False
-            self._record_front_conversation(text, full_text, from_person, record_user=record_user)
+            if record:
+                self._record_front_conversation(text, full_text, from_person, record_user=record_user)
             self._last_activity = time.monotonic()
             emotion = extract_emotion(full_text)
             await self._finish_tts_and_response_done(emotion)
@@ -1138,6 +1364,16 @@ class VoiceSession:
                 self._tts_playing = False
 
     # ── ask_anima async delegation (PR-3) ─────────────────────────
+
+    def _read_memory(self, args: dict) -> str:
+        """Read this Anima's file-backed memory for the front lane."""
+        from core.paths import get_animas_dir
+
+        return read_memory_snippets(
+            get_animas_dir() / self._anima_name,
+            str(args.get("query", "")),
+            page=self._proactive_count // len(_MONOLOGUE_CORNERS_JA),
+        )
 
     def _ensure_delegation_state(self) -> None:
         """Create delegation queues and start the result watcher once."""

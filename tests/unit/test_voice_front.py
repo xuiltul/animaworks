@@ -22,8 +22,8 @@ import pytest
 
 from core.config.schemas import VoiceConfig
 from core.prompt.builder import build_voice_front_prompt
-from core.voice.front import VoiceFrontLane, extract_emotion
-from core.voice.session import VoiceSession
+from core.voice.front import READ_MEMORY_TOOL, VoiceFrontLane, extract_emotion
+from core.voice.session import VoiceSession, read_memory_snippets
 from core.voice.tts_base import TTSConfig
 
 # ── Helpers ──────────────────────────────────────────────────────
@@ -60,9 +60,7 @@ def _make_voice_session(
     supervisor: MagicMock | None = None,
 ) -> VoiceSession:
     stt = AsyncMock()
-    stt.transcribe_buffer_async = AsyncMock(
-        return_value={"raw_text": "こんにちは", "language": "ja"}
-    )
+    stt.transcribe_buffer_async = AsyncMock(return_value={"raw_text": "こんにちは", "language": "ja"})
     tts = AsyncMock()
     tts.health_check = AsyncMock(return_value=True)
 
@@ -118,6 +116,7 @@ class TestBuildVoiceFrontPrompt:
         assert "taro" in prompt
         assert "emotion" in prompt
         assert "60 characters" in prompt
+        assert "read_memory is read-only" in prompt
 
     def test_reads_specialty_prompt_file(self, tmp_path: Path) -> None:
         # Regression: the real anima file is ``specialty_prompt.md`` (no "i") —
@@ -143,7 +142,7 @@ class TestBuildVoiceFrontPrompt:
 
 class TestExtractEmotion:
     def test_parses_tag(self) -> None:
-        assert extract_emotion("こんにちは。 <!-- emotion: {\"emotion\": \"smile\"} -->") == "smile"
+        assert extract_emotion('こんにちは。 <!-- emotion: {"emotion": "smile"} -->') == "smile"
 
     def test_defaults_neutral(self) -> None:
         assert extract_emotion("プレーンテキスト") == "neutral"
@@ -197,9 +196,7 @@ class TestVoiceFrontLane:
             system_prompt="S",
         )
         with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
-                side_effect=ConnectionError("down")
-            )
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(side_effect=ConnectionError("down"))
             assert await lane.check_health() is False
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(
                 return_value=SimpleNamespace(status_code=200)
@@ -210,6 +207,175 @@ class TestVoiceFrontLane:
     async def test_empty_api_base_is_unhealthy(self) -> None:
         lane = VoiceFrontLane(model="openai/q", api_base="", system_prompt="S")
         assert await lane.check_health() is False
+
+    @pytest.mark.asyncio
+    async def test_named_tool_executor_receives_parsed_arguments(self) -> None:
+        lane = VoiceFrontLane(model="openai/q", api_base="", system_prompt="S")
+
+        async def _tool_response(**kwargs):  # type: ignore[no-untyped-def]
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="memory_1",
+                                    function=SimpleNamespace(
+                                        name="read_memory",
+                                        arguments='{"query":"散歩"}',
+                                    ),
+                                )
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                ]
+            )
+
+        async def _final_response(**kwargs):  # type: ignore[no-untyped-def]
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="思い出した", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ]
+            )
+
+        executor = MagicMock(return_value="散歩の記憶")
+        with patch(
+            "core.voice.front.litellm.acompletion",
+            side_effect=[_tool_response(), _final_response()],
+        ) as mock_ac:
+            got = [
+                delta
+                async for delta in lane.stream(
+                    "思い出して",
+                    tools=[READ_MEMORY_TOOL],
+                    tool_executors={"read_memory": executor},
+                )
+            ]
+
+        assert "".join(got) == "思い出した"
+        executor.assert_called_once_with({"query": "散歩"})
+        tool_message = mock_ac.await_args_list[1].kwargs["messages"][-1]
+        assert tool_message == {
+            "role": "tool",
+            "tool_call_id": "memory_1",
+            "content": "散歩の記憶",
+        }
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_returns_error_and_continues(self) -> None:
+        lane = VoiceFrontLane(model="openai/q", api_base="", system_prompt="S")
+
+        async def _tool_response(**kwargs):  # type: ignore[no-untyped-def]
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(
+                            content=None,
+                            tool_calls=[
+                                SimpleNamespace(
+                                    index=0,
+                                    id="unknown_1",
+                                    function=SimpleNamespace(name="write_memory", arguments="{}"),
+                                )
+                            ],
+                        ),
+                        finish_reason="tool_calls",
+                    )
+                ]
+            )
+
+        async def _final_response(**kwargs):  # type: ignore[no-untyped-def]
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="続行", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ]
+            )
+
+        with patch(
+            "core.voice.front.litellm.acompletion",
+            side_effect=[_tool_response(), _final_response()],
+        ) as mock_ac:
+            got = [delta async for delta in lane.stream("test")]
+
+        assert "".join(got) == "続行"
+        assert mock_ac.await_args_list[1].kwargs["messages"][-1]["content"] == ("error: unknown tool write_memory")
+
+    @pytest.mark.asyncio
+    async def test_history_is_limited_to_thirty_messages(self) -> None:
+        lane = VoiceFrontLane(model="openai/q", api_base="", system_prompt="S")
+        lane.set_history([{"role": "user", "content": str(index)} for index in range(30)])
+
+        async def _response(**kwargs):  # type: ignore[no-untyped-def]
+            yield SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        delta=SimpleNamespace(content="reply", tool_calls=None),
+                        finish_reason="stop",
+                    )
+                ]
+            )
+
+        with patch("core.voice.front.litellm.acompletion", side_effect=_response):
+            assert [delta async for delta in lane.stream("new")] == ["reply"]
+
+        assert len(lane.history) == 30
+        assert lane.history[0]["content"] == "2"
+
+
+class TestReadMemorySnippets:
+    @staticmethod
+    def _create_memory_tree(anima_dir: Path) -> None:
+        (anima_dir / "episodes").mkdir(parents=True)
+        (anima_dir / "knowledge" / "archive").mkdir(parents=True)
+        (anima_dir / "procedures").mkdir(parents=True)
+        (anima_dir / "episodes" / "2026-08-24.md").write_text("古い出来事", encoding="utf-8")
+        (anima_dir / "episodes" / "2026-08-25.md").write_text(
+            "---\ntitle: hidden\n---\n今日の前半。最新エピソードの末尾。",
+            encoding="utf-8",
+        )
+        (anima_dir / "knowledge" / "a.md").write_text("散歩すると発想が整う。", encoding="utf-8")
+        (anima_dir / "knowledge" / "archive" / "old.md").write_text("アーカイブの秘密", encoding="utf-8")
+        (anima_dir / "procedures" / "p.md").write_text(
+            "朝の手順では珈琲を淹れる。珈琲の香りを楽しむ。", encoding="utf-8"
+        )
+
+    def test_empty_query_returns_latest_episode_and_active_knowledge(self, tmp_path: Path) -> None:
+        self._create_memory_tree(tmp_path)
+
+        result = read_memory_snippets(tmp_path, "")
+
+        assert "最近の出来事 (2026-08-25.md)" in result
+        assert "最新エピソードの末尾" in result
+        assert "知っていること (a.md)" in result
+        assert "散歩すると発想が整う" in result
+        assert "2026-08-24.md" not in result
+        assert "アーカイブの秘密" not in result
+        assert "title: hidden" not in result
+
+    def test_query_returns_matching_snippet_and_no_hit_message(self, tmp_path: Path) -> None:
+        self._create_memory_tree(tmp_path)
+
+        result = read_memory_snippets(tmp_path, "珈琲")
+
+        assert "## procedures/p.md" in result
+        assert "珈琲の香り" in result
+        assert read_memory_snippets(tmp_path, "宇宙船") == ("（「宇宙船」に関する記憶は見つからなかった）")
+
+    def test_result_is_truncated_to_max_chars(self, tmp_path: Path) -> None:
+        self._create_memory_tree(tmp_path)
+
+        result = read_memory_snippets(tmp_path, "", max_chars=80)
+
+        assert len(result) <= 80
 
 
 # ── VoiceSession routing ────────────────────────────────────────
@@ -280,11 +446,34 @@ class TestVoiceSessionFrontRouting:
         )
         sess._front_lane = _front_lane_stub(healthy=True)
         mock_conv = MagicMock()
-        with patch(
-            "core.memory.conversation.ConversationMemory", return_value=mock_conv
-        ):
+        with patch("core.memory.conversation.ConversationMemory", return_value=mock_conv):
             sess._audio_buffer.extend(_audio_frames())
             await sess.handle_speech_end()
         roles = [c.args[0] for c in mock_conv.append_turn.call_args_list]
         assert roles == ["human", "assistant"]
         mock_conv.save.assert_called_once()
+
+
+def test_read_memory_page_rotates_material(tmp_path) -> None:
+    (tmp_path / "episodes").mkdir()
+    (tmp_path / "knowledge").mkdir()
+    (tmp_path / "episodes" / "2026-08-25.md").write_text("A" * 100 + "B" * 100, encoding="utf-8")
+    for name in ("k1", "k2", "k3", "k4"):
+        (tmp_path / "knowledge" / f"{name}.md").write_text(f"note {name}", encoding="utf-8")
+
+    page0 = read_memory_snippets(tmp_path, "", max_chars=160, page=0)
+    page1 = read_memory_snippets(tmp_path, "", max_chars=160, page=1)
+    # page 0 is the tail of the episode, page 1 the window before it
+    assert "B" * 20 in page0 and "A" * 20 not in page0
+    assert "A" * 20 in page1
+    # knowledge picks rotate instead of always being the newest three
+    assert page0 != page1
+
+
+def test_is_repeating_detects_looped_paragraph() -> None:
+    from core.voice.front import _is_repeating
+
+    para = "「豆知識」の時間ね！今日の手帳、マステで星デコしてたんだよね✨ "
+    assert _is_repeating(para) is False
+    assert _is_repeating(para + para) is True
+    assert _is_repeating("短い") is False

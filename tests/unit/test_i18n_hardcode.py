@@ -121,7 +121,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/voice/front.py": 2,
     # voice front lane — spoken ACK/error phrases voiced to the user via TTS
     # plus the proactive silence-turn system prompt fed to the front LLM
-    "core/voice/session.py": 9,
+    "core/voice/session.py": 8,
 }
 
 
