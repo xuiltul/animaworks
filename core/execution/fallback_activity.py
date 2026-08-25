@@ -201,8 +201,7 @@ async def run_with_model_fallback(
 
     while True:
         key = tuple(
-            getattr(current_config, field, None)
-            for field in ("model", "execution_mode", "resolved_mode", "credential")
+            getattr(current_config, field, None) for field in ("model", "execution_mode", "resolved_mode", "credential")
         )
         if key in seen:
             if last_failure is not None:
@@ -225,9 +224,7 @@ async def run_with_model_fallback(
             if not isinstance(data, dict):
                 return result
             error_text = str(data.get("summary") or "")
-            reason, hint = classify_llm_error_message(
-                f"{data.get('reason') or ''} {error_text}".strip()
-            )
+            reason, hint = classify_llm_error_message(f"{data.get('reason') or ''} {error_text}".strip())
             explicit_error = data.get("action") == "error" or bool(data.get("reason"))
             if reason is FailoverReason.UNKNOWN and not explicit_error:
                 return result
@@ -237,8 +234,7 @@ async def run_with_model_fallback(
         report_capacity_block(current_config, reason, hint)
         retry_config = resolve_effective_model_config(primary_config)
         retry_key = tuple(
-            getattr(retry_config, field, None)
-            for field in ("model", "execution_mode", "resolved_mode", "credential")
+            getattr(retry_config, field, None) for field in ("model", "execution_mode", "resolved_mode", "credential")
         )
         if retry_key in seen:
             if last_failure is not None:

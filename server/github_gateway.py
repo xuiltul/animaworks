@@ -7,7 +7,7 @@ from __future__ import annotations
 """GitHub webhook gateway for PR review and dispatcher notifications."""
 
 import asyncio
-import fcntl
+import fcntl  # noqa: F401  # Backward-compatible module attribute for lock tests.
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,13 +15,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import core.review_multipass as review_multipass
 from core.config.models import load_config
 from core.config.schemas import GitHubWebhookConfig
 from core.i18n import t
 from core.memory.task_queue import TaskQueueManager
 from core.messenger import Messenger
 from core.paths import get_animas_dir, get_shared_dir
-import core.review_multipass as review_multipass
 from core.tasks_dispatch import FAILING_CI_CONCLUSIONS, dispatch_direct_task
 
 logger = logging.getLogger("animaworks.github_gateway")

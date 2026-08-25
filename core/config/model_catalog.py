@@ -14,11 +14,14 @@ stays cheap and deterministic.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from core.config.models import KNOWN_MODELS, load_config
 from core.platform.codex import is_codex_login_available
 from core.platform.grok import is_grok_authenticated
+
+logger = logging.getLogger(__name__)
 
 
 def _known_codex_models() -> list[str]:
@@ -142,7 +145,7 @@ def validate_model_override(anima_name: str, requested_model: str | None) -> str
             if len(head) == 1 and tail:
                 allowed.add(tail)
     except Exception:
-        pass
+        logger.debug("Failed to load target anima model config: %s", anima_name, exc_info=True)
 
     check = model
     if ":" in model:

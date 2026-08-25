@@ -293,12 +293,8 @@ def check_multipass_synth(
     multipass = state.setdefault("multi_model_passes", {})
     log = logger or (lambda _msg: None)
     for base_id, info in list(multipass.items()):
-        records = {
-            tid: review_task(reviewer, tid, animas_dir=animas_dir) for tid in info["task_ids"]
-        }
-        if any(
-            rec is None or rec.status not in TERMINAL_TASK_STATUSES for rec in records.values()
-        ):
+        records = {tid: review_task(reviewer, tid, animas_dir=animas_dir) for tid in info["task_ids"]}
+        if any(rec is None or rec.status not in TERMINAL_TASK_STATUSES for rec in records.values()):
             continue  # still running or unpublished; wait for the next sweep
 
         done = [tid for tid, rec in records.items() if rec.status == "done"]
@@ -310,9 +306,7 @@ def check_multipass_synth(
         if done:
             failed = [tid for tid, rec in records.items() if rec.status != "done"]
             synth_id = f"{base_id}-synth"
-            file_paths = "\n".join(
-                f"- reviews/pr{number}-frc-{reviewer}-{sha}-{model_slug(m)}.md" for m in models
-            )
+            file_paths = "\n".join(f"- reviews/pr{number}-frc-{reviewer}-{sha}-{model_slug(m)}.md" for m in models)
             failed_notes = (
                 "\n\n注意: 以下のモデルパスは失敗（terminalだがdoneでない）したためファイルが欠落している。"
                 f"\n{chr(10).join('- ' + t for t in failed)}"
@@ -337,9 +331,7 @@ def check_multipass_synth(
                 kwargs["animas_dir"] = animas_dir
             try:
                 dispatch(**kwargs)
-                log(
-                    f"multi-pass synth dispatch -> {reviewer}: {synth_id} models={','.join(models)}"
-                )
+                log(f"multi-pass synth dispatch -> {reviewer}: {synth_id} models={','.join(models)}")
             except Exception as exc:  # noqa: BLE001
                 log(f"multi-pass synth dispatch error {synth_id}: {exc}")
             # Drop the entry so state stays bounded to in-flight PRs.
@@ -376,10 +368,7 @@ def check_multipass_synth(
                     dispatch(**kwargs)
                 except Exception as exc:  # noqa: BLE001
                     log(f"multi-pass retry dispatch error {task_id}: {exc}")
-            log(
-                f"multi-pass review all failed -> reissue -r2 for {repo}#{number} "
-                f"tasks={','.join(retry_tasks)}"
-            )
+            log(f"multi-pass review all failed -> reissue -r2 for {repo}#{number} tasks={','.join(retry_tasks)}")
         else:
             log(
                 f"MULTI-PASS ALL MODEL PASSES FAILED (attempt {attempt}) for {repo}#{number}: "

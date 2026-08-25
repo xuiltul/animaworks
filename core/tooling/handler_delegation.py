@@ -206,7 +206,7 @@ class DelegationMixin(OrgHelpersMixin):
             if model_err:
                 return _error_result(
                     "InvalidArguments",
-                    f"{model_err}. 現行リストは available-models を確認",
+                    t("tooling.model_list_hint", error=model_err),
                 )
 
         from core.company import check_company_boundary

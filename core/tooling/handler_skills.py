@@ -860,8 +860,10 @@ class SkillsToolsMixin:
             if model_err:
                 return _error_result(
                     "InvalidArguments",
-                    f"Task '{t.get('task_id', '?')}' model: {model_err}. "
-                    "現行リストは available-models を確認",
+                    t(
+                        "tooling.model_list_hint",
+                        error=f"Task '{t.get('task_id', '?')}' model: {model_err}",
+                    ),
                 )
 
         # Cycle detection via topological sort

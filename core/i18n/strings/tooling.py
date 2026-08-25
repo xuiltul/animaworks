@@ -43,4 +43,9 @@ STRINGS: dict[str, dict[str, str]] = {
             "액션 '{action}' (도구 '{tool}')은 명시적인 허가가 필요합니다. permissions.md에 '{tool}_{action}: yes'를 추가하세요."
         ),
     },
+    "tooling.model_list_hint": {
+        "ja": "{error}。現行リストは available-models を確認してください",
+        "en": "{error}. Check available-models for the current list",
+        "ko": "{error}. 현재 목록은 available-models에서 확인하세요",
+    },
 }

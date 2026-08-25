@@ -814,20 +814,22 @@ class CycleMixin:
                 usage=_x_usage,
                 duration_ms=duration_ms,
             )
+            is_error = result.error is True
+            error_reason = result.reason if isinstance(result.reason, str) else ""
             return CycleResult(
                 trigger=trigger,
-                action="error" if result.error else "responded",
-                stop_kind="stream_error" if result.error else "normal",
+                action="error" if is_error else "responded",
+                stop_kind="stream_error" if is_error else "normal",
                 summary=result.text,
-                reason=result.reason,
-                error_category=(_resolve_error_category(result.reason, result.text) if result.error else None),
+                reason=error_reason,
+                error_category=(_resolve_error_category(error_reason, result.text) if is_error else None),
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
                 context_window=tracker.context_window,
                 context_threshold=tracker.threshold,
                 tool_call_records=_tool_records_to_dicts(result),
                 usage=_x_usage,
-                truncated=result.truncated,
+                truncated=result.truncated is True,
             )
 
         # ── Mode A: LiteLLM tool_use loop ─────────────────
@@ -1001,19 +1003,16 @@ class CycleMixin:
             turns=total_turns,
             chains=chain_count if session_chained else 0,
         )
+        is_error = result.error is True
+        error_reason = result.reason if isinstance(result.reason, str) else ""
+        error_category = _resolve_error_category(error_reason, accumulated_text) if is_error else None
         return CycleResult(
             trigger=trigger,
-            action="error" if result.error else "responded",
-            stop_kind="stream_error" if result.error else "normal",
+            action="error" if is_error else "responded",
+            stop_kind="stream_error" if is_error else "normal",
             summary=accumulated_text,
-            reason=(
-                _resolve_error_category(result.reason, accumulated_text) or "unknown"
-                if result.error
-                else ""
-            ),
-            error_category=(
-                _resolve_error_category(result.reason, accumulated_text) if result.error else None
-            ),
+            reason=error_category or "unknown" if is_error else "",
+            error_category=error_category,
             duration_ms=duration_ms,
             context_usage_ratio=tracker.usage_ratio,
             context_window=tracker.context_window,
@@ -1022,7 +1021,7 @@ class CycleMixin:
             total_turns=total_turns,
             tool_call_records=accumulated_tool_records,
             usage=_cycle_usage,
-            truncated=result.truncated,
+            truncated=result.truncated is True,
         )
 
     # ── Streaming ──────────────────────────────────────────

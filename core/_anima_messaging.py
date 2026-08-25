@@ -168,10 +168,7 @@ def _apply_chat_model_override(
             return base_config
         owner._activity.log(
             "model_override",
-            summary=(
-                f"Chat model override: {base_config.model} -> "
-                f"{override.resolved_mode}:{override.model}"
-            ),
+            summary=(f"Chat model override: {base_config.model} -> {override.resolved_mode}:{override.model}"),
             channel="chat",
             meta={
                 "requested": requested_model,
@@ -196,7 +193,6 @@ def _apply_chat_model_override(
             exc_info=True,
         )
         return base_config
-
 
 
 def _resolve_chat_retry_config(

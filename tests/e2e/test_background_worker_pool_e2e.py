@@ -75,6 +75,7 @@ class _MockAgentCore:
         *,
         trigger: str,
         thread_id: str,
+        **_kwargs: object,
     ) -> AsyncGenerator[dict, None]:
         del trigger
         async for chunk in self._executor.execute_streaming(thread_id):

@@ -261,6 +261,7 @@ class TestCollectActivityChunks:
         mock_now_local: MagicMock,
         mock_logger_cls: MagicMock,
         mock_budget: MagicMock,
+        tmp_path: Path,
     ) -> None:
         fixed_now = datetime(2026, 3, 29, 15, 0, 0, tzinfo=UTC)
         mock_now_local.return_value = fixed_now
@@ -281,7 +282,7 @@ class TestCollectActivityChunks:
         mock_activity.recent.return_value = [included, excluded_tool]
         mock_logger_cls.return_value = mock_activity
 
-        engine = ConsolidationEngine(Path("/tmp/x"), "t")
+        engine = ConsolidationEngine(tmp_path / "anima", "t")
         chunks = engine.collect_activity_chunks(hours=24, model="claude-test")
 
         mock_activity.recent.assert_called_once()
@@ -298,6 +299,7 @@ class TestCollectActivityChunks:
         mock_now_local: MagicMock,
         mock_logger_cls: MagicMock,
         mock_budget: MagicMock,
+        tmp_path: Path,
     ) -> None:
         mock_now_local.return_value = datetime(2026, 3, 29, 12, 0, 0, tzinfo=UTC)
         mock_budget.return_value = 10_000
@@ -305,7 +307,7 @@ class TestCollectActivityChunks:
         mock_activity.recent.return_value = []
         mock_logger_cls.return_value = mock_activity
 
-        engine = ConsolidationEngine(Path("/tmp/y"), "t")
+        engine = ConsolidationEngine(tmp_path / "anima", "t")
         assert engine.collect_activity_chunks(hours=24, model="m") == []
 
     @patch("core.memory.consolidation.ConsolidationEngine.compute_activity_budget")

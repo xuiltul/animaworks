@@ -181,6 +181,8 @@ class TestSkillCatalogE2E:
             top_k=3,
             min_score=1.15,
             include_body=False,
+            dense_enabled=False,
+            dense_weight=8.0,
         )
 
         with (

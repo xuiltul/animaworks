@@ -36,7 +36,6 @@ from core.i18n import t
 from core.paths import get_animas_dir
 from core.platform.claude_code import is_claude_code_available
 from core.platform.codex import is_codex_cli_available, is_codex_login_available
-from core.platform.grok import is_grok_authenticated
 
 logger = logging.getLogger("animaworks.routes.config")
 
