@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import re
 import time
 import unicodedata
+import wave
 from collections import deque
 from pathlib import Path
 from typing import Any
@@ -506,6 +508,16 @@ def apply_reading_rules(text: str) -> str:
     return read_years(text)
 
 
+def _wav_seconds(data: bytes) -> float | None:
+    """Duration of a complete WAV blob, or None if *data* is not parseable WAV."""
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            rate = w.getframerate()
+            return w.getnframes() / rate if rate else None
+    except Exception:
+        return None
+
+
 def _normalized_rms_from_pcm16(audio_data: bytes) -> float:
     """Calculate normalized RMS from 16-bit mono PCM bytes."""
     if len(audio_data) < PCM16_BYTES_PER_SAMPLE:
@@ -631,6 +643,10 @@ class VoiceSession:
         # What the monologue already said (block-list for the next prompt).
         self._monologue_log: deque[str] = deque(maxlen=5)
         self._proactive_delay: float = float(getattr(voice_config, "proactive_initial_delay_sec", 10.0))
+        self._proactive_lead_sec: float = float(getattr(voice_config, "proactive_lead_sec", 5.0))
+        # Estimated monotonic time when the client finishes playing everything
+        # sent so far. Synthesis finishing is *not* playback finishing.
+        self._playback_end_at: float = 0.0
         self._idle_watcher: asyncio.Task | None = None
         self._idle_tick_sec: float = 5.0
         self._closed = False
@@ -1124,6 +1140,10 @@ class VoiceSession:
             return False
         if self._tts_playing:
             return False
+        # Wait for the client to nearly finish playing what it already has;
+        # otherwise monologues pile up in its queue faster than it can speak.
+        if time.monotonic() < self._playback_end_at - self._proactive_lead_sec:
+            return False
         # Buffered raw audio is *not* a blocker: an open hands-free mic always
         # has some. Only a pending decode or already-recognized speech is.
         if self._streamer.ready() or self._streamer.committed or self._streaming_busy:
@@ -1544,6 +1564,11 @@ class VoiceSession:
             except asyncio.CancelledError:
                 pass
 
+    def _note_playback(self, seconds: float) -> None:
+        """Extend the estimated client playback end by *seconds* of audio just sent."""
+        now = time.monotonic()
+        self._playback_end_at = max(self._playback_end_at, now) + max(seconds, 0.0)
+
     async def _synthesize_and_send(self, text: str) -> None:
         """TTS synthesize a sentence and send audio to client."""
         keep_emoji = getattr(self._tts_config, "provider", "") == "irodori"
@@ -1557,10 +1582,14 @@ class VoiceSession:
             # text rides along so the client can show a playback-synced subtitle
             self._recent_tts_text.append(text)
             await self._ws.send_json({"type": "tts_start", "text": text})
+            secs = 0.0
             async for audio_chunk in self._tts.synthesize(spoken, self._tts_config):
                 if self._interrupted:
                     break
                 await self._ws.send_bytes(audio_chunk)
+                secs += _wav_seconds(audio_chunk) or 0.0
+            # ponytail: non-WAV (mp3 stream) falls back to ~6 chars/sec
+            self._note_playback(secs or len(text) / 6.0)
             await self._ws.send_json({"type": "tts_done"})
             self._consecutive_tts_failures = 0
         except TTSSynthesisError as e:
@@ -1639,6 +1668,7 @@ class VoiceSession:
         # Reopen the mic immediately — handle_audio_chunk drops input while we
         # are talking, and the turn's own finally may be a beat behind.
         self._tts_playing = False
+        self._playback_end_at = 0.0
         self._audio_buffer.clear()
         self._streamer.reset()
         self._clear_tts_queue()

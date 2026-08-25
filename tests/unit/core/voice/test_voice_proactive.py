@@ -236,6 +236,33 @@ class TestProactiveGuards:
         assert sess._should_proactive() is False
 
     @pytest.mark.asyncio
+    async def test_pending_client_playback_blocks(self) -> None:
+        sess = _make_session()
+        _ready_to_fire(sess)
+        sess._proactive_lead_sec = 5.0
+        sess._playback_end_at = time.monotonic() + 30
+        assert sess._should_proactive() is False
+
+    async def test_playback_within_lead_allows(self) -> None:
+        sess = _make_session()
+        _ready_to_fire(sess)
+        sess._proactive_lead_sec = 5.0
+        sess._playback_end_at = time.monotonic() + 4
+        assert sess._should_proactive() is True
+
+    async def test_note_playback_accumulates_from_now(self) -> None:
+        sess = _make_session()
+        sess._playback_end_at = 0.0  # long past
+        sess._note_playback(3.0)
+        sess._note_playback(2.0)
+        assert 4.9 < sess._playback_end_at - time.monotonic() <= 5.0
+
+    async def test_interrupt_resets_playback_estimate(self) -> None:
+        sess = _make_session()
+        sess._playback_end_at = time.monotonic() + 30
+        await sess.handle_interrupt()
+        assert sess._playback_end_at == 0.0
+
     async def test_recognized_speech_blocks(self) -> None:
         sess = _make_session(proactive=True)
         _ready_to_fire(sess)
@@ -635,3 +662,20 @@ class TestMonologueBlockList:
 
     def test_no_block_list_when_nothing_said(self) -> None:
         assert "すでに話した話題" not in build_proactive_prompt(1, [])
+
+
+def test_wav_seconds_parses_duration() -> None:
+    import io
+    import wave
+
+    from core.voice.session import _wav_seconds
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x00\x00" * 12000)  # 0.5s
+    assert _wav_seconds(buf.getvalue()) == pytest.approx(0.5)
+    assert _wav_seconds(b"not wav") is None
+    assert _wav_seconds(b"") is None

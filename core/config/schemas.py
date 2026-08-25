@@ -1042,6 +1042,9 @@ class VoiceConfig(BaseModel):
     """Proactively speak up after sustained silence (requires front lane). Opt-out."""
     proactive_initial_delay_sec: float = 10.0
     """Silence seconds between proactive utterances."""
+    proactive_lead_sec: float = 5.0
+    """Start the next monologue this many seconds before the current playback ends
+    (so speech is continuous but never more than one utterance is queued)."""
     voicevox: VoicevoxConfig = VoicevoxConfig()
     elevenlabs: ElevenLabsVoiceConfig = ElevenLabsVoiceConfig()
     style_bert_vits2: StyleBertVits2Config = StyleBertVits2Config()
