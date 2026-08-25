@@ -89,7 +89,7 @@ def _load_disk_cache(model: str) -> dict[str, list[float]]:
             if isinstance(entries, dict):
                 return {k: list(v) for k, v in entries.items() if v}
     except Exception:
-        pass
+        logger.debug("Failed to load skill embedding cache", exc_info=True)
     return {}
 
 

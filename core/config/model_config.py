@@ -157,6 +157,84 @@ def _fallback_credential_name(model: str) -> str | None:
     return _FAMILY_CREDENTIAL_MAP.get(model_family) or _FAMILY_CREDENTIAL_MAP.get(provider_family_of(model))
 
 
+def build_model_override_config(
+    base: ModelConfig,
+    mode: str,
+    model: str,
+    config: AnimaWorksConfig,
+) -> ModelConfig | None:
+    """Build a ModelConfig for a requested model, resolving credential by mode.
+
+    Shared candidate construction for fallback selection and per-task model
+    overrides.  CLI-auth engines (C/D/G/X) authenticate via their own CLI
+    credential stores, so the base credential fields are explicitly cleared
+    (only ``model`` / ``execution_mode`` / ``resolved_mode`` are replaced and
+    any inherited credential fields are reset to keep stale keys from leaking
+    across providers).  Other modes (S/A/etc.) resolve a family credential via
+    :func:`_fallback_credential_name` and replace the credential fields;
+    returns ``None`` when no credential can be resolved (caller should fall
+    back to the base config rather than risk an auth error).
+    """
+    resolved_mode = mode.upper()
+    if resolved_mode in {"C", "D", "G", "X"}:
+        # CLI-auth engines (codex/cursor/gemini/grok) authenticate via their own
+        # CLI credential stores, so the base credential fields are stale here.
+        # Clear them explicitly: e.g. an Anthropic-credential anima using a
+        # ``g:gemini/...`` override would otherwise leak the Anthropic API key
+        # to Google (gemini_cli._resolve_api_key prefers model_config.api_key).
+        # Gemini falls back to the OS env var GEMINI_API_KEY, which is correct.
+        return base.model_copy(
+            update={
+                "model": model,
+                "execution_mode": resolved_mode,
+                "resolved_mode": resolved_mode,
+                "credential": None,
+                "credential_type": None,
+                "api_key": None,
+                # "" (not None): schema declares str, and readers pass this to
+                # os.environ.get(), which raises TypeError on None.
+                "api_key_env": "",
+                "api_base_url": None,
+                "extra_keys": {},
+            },
+        )
+    credential_name = _fallback_credential_name(model)
+    credential = config.credentials.get(credential_name) if credential_name else None
+    if credential is None:
+        logger.warning(
+            "build_model_override_config: no credential configured for model %r (family=%r)",
+            model,
+            credential_name,
+        )
+        return None
+    credential_type = getattr(credential, "type", None)
+    if not isinstance(credential_type, str):
+        credential_type = None
+    mode_s_auth = (
+        infer_mode_s_auth(
+            mode=resolved_mode,
+            credential_name=credential_name,
+            config=config,
+        )
+        if resolved_mode == "S"
+        else None
+    )
+    return base.model_copy(
+        update={
+            "model": model,
+            "execution_mode": resolved_mode,
+            "resolved_mode": resolved_mode,
+            "credential": credential_name,
+            "credential_type": credential_type,
+            "api_key": credential.api_key or None,
+            "api_key_env": f"{credential_name.upper()}_API_KEY",
+            "api_base_url": credential.base_url,
+            "extra_keys": dict(credential.keys or {}),
+            "mode_s_auth": mode_s_auth,
+        },
+    )
+
+
 def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
     """Select the first usable fallback while the primary realm is blocked.
 
@@ -204,54 +282,14 @@ def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
                 logger.debug("Skipping fallback %s:%s: openai_codex is unavailable", mode, model)
                 continue
 
-        if resolved_mode in {"C", "D", "G", "X"}:
-            # CLI-auth engines (Codex/Cursor/Gemini/Grok) authenticate via their
-            # own CLI credential stores, not config.credentials — keep the
-            # primary's credential fields untouched.
-            candidate = model_config.model_copy(
-                update={
-                    "model": model,
-                    "execution_mode": resolved_mode,
-                    "resolved_mode": resolved_mode,
-                },
+        candidate = build_model_override_config(model_config, mode, model, config)
+        if candidate is None:
+            logger.warning(
+                "Skipping fallback %s:%s: no credential configured for model family",
+                mode,
+                model,
             )
-        else:
-            credential_name = _fallback_credential_name(model)
-            credential = config.credentials.get(credential_name) if credential_name else None
-            if credential is None:
-                logger.warning(
-                    "Skipping fallback %s:%s: no credential configured for model family",
-                    mode,
-                    model,
-                )
-                continue
-
-            credential_type = getattr(credential, "type", None)
-            if not isinstance(credential_type, str):
-                credential_type = None
-            mode_s_auth = (
-                infer_mode_s_auth(
-                    mode=resolved_mode,
-                    credential_name=credential_name,
-                    config=config,
-                )
-                if resolved_mode == "S"
-                else None
-            )
-            candidate = model_config.model_copy(
-                update={
-                    "model": model,
-                    "execution_mode": resolved_mode,
-                    "resolved_mode": resolved_mode,
-                    "credential": credential_name,
-                    "credential_type": credential_type,
-                    "api_key": credential.api_key or None,
-                    "api_key_env": f"{credential_name.upper()}_API_KEY",
-                    "api_base_url": credential.base_url,
-                    "extra_keys": dict(credential.keys or {}),
-                    "mode_s_auth": mode_s_auth,
-                },
-            )
+            continue
         candidate_key = _guard_key_for_model_config(candidate, config)
         candidate_remaining = guard.blocked_remaining(candidate_key)
         if candidate_remaining > 0:

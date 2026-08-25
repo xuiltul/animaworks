@@ -9,7 +9,7 @@ import { createImageInput, initLightbox } from "../../shared/image-input.js";
 import { initTextArtifactHandlers } from "../../shared/text-artifact.js";
 
 import { initHistory, renderConvMessages, loadAndRenderConvMessages, disconnectScrollObserver, refreshSentinel } from "./chat-history.js";
-import { initStreaming, submitConversation, addToQueue, resumeConversationStream, wsUpdateSendButton, wsHidePendingIndicator, updateStreamingBubble } from "./chat-streaming.js";
+import { initStreaming, submitConversation, addToQueue, resumeConversationStream, wsUpdateSendButton, wsHidePendingIndicator, updateStreamingBubble, initChatModelPicker } from "./chat-streaming.js";
 import { initThreads, renderWsThreadTabs } from "./chat-thread.js";
 import {
   initMobile, setupMobileListeners, destroyMobile,
@@ -152,6 +152,7 @@ export function initChatController(dom) {
     getDom: _getDom,
     getImageManager: _getImageManager,
   });
+  initChatModelPicker();
   initThreads({
     getDom: _getDom,
     renderConvMessages,

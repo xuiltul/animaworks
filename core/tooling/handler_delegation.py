@@ -90,6 +90,7 @@ class DelegationMixin(OrgHelpersMixin):
         persist_sub: bool,
         persist_tracking: bool,
         persist_pending: bool,
+        model: str = "",
     ) -> str | None:
         """Persist delegation via /api/internal/delegate-task when local FS is read-only.
 
@@ -114,6 +115,7 @@ class DelegationMixin(OrgHelpersMixin):
             "persist_sub": persist_sub,
             "persist_tracking": persist_tracking,
             "persist_pending": persist_pending,
+            "model": model,
         }
         timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
         url = f"{_server_base_url()}/api/internal/delegate-task"
@@ -178,6 +180,11 @@ class DelegationMixin(OrgHelpersMixin):
                     suggestion=str(e),
                 )
 
+        model = args.get("model")
+        if model is not None and not isinstance(model, str):
+            return _error_result("InvalidArguments", "model must be a string")
+        model = model.strip() if isinstance(model, str) else ""
+
         if not target_name:
             return _error_result("InvalidArguments", "name is required")
         if not instruction:
@@ -191,6 +198,16 @@ class DelegationMixin(OrgHelpersMixin):
         err = self._check_subordinate(target_name)
         if err:
             return err
+
+        if model:
+            from core.config.model_catalog import validate_model_override
+
+            model_err = validate_model_override(target_name, model)
+            if model_err:
+                return _error_result(
+                    "InvalidArguments",
+                    t("tooling.model_list_hint", error=model_err),
+                )
 
         from core.company import check_company_boundary
         from core.memory.task_queue import TaskQueueManager
@@ -228,6 +245,7 @@ class DelegationMixin(OrgHelpersMixin):
                 deadline=deadline,
                 relay_chain=[self._anima_name],
                 task_id=sub_task_id,
+                meta={"model": model} if model else None,
             )
             persisted_sub = True
             own_tqm.add_delegated_task(
@@ -240,6 +258,7 @@ class DelegationMixin(OrgHelpersMixin):
                 meta={
                     "delegated_to": target_name,
                     "delegated_task_id": sub_task_id,
+                    **({"model": model} if model else {}),
                 },
             )
             persisted_tracking = True
@@ -259,6 +278,7 @@ class DelegationMixin(OrgHelpersMixin):
                 "source": "delegation",
                 "working_directory": resolved_wd,
                 "exclusive_key": exclusive_key,
+                "model": model,
             }
             pending_dir = target_dir / "state" / "pending"
             pending_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +307,7 @@ class DelegationMixin(OrgHelpersMixin):
                 persist_sub=not persisted_sub,
                 persist_tracking=not persisted_tracking,
                 persist_pending=not persisted_pending,
+                model=model,
             )
             if fb_err is not None:
                 logger.error(

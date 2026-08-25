@@ -184,6 +184,10 @@ _QUOTA_EXHAUSTED_PATTERNS = (
     "usage balance exhausted",
     "weekly limit",
     "usage_limit_reached",
+    # Claude Code subscription-limit responses can be returned as ordinary
+    # assistant text rather than an SDK error event.
+    "limit. switch to another model",
+    "limit_message, to continue",
     # Quota-capability exhaustion belongs on the long-lived quota side: the
     # recovery is a 30-minute block plus failover, not a transient retry.
     "quota exceeded",

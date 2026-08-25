@@ -34,7 +34,11 @@ from core.execution.error_classifier import (
     classify_llm_error,
     classify_llm_error_message,
 )
-from core.execution.fallback_activity import log_model_fallback, run_with_model_fallback
+from core.execution.fallback_activity import (
+    log_model_fallback,
+    report_capacity_block,
+    run_with_model_fallback,
+)
 from core.execution.session_types import resolve_runtime_session_type
 from core.i18n import t
 from core.image_artifacts import extract_image_artifacts_from_tool_records, resolve_local_image_paths
@@ -57,8 +61,6 @@ def _chat_fallback_reason_from_exception(exc: Exception) -> FailoverReason | Non
 def _chat_fallback_reason_from_result(result: CycleResult | dict[str, Any]) -> FailoverReason | None:
     """Return a chat-retry reason from a terminal cycle result, if any."""
     data = result.model_dump(mode="json") if isinstance(result, CycleResult) else result
-    if data.get("action") != "error":
-        return None
     raw_reason = data.get("reason")
     if isinstance(raw_reason, str):
         try:
@@ -70,7 +72,12 @@ def _chat_fallback_reason_from_result(result: CycleResult | dict[str, Any]) -> F
                 f"{reason.value.replace('_', ' ')} {data.get('summary') or ''}"
             )
             return reason if hint.fallback_ok else None
+    # Mode S can surface quota/overload failures as a normal assistant result.
+    # Always inspect the final text; the classifier only opts in known,
+    # fallback-safe provider failures.
     reason, hint = classify_llm_error_message(str(data.get("summary") or ""))
+    if reason is FailoverReason.UNKNOWN and data.get("action") != "error":
+        return None
     return reason if hint.fallback_ok else None
 
 
@@ -118,6 +125,76 @@ def _resolve_voice_model_config(model_config: Any, voice_mode: bool) -> Any:
     return model_config.model_copy(update={"thinking_effort": effort})
 
 
+def _apply_chat_model_override(
+    owner: Any,
+    base_config: Any,
+    requested_model: str,
+    *,
+    thread_id: str,
+) -> Any:
+    """Build and log a per-message model override (Cursor-style).
+
+    On unparseable input or unresolvable credential the override is skipped
+    (with a warning) and *base_config* is returned unchanged so chat always
+    continues with the default model.  ``fallback_models`` is inherited from
+    *base_config* via the shared ``build_model_override_config`` so the
+    existing rate_guard fallback walk keeps working.
+    """
+    if not requested_model or not isinstance(base_config, ModelConfig):
+        return base_config
+    try:
+        from core.config.io import load_config
+        from core.config.model_config import build_model_override_config
+        from core.config.model_mode import parse_fallback_entry
+
+        config = load_config()
+        parsed = parse_fallback_entry(requested_model, config)
+        if parsed is None:
+            logger.warning(
+                "[%s] Ignoring chat model override: unparseable %r",
+                owner.name,
+                requested_model,
+            )
+            return base_config
+        mode, model = parsed
+        override = build_model_override_config(base_config, mode, model, config)
+        if override is None:
+            logger.warning(
+                "[%s] Ignoring chat model override: no resolvable credential for %r (mode=%s)",
+                owner.name,
+                model,
+                mode,
+            )
+            return base_config
+        owner._activity.log(
+            "model_override",
+            summary=(f"Chat model override: {base_config.model} -> {override.resolved_mode}:{override.model}"),
+            channel="chat",
+            meta={
+                "requested": requested_model,
+                "resolved": f"{override.resolved_mode}:{override.model}",
+                "thread_id": thread_id,
+            },
+            safe=True,
+        )
+        logger.info(
+            "[%s] Chat model override applied: %s -> %s:%s",
+            owner.name,
+            base_config.model,
+            override.resolved_mode,
+            override.model,
+        )
+        return override
+    except Exception:
+        logger.warning(
+            "[%s] Ignoring chat model override for %r",
+            owner.name,
+            requested_model,
+            exc_info=True,
+        )
+        return base_config
+
+
 def _resolve_chat_retry_config(
     owner: Any,
     primary_config: Any,
@@ -127,6 +204,8 @@ def _resolve_chat_retry_config(
     """Re-evaluate fallback selection and return a different config once."""
     if reason is None or not isinstance(primary_config, ModelConfig):
         return None
+    _classified, hint = classify_llm_error_message(reason.value.replace("_", " "))
+    report_capacity_block(active_config, reason, hint)
     retry_config = resolve_effective_model_config(primary_config)
     if _same_effective_model(retry_config, active_config):
         return None
@@ -152,7 +231,7 @@ async def _run_chat_cycle_with_fallback(
     primary_config: Any,
     active_config: Any,
 ) -> CycleResult:
-    """Run a blocking chat cycle, retrying once on quota/rate fallback."""
+    """Run a blocking chat cycle, walking fallbacks on capacity failures."""
 
     async def _run(config: Any) -> CycleResult:
         return await owner.agent.run_cycle(
@@ -188,11 +267,17 @@ async def _run_chat_stream_with_fallback(
     primary_config: Any,
     active_config: Any,
 ) -> AsyncGenerator[dict[str, Any], None]:
-    """Stream a chat cycle, restarting at most once on terminal quota/rate errors."""
+    """Stream a chat cycle, walking fallbacks on terminal capacity errors."""
     current_config = active_config
-    retry_used = False
+    attempted: set[tuple[Any, ...]] = set()
 
     while True:
+        attempted.add(
+            tuple(
+                getattr(current_config, field, None)
+                for field in ("model", "execution_mode", "resolved_mode", "credential")
+            )
+        )
         retry_config = None
         emitted_payload = False
         try:
@@ -217,7 +302,7 @@ async def _run_chat_stream_with_fallback(
                     if isinstance(raw_result, dict):
                         reason = _chat_fallback_reason_from_result(raw_result)
 
-                if not retry_used and not emitted_payload:
+                if not emitted_payload:
                     retry_config = _resolve_chat_retry_config(
                         owner,
                         primary_config,
@@ -225,26 +310,39 @@ async def _run_chat_stream_with_fallback(
                         reason,
                     )
                     if retry_config is not None:
+                        retry_key = tuple(
+                            getattr(retry_config, field, None)
+                            for field in ("model", "execution_mode", "resolved_mode", "credential")
+                        )
+                        if retry_key in attempted:
+                            retry_config = None
+                    if retry_config is not None:
                         break
 
                 if chunk_type in {"text_delta", "tool_start", "tool_end"}:
                     emitted_payload = True
                 yield chunk
         except Exception as exc:
-            if not retry_used and not emitted_payload:
+            if not emitted_payload:
                 retry_config = _resolve_chat_retry_config(
                     owner,
                     primary_config,
                     current_config,
                     _chat_fallback_reason_from_exception(exc),
                 )
+                if retry_config is not None:
+                    retry_key = tuple(
+                        getattr(retry_config, field, None)
+                        for field in ("model", "execution_mode", "resolved_mode", "credential")
+                    )
+                    if retry_key in attempted:
+                        retry_config = None
             if retry_config is None:
                 raise
 
         if retry_config is None:
             return
         current_config = retry_config
-        retry_used = True
 
 
 def _agent_session_context(owner: Any):
@@ -651,6 +749,7 @@ class MessagingMixin:
         meeting_room_id: str = "",
         meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
+        model: str | None = None,
     ) -> str | dict[str, Any]:
         self._validate_thread_id(thread_id)
         # Auto-interrupt: if a session is already running on this thread,
@@ -717,6 +816,20 @@ class MessagingMixin:
                     primary_model_config,
                     phase="preflight",
                 )
+
+                # Optional per-message model override (Cursor-style). Skipped
+                # (with a warning) when the model can't be resolved, so chat
+                # always continues on the default model.  The override also
+                # becomes the fallback context so rate_guard re-routing keeps
+                # working within the requested model's family.
+                if model:
+                    base_model_config = _apply_chat_model_override(
+                        self,
+                        base_model_config,
+                        model,
+                        thread_id=thread_id,
+                    )
+                    primary_model_config = base_model_config
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)
@@ -958,6 +1071,7 @@ class MessagingMixin:
         meeting_room_id: str = "",
         meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
+        model: str | None = None,
     ) -> AsyncGenerator[dict, None]:
         """Streaming version of process_message.
 
@@ -1045,6 +1159,20 @@ class MessagingMixin:
                     primary_model_config,
                     phase="preflight",
                 )
+
+                # Optional per-message model override (Cursor-style). Skipped
+                # (with a warning) when the model can't be resolved, so chat
+                # always continues on the default model.  The override also
+                # becomes the fallback context so rate_guard re-routing keeps
+                # working within the requested model's family.
+                if model:
+                    base_model_config = _apply_chat_model_override(
+                        self,
+                        base_model_config,
+                        model,
+                        thread_id=thread_id,
+                    )
+                    primary_model_config = base_model_config
 
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)

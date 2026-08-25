@@ -259,9 +259,10 @@ class TestResolveEffectiveModelConfig:
 
         assert result.model == "grok/grok-4.5"
         assert result.resolved_mode == "X"
-        # CLI-auth engines (X/C/D/G) authenticate via their own CLI stores and
-        # keep the primary's credential fields untouched.
-        assert result.credential == "openai"
+        # CLI-auth engines (X/C/D/G) authenticate via their own CLI stores, so
+        # the primary's credential fields must be cleared (not copied) to avoid
+        # leaking e.g. an OpenAI key to Grok.
+        assert result.credential is None
         assert result.api_key is None
         assert guard.blocked_remaining.call_args_list[-1].args == ("grok:grok",)
 

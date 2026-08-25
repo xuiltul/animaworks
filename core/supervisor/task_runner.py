@@ -326,6 +326,7 @@ async def execute_chat_contract(
             voice_mode=payload.get("voice_mode") is True,
             meeting_room_id=str(payload.get("meeting_room_id") or ""),
             meeting_participants=payload.get("meeting_participants") or None,
+            model=payload.get("model") or None,
         )
         cycle_result = result if isinstance(result, dict) else {}
         return {

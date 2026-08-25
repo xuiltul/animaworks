@@ -41,6 +41,7 @@ class ChatRequest(BaseModel):
     resume: str | None = None
     last_event_id: str | None = None
     thread_id: str = "default"
+    model: str | None = None
 
 
 class ChatResponse(BaseModel):

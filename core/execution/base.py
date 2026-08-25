@@ -664,6 +664,8 @@ class BaseExecutor(ABC):
         """Resolve the actual API key (direct value from config, then env var)."""
         if self._model_config.api_key:
             return self._model_config.api_key
+        if not self._model_config.api_key_env:
+            return None
         return os.environ.get(self._model_config.api_key_env)
 
     def _read_replied_to_file(self) -> set[str]:

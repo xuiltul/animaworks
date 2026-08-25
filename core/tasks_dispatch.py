@@ -27,13 +27,23 @@ def dispatch_direct_task(
     submitted_by: str = "github-event-dispatch",
     meta: dict | None = None,
     animas_dir: Path | None = None,
+    model: str | None = None,
 ) -> bool:
-    """Queue a deterministic task and publish it for TaskExec pickup."""
+    """Queue a deterministic task and publish it for TaskExec pickup.
+
+    *model* is the optional ``"mode:model"`` (or plain ``"model"``) override
+    applied by the pending executor at run time.  It is propagated into both
+    the task record's ``meta`` and the published ``task_desc`` (the field the
+    executor actually reads), so a per-task model override reaches execution
+    without changing the anima's default configuration.
+    """
     target_dir = (animas_dir or get_animas_dir()) / target
     if not target_dir.is_dir():
         raise ValueError(f"Anima directory not found: {target}")
 
     task_meta = {**(meta or {}), "origin": "github-event", "executor": "taskexec"}
+    if model:
+        task_meta["model"] = model
     entry = TaskQueueManager(target_dir).add_task_if_absent(
         lambda task: task.task_id == task_id,
         source="anima",
@@ -63,6 +73,8 @@ def dispatch_direct_task(
         "working_directory": "",
         "exclusive_key": "",
     }
+    if model:
+        task_desc["model"] = model
     atomic_write_text(
         target_dir / "state" / "pending" / f"{task_id}.json",
         json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",

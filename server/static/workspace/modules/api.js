@@ -119,6 +119,10 @@ export function fetchSystemStatus() {
   return request("/api/system/status");
 }
 
+export function fetchAvailableModels() {
+  return request("/api/system/available-models");
+}
+
 export function fetchSharedUsers() {
   return request("/api/shared/users");
 }

@@ -877,5 +877,7 @@
   "ws.trigger_cron": "Scheduled task",
   "ws.trigger_heartbeat": "Heartbeat",
   "ws.turns": " turns",
-  "ws.view_toggle_title": "Toggle view"
+  "ws.view_toggle_title": "Toggle view",
+  "chat.model_default": "Anima default",
+  "chat.model_selector": "Model for this message"
 }

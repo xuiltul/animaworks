@@ -34,13 +34,31 @@ class BaseMessageCache:
     """
 
     def __init__(self, db_path: Path, schema_sql: str) -> None:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db_path = db_path
-        self.conn = sqlite3.connect(str(db_path))
+        self.readonly = False
+        conn: sqlite3.Connection | None = None
+        try:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(db_path))
+            # DELETE, not WAL: sandboxed animas mount the cache dir read-only
+            # (write-access charter) and a WAL database cannot even be *read*
+            # there, because SQLite must create a -shm file alongside it.
+            conn.execute("PRAGMA journal_mode=DELETE")
+            conn.executescript(schema_sql)
+            conn.commit()
+        except (OSError, sqlite3.OperationalError) as exc:
+            if conn is not None:
+                conn.close()
+            if not db_path.exists():
+                raise
+            # The cron collectors keep this cache fresh outside the sandbox,
+            # so read-only access still answers search/unreplied/mentions.
+            # Writes fail loudly on this connection -- never silently.
+            logger.warning("Cache DB %s is not writable, opening read-only: %s", db_path, exc)
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            self.readonly = True
+        self.conn = conn
         self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.executescript(schema_sql)
-        self.conn.commit()
 
     # ── Lifecycle ──────────────────────────────────────────
 
