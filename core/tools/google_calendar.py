@@ -65,6 +65,20 @@ class GoogleCalendarClient:
         self.client_secret = client_secret or os.environ.get("GOOGLE_CALENDAR_CLIENT_SECRET")
         self._service = None
 
+    def _persist_token(self, creds: Any) -> None:
+        """Best-effort save of refreshed credentials.
+
+        Sandboxed runs mount ``~/.animaworks`` read-only (write-access
+        charter), so persisting raises EROFS there. The refreshed creds
+        are already valid in memory; a stale token.json only costs an
+        extra refresh next run, so never let the save kill the call.
+        """
+        try:
+            self.token_path.parent.mkdir(parents=True, exist_ok=True)
+            self.token_path.write_text(creds.to_json())
+        except OSError as e:
+            logger.warning("Token persist skipped (%s): %s", self.token_path, e)
+
     def _get_credentials(self) -> Any:
         """Obtain valid credentials via OAuth2."""
         try:
@@ -86,8 +100,7 @@ class GoogleCalendarClient:
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
-                self.token_path.parent.mkdir(parents=True, exist_ok=True)
-                self.token_path.write_text(creds.to_json())
+                self._persist_token(creds)
             else:
                 if self.credentials_path.exists():
                     flow = InstalledAppFlow.from_client_secrets_file(
@@ -112,8 +125,7 @@ class GoogleCalendarClient:
                         f"and GOOGLE_CALENDAR_CLIENT_SECRET environment variables."
                     )
                 creds = flow.run_local_server(port=0)
-                self.token_path.parent.mkdir(parents=True, exist_ok=True)
-                self.token_path.write_text(creds.to_json())
+                self._persist_token(creds)
 
         return creds
 
