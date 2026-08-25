@@ -190,9 +190,7 @@ class ChatworkClient:
         max_size = 5 * 1024 * 1024
         size = file_path.stat().st_size
         if size > max_size:
-            raise ValueError(
-                f"File too large: {file_path} is {size} bytes (max {max_size} bytes / 5MB)"
-            )
+            raise ValueError(f"File too large: {file_path} is {size} bytes (max {max_size} bytes / 5MB)")
         if message is not None and len(message) > 10000:
             raise ValueError(f"Message exceeds 10,000 characters ({len(message)} chars)")
         with open(file_path, "rb") as f:
