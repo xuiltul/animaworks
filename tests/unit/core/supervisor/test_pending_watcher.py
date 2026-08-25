@@ -248,6 +248,57 @@ class TestPendingTaskRecoveryScan:
             for event in events
         )
 
+    def test_in_progress_without_runner_is_repended_and_regenerated(self, tmp_path: Path) -> None:
+        """update_task(in_progress) from a non-runner session (e.g. inbox cycle) must not strand the task."""
+        executor = _make_executor(tmp_path)
+        queue = TaskQueueManager(executor._anima_dir)
+        stranded = queue.add_task(
+            source="anima",
+            original_instruction="set in_progress by inbox cycle",
+            assignee="test-anima",
+            summary="stranded",
+            status="in_progress",
+            task_id="stranded-task",
+        )
+        active = queue.add_task(
+            source="anima",
+            original_instruction="really running",
+            assignee="test-anima",
+            summary="running",
+            status="in_progress",
+            task_id="active-task",
+        )
+        fresh = queue.add_task(
+            source="anima",
+            original_instruction="just flipped",
+            assignee="test-anima",
+            summary="fresh",
+            status="in_progress",
+            task_id="fresh-task",
+        )
+        executor._active_task_ids.add(active.task_id)
+        old = "2000-01-01T00:00:00+00:00"
+        listed = {
+            "pending": [],
+            "in_progress": [
+                stranded.model_copy(update={"updated_at": old}),
+                active.model_copy(update={"updated_at": old}),
+                fresh,
+            ],
+        }
+        with (
+            patch.object(TaskQueueManager, "list_tasks", lambda self, status=None: listed[status]),
+            patch("core.blocked_recovery.revalidate_blocked_tasks"),
+            patch("core.blocked_recovery.regenerate_pending_json", return_value=True) as regenerate,
+        ):
+            executor._recover_blocked_and_orphaned_tasks()
+
+        regenerate.assert_called_once()
+        assert regenerate.call_args.args[2].task_id == stranded.task_id
+        assert queue.get_task_by_id(stranded.task_id).status == "pending"
+        assert queue.get_task_by_id(active.task_id).status == "in_progress"
+        assert queue.get_task_by_id(fresh.task_id).status == "in_progress"
+
     def test_existing_processing_descriptor_is_not_regenerated(self, tmp_path: Path) -> None:
         executor = _make_executor(tmp_path)
         queue = TaskQueueManager(executor._anima_dir)

@@ -62,6 +62,8 @@ _SENTINEL_BUDGET_SKIPPED = "(budget_skipped)"
 _SENTINEL_BLOCKED = "(blocked)"
 _MAX_TASK_CONTINUATIONS = 3
 _MAX_WAITING_REENQUEUES = 12
+# ponytail: grace so a runner that just finished (descriptor unlinked, status not yet flipped) is not re-pended
+_IN_PROGRESS_ORPHAN_GRACE_SECONDS = 120
 _WAITING_REENQUEUE_DELAY_SECONDS = 300.0
 # Delay before each continuation may be claimed, keyed by continuation_count.
 # A task stuck on an obstacle otherwise burns all continuations in minutes.
@@ -798,8 +800,13 @@ class PendingTaskExecutor:
 
         pending_dir = self._anima_dir / "state" / "pending"
         processing_dir = pending_dir / "processing"
+        queue = TaskQueueManager(self._anima_dir)
         try:
-            entries = TaskQueueManager(self._anima_dir).list_tasks(status="pending")
+            # in_progress is included because update_task(in_progress) can be
+            # called from any session (e.g. an inbox cycle) without a runner
+            # behind it; such entries have no descriptor and nothing would
+            # ever pick them up again.
+            entries = queue.list_tasks(status="pending") + queue.list_tasks(status="in_progress")
         except Exception:
             logger.warning(
                 "[%s] Failed to scan task queue for missing descriptors",
@@ -815,6 +822,23 @@ class PendingTaskExecutor:
             task_file = f"{entry.task_id}.json"
             if (pending_dir / task_file).exists() or (processing_dir / task_file).exists():
                 continue
+            if entry.status == "in_progress":
+                if entry.task_id in self._active_task_ids:
+                    continue
+                try:
+                    age = (datetime.now(UTC) - datetime.fromisoformat(entry.updated_at)).total_seconds()
+                except (TypeError, ValueError):
+                    age = _IN_PROGRESS_ORPHAN_GRACE_SECONDS
+                if age < _IN_PROGRESS_ORPHAN_GRACE_SECONDS:
+                    continue
+                pended = queue.update_status(
+                    entry.task_id,
+                    "pending",
+                    summary="auto-recovered: in_progress without a runner",
+                )
+                if pended is None:
+                    continue
+                entry = pended
             logger.warning(
                 "[%s] Pending task descriptor missing; regenerating: %s",
                 self._anima_name,
