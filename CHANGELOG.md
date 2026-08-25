@@ -25,6 +25,7 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - TTS look-ahead pipeline (`core/voice/session.py`) and voice-fast mode: thinking-token suppression and task offload to keep voice turns responsive.
 - Irodori TTS reading rules: emoji allowlist, yomi dictionary, and era-reading normalization for natural Japanese pronunciation.
 - Continuous memory-grounded monologue while the user is away: 10s cadence with no cutoff, AI-VTuber style corner rotation, and a read-only `read_memory` tool the front lane is forced to call on memory corners (`tests/e2e/test_voice_monologue_e2e.py` observes real turns).
+- Katakana readings for alphabet terms: the front lane writes `GitHub（ギットハブ）`, TTS speaks the kana while subtitles keep the spelling (`resolve_ruby`/`strip_ruby`); the front lane can also run on `azure/<deployment>` credentials from `config.json`, including gpt-5 reasoning models.
 
 #### Memory & RAG (rag-a through rag-e)
 - rag-a: eliminated inline index rebuilds from the chat runner's hot path (`core/memory/rag_search.py`).
@@ -87,6 +88,7 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Self-loop bug where the mic picked up the anima's own TTS output, cutting off replies mid-sentence.
 - Residual TTS echo still tripping the VAD: playback-time barge-in now requires sustained high-confidence speech, then pauses (not stops) and asks the server for an STT verdict — self-echo (text similar to recent TTS) resumes playback.
 - Voice front lane promising work (「確認しておきますね」) without emitting the `ask_anima` tool call; prompt restructured so requests reliably delegate while small talk does not.
+- Monologues piling up while the browser was still playing the previous one: the idle watcher now paces self-turns by estimated client playback end (`proactive_lead_sec`), not synthesis end.
 - VAD misfire leaving the mic stuck open, and a related turn-interruption bug from misfire during an active turn.
 - Two causes of silent voice responses: thinking-token exhaustion and misfire-triggered turn cancellation.
 - Proactive speech failing to fire on a silent mic input.
