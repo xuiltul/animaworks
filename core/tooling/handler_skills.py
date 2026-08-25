@@ -828,32 +828,32 @@ class SkillsToolsMixin:
             return _error_result("InvalidArguments", "tasks must contain at least one task")
 
         # Validate task IDs are unique
-        task_ids = [t.get("task_id", "") for t in tasks]
+        task_ids = [task.get("task_id", "") for task in tasks]
         if len(task_ids) != len(set(task_ids)):
             return _error_result("InvalidArguments", "Duplicate task_id found in batch")
 
         task_id_set = set(task_ids)
 
         # Validate depends_on references
-        for t in tasks:  # noqa: F402
-            for dep in t.get("depends_on", []):
+        for task in tasks:
+            for dep in task.get("depends_on", []):
                 if dep not in task_id_set:
                     return _error_result(
-                        "InvalidArguments", f"Task '{t['task_id']}' depends on unknown task_id '{dep}'"
+                        "InvalidArguments", f"Task '{task['task_id']}' depends on unknown task_id '{dep}'"
                     )
 
         # Validate required fields
-        for t in tasks:
-            if not t.get("task_id") or not t.get("title") or not t.get("description"):
+        for task in tasks:
+            if not task.get("task_id") or not task.get("title") or not task.get("description"):
                 return _error_result(
                     "InvalidArguments",
-                    f"Task missing required fields (task_id, title, description): {t.get('task_id', '?')}",
+                    f"Task missing required fields (task_id, title, description): {task.get('task_id', '?')}",
                 )
 
         from core.config.model_catalog import validate_model_override
 
-        for t in tasks:
-            t_model = t.get("model") if isinstance(t.get("model"), str) else ""
+        for task in tasks:
+            t_model = task.get("model") if isinstance(task.get("model"), str) else ""
             if not t_model.strip():
                 continue
             model_err = validate_model_override(self._anima_name, t_model)
@@ -862,7 +862,7 @@ class SkillsToolsMixin:
                     "InvalidArguments",
                     t(
                         "tooling.model_list_hint",
-                        error=f"Task '{t.get('task_id', '?')}' model: {model_err}",
+                        error=f"Task '{task.get('task_id', '?')}' model: {model_err}",
                     ),
                 )
 
@@ -884,8 +884,8 @@ class SkillsToolsMixin:
         manager = TaskQueueManager(self._anima_dir)
 
         written: list[str] = []
-        for t in tasks:
-            workspace_raw = t.get("workspace", "")
+        for task in tasks:
+            workspace_raw = task.get("workspace", "")
             resolved_wd = ""
             if workspace_raw:
                 try:
@@ -899,28 +899,28 @@ class SkillsToolsMixin:
                         suggestion=str(e),
                     )
 
-            t_model = t.get("model") if isinstance(t.get("model"), str) else ""
+            t_model = task.get("model") if isinstance(task.get("model"), str) else ""
             task_desc = {
                 "task_type": "llm",
-                "task_id": t["task_id"],
+                "task_id": task["task_id"],
                 "batch_id": batch_id,
-                "title": t["title"],
-                "description": t["description"],
-                "parallel": t.get("parallel", False),
-                "depends_on": t.get("depends_on", []),
-                "context": t.get("context", ""),
-                "acceptance_criteria": t.get("acceptance_criteria", []),
-                "constraints": t.get("constraints", []),
-                "file_paths": t.get("file_paths", []),
+                "title": task["title"],
+                "description": task["description"],
+                "parallel": task.get("parallel", False),
+                "depends_on": task.get("depends_on", []),
+                "context": task.get("context", ""),
+                "acceptance_criteria": task.get("acceptance_criteria", []),
+                "constraints": task.get("constraints", []),
+                "file_paths": task.get("file_paths", []),
                 "submitted_by": self._anima_name,
                 "submitted_at": submitted_at,
-                "reply_to": t.get("reply_to", self._anima_name),
+                "reply_to": task.get("reply_to", self._anima_name),
                 "working_directory": resolved_wd,
                 "model": t_model,
             }
 
             # Layer 1: Write JSON to state/pending/
-            path = pending_dir / f"{t['task_id']}.json"
+            path = pending_dir / f"{task['task_id']}.json"
             atomic_write_text(
                 path,
                 _json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
@@ -930,25 +930,25 @@ class SkillsToolsMixin:
             try:
                 manager.add_task(
                     source="anima",
-                    original_instruction=t["description"][:5000],
+                    original_instruction=task["description"][:5000],
                     assignee=self._anima_name,
-                    summary=t["title"],
-                    task_id=t["task_id"],
-                    status="pending" if t.get("depends_on") else "in_progress",
+                    summary=task["title"],
+                    task_id=task["task_id"],
+                    status="pending" if task.get("depends_on") else "in_progress",
                     meta={
                         "executor": "taskexec",
                         "batch_id": batch_id,
-                        "depends_on": t.get("depends_on", []),
-                        "parallel": t.get("parallel", False),
+                        "depends_on": task.get("depends_on", []),
+                        "parallel": task.get("parallel", False),
                         "model": t_model,
                         "task_desc": {
-                            "title": t["title"],
-                            "description": t["description"],
-                            "acceptance_criteria": t.get("acceptance_criteria", []),
-                            "constraints": t.get("constraints", []),
-                            "file_paths": t.get("file_paths", []),
-                            "context": t.get("context", ""),
-                            "reply_to": t.get("reply_to", self._anima_name),
+                            "title": task["title"],
+                            "description": task["description"],
+                            "acceptance_criteria": task.get("acceptance_criteria", []),
+                            "constraints": task.get("constraints", []),
+                            "file_paths": task.get("file_paths", []),
+                            "context": task.get("context", ""),
+                            "reply_to": task.get("reply_to", self._anima_name),
                             "working_directory": resolved_wd,
                             "model": t_model,
                         },
@@ -957,11 +957,11 @@ class SkillsToolsMixin:
             except Exception:
                 logger.warning(
                     "Failed to register submit_task in task_queue: %s",
-                    t["task_id"],
+                    task["task_id"],
                     exc_info=True,
                 )
 
-            written.append(t["task_id"])
+            written.append(task["task_id"])
 
         # Wake the pending executor
         if hasattr(self, "_pending_executor_wake") and self._pending_executor_wake:
