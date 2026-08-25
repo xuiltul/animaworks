@@ -25,7 +25,6 @@ from core.exceptions import AnimaNotRunningError, ProcessError
 from core.supervisor.ipc import IPCRequest
 from core.supervisor.process_handle import ProcessHandle, ProcessState
 
-
 # ── A2: StreamingIPCHandler BaseException safety valve ──────────
 
 
