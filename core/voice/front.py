@@ -7,8 +7,8 @@
 The front lane connects directly to a small, fast OpenAI-compatible endpoint
 (llama.cpp) that reuses the same Anima persona, and keeps an in-session
 user/assistant history so it can carry a conversation without the full
-agent loop (large-model TTFT regression).  Tools are not used yet; the
-``tools`` argument is accepted so PR-3 (``ask_anima``) can hook in later.
+agent loop (large-model TTFT regression). Tool calls are dispatched to
+synchronous callbacks supplied by the voice session.
 """
 
 from __future__ import annotations
@@ -29,6 +29,17 @@ _HEALTH_TIMEOUT = 5.0
 # Maximum number of tool-return rounds before the stream stops retrying
 # (initial call + 2 tool rounds).
 _MAX_TOOL_ROUNDS = 2
+# Small models sometimes fall into "same paragraph again" loops until
+# max_tokens. When the newest window of text already appeared earlier in
+# this reply, the stream is cut — nothing after that point is new.
+_REPEAT_WINDOW = 30
+
+_READ_MEMORY_SCHEMA_JA = (
+    "自分の記憶（知識ノート・日々の出来事の記録・手順）を読む。"
+    "query を空にすると最近の出来事を返す。query を指定するとその語を含む"
+    "記憶の抜粋を返す。読み取り専用。",
+    "思い出したい話題のキーワード（任意）",
+)
 
 # OpenAI tool schema exposed to the front model. The front lane itself knows
 # nothing about the supervisor: executing the tool is delegated to an
@@ -55,6 +66,32 @@ ASK_ANIMA_TOOL: dict[str, Any] = {
         },
     },
 }
+
+READ_MEMORY_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "read_memory",
+        "description": _READ_MEMORY_SCHEMA_JA[0],
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": _READ_MEMORY_SCHEMA_JA[1],
+                }
+            },
+            "required": [],
+        },
+    },
+}
+
+
+def _is_repeating(text: str, window: int = _REPEAT_WINDOW) -> bool:
+    """True when the last ``window`` chars of ``text`` already occurred before."""
+    if len(text) < window * 2:
+        return False
+    tail = text[-window:]
+    return tail.strip() != "" and tail in text[:-window]
 
 
 def extract_emotion(full_text: str) -> str:
@@ -147,6 +184,11 @@ class VoiceFrontLane:
         *,
         tools: list[dict[str, Any]] | None = None,
         tool_executor: Callable[[str], str] | None = None,
+        tool_executors: dict[str, Callable[[dict], str]] | None = None,
+        tool_choice: str | None = None,
+        keep_history: bool = True,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> AsyncIterator[str]:
         """Send a user turn through the front lane and yield text deltas.
 
@@ -165,6 +207,9 @@ class VoiceFrontLane:
                 tool call's ``request`` argument (or the raw arguments string
                 when JSON parsing fails). Falls back to the value passed to
                 ``__init__``.
+            tool_executors: Callbacks keyed by tool name. Each receives the
+                parsed argument dictionary. An ``ask_anima`` callback here
+                takes precedence over the backward-compatible executor.
         """
         executor = tool_executor or getattr(self, "_tool_executor", None)
         messages: list[dict[str, Any]] = [{"role": "system", "content": self._system_prompt}]
@@ -175,8 +220,8 @@ class VoiceFrontLane:
             "model": self._model,
             "messages": messages,
             "stream": True,
-            "max_tokens": self._max_tokens,
-            "temperature": self._temperature,
+            "max_tokens": max_tokens or self._max_tokens,
+            "temperature": self._temperature if temperature is None else temperature,
             "timeout": self._timeout,
             "num_retries": self._num_retries,
             # The front lane is the low-latency lane: a thinking model burns
@@ -193,6 +238,12 @@ class VoiceFrontLane:
         emitted: list[str] = []
         for _round in range(_MAX_TOOL_ROUNDS + 1):
             kwargs["messages"] = messages
+            # ``tool_choice`` (e.g. "required") applies to the first round only:
+            # once the tool result is in, the model must be free to answer.
+            if tool_choice and _round == 0 and tools:
+                kwargs["tool_choice"] = tool_choice
+            else:
+                kwargs.pop("tool_choice", None)
             response = await litellm.acompletion(**kwargs)
 
             chunks: list[str] = []
@@ -213,6 +264,10 @@ class VoiceFrontLane:
                     chunks.append(content)
                     emitted.append(content)
                     yield content
+                    if _is_repeating("".join(chunks)):
+                        logger.debug("voice front reply repeating itself; truncating")
+                        finish_reason = "stop"
+                        break
                 finish_reason = getattr(choice, "finish_reason", None)
                 for tc in getattr(delta, "tool_calls", None) or []:
                     idx = int(getattr(tc, "index", 0) or 0)
@@ -228,7 +283,7 @@ class VoiceFrontLane:
                         entry["arguments"] += fn.arguments
 
             full_tool_text = "".join(chunks)
-            if finish_reason == "tool_calls" and tool_calls and executor:
+            if finish_reason == "tool_calls" and tool_calls:
                 tool_call_list: list[dict[str, Any]] = []
                 for idx in sorted(tool_calls):
                     tcd = tool_calls[idx]
@@ -249,20 +304,33 @@ class VoiceFrontLane:
                 }
                 messages.append(assistant_msg)
                 for tcd in tool_call_list:
+                    tool_name = tcd["function"]["name"]
                     raw_args = tcd["function"]["arguments"] or ""
                     try:
                         args = json.loads(raw_args or "{}")
-                        request_text = args.get("request", "") if isinstance(args, dict) else ""
+                        if not isinstance(args, dict):
+                            args = {}
                     except json.JSONDecodeError:
                         # small models sometimes emit free text instead of JSON
-                        request_text = raw_args
-                    try:
-                        result = executor(str(request_text))
-                        if not isinstance(result, str):
-                            result = str(result)
-                    except Exception as exc:  # keep the conversation going
-                        logger.exception("tool_executor failed for %s", tcd["function"]["name"])
-                        result = f"error: {exc}"
+                        fallback_key = "query" if tool_name == "read_memory" else "request"
+                        args = {fallback_key: raw_args}
+                    named_executor = (tool_executors or {}).get(tool_name)
+                    if named_executor is None and tool_name == "ask_anima" and executor is not None:
+                        try:
+                            result = executor(str(args.get("request", "")))
+                        except Exception as exc:  # keep the conversation going
+                            logger.exception("tool_executor failed for %s", tool_name)
+                            result = f"error: {exc}"
+                    elif named_executor is None:
+                        result = f"error: unknown tool {tool_name}"
+                    else:
+                        try:
+                            result = named_executor(args)
+                        except Exception as exc:  # keep the conversation going
+                            logger.exception("tool_executor failed for %s", tool_name)
+                            result = f"error: {exc}"
+                    if not isinstance(result, str):
+                        result = str(result)
                     messages.append(
                         {
                             "role": "tool",
@@ -274,6 +342,11 @@ class VoiceFrontLane:
             break
 
         full_text = "".join(emitted)
-        self._history.append({"role": "user", "content": user_text})
-        self._history.append({"role": "assistant", "content": full_text})
+        # Monologue turns (keep_history=False) never enter the history: a small
+        # model that re-reads its own filler loops on it (the caller passes an
+        # explicit block-list instead).
+        if keep_history:
+            self._history.append({"role": "user", "content": user_text})
+            self._history.append({"role": "assistant", "content": full_text})
+            self._history = self._history[-30:]
         self._last_full_text = full_text

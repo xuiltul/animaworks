@@ -1040,8 +1040,8 @@ class VoiceConfig(BaseModel):
     """OpenAI-compatible base URL for the voice front lane. None = legacy path."""
     proactive_enabled: bool = True
     """Proactively speak up after sustained silence (requires front lane). Opt-out."""
-    proactive_initial_delay_sec: float = 50.0
-    """Silence seconds before the first proactive speech; doubles per utterance."""
+    proactive_initial_delay_sec: float = 10.0
+    """Silence seconds between proactive utterances."""
     voicevox: VoicevoxConfig = VoicevoxConfig()
     elevenlabs: ElevenLabsVoiceConfig = ElevenLabsVoiceConfig()
     style_bert_vits2: StyleBertVits2Config = StyleBertVits2Config()
