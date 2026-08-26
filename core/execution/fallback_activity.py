@@ -180,6 +180,10 @@ def runtime_fallback_config(
     return retry_config
 
 
+# ponytail: length cap; longest real provider error text seen is ~330 chars
+_IMPLICIT_ERROR_MAX_CHARS = 400
+
+
 async def run_with_model_fallback(
     run: Callable[[ModelConfig], Awaitable[_T]],
     *,
@@ -227,6 +231,12 @@ async def run_with_model_fallback(
             reason, hint = classify_llm_error_message(f"{data.get('reason') or ''} {error_text}".strip())
             explicit_error = data.get("action") == "error" or bool(data.get("reason"))
             if reason is FailoverReason.UNKNOWN and not explicit_error:
+                return result
+            if not explicit_error and len(error_text) > _IMPLICIT_ERROR_MAX_CHARS:
+                # A provider failure returned as plain text is short (longest
+                # observed: ~330 chars, OpenAI policy refusal). A long reply that
+                # merely *mentions* a 403/"forbidden" is a real answer; registering
+                # it would block the shared provider for every anima.
                 return result
             if not hint.fallback_ok:
                 return result

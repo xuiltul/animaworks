@@ -453,3 +453,34 @@ def test_preflight_fallback_records_activity_event() -> None:
         meta={**_fallback_meta(), "phase": "preflight"},
         safe=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_reply_mentioning_403_is_not_an_auth_failure(tmp_path) -> None:
+    """A normal reply quoting an API 403 must not block the provider (#natsume-deepseek)."""
+    from core.execution import fallback_activity as fa
+
+    calls: list[str] = []
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(fa, "report_capacity_block", lambda *a, **k: calls.append("blocked"))
+    try:
+        cfg = ModelConfig(model="codex/gpt-5.6-luna", execution_mode="c", resolved_mode="C", fallback_models=["a:openai/deepseek-v4-flash"])
+        reply = CycleResult(
+            trigger="cron:x",
+            action="responded",
+            summary=(
+                "Chatwork統合監視で代表宛メンションを1件検知しました。room 373957118 の再取得は "
+                "Chatwork API HTTP 403 Forbidden で失敗したため本文の確定は保留。" + "対応内容の要約。" * 60
+            ),
+        )
+
+        async def run(_c):
+            return reply
+
+        result = await fa.run_with_model_fallback(
+            run, activity=MagicMock(), primary_config=cfg, active_config=cfg, channel="cron"
+        )
+    finally:
+        monkey.undo()
+    assert result is reply
+    assert calls == []
