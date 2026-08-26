@@ -7,14 +7,103 @@ from __future__ import annotations
 """Direct task dispatch for deterministic external events."""
 
 import json
+import logging
+import os
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.execution.github_identity import resolve_github_token_env
 from core.memory._io import atomic_write_text
 from core.memory.task_queue import TaskQueueManager
 from core.paths import get_animas_dir
 
+logger = logging.getLogger("animaworks.tasks_dispatch")
+
 FAILING_CI_CONCLUSIONS = frozenset({"FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"})
+
+
+def pr_exclusive_key(meta: dict | None) -> str:
+    """Derive the ``pr-NNNN`` exclusion key so same-PR tasks run serially.
+
+    Matches the manual ``delegate_task`` convention (e.g. ``pr-3999``), so an
+    automated gh-ci/gh-review task and a hand-delegated task on the same PR
+    share one lock instead of racing on the same worktree.
+    """
+    number = (meta or {}).get("number")
+    return f"pr-{number}" if number else ""
+
+
+def _post_pr_comment(target_dir: Path, repo: str, number: str, body: str) -> bool:
+    """Post an issue/PR comment via ``gh api``. Returns True on success.
+
+    Never raises; callers rely on the boolean to decide whether to record
+    the queue ack.  Token resolution may return an empty dict, in which
+    case ``gh`` falls back to the host's default identity.
+    """
+    env = os.environ.copy()
+    env.update(resolve_github_token_env(target_dir))
+    try:
+        result = subprocess.run(
+            ["gh", "api", f"repos/{repo}/issues/{number}/comments", "-f", f"body={body}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            env=env,
+        )
+    except Exception as exc:
+        logger.warning("gh api comment failed for %s#%s: %s", repo, number, exc)
+        return False
+    if result.returncode != 0:
+        logger.warning(
+            "gh api comment exited %s for %s#%s: %s",
+            result.returncode,
+            repo,
+            number,
+            (result.stderr or "").strip(),
+        )
+        return False
+    return True
+
+
+def _find_holder_task(manager: TaskQueueManager, exclusive_key: str, task_id: str) -> str | None:
+    """Return the oldest active task holding the same exclusive key (excluding *task_id*)."""
+    candidates = [
+        task
+        for task in manager.list_tasks()
+        if task.task_id != task_id
+        and task.status in ("pending", "in_progress", "blocked")
+        and (task.meta or {}).get("exclusive_key") == exclusive_key
+    ]
+    if not candidates:
+        return None
+    candidates.sort(key=lambda task: task.ts)
+    return candidates[0].task_id
+
+
+def _maybe_post_queue_ack(target_dir: Path, task_id: str, meta: dict) -> None:
+    """Best-effort PR ack so the requester sees the task was received."""
+    if not meta.get("exclusive_key"):
+        return
+    repo = meta.get("repo")
+    number = meta.get("number")
+    if not repo or not number:
+        return
+    if meta.get("queue_ack_posted"):
+        return
+    manager = TaskQueueManager(target_dir)
+    holder_task_id = _find_holder_task(manager, meta["exclusive_key"], task_id)
+    if holder_task_id is None:
+        return
+    from core.i18n import t
+
+    body = t("github_gateway.queue_ack", task_id=task_id, holder_task_id=holder_task_id)
+    try:
+        if _post_pr_comment(target_dir, repo, number, body):
+            manager.update_meta(task_id, {"queue_ack_posted": True})
+    except Exception as exc:
+        logger.warning("queue ack post failed for task %s: %s", task_id, exc)
 
 
 def dispatch_direct_task(
@@ -42,6 +131,9 @@ def dispatch_direct_task(
         raise ValueError(f"Anima directory not found: {target}")
 
     task_meta = {**(meta or {}), "origin": "github-event", "executor": "taskexec"}
+    exclusive_key = pr_exclusive_key(meta)
+    if exclusive_key:
+        task_meta["exclusive_key"] = exclusive_key
     if model:
         task_meta["model"] = model
     entry = TaskQueueManager(target_dir).add_task_if_absent(
@@ -57,6 +149,8 @@ def dispatch_direct_task(
     if entry is None:
         return False
 
+    _maybe_post_queue_ack(target_dir, task_id, task_meta)
+
     task_desc = {
         "task_type": "llm",
         "task_id": task_id,
@@ -71,7 +165,7 @@ def dispatch_direct_task(
         "reply_to": "",
         "source": "delegation",
         "working_directory": "",
-        "exclusive_key": "",
+        "exclusive_key": exclusive_key,
     }
     if model:
         task_desc["model"] = model

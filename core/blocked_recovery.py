@@ -59,6 +59,7 @@ def regenerate_pending_json(
         "submitted_at": now_iso(),
         "reply_to": task_desc_meta.get("reply_to", anima_name),
         "working_directory": task_desc_meta.get("working_directory", ""),
+        "exclusive_key": task_desc_meta.get("exclusive_key") or entry.meta.get("exclusive_key", ""),
         "model": model if isinstance(model, str) else "",
     }
     atomic_write_text(
