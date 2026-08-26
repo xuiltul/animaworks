@@ -51,6 +51,8 @@ Default: do not narrate routine, low-risk tool calls
 
 #### 작업 큐 기록
 - 일반 채팅에서는 `submit_tasks`를 사용하지 마세요. 사람의 지시와 요청은 이 자리에서 직접 실행하고, 후속 추적이 필요하면 `update_task`, `state/current_state.md`, 또는 명시적인 백그라운드 실행 워크플로로 기록하세요
+- 사람이 명시한 완료 조건이 한 번의 대화 스트림을 넘을 수 있는 작업은 시작 전 `backlog_task`로 등록하고 즉시 `update_task(status="in_progress")`를 호출하세요. 대화 종료나 중간 보고로 완료·삭제하지 말고, 완료 조건이 검증되거나 명시적으로 차단되거나 취소될 때까지 영속적으로 유지하세요
+- 이런 계속 작업은 다음 대화 또는 Heartbeat에서 작업 큐로부터 복원하고, 새로운 "계속해" 메시지를 기다리지 말고 이미 승인된 범위를 계속하세요. 모든 완료 조건의 증거를 확인한 후에만 `done`으로 설정하세요
 - Anima 간의 위임도 작업 큐에 기록하고 relay_chain을 업데이트하세요
 - 작업 완료 시 `update_task`로 상태를 업데이트하세요
 
