@@ -18,12 +18,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.config.global_permissions import GlobalPermissionsCache
 from core.tooling.handler import (
     ToolHandler,
     _get_blocked_patterns,
     _get_injection_re,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -73,6 +73,7 @@ class TestNewlineInjection:
     def test_newline_command_rejected_by_permission_check(
         self, handler: ToolHandler, memory: MagicMock,
     ):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK\n- cat: OK"
         result = handler._check_command_permission("echo hello\ncat /etc/passwd")
         parsed = json.loads(result)
@@ -82,6 +83,7 @@ class TestNewlineInjection:
     def test_newline_command_rejected_via_execute_command(
         self, handler: ToolHandler, memory: MagicMock,
     ):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK"
         result = handler.handle(
             "execute_command", {"command": "echo safe\necho evil"},
@@ -261,6 +263,7 @@ class TestExecuteCommandIntegration:
         assert "PermissionDenied" not in result
 
     def test_newline_in_command_blocked(self, handler: ToolHandler, memory: MagicMock):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK"
         result = handler.handle(
             "execute_command", {"command": "echo safe\necho malicious"},
