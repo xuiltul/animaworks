@@ -17,6 +17,17 @@ from core.paths import get_animas_dir
 FAILING_CI_CONCLUSIONS = frozenset({"FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"})
 
 
+def pr_exclusive_key(meta: dict | None) -> str:
+    """Derive the ``pr-NNNN`` exclusion key so same-PR tasks run serially.
+
+    Matches the manual ``delegate_task`` convention (e.g. ``pr-3999``), so an
+    automated gh-ci/gh-review task and a hand-delegated task on the same PR
+    share one lock instead of racing on the same worktree.
+    """
+    number = (meta or {}).get("number")
+    return f"pr-{number}" if number else ""
+
+
 def dispatch_direct_task(
     *,
     target: str,
@@ -42,6 +53,9 @@ def dispatch_direct_task(
         raise ValueError(f"Anima directory not found: {target}")
 
     task_meta = {**(meta or {}), "origin": "github-event", "executor": "taskexec"}
+    exclusive_key = pr_exclusive_key(meta)
+    if exclusive_key:
+        task_meta["exclusive_key"] = exclusive_key
     if model:
         task_meta["model"] = model
     entry = TaskQueueManager(target_dir).add_task_if_absent(
@@ -71,7 +85,7 @@ def dispatch_direct_task(
         "reply_to": "",
         "source": "delegation",
         "working_directory": "",
-        "exclusive_key": "",
+        "exclusive_key": exclusive_key,
     }
     if model:
         task_desc["model"] = model

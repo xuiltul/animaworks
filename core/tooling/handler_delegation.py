@@ -9,6 +9,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import os
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,15 @@ from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.tooling.handler_base import _error_result, build_outgoing_origin_chain
 from core.tooling.org_helpers import OrgHelpersMixin
+
+_PR_REF = re.compile(r"(?:#|/pull/)(\d{2,7})\b")
+
+
+def _pr_key_from_text(text: str) -> str:
+    """Fallback ``pr-NNNN`` exclusion key from a PR reference in the task text."""
+    match = _PR_REF.search(text)
+    return f"pr-{match.group(1)}" if match else ""
+
 
 if TYPE_CHECKING:
     from core.memory.activity import ActivityLogger
@@ -160,7 +170,7 @@ class DelegationMixin(OrgHelpersMixin):
         instruction = args.get("instruction", "")
         summary = args.get("summary", "") or instruction[:100]
         deadline = args.get("deadline", "")
-        exclusive_key = args.get("exclusive_key", "")
+        exclusive_key = args.get("exclusive_key", "") or _pr_key_from_text(f"{summary}\n{instruction}")
         raw_criteria = args.get("acceptance_criteria")
         acceptance_criteria: list[str] = (
             [c for c in raw_criteria if isinstance(c, str)] if isinstance(raw_criteria, list) else []
@@ -245,7 +255,13 @@ class DelegationMixin(OrgHelpersMixin):
                 deadline=deadline,
                 relay_chain=[self._anima_name],
                 task_id=sub_task_id,
-                meta={"model": model} if model else None,
+                meta=(
+                    {
+                        **({"model": model} if model else {}),
+                        **({"exclusive_key": exclusive_key} if exclusive_key else {}),
+                    }
+                    or None
+                ),
             )
             persisted_sub = True
             own_tqm.add_delegated_task(
