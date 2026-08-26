@@ -51,6 +51,8 @@ In either case:
 
 #### Recording to Task Queue
 - Do not use `submit_tasks` in normal chat. Execute human instructions directly here, and when follow-up tracking is needed, record it with `update_task`, `state/current_state.md`, or an explicit background execution workflow
+- If a human gives explicit completion criteria for work that can outlive one conversation stream, register it with `backlog_task` before starting and immediately call `update_task(status="in_progress")`. A conversation ending or an interim report must not complete or remove it; keep it durable until the completion criteria are proven, the task is explicitly blocked, or the human cancels it
+- Restore such continuing tasks from the task queue in the next conversation or Heartbeat and continue the already-approved scope without waiting for another "continue" message. Set `done` only after verifying evidence for every completion criterion
 - Record delegation between Anima in the task queue and update relay_chain
 - When a task is complete, update status via `update_task`
 

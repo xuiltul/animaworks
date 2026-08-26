@@ -51,6 +51,8 @@ class TestBehaviorRulesTemplate:
         path = TEMPLATES_DIR / "behavior_rules.md"
         content = path.read_text(encoding="utf-8")
         assert "通常チャットでは `submit_tasks` を使わない" in content
+        assert "`backlog_task` で登録" in content
+        assert "完了条件の達成" in content
         assert "解決済み案件の再報告禁止" in content
 
     def test_existing_sections_preserved(self):
@@ -73,6 +75,8 @@ class TestBehaviorRulesTemplate:
             content = (TEMPLATES_ROOT / locale / "prompts" / "behavior_rules.md").read_text(encoding="utf-8")
             for token in required:
                 assert token in content, f"{locale} behavior_rules missing {token}"
+            assert "backlog_task" in content
+            assert 'update_task(status="in_progress")' in content
             assert "must be registered with `submit_tasks`" not in content
             assert "必ず `submit_tasks` でタスクキューに登録" not in content
             assert "반드시 `submit_tasks`로 태스크 큐에 등록" not in content
