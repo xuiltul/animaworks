@@ -39,6 +39,103 @@ def test_dispatch_direct_task_sets_exclusive_key(tmp_path: Path) -> None:
     assert entry is not None and entry.meta["exclusive_key"] == "pr-5008"
 
 
+def _dispatch_with_ack(
+    tmp_path: Path,
+    monkeypatch,
+    task_id: str,
+    meta: dict,
+) -> tuple[bool, list]:
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True, exist_ok=True)
+    calls: list = []
+
+    def _fake_post(target_dir, repo, number, body):
+        calls.append((repo, number, body))
+        return True
+
+    monkeypatch.setattr("core.tasks_dispatch._post_pr_comment", _fake_post)
+    ok = dispatch_direct_task(
+        target="natsume",
+        task_id=task_id,
+        summary="CI failed",
+        instruction="fix it",
+        meta=meta,
+        animas_dir=tmp_path / "animas",
+    )
+    return ok, calls
+
+
+def test_dispatch_posts_queue_ack_when_key_held(tmp_path: Path, monkeypatch) -> None:
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(anima_dir)
+    manager.add_task(
+        source="anima",
+        original_instruction="in-flight PR work",
+        assignee="natsume",
+        summary="in-flight PR work",
+        task_id="holder-1",
+        meta={"exclusive_key": "pr-5008"},
+    )
+    ok, calls = _dispatch_with_ack(
+        tmp_path,
+        monkeypatch,
+        task_id="gh-ci-o-r#5008-360895c3",
+        meta={"repo": "o/r", "number": 5008, "sha": "360895c3"},
+    )
+    assert ok
+    assert len(calls) == 1
+    repo, number, body = calls[0]
+    assert repo == "o/r"
+    assert number == 5008
+    assert "gh-ci-o-r#5008-360895c3" in body
+    assert "holder-1" in body
+    # ack recorded to prevent double posting
+    entry = manager.get_task_by_id("gh-ci-o-r#5008-360895c3")
+    assert entry is not None and entry.meta["queue_ack_posted"] is True
+
+
+def test_dispatch_no_ack_when_key_free(tmp_path: Path, monkeypatch) -> None:
+    ok, calls = _dispatch_with_ack(
+        tmp_path,
+        monkeypatch,
+        task_id="gh-ci-o-r#5008-360895c3",
+        meta={"repo": "o/r", "number": 5008, "sha": "360895c3"},
+    )
+    assert ok
+    assert calls == []
+
+
+def test_dispatch_ack_failure_does_not_block_dispatch(tmp_path: Path, monkeypatch) -> None:
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(anima_dir)
+    manager.add_task(
+        source="anima",
+        original_instruction="in-flight PR work",
+        assignee="natsume",
+        summary="in-flight PR work",
+        task_id="holder-1",
+        meta={"exclusive_key": "pr-5008"},
+    )
+
+    def _boom(target_dir, repo, number, body):
+        raise RuntimeError("gh down")
+
+    monkeypatch.setattr("core.tasks_dispatch._post_pr_comment", _boom)
+    ok = dispatch_direct_task(
+        target="natsume",
+        task_id="gh-ci-o-r#5008-360895c3",
+        summary="CI failed",
+        instruction="fix it",
+        meta={"repo": "o/r", "number": 5008, "sha": "360895c3"},
+        animas_dir=tmp_path / "animas",
+    )
+    assert ok
+    task_desc = json.loads((anima_dir / "state" / "pending" / "gh-ci-o-r#5008-360895c3.json").read_text())
+    assert task_desc["exclusive_key"] == "pr-5008"
+
+
 def test_regenerate_pending_json_restores_exclusive_key(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "natsume"
     (anima_dir / "state" / "pending").mkdir(parents=True)
