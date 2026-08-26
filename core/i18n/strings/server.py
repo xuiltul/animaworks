@@ -236,6 +236,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Gemini CLI 認証",
         "en": "Gemini CLI Auth",
     },
+    "github_gateway.queue_ack": {
+        "ja": "受領しました（task `{task_id}`）。同一PRの先行タスク `{holder_task_id}` の完了後に着手します。",
+        "en": "Received (task `{task_id}`). Will start after the preceding task `{holder_task_id}` on this PR completes.",
+    },
     "github_gateway.review_dispatch": {
         "ja": (
             "【PR新規コミット検出（push静穏確認済み）】\n\n"

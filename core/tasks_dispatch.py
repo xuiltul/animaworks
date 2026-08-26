@@ -96,7 +96,9 @@ def _maybe_post_queue_ack(target_dir: Path, task_id: str, meta: dict) -> None:
     holder_task_id = _find_holder_task(manager, meta["exclusive_key"], task_id)
     if holder_task_id is None:
         return
-    body = f"受領しました（task `{task_id}`）。同一PRの先行タスク `{holder_task_id}` の完了後に着手します。"
+    from core.i18n import t
+
+    body = t("github_gateway.queue_ack", task_id=task_id, holder_task_id=holder_task_id)
     try:
         if _post_pr_comment(target_dir, repo, number, body):
             manager.update_meta(task_id, {"queue_ack_posted": True})
