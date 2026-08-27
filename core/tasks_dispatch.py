@@ -68,12 +68,17 @@ def _post_pr_comment(target_dir: Path, repo: str, number: str, body: str) -> boo
 
 
 def _find_holder_task(manager: TaskQueueManager, exclusive_key: str, task_id: str) -> str | None:
-    """Return the oldest active task holding the same exclusive key (excluding *task_id*)."""
+    """Return the oldest active task holding the same exclusive key (excluding *task_id*).
+
+    ``blocked`` tasks are not holders: they wait on an external condition and may
+    never complete, so announcing one as the predecessor promises a start that
+    never comes.
+    """
     candidates = [
         task
         for task in manager.list_tasks()
         if task.task_id != task_id
-        and task.status in ("pending", "in_progress", "blocked")
+        and task.status in ("pending", "in_progress")
         and (task.meta or {}).get("exclusive_key") == exclusive_key
     ]
     if not candidates:

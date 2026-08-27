@@ -95,6 +95,31 @@ def test_dispatch_posts_queue_ack_when_key_held(tmp_path: Path, monkeypatch) -> 
     assert entry is not None and entry.meta["queue_ack_posted"] is True
 
 
+def test_dispatch_no_ack_when_holder_is_blocked(tmp_path: Path, monkeypatch) -> None:
+    """A blocked holder may never finish; do not promise a start after it."""
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(anima_dir)
+    manager.add_task(
+        source="anima",
+        original_instruction="stalled PR work",
+        assignee="natsume",
+        summary="stalled PR work",
+        task_id="holder-1",
+        meta={"exclusive_key": "pr-5008"},
+    )
+    manager.update_status("holder-1", "blocked", summary="waiting on an external blocker")
+
+    ok, calls = _dispatch_with_ack(
+        tmp_path,
+        monkeypatch,
+        task_id="gh-ci-o-r#5008-360895c3",
+        meta={"repo": "o/r", "number": 5008, "sha": "360895c3"},
+    )
+    assert ok
+    assert calls == []
+
+
 def test_dispatch_no_ack_when_key_free(tmp_path: Path, monkeypatch) -> None:
     ok, calls = _dispatch_with_ack(
         tmp_path,
@@ -168,12 +193,14 @@ def test_dispatch_acks_once_per_pr_backlog(tmp_path: Path, monkeypatch) -> None:
         meta={"exclusive_key": "pr-5008"},
     )
     _, calls1 = _dispatch_with_ack(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         task_id="gh-ci-o-r#5008-aaaa",
         meta={"repo": "o/r", "number": 5008, "sha": "aaaa"},
     )
     _, calls2 = _dispatch_with_ack(
-        tmp_path, monkeypatch,
+        tmp_path,
+        monkeypatch,
         task_id="gh-ci-o-r#5008-bbbb",
         meta={"repo": "o/r", "number": 5008, "sha": "bbbb"},
     )

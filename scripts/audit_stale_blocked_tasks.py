@@ -48,7 +48,10 @@ def main() -> int:
         for tid, task in latest_status(queue).items():
             if task.get("status") != "blocked":
                 continue
-            ts_raw = task.get("updated_at") or task.get("ts") or ""
+            # blocked_at, not updated_at: the unblock_check retry bumps updated_at
+            # every heartbeat, which hid every stale task from this audit.
+            meta = task.get("meta") or {}
+            ts_raw = meta.get("blocked_at") or task.get("ts") or task.get("updated_at") or ""
             try:
                 ts = datetime.fromisoformat(ts_raw)
             except ValueError:

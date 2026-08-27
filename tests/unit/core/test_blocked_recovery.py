@@ -91,7 +91,6 @@ def test_check_success_republishes_without_consuming_retry(tmp_path: Path) -> No
         "/proc",
         "--tmpfs",
         "/tmp",
-        "--unshare-net",
         "--die-with-parent",
         "--",
         "/bin/sh",
@@ -283,6 +282,79 @@ def test_failed_check_stays_blocked_and_counts_failure(tmp_path: Path, failure: 
     assert current.status == "blocked"
     assert current.meta["unblock_check_failures"] == 1
     assert not (anima_dir / "state" / "pending" / f"check-{failure}.json").exists()
+
+
+def test_failing_check_alerts_once_past_threshold(tmp_path: Path) -> None:
+    """A check that can never pass must escalate instead of failing in silence."""
+    animas_dir = tmp_path / "animas"
+    anima_dir = animas_dir / "worker"
+    supervisor_dir = animas_dir / "boss"
+    supervisor_dir.mkdir(parents=True)
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text('{"supervisor": "boss"}', encoding="utf-8")
+    manager = _blocked_task(
+        anima_dir,
+        task_id="stale-check",
+        meta={
+            "blocked_at": (now_local() - timedelta(hours=7)).isoformat(),
+            "unblock_check": "test 1 = 2",
+            "task_desc": {"title": "finish", "description": "finish the task"},
+        },
+    )
+
+    with (
+        patch("core.config.models.load_config", return_value=_config()),
+        patch(
+            "core.blocked_recovery.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1),
+        ),
+    ):
+        assert revalidate_blocked_tasks(anima_dir, "worker") == []
+        assert revalidate_blocked_tasks(anima_dir, "worker") == []
+
+    current = manager.get_task_by_id("stale-check")
+    assert current is not None
+    assert current.status == "blocked"
+    assert current.meta["unblock_check_failures"] == 2
+    assert current.meta.get("blocked_recovery_alerted") is True
+    alerts = [
+        task
+        for task in TaskQueueManager(supervisor_dir).list_tasks()
+        if task.meta.get("kind") == "blocked_task_manual_intervention_required"
+    ]
+    assert len(alerts) == 1
+
+
+def test_fresh_failing_check_does_not_alert(tmp_path: Path) -> None:
+    """Below the threshold the check just retries; no supervisor noise."""
+    animas_dir = tmp_path / "animas"
+    anima_dir = animas_dir / "worker"
+    supervisor_dir = animas_dir / "boss"
+    supervisor_dir.mkdir(parents=True)
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text('{"supervisor": "boss"}', encoding="utf-8")
+    manager = _blocked_task(
+        anima_dir,
+        task_id="fresh-check",
+        meta={
+            "blocked_at": (now_local() - timedelta(hours=1)).isoformat(),
+            "unblock_check": "test 1 = 2",
+        },
+    )
+
+    with (
+        patch("core.config.models.load_config", return_value=_config()),
+        patch(
+            "core.blocked_recovery.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1),
+        ),
+    ):
+        assert revalidate_blocked_tasks(anima_dir, "worker") == []
+
+    current = manager.get_task_by_id("fresh-check")
+    assert current is not None
+    assert current.meta.get("blocked_recovery_alerted") is None
+    assert not TaskQueueManager(supervisor_dir).list_tasks()
 
 
 def test_checkless_task_stays_blocked_and_alerts_once(tmp_path: Path) -> None:

@@ -92,11 +92,22 @@ def _count(meta: dict, key: str) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
-def _record_check_failure(manager: TaskQueueManager, entry: TaskEntry) -> None:
+def _record_check_failure(
+    manager: TaskQueueManager,
+    anima_dir: Path,
+    anima_name: str,
+    entry: TaskEntry,
+    stale_after_hours: float,
+) -> None:
     manager.update_meta(
         entry.task_id,
         {"unblock_check_failures": _count(entry.meta, "unblock_check_failures") + 1},
     )
+    # A check can be permanently unsatisfiable (e.g. it pins a head SHA the PR has
+    # already moved past). Escalate once instead of retrying in silence forever.
+    age_hours = _age_hours(entry)
+    if age_hours is not None and age_hours >= stale_after_hours:
+        _alert_manual_intervention_required(manager, anima_dir, anima_name, entry)
 
 
 def _alert_manual_intervention_required(
@@ -144,6 +155,9 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
 
     manager = TaskQueueManager(anima_dir)
     unblocked: list[str] = []
+    # ponytail: every blocked task re-runs its check each heartbeat, so a large
+    # backlog of gh-based checks burns GitHub rate limit; add per-task backoff on
+    # unblock_check_failures if the budget actually starts to hurt.
     entries = sorted(
         manager.list_tasks(status="blocked"),
         key=lambda entry: (_blocked_since(entry), entry.task_id),
@@ -176,6 +190,9 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                     "ANIMAWORKS_ANIMA_DIR": str(anima_dir),
                 }
                 try:
+                    # Network stays reachable: blockers are almost always remote state
+                    # (gh api / git ls-remote), so an isolated sandbox made every such
+                    # check fail forever. The filesystem is still read-only.
                     result = subprocess.run(
                         [
                             "bwrap",
@@ -188,7 +205,6 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                             "/proc",
                             "--tmpfs",
                             "/tmp",
-                            "--unshare-net",
                             "--die-with-parent",
                             "--",
                             "/bin/sh",
@@ -208,13 +224,13 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                         entry.task_id,
                         exc_info=True,
                     )
-                    _record_check_failure(manager, entry)
+                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
                     continue
                 except subprocess.TimeoutExpired:
-                    _record_check_failure(manager, entry)
+                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
                     continue
                 if result.returncode != 0:
-                    _record_check_failure(manager, entry)
+                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
                     continue
                 suffix = ""
             else:
