@@ -96,6 +96,15 @@ def _maybe_post_queue_ack(target_dir: Path, task_id: str, meta: dict) -> None:
     holder_task_id = _find_holder_task(manager, meta["exclusive_key"], task_id)
     if holder_task_id is None:
         return
+    # One ack per PR backlog: skip if another queued task on this key already acked.
+    if any(
+        task.task_id != task_id
+        and task.status in ("pending", "in_progress", "blocked")
+        and (task.meta or {}).get("exclusive_key") == meta["exclusive_key"]
+        and (task.meta or {}).get("queue_ack_posted")
+        for task in manager.list_tasks()
+    ):
+        return
     from core.i18n import t
 
     body = t("github_gateway.queue_ack", task_id=task_id, holder_task_id=holder_task_id)
