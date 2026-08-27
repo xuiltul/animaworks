@@ -167,6 +167,29 @@ STRINGS: dict[str, dict[str, str]] = {
             "가능하면 unblock_check를 함께 제시하세요."
         ),
     },
+    "blocked_recovery.stale_check_instruction": {
+        "ja": (
+            "unblock_check が長時間失敗し続けている。まず自分で立て直すこと: "
+            "(1) checkが陳腐化していないか（当時のexact SHAを固定している等）を現状と照合する "
+            "(2) タスク自体が現行headに追い越されて無意味なら done/cancelled に落とす "
+            "(3) 継続が必要なら、現状で本当に成立しうる unblock_check を付け直して blocked を宣言し直す。"
+            "同じcheckをそのまま付け直さないこと。"
+        ),
+        "en": (
+            "The unblock_check has been failing for a long time. Fix it yourself first: "
+            "(1) compare the check against reality (does it pin an exact SHA that has moved on?), "
+            "(2) close it as done/cancelled if the current head made the task obsolete, "
+            "(3) if it must continue, re-declare blocked with a check that can actually pass now. "
+            "Do not re-attach the same check unchanged."
+        ),
+        "ko": (
+            "unblock_check가 오랫동안 계속 실패하고 있습니다. 먼저 스스로 정리하세요: "
+            "(1) check가 낡지 않았는지(당시의 exact SHA 고정 등) 현재 상태와 대조하고, "
+            "(2) 현재 head에 밀려 무의미해졌다면 done/cancelled로 종료하고, "
+            "(3) 계속해야 한다면 지금 실제로 통과할 수 있는 unblock_check로 다시 blocked를 선언하세요. "
+            "같은 check를 그대로 다시 붙이지 마세요."
+        ),
+    },
     "blocked_recovery.manual_intervention_instruction": {
         "ja": (
             "タスク {task_id}（{anima_name}）は unblock_check を持たないため自動再開されない。"

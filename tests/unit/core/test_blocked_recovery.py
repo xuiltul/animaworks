@@ -284,8 +284,8 @@ def test_failed_check_stays_blocked_and_counts_failure(tmp_path: Path, failure: 
     assert not (anima_dir / "state" / "pending" / f"check-{failure}.json").exists()
 
 
-def test_failing_check_alerts_once_past_threshold(tmp_path: Path) -> None:
-    """A check that can never pass must escalate instead of failing in silence."""
+def test_failing_check_hands_task_back_for_self_review(tmp_path: Path) -> None:
+    """A long-failing check goes back to the anima to re-judge, not to a human."""
     animas_dir = tmp_path / "animas"
     anima_dir = animas_dir / "worker"
     supervisor_dir = animas_dir / "boss"
@@ -309,13 +309,51 @@ def test_failing_check_alerts_once_past_threshold(tmp_path: Path) -> None:
             return_value=subprocess.CompletedProcess([], 1),
         ),
     ):
-        assert revalidate_blocked_tasks(anima_dir, "worker") == []
-        assert revalidate_blocked_tasks(anima_dir, "worker") == []
+        assert revalidate_blocked_tasks(anima_dir, "worker") == ["stale-check"]
 
     current = manager.get_task_by_id("stale-check")
     assert current is not None
+    assert current.status == "pending"
+    assert current.meta["unblock_check_failures"] == 1
+    assert current.meta["blocked_reprobe_count"] == 1
+    assert current.meta.get("blocked_recovery_alerted") is None
+    assert not TaskQueueManager(supervisor_dir).list_tasks()
+    description = json.loads((anima_dir / "state" / "pending" / "stale-check.json").read_text(encoding="utf-8"))[
+        "description"
+    ]
+    assert "unblock_check" in description
+
+
+def test_failing_check_alerts_after_self_reviews_are_used_up(tmp_path: Path) -> None:
+    """Escalate only once the anima has had its bounded attempts to fix itself."""
+    animas_dir = tmp_path / "animas"
+    anima_dir = animas_dir / "worker"
+    supervisor_dir = animas_dir / "boss"
+    supervisor_dir.mkdir(parents=True)
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text('{"supervisor": "boss"}', encoding="utf-8")
+    manager = _blocked_task(
+        anima_dir,
+        task_id="dead-check",
+        meta={
+            "blocked_at": (now_local() - timedelta(hours=7)).isoformat(),
+            "unblock_check": "test 1 = 2",
+            "blocked_reprobe_count": 4,
+        },
+    )
+
+    with (
+        patch("core.config.models.load_config", return_value=_config()),
+        patch(
+            "core.blocked_recovery.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1),
+        ),
+    ):
+        assert revalidate_blocked_tasks(anima_dir, "worker") == []
+
+    current = manager.get_task_by_id("dead-check")
+    assert current is not None
     assert current.status == "blocked"
-    assert current.meta["unblock_check_failures"] == 2
     assert current.meta.get("blocked_recovery_alerted") is True
     alerts = [
         task
@@ -485,8 +523,9 @@ def test_checkless_many_tasks_generate_zero_pending_json(tmp_path: Path) -> None
         assert current.status == "blocked"
 
 
-def test_blocked_checkless_reprobe_enabled_default_is_false() -> None:
-    assert BackgroundTaskConfig().blocked_checkless_reprobe_enabled is False
+def test_blocked_checkless_reprobe_enabled_default_is_true() -> None:
+    """Self review before escalation: the anima gets bounded attempts of its own."""
+    assert BackgroundTaskConfig().blocked_checkless_reprobe_enabled is True
 
 
 def test_recovery_can_be_disabled(tmp_path: Path) -> None:

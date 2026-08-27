@@ -92,22 +92,38 @@ def _count(meta: dict, key: str) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
 
 
-def _record_check_failure(
-    manager: TaskQueueManager,
-    anima_dir: Path,
-    anima_name: str,
-    entry: TaskEntry,
-    stale_after_hours: float,
-) -> None:
+def _record_check_failure(manager: TaskQueueManager, entry: TaskEntry) -> None:
     manager.update_meta(
         entry.task_id,
         {"unblock_check_failures": _count(entry.meta, "unblock_check_failures") + 1},
     )
-    # A check can be permanently unsatisfiable (e.g. it pins a head SHA the PR has
-    # already moved past). Escalate once instead of retrying in silence forever.
+
+
+def _stale_check_action(
+    manager: TaskQueueManager,
+    anima_dir: Path,
+    anima_name: str,
+    entry: TaskEntry,
+    config,
+) -> str | None:
+    """Decide what to do about a check that keeps failing.
+
+    A check can be permanently unsatisfiable (e.g. it pins a head SHA the PR has
+    already moved past), so retrying it forever is silent abandonment. Hand the
+    task back to the anima to re-judge its own blocker first; only escalate once
+    those self-reviews are used up.
+
+    Returns the instruction suffix for a requeue, or None to stay blocked.
+    """
     age_hours = _age_hours(entry)
-    if age_hours is not None and age_hours >= stale_after_hours:
+    if age_hours is None or age_hours < config.blocked_reprobe_after_hours:
+        return None
+    reprobes = _count(entry.meta, "blocked_reprobe_count")
+    if reprobes >= config.blocked_max_reprobes:
         _alert_manual_intervention_required(manager, anima_dir, anima_name, entry)
+        return None
+    manager.update_meta(entry.task_id, {"blocked_reprobe_count": reprobes + 1})
+    return t("blocked_recovery.stale_check_instruction")
 
 
 def _alert_manual_intervention_required(
@@ -224,24 +240,29 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                         entry.task_id,
                         exc_info=True,
                     )
-                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
+                    _record_check_failure(manager, entry)
                     continue
                 except subprocess.TimeoutExpired:
-                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
+                    _record_check_failure(manager, entry)
                     continue
                 if result.returncode != 0:
-                    _record_check_failure(manager, anima_dir, anima_name, entry, config.blocked_reprobe_after_hours)
-                    continue
-                suffix = ""
+                    # Infra failures above just retry; a check that genuinely says
+                    # "still blocked" for hours goes back to the anima to re-judge.
+                    _record_check_failure(manager, entry)
+                    suffix = _stale_check_action(manager, anima_dir, anima_name, entry, config)
+                    if suffix is None:
+                        continue
+                else:
+                    suffix = ""
             else:
-                # checkless: fail closed by default (no automatic pending requeue).
+                # checkless: nothing can prove the blocker is gone, so the anima
+                # itself re-judges it (bounded), and only then the supervisor hears.
                 age_hours = _age_hours(entry)
                 if age_hours is None or age_hours < config.blocked_reprobe_after_hours:
                     continue
                 if not config.blocked_checkless_reprobe_enabled:
                     _alert_manual_intervention_required(manager, anima_dir, anima_name, entry)
                     continue
-                # Legacy time-based reprobe (opt-in via blocked_checkless_reprobe_enabled).
                 reprobes = _count(entry.meta, "blocked_reprobe_count")
                 if reprobes >= config.blocked_max_reprobes:
                     _alert_manual_intervention_required(manager, anima_dir, anima_name, entry)
@@ -249,10 +270,13 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                 manager.update_meta(entry.task_id, {"blocked_reprobe_count": reprobes + 1})
                 suffix = t("blocked_recovery.reprobe_instruction")
 
+            # An empty suffix means the check actually passed; otherwise the task is
+            # requeued for the anima to re-judge its own blocker.
+            passed = not suffix
             pending = manager.update_status(
                 entry.task_id,
                 "pending",
-                summary=("auto-unblocked: check passed" if has_check else "auto-unblocked: scheduled reprobe"),
+                summary=("auto-unblocked: check passed" if passed else "auto-unblocked: self review"),
             )
             if pending is None:
                 continue
@@ -266,10 +290,10 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
 
             ActivityLogger(anima_dir).log(
                 "blocked_recovery",
-                summary=("Unblock check passed" if has_check else "Scheduled blocked task reprobe"),
+                summary=("Unblock check passed" if passed else "Blocked task handed back for self review"),
                 meta={
                     "task_id": entry.task_id,
-                    "method": "check" if has_check else "reprobe",
+                    "method": "check" if passed else "reprobe",
                 },
                 safe=True,
             )
