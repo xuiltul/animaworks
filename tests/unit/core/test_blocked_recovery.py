@@ -93,7 +93,7 @@ def test_check_success_republishes_without_consuming_retry(tmp_path: Path) -> No
         "/tmp",
         "--die-with-parent",
         "--",
-        "/bin/sh",
+        "/bin/bash",
         "-c",
         "test -w .",
     ]

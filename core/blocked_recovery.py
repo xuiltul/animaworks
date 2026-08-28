@@ -223,7 +223,10 @@ def revalidate_blocked_tasks(anima_dir: Path, anima_name: str) -> list[str]:
                             "/tmp",
                             "--die-with-parent",
                             "--",
-                            "/bin/sh",
+                            # bash, not sh: agents write checks with here-strings
+                            # (`<<<`), `[[ ]]` and `set -o pipefail`, which dash
+                            # rejects with a syntax error before any condition runs.
+                            "/bin/bash",
                             "-c",
                             check,
                         ],
