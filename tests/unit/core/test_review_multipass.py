@@ -131,6 +131,71 @@ def test_dispatch_is_idempotent_within_scan():
     assert len(recorder.tasks) == 1
 
 
+def test_newer_exact_supersedes_queued_reviews_of_older_exact(tmp_path):
+    """新pushが来たら、旧exactの未着手レビューは放棄して最新だけを走らせる。"""
+    from core.memory.task_queue import TaskQueueManager
+
+    animas_dir = tmp_path / "animas"
+    reviewer_dir = animas_dir / "sumire"
+    (reviewer_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(reviewer_dir)
+    old_sha = "b" * 40
+    for task_id, status in (("old-pending", "pending"), ("old-running", "in_progress")):
+        manager.add_task(
+            source="anima",
+            original_instruction="review",
+            assignee="sumire",
+            summary="旧exactのレビュー",
+            task_id=task_id,
+            meta={"repo": "o/r", "number": 1, "sha": old_sha, "multipass": True},
+        )
+        manager.update_status(task_id, status, summary="旧exactのレビュー")
+
+    recorder = _DispatchRecorder()
+    dispatch_multipass_reviews(
+        default_state(),
+        [{"repo": "o/r", "number": 1, "sha": SHA, "title": "t"}],
+        reviewer="sumire",
+        models=["c:codex/gpt-5.6-sol"],
+        dispatch=recorder,
+        animas_dir=animas_dir,
+    )
+
+    # 未着手の旧exactは放棄、実行中のものは殺さない
+    assert manager.get_task_by_id("old-pending").status == "cancelled"
+    assert "superseded" in manager.get_task_by_id("old-pending").summary
+    assert manager.get_task_by_id("old-running").status == "in_progress"
+    assert len(recorder.tasks) == 1
+
+
+def test_same_exact_review_is_not_superseded(tmp_path):
+    """同じexactの既存レビューは巻き込まない。"""
+    from core.memory.task_queue import TaskQueueManager
+
+    animas_dir = tmp_path / "animas"
+    reviewer_dir = animas_dir / "sumire"
+    (reviewer_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(reviewer_dir)
+    manager.add_task(
+        source="anima",
+        original_instruction="review",
+        assignee="sumire",
+        summary="同一exactのレビュー",
+        task_id="same-exact",
+        meta={"repo": "o/r", "number": 1, "sha": SHA, "multipass": True},
+    )
+
+    dispatch_multipass_reviews(
+        default_state(),
+        [{"repo": "o/r", "number": 1, "sha": SHA, "title": "t"}],
+        reviewer="sumire",
+        models=["c:codex/gpt-5.6-sol"],
+        dispatch=_DispatchRecorder(),
+        animas_dir=animas_dir,
+    )
+    assert manager.get_task_by_id("same-exact").status == "pending"
+
+
 def test_empty_models_noop():
     recorder = _DispatchRecorder()
     state = default_state()

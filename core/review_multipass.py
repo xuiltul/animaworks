@@ -182,6 +182,47 @@ def review_task(reviewer: str, task_id: str, animas_dir: Path | None = None):
     return SimpleNamespace(task_id=task_id, status=archived_status)
 
 
+def supersede_stale_review_tasks(
+    reviewer: str,
+    repo: str,
+    number: int,
+    sha: str,
+    *,
+    animas_dir: Path | None = None,
+) -> list[str]:
+    """Cancel queued review tasks for older exacts of the same PR.
+
+    A review is only meaningful against the current HEAD, so once a newer push
+    arrives the queued passes for the previous exact are dead work.  Leaving
+    them queued is actively harmful: they hold the ``pr-<N>`` exclusion key, so
+    the review of the commit that actually matters waits behind a review of a
+    commit nobody will merge.
+
+    Only ``pending``/``blocked`` (not yet started) tasks are cancelled; an
+    already running pass is left to finish rather than killed mid-flight.
+    """
+    target_dir = (animas_dir or get_animas_dir()) / reviewer
+    if not target_dir.is_dir():
+        return []
+    manager = TaskQueueManager(target_dir)
+    cancelled: list[str] = []
+    for task in manager.list_tasks():
+        meta = task.meta or {}
+        if not meta.get("multipass") or task.status not in ("pending", "blocked"):
+            continue
+        if meta.get("repo") != repo or str(meta.get("number")) != str(number):
+            continue
+        if str(meta.get("sha")) == sha:
+            continue
+        manager.update_status(
+            task.task_id,
+            "cancelled",
+            summary=f"superseded: exact {meta.get('sha')} は新しい exact {sha} に追い越された",
+        )
+        cancelled.append(task.task_id)
+    return cancelled
+
+
 # ── Review instruction templates ────────────────────────────────────
 
 
@@ -235,6 +276,9 @@ def dispatch_multipass_reviews(
         sha = str(it["sha"])
         number = int(it["number"])
         repo = str(it["repo"])
+        superseded = supersede_stale_review_tasks(reviewer, repo, number, sha, animas_dir=animas_dir)
+        for stale_id in superseded:
+            log(f"superseded stale review task {stale_id} (newer exact {sha[:8]})")
         model_tasks = [f"{base_id}-m-{model_slug(entry)}" for entry in models]
         # Entry-first persistence: record before dispatching any task.
         multipass[base_id] = {
