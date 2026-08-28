@@ -889,13 +889,14 @@ class MessagingMixin:
 
                 try:
                     external_chat_recipient = self._resolve_chat_external_recipient(from_person, source)
+                    trigger = f"message:{source}:{from_person}" if source else f"message:{from_person}"
                     async with _agent_session_context(self):
                         self.agent.set_interrupt_event(self._get_interrupt_event(thread_id))
                         self.agent._tool_handler.set_session_origin(ORIGIN_HUMAN)
                         result = await _run_chat_cycle_with_fallback(
                             self,
                             prompt=prompt,
-                            trigger=f"message:{from_person}",
+                            trigger=trigger,
                             message_intent=intent,
                             images=images,
                             prior_messages=prior_messages,
@@ -922,7 +923,7 @@ class MessagingMixin:
                     response_artifacts.extend(local_artifacts[:remaining])
                     guard_ok, guard_meta = _chat_cycle_isolated(
                         result,
-                        expected_trigger=f"message:{from_person}",
+                        expected_trigger=trigger,
                         thread_id=thread_id,
                     )
                     if not guard_ok:
@@ -1246,6 +1247,7 @@ class MessagingMixin:
                 self._active_chat_conversations[thread_id] = conv_memory
 
                 try:
+                    trigger = f"message:{source}:{from_person}" if source else f"message:{from_person}"
                     agent_session_lock = getattr(self, "_agent_session_lock", None)
                     if isinstance(agent_session_lock, asyncio.Lock):
                         await agent_session_lock.acquire()
@@ -1255,7 +1257,7 @@ class MessagingMixin:
                     async for chunk in _run_chat_stream_with_fallback(
                         self,
                         prompt=prompt,
-                        trigger=f"message:{from_person}",
+                        trigger=trigger,
                         message_intent=intent,
                         images=images,
                         prior_messages=prior_messages,
@@ -1288,7 +1290,7 @@ class MessagingMixin:
                             chunk["cycle_result"] = cycle_result
                             guard_ok, guard_meta = _chat_cycle_isolated(
                                 cycle_result,
-                                expected_trigger=f"message:{from_person}",
+                                expected_trigger=trigger,
                                 thread_id=thread_id,
                             )
                             if not guard_ok:
