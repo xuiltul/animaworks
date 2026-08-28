@@ -154,8 +154,8 @@ class TestEventTypesInApi:
     all appear in the activity API response (confirming backend records them)."""
 
     @pytest.mark.parametrize("event_type,extra_fields", [
-        ("message_received", {"from": "taka", "content": "hello"}),
-        ("response_sent", {"to": "taka", "content": "hi there"}),
+        ("message_received", {"from": "owner", "content": "hello"}),
+        ("response_sent", {"to": "owner", "content": "hi there"}),
         ("dm_sent", {"from": "alice", "to": "bob", "summary": "DM test"}),
         ("dm_received", {"from": "bob", "to": "alice", "summary": "DM reply"}),
         ("human_notify", {"summary": "notification test", "via": "slack"}),
@@ -193,8 +193,8 @@ class TestEventTypeFilter:
         now = now_jst()
         _write_activity(animas_dir, "alice", [
             {"ts": (now - timedelta(seconds=3)).isoformat(), "type": "heartbeat_start", "summary": "HB"},
-            {"ts": (now - timedelta(seconds=2)).isoformat(), "type": "message_received", "from": "taka", "content": "hi"},
-            {"ts": (now - timedelta(seconds=1)).isoformat(), "type": "response_sent", "to": "taka", "content": "hello"},
+            {"ts": (now - timedelta(seconds=2)).isoformat(), "type": "message_received", "from": "owner", "content": "hi"},
+            {"ts": (now - timedelta(seconds=1)).isoformat(), "type": "response_sent", "to": "owner", "content": "hello"},
         ])
 
         with _create_app(tmp_path, anima_names=["alice"]) as app:

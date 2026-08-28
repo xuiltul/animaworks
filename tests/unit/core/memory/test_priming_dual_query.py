@@ -167,9 +167,9 @@ class TestMeetsMinLength:
         assert PrimingEngine._meets_min_length("実装") is True
         assert PrimingEngine._meets_min_length("검색") is True  # Korean
 
-    def test_katakana(self) -> None:
+    def test_kaオーナーna(self) -> None:
         assert PrimingEngine._meets_min_length("マレーシア") is True
-        assert PrimingEngine._meets_min_length("ア") is True  # single katakana
+        assert PrimingEngine._meets_min_length("ア") is True  # single kaオーナーna
 
     def test_latin_short_rejected(self) -> None:
         assert PrimingEngine._meets_min_length("a") is False

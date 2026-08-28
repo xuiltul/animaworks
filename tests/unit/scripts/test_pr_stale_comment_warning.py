@@ -808,7 +808,7 @@ def test_check_unaddressed_dry_run_with_mocks(mod, monkeypatch, tmp_path):
 
 
 def test_default_ladder_15_30_45_60(mod):
-    """taka指示(2026-07-27): 15分警告→30/45分再警告→60分エスカレーション。"""
+    """オーナー指示(2026-07-27): 15分警告→30/45分再警告→60分エスカレーション。"""
     kw = dict(item_created_at=T0, escalated_at=None)
     assert mod.determine_warning_stage(now=T0 + timedelta(minutes=14), last_warned=None, **kw) == "none"
     assert mod.determine_warning_stage(now=T0 + timedelta(minutes=15), last_warned=None, **kw) == "warn"
@@ -921,16 +921,17 @@ def test_escalated_item_sends_repeating_human_judgment_dm(mod, monkeypatch):
     mod.check_unaddressed(state)
     mod.check_unaddressed(state)  # same tick → no duplicate
 
-    human_sends = [s for s in sends if "人間判断が必要" in s[1]]
+    human_sends = [s for s in sends if "上司判断で再開させること" in s[1]]
     assert len(human_sends) == 1
     assert human_sends[0][0] == "sakura"
-    assert "takaへ call_human で報告すること" in human_sends[0][1]
+    assert "まずあなたが解決策" in human_sends[0][1]
+    assert "作業を止めないこと" in human_sends[0][1]
     assert state["stale_watch"][item_id]["human_notified_at"]
 
     # 24h後にもう一度届く（1回きりで終わらない）
     now_box[0] = T0 + timedelta(hours=24)
     mod.check_unaddressed(state)
-    human_sends = [s for s in sends if "人間判断が必要" in s[1]]
+    human_sends = [s for s in sends if "上司判断で再開させること" in s[1]]
     assert len(human_sends) == 2
 
 

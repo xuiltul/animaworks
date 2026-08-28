@@ -85,9 +85,9 @@ class TestAddTask:
             assignee="rin",
             summary="test",
             deadline="1h",
-            relay_chain=["taka", "sakura", "rin"],
+            relay_chain=["owner", "sakura", "rin"],
         )
-        assert entry.relay_chain == ["taka", "sakura", "rin"]
+        assert entry.relay_chain == ["owner", "sakura", "rin"]
 
     def test_add_task_with_deadline(self, task_queue):
         entry = task_queue.add_task(
@@ -260,11 +260,11 @@ class TestFormatForPriming:
             assignee="rin",
             summary="Delegated task",
             deadline="1h",
-            relay_chain=["taka", "sakura", "rin"],
+            relay_chain=["owner", "sakura", "rin"],
         )
         output = task_queue.format_for_priming()
         assert "chain:" in output
-        assert "taka" in output
+        assert "owner" in output
 
 
 class TestCompact:

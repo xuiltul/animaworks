@@ -412,7 +412,7 @@ class TestChatworkMessageDelivery:
                 "room_id": 12345,
                 "message_id": "msg_001",
                 "body": "Hi Kotoha!",
-                "account": {"account_id": 67890, "name": "taka"},
+                "account": {"account_id": 67890, "name": "owner"},
             },
         }).encode("utf-8")
         resp = client.post(

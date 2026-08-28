@@ -30,7 +30,7 @@ class TestIsCjk:
         assert _is_cjk("あ")
         assert _is_cjk("の")
 
-    def test_katakana(self) -> None:
+    def test_kaオーナーna(self) -> None:
         assert _is_cjk("ア")
         assert _is_cjk("ン")
 

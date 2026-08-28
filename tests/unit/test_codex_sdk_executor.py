@@ -469,7 +469,7 @@ class TestExecutorInit:
         ctx = RuntimeSessionContext.create(
             session_type="chat",
             thread_id="thread-1",
-            trigger="message:taka",
+            trigger="message:owner",
         )
 
         with runtime_session_scope(ctx):
@@ -478,7 +478,7 @@ class TestExecutorInit:
         assert env["ANIMAWORKS_REQUEST_ID"] == ctx.request_id
         assert env["ANIMAWORKS_SESSION_TYPE"] == "chat"
         assert env["ANIMAWORKS_THREAD_ID"] == "thread-1"
-        assert env["ANIMAWORKS_TRIGGER"] == "message:taka"
+        assert env["ANIMAWORKS_TRIGGER"] == "message:owner"
         assert env["ANIMAWORKS_TOOL_SESSION_ID"] == ctx.tool_session_id
 
     def test_build_env_codex_azure_uses_azure_api_key(self, model_config, anima_dir, monkeypatch):

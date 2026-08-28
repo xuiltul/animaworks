@@ -469,7 +469,7 @@ class TestSessionTypeResolution:
         assert _resolve_session_type("chat") == "chat"
 
     def test_message_trigger_maps_to_chat(self):
-        assert _resolve_session_type("message:taka") == "chat"
+        assert _resolve_session_type("message:owner") == "chat"
 
     def test_message_bare_maps_to_chat(self):
         assert _resolve_session_type("message") == "chat"

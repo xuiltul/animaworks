@@ -125,7 +125,7 @@ class TestFullTaskLifecycleWithStaleness:
         entry = task_queue.add_task(
             source="human",
             original_instruction="Weekly report",
-            assignee="taka",
+            assignee="owner",
             summary="Weekly report",
             deadline="1d",
         )
@@ -458,14 +458,14 @@ class TestHeartbeatDelegationInjection:
 
     def test_load_prompt_renders_subordinates(self):
         """load_prompt substitutes {subordinates} into the template."""
-        subordinates = "rin, sakura, taka"
+        subordinates = "rin, sakura, owner"
         result = load_prompt(
             "heartbeat_subordinate_check",
             subordinates=subordinates,
             animas_dir="/home/test/.animaworks/animas",
         )
 
-        assert "rin, sakura, taka" in result
+        assert "rin, sakura, owner" in result
         assert "STALE" in result
         assert "OVERDUE" in result
         assert "委任" in result

@@ -237,9 +237,9 @@ class TestRepairJsonArguments:
     def test_glm_complex_duplicate(self) -> None:
         raw = (
             '{"command":"docker ps -a --format \\"table {{.Names}}\\\\t{{.Status}}'
-            "\\\\t{{.Ports}} | grep -E 'ai-schreiber|bitcoin'\\\"\"}"
+            "\\\\t{{.Ports}} | grep -E 'ai-schreiber|worker'\\\"\"}"
             + '{"command": "docker ps -a --format \\"table {{.Names}}\\\\t{{.Status}}'
-            "\\\\t{{.Ports}} | grep -E 'ai-schreiber|bitcoin'\\\"\"}"
+            "\\\\t{{.Ports}} | grep -E 'ai-schreiber|worker'\\\"\"}"
         )
         result = _repair_json_arguments(raw)
         assert result is not None

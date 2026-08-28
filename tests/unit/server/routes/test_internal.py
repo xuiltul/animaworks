@@ -245,7 +245,7 @@ class TestInternalAnimaCreate:
                     json={
                         "character_sheet_content": _VALID_SHEET,
                         "name": "yoru",
-                        "calling_anima": "taka",
+                        "calling_anima": "owner",
                     },
                 )
 
@@ -256,7 +256,7 @@ class TestInternalAnimaCreate:
         assert (animas_dir / "yoru").is_dir()
         # supervisor fallback from calling_anima
         status = json.loads((animas_dir / "yoru" / "status.json").read_text(encoding="utf-8"))
-        assert status.get("supervisor") == "taka"
+        assert status.get("supervisor") == "owner"
 
     async def test_create_duplicate_409(self, data_dir):
         from pathlib import Path

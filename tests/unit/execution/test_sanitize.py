@@ -607,17 +607,17 @@ class TestWrapInboxMessage:
 
         ORIGIN_TRUST_MAP maps human → medium (not trusted); we must not invent levels.
         """
-        cfg = _mock_config(aliases={"taka": _alias_cfg(slack="U_TAKA")})
+        cfg = _mock_config(aliases={"owner": _alias_cfg(slack="U_OWNER")})
         with patch("core.config.models.load_config", return_value=cfg):
             result = wrap_inbox_message(
                 "please check this",
                 source="slack",
                 origin=ORIGIN_EXTERNAL_PLATFORM,
-                sender="U_TAKA",
+                sender="U_OWNER",
             )
         assert 'trust="medium"' in result
         assert 'origin="human"' in result
-        assert 'sender="U_TAKA"' in result
+        assert 'sender="U_OWNER"' in result
 
     def test_known_human_via_approver_ids(self) -> None:
         cfg = _mock_config(approver_ids=["U_APPROVER"])
@@ -632,7 +632,7 @@ class TestWrapInboxMessage:
         assert 'origin="human"' in result
 
     def test_unknown_sender_stays_untrusted(self) -> None:
-        cfg = _mock_config(aliases={"taka": _alias_cfg(slack="U_TAKA")})
+        cfg = _mock_config(aliases={"owner": _alias_cfg(slack="U_OWNER")})
         with patch("core.config.models.load_config", return_value=cfg):
             result = wrap_inbox_message(
                 "hi",
@@ -645,14 +645,14 @@ class TestWrapInboxMessage:
 
     def test_display_name_only_match_does_not_elevate(self) -> None:
         """Alias key (display name) must NOT elevate — only platform user ID."""
-        cfg = _mock_config(aliases={"taka": _alias_cfg(slack="U_TAKA")})
+        cfg = _mock_config(aliases={"owner": _alias_cfg(slack="U_OWNER")})
         with patch("core.config.models.load_config", return_value=cfg):
             # sender is the display/alias name, not the Slack user ID
             result = wrap_inbox_message(
                 "hi",
                 source="slack",
                 origin=ORIGIN_EXTERNAL_PLATFORM,
-                sender="taka",
+                sender="owner",
             )
         assert 'trust="untrusted"' in result
         assert 'origin="external_platform"' in result
@@ -679,13 +679,13 @@ class TestWrapInboxMessage:
 
 class TestIsRegisteredHumanSender:
     def test_matches_slack_alias(self) -> None:
-        cfg = _mock_config(aliases={"taka": _alias_cfg(slack="U_TAKA")})
+        cfg = _mock_config(aliases={"owner": _alias_cfg(slack="U_OWNER")})
         with patch("core.config.models.load_config", return_value=cfg):
-            assert is_registered_human_sender("slack", "U_TAKA") is True
+            assert is_registered_human_sender("slack", "U_OWNER") is True
             assert is_registered_human_sender("slack", "U_OTHER") is False
 
     def test_matches_discord_alias(self) -> None:
-        cfg = _mock_config(aliases={"taka": _alias_cfg(discord="D_123")})
+        cfg = _mock_config(aliases={"owner": _alias_cfg(discord="D_123")})
         with patch("core.config.models.load_config", return_value=cfg):
             assert is_registered_human_sender("discord", "D_123") is True
             assert is_registered_human_sender("discord", "D_OTHER") is False
@@ -696,4 +696,4 @@ class TestIsRegisteredHumanSender:
 
     def test_config_load_failure_is_safe(self) -> None:
         with patch("core.config.models.load_config", side_effect=RuntimeError("boom")):
-            assert is_registered_human_sender("slack", "U_TAKA") is False
+            assert is_registered_human_sender("slack", "U_OWNER") is False

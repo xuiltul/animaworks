@@ -314,20 +314,20 @@ class TestReceiveExternalChannelMirroring:
         messenger.receive_external(
             "@all Server error is resolved",
             source="human",
-            external_user_id="taka",
+            external_user_id="owner",
         )
         channel_file = shared_dir / "channels" / "general.jsonl"
         assert channel_file.exists()
         entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
         assert entry["source"] == "human"
-        assert entry["from"] == "taka"  # Human identity, not anima name
+        assert entry["from"] == "owner"  # Human identity, not anima name
         assert "@all" in entry["text"]
 
     def test_human_without_at_all_no_mirror(self, shared_dir, messenger):
         messenger.receive_external(
             "Just a normal message",
             source="human",
-            external_user_id="taka",
+            external_user_id="owner",
         )
         channel_file = shared_dir / "channels" / "general.jsonl"
         assert not channel_file.exists()
@@ -342,7 +342,7 @@ class TestReceiveExternalChannelMirroring:
 
     def test_receive_external_still_creates_inbox(self, shared_dir, messenger):
         messenger.receive_external(
-            "@all resolve notice", source="human", external_user_id="taka",
+            "@all resolve notice", source="human", external_user_id="owner",
         )
         # inbox should still get the message (even if #general is missing)
         messages = messenger.receive()
@@ -351,7 +351,7 @@ class TestReceiveExternalChannelMirroring:
     def test_receive_external_no_message_log(self, shared_dir, messenger):
         """receive_external() should NOT create message_log anymore."""
         messenger.receive_external(
-            "Test", source="human", external_user_id="taka",
+            "Test", source="human", external_user_id="owner",
         )
         assert not (shared_dir / "message_log").exists()
 

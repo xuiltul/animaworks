@@ -55,8 +55,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Original instruction text (include original quote when delegating)",
     },
     "schema.backlog_task.relay_chain": {
-        "ja": "委任経路（例: ['taka', 'sakura', 'rin']）",
-        "en": "Delegation chain (e.g. ['taka', 'sakura', 'rin'])",
+        "ja": "委任経路（例: ['owner', 'sakura', 'rin']）",
+        "en": "Delegation chain (e.g. ['owner', 'sakura', 'rin'])",
     },
     "schema.backlog_task.source": {
         "ja": "タスクの発生源 (human=人間からの指示, anima=Anima間委任)",

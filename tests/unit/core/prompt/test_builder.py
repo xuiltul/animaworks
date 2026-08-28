@@ -373,7 +373,7 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_metas.return_value = []
         memory.list_procedure_metas.return_value = []
         memory.common_skills_dir = data_dir / "common_skills"
-        memory.list_shared_users.return_value = ["taka"]
+        memory.list_shared_users.return_value = ["owner"]
 
         captured_calls: list[dict] = []
 

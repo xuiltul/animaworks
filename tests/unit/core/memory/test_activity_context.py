@@ -24,7 +24,7 @@ from core.tooling.handler import ToolHandler
         ("heartbeat", "heartbeat", "heartbeat"),
         ("cron:daily", "cron", "cron:daily"),
         ("inbox:alice", "inbox", "inbox"),
-        ("message:taka", "chat", "chat"),
+        ("message:owner", "chat", "chat"),
         ("manual", "chat", "chat"),
     ],
 )

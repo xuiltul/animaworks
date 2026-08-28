@@ -119,8 +119,8 @@ class TestFallbackChannels:
     async def test_human_messages_within_24h(self, anima_dir, shared_dir):
         now = now_jst()
         entries = [
-            {"ts": (now - timedelta(hours=2)).isoformat(), "from": "taka", "text": "Error resolved", "source": "human"},
-            {"ts": (now - timedelta(hours=30)).isoformat(), "from": "taka", "text": "Old message", "source": "human"},
+            {"ts": (now - timedelta(hours=2)).isoformat(), "from": "owner", "text": "Error resolved", "source": "human"},
+            {"ts": (now - timedelta(hours=30)).isoformat(), "from": "owner", "text": "Old message", "source": "human"},
         ]
         _write_channel(shared_dir, "general", entries)
         engine = PrimingEngine(anima_dir, shared_dir=shared_dir)
@@ -174,7 +174,7 @@ class TestPrimeMemoriesWithActivity:
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_c_related_knowledge", _stub_c)
 
         engine = PrimingEngine(anima_dir, shared_dir=shared_dir)
-        result = await engine.prime_memories("hello", sender_name="taka")
+        result = await engine.prime_memories("hello", sender_name="owner")
         assert result.recent_activity != ""
 
     async def test_fallback_populates_recent_activity(self, anima_dir, shared_dir, monkeypatch):
@@ -200,7 +200,7 @@ class TestPrimeMemoriesWithActivity:
         monkeypatch.setattr("core.memory.priming.PrimingEngine._channel_c_related_knowledge", _stub_c)
 
         engine = PrimingEngine(anima_dir, shared_dir=shared_dir)
-        result = await engine.prime_memories("hello", sender_name="taka")
+        result = await engine.prime_memories("hello", sender_name="owner")
         assert result.recent_activity != ""
         assert "Fallback msg" in result.recent_activity
 

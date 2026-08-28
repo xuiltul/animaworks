@@ -529,7 +529,7 @@ async def test_run_cycle_streaming_override_uses_local_executor_without_mutating
     ):
         async for chunk in agent.run_cycle_streaming(
             "hello",
-            trigger="message:taka",
+            trigger="message:owner",
             model_config_override=override,
         ):
             chunks.append(chunk)
@@ -574,7 +574,7 @@ class _FakeMessagingAgent:
         yield {
             "type": "cycle_done",
             "cycle_result": {
-                "trigger": kwargs.get("trigger", "message:taka"),
+                "trigger": kwargs.get("trigger", "message:owner"),
                 "action": "responded",
                 "summary": "ok",
                 "duration_ms": 1,
@@ -657,7 +657,7 @@ async def test_process_message_stream_uses_message_specific_voice_effort(
         chunk
         async for chunk in anima.process_message_stream(
             "hello",
-            from_person="taka",
+            from_person="owner",
             thread_id="default",
             voice_mode=voice_mode,
         )

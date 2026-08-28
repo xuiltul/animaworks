@@ -218,7 +218,7 @@ class TestChatworkWebhookE2E:
                 "room_id": 99999,
                 "message_id": "e2e_msg_001",
                 "body": "E2E test from Chatwork",
-                "account": {"account_id": 54321, "name": "taka"},
+                "account": {"account_id": 54321, "name": "owner"},
             },
         }).encode("utf-8")
         resp = e2e_client.post(

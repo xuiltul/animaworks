@@ -16,8 +16,8 @@ from core.memory.priming.channel_c import _path_from_doc_id, to_read_memory_path
 
 
 def test_shared_company_path_not_prefixed() -> None:
-    meta = {"anima": "shared", "source_file": "companies/a/knowledge/org-notification-to-taka.md"}
-    assert to_read_memory_path(meta, "mei") == "companies/a/knowledge/org-notification-to-taka.md"
+    meta = {"anima": "shared", "source_file": "companies/a/knowledge/org-notification-to-owner.md"}
+    assert to_read_memory_path(meta, "mei") == "companies/a/knowledge/org-notification-to-owner.md"
 
 
 def test_shared_plain_source_gets_common_knowledge_prefix() -> None:
@@ -37,5 +37,5 @@ def test_own_anima_source_unchanged() -> None:
 
 def test_doc_id_companies_marker_wins_over_knowledge() -> None:
     # companies/<c>/knowledge/... must not be truncated to knowledge/...
-    doc_id = "/data/companies/a/knowledge/org-notification-to-taka.md#0"
-    assert _path_from_doc_id(doc_id) == "companies/a/knowledge/org-notification-to-taka.md"
+    doc_id = "/data/companies/a/knowledge/org-notification-to-owner.md#0"
+    assert _path_from_doc_id(doc_id) == "companies/a/knowledge/org-notification-to-owner.md"

@@ -94,11 +94,11 @@ class TestDisableSubordinate:
 
     def test_disable_non_descendant_rejected(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
-        _setup_subordinate(tmp_path, "mio", supervisor="taka", enabled=True)
+        _setup_subordinate(tmp_path, "mio", supervisor="owner", enabled=True)
 
         mock_cfg = _mock_config(tmp_path, {
             "sakura": {},
-            "mio": {"supervisor": "taka"},
+            "mio": {"supervisor": "owner"},
         })
 
         with patch("core.config.models.load_config", return_value=mock_cfg):
@@ -195,7 +195,7 @@ class TestEnableSubordinate:
 
         mock_cfg = _mock_config(tmp_path, {
             "sakura": {},
-            "mio": {"supervisor": "taka"},
+            "mio": {"supervisor": "owner"},
         })
 
         with patch("core.config.models.load_config", return_value=mock_cfg):

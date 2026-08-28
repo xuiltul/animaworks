@@ -300,9 +300,9 @@ class TestFormatEntries:
         assert result == "[sakura(議長)] Hello"
 
     def test_human_format(self):
-        entries = [{"speaker": "taka", "role": "human", "text": "Hi"}]
+        entries = [{"speaker": "owner", "role": "human", "text": "Hi"}]
         result = RoomManager._format_entries(entries)
-        assert result == "[human(taka)] Hi"
+        assert result == "[human(owner)] Hi"
 
     def test_participant_format(self):
         entries = [{"speaker": "rin", "role": "participant", "text": "Agreed"}]
@@ -311,7 +311,7 @@ class TestFormatEntries:
 
     def test_multiple_entries(self):
         entries = [
-            {"speaker": "taka", "role": "human", "text": "Start"},
+            {"speaker": "owner", "role": "human", "text": "Start"},
             {"speaker": "sakura", "role": "chair", "text": "OK"},
             {"speaker": "rin", "role": "participant", "text": "Yes"},
         ]
@@ -329,11 +329,11 @@ class TestGetConversationContext:
 
     def test_formats_entries(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
-        rm.append_message(room.room_id, "taka", "human", "Hello")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
+        rm.append_message(room.room_id, "owner", "human", "Hello")
         rm.append_message(room.room_id, "sakura", "chair", "Welcome")
         ctx = rm.get_conversation_context(room.room_id)
-        assert "[human(taka)] Hello" in ctx
+        assert "[human(owner)] Hello" in ctx
         assert "[sakura(議長)] Welcome" in ctx
 
 
@@ -343,9 +343,9 @@ class TestGetSummarizedContext:
     @pytest.mark.asyncio
     async def test_returns_full_context_when_below_threshold(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
         for i in range(SUMMARY_THRESHOLD):
-            rm.append_message(room.room_id, "taka", "human", f"Message {i}")
+            rm.append_message(room.room_id, "owner", "human", f"Message {i}")
         result = await rm.get_summarized_context(room.room_id)
         assert "[要約]" not in result
         assert "Message 0" in result
@@ -353,9 +353,9 @@ class TestGetSummarizedContext:
     @pytest.mark.asyncio
     async def test_summarizes_when_above_threshold(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
         for i in range(SUMMARY_THRESHOLD + 2):
-            rm.append_message(room.room_id, "taka", "human", f"Message {i}")
+            rm.append_message(room.room_id, "owner", "human", f"Message {i}")
 
         with patch.object(rm, "_call_summary_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "Summary of older messages"
@@ -370,9 +370,9 @@ class TestGetSummarizedContext:
     @pytest.mark.asyncio
     async def test_uses_cached_summary(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
         for i in range(SUMMARY_THRESHOLD + 2):
-            rm.append_message(room.room_id, "taka", "human", f"Message {i}")
+            rm.append_message(room.room_id, "owner", "human", f"Message {i}")
 
         with patch.object(rm, "_call_summary_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "Cached summary"
@@ -386,16 +386,16 @@ class TestGetSummarizedContext:
     @pytest.mark.asyncio
     async def test_invalidates_cache_on_new_messages(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
         for i in range(SUMMARY_THRESHOLD + 2):
-            rm.append_message(room.room_id, "taka", "human", f"Message {i}")
+            rm.append_message(room.room_id, "owner", "human", f"Message {i}")
 
         with patch.object(rm, "_call_summary_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.return_value = "Summary v1"
             await rm.get_summarized_context(room.room_id)
 
             # Add more messages (shifts the older/recent boundary)
-            rm.append_message(room.room_id, "taka", "human", "New message")
+            rm.append_message(room.room_id, "owner", "human", "New message")
             mock_llm.return_value = "Summary v2"
             result = await rm.get_summarized_context(room.room_id)
 
@@ -405,9 +405,9 @@ class TestGetSummarizedContext:
     @pytest.mark.asyncio
     async def test_fallback_on_llm_failure(self, tmp_path):
         rm = RoomManager(tmp_path)
-        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="taka")
+        room = rm.create_room(["sakura", "rin"], chair="sakura", created_by="owner")
         for i in range(SUMMARY_THRESHOLD + 2):
-            rm.append_message(room.room_id, "taka", "human", f"Message {i}")
+            rm.append_message(room.room_id, "owner", "human", f"Message {i}")
 
         with patch.object(rm, "_call_summary_llm", new_callable=AsyncMock) as mock_llm:
             mock_llm.side_effect = RuntimeError("LLM unavailable")

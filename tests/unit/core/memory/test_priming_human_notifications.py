@@ -104,7 +104,7 @@ class TestCollectPendingHumanNotifications:
             },
         ])
         engine = PrimingEngine(anima_dir)
-        result = await engine._collect_pending_human_notifications(channel="message:taka")
+        result = await engine._collect_pending_human_notifications(channel="message:owner")
         assert "Notification body" in result
 
     @pytest.mark.asyncio

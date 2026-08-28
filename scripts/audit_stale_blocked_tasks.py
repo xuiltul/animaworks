@@ -2,7 +2,7 @@
 """List tasks stuck in blocked status for more than N days.
 
 Blocked is not a terminal status, so TaskBoard archive never closes these;
-they silently pile up (taka directive 2026-08-13). Weekly cron feeds the
+they silently pile up (owner directive 2026-08-13). Weekly cron feeds the
 output to rin for triage.
 
 Usage: audit_stale_blocked_tasks.py [--days 7] [--data-dir ~/.animaworks]

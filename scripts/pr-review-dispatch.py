@@ -49,7 +49,7 @@ ESCALATION_TARGET = os.environ.get("PR_DISPATCH_ESCALATION", "sakura")
 ALERT_EVERY = 5
 
 # Stale unaddressed-review warning thresholds (hours).
-# 2026-07-27 taka指示: 15分警告 → 以後15分毎に再警告(30/45分) → 60分でsakuraエスカレーション
+# 2026-07-27 オーナー指示: 15分警告 → 以後15分毎に再警告(30/45分) → 60分でsakuraエスカレーション
 STALE_WARN_HOURS = float(os.environ.get("PR_STALE_WARN_HOURS", "0.25"))
 STALE_REWARN_HOURS = float(os.environ.get("PR_STALE_REWARN_HOURS", "0.25"))
 STALE_ESCALATE_HOURS = float(os.environ.get("PR_STALE_ESCALATE_HOURS", "1"))
@@ -80,7 +80,7 @@ HUMAN_ESCALATION_HOURS = 24
 TERMINAL_TASK_STATUSES = frozenset({"failed", "cancelled", "done"})
 ACTIVE_TASK_STATUSES = frozenset({"waiting", "in_progress", "pending"})
 REDISPATCH_COOLDOWN = timedelta(minutes=30)
-# Reminders decay in frequency but never stop (taka指示 2026-08-13: 抑制禁止).
+# Reminders decay in frequency but never stop (オーナー指示 2026-08-13: 抑制禁止).
 REWARN_CAP_HOURS = 4.0
 ACTIVE_TASK_REWARN_FLOOR_HOURS = 1.0
 ESCALATE_REPEAT_HOURS = 8.0
@@ -1008,7 +1008,7 @@ def check_unaddressed(state: dict) -> None:
                 + "\n".join(lines)
                 + "\n\n状態が24時間以上変化していません。まずあなたが解決策"
                 "（担当替え・スコープ縮小・PR分割・findingの妥当性再判定）を決めて再開させてください。"
-                "takaへの call_human は報告であって、これを理由に作業を止めないこと。"
+                "オーナーへの call_human は報告であって、これを理由に作業を止めないこと。"
                 "解決するまでこの通知は24時間ごとに繰り返されます。",
             )
             log(f"stale human escalation ({msg_kind}) -> {ESCALATION_TARGET}: {len(lines)} item(s)")
@@ -1192,7 +1192,7 @@ def check_comments(state: dict) -> None:
 def check_ci(state: dict) -> None:
     """Dispatch CI failures once per PR and head SHA.
 
-    2026-08-11 taka指示: CI待ちでレビュー保留したPRが「全チェックgreen化」を検知できず
+    2026-08-11 オーナー指示: CI待ちでレビュー保留したPRが「全チェックgreen化」を検知できず
     放置される問題への対処として、review dispatch済みHEADのCI全green化を
     REVIEWERへ一度だけ再通知する（green_notified でSHAごとにラッチ）。
     """
@@ -1420,7 +1420,7 @@ def check_human_waits(state: dict) -> None:
         + "\n".join(lines)
         + "\n\n上記はbotレビュー承認済み・CI全green・人間レビュアーの承認のみ待ちのPRです。"
         "animaに打つ手はないため、警告ループの対象外にしています。"
-        "takaへ call_human でまとめて報告してください。",
+        "オーナーへ call_human でまとめて報告してください。",
     )
     log(f"human-wait digest -> {ESCALATION_TARGET}: {len(lines)} PR(s)")
 
