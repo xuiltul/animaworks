@@ -1004,9 +1004,11 @@ def check_unaddressed(state: dict) -> None:
         if lines:
             send(
                 ESCALATION_TARGET,
-                "【人間判断が必要】\n\n"
+                "【24時間停滞・上司判断で再開させること】\n\n"
                 + "\n".join(lines)
-                + "\n\n状態が24時間以上変化していません。takaへ call_human で報告すること。"
+                + "\n\n状態が24時間以上変化していません。まずあなたが解決策"
+                "（担当替え・スコープ縮小・PR分割・findingの妥当性再判定）を決めて再開させてください。"
+                "takaへの call_human は報告であって、これを理由に作業を止めないこと。"
                 "解決するまでこの通知は24時間ごとに繰り返されます。",
             )
             log(f"stale human escalation ({msg_kind}) -> {ESCALATION_TARGET}: {len(lines)} item(s)")
