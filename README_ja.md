@@ -1,10 +1,30 @@
 # AnimaWorks — Organization-as-Code
 
-**一人では何もできない。だから、組織を作りました。**
+### ソフトウェアを出荷するAI組織。
 
-AIエージェントを単発の「ツール」ではなく、記憶を持って継続的に働くチームメンバーとして扱うフレームワークです。各Animaは名前、ロール、性格、記憶、スケジュールを持ち、メッセージで連携しながら判断し、必要に応じて人間へ確認を返します。
+AnimaWorksは、永続的なAIエージェントを「動く組織」にするフレームワークです。ゴールを渡すと、エージェントたちが仕事を分解し、並列のworktreeで実装し、互いにテスト・レビューし、Pull Requestを作り、CIの失敗を修復し、コンフリクトを解消し、デプロイ結果まで見届けます。人間に確認を求めるのは、本当に人間が必要な場面だけです。
 
-人間はリーダーや担当者と会話するだけで、タスクの分解、委譲、進捗確認、記憶の更新、日次・週次の振り返りまでを同じ組織の中で扱えます。
+```text
+タスク → エージェントチーム → 並列worktree → 実装 → テスト → レビュー
+     → Pull Request → CI修復 → デプロイ → 観測 → 修復
+```
+
+AnimaWorksはこのパイプラインをハードコードしていません。フレームワークが担うのは、GitHubイベントのタスク化、PR単位の直列実行、マルチモデルレビューの編成。残りはエージェントたちが人間のエンジニアと同じやり方で回します — git、テスト、CI、そしてロールごとの作業規約で。だからこそ同じ組織が、メール対応も議事録もSlack投稿もこなせます。ビルドスクリプトではなく、組織だからです。
+
+## 本番での実績
+
+過去6ヶ月、8体のAnimaからなるAnimaWorks組織が、本番SaaSプロダクトの日常的な開発運用を担ってきました:
+
+| 指標（2026年3月〜8月） | 値 |
+|---|---|
+| エージェントが作成したPull Request | **302件**（267件マージ） |
+| エージェントが運用したPull Request — レビュー・CI修復・コンフリクト解消 | **752件**（721件マージ） |
+| 組織が自発的に起こしたタスクの割合 | **99.7%**（31,215タスク中、人間起点は92件） |
+| GitHubイベントから自動でタスク化された件数（8月のみ） | **2,508件** |
+
+これらの数字は、コミットのauthor情報ではなく一次実行記録（エージェントごとのactivity log・タスクキュー・作業メモ）から集計したものです。共有クレデンシャルの下では人間とエージェントのpushが混ざるためです。証跡が確認できないPRは除外しています。対象リポジトリは非公開のため、公開するのは集計値のみです。
+
+AnimaWorks自身も同じ方法で開発されています。このリポジトリに定義されたエージェントたちが、このリポジトリのPRをレビューし、CIを直し、リリースを出しています。人間の仕事は主に方向づけと例外対応です。
 
 <p align="center">
   <img src="docs/images/workspace-dashboard.gif" alt="AnimaWorks Workspace — リアルタイム組織ツリーとアクティビティフィード" width="720">
@@ -12,32 +32,17 @@ AIエージェントを単発の「ツール」ではなく、記憶を持って
 </p>
 
 <p align="center">
-  <img src="docs/images/workspace-demo.gif" alt="AnimaWorks 3Dワークスペース — エージェントが自律的に協働" width="720">
-  <br><em>3Dオフィス: Animaたちがデスクに座ったり、歩き回ったり、必要に応じてメッセージをやり取りしています。</em>
+  <img src="docs/images/pixel-workspace.gif" alt="AnimaWorks ドット絵オフィス — 稼働中の組織のライブビュー" width="720">
+  <br><em>ドット絵オフィスはシミュレーションではありません。稼働中の組織のライブビューです — ステータスラベルの一つひとつが、実際に動いているタスクです。</em>
 </p>
 
 **[English README](README.md)** | **[简体中文 README](README_zh.md)** | **[한국어 README](README_ko.md)**
 
 ---
 
-## 他のフレームワークとの違い
-
-|  | AnimaWorks | CrewAI | LangGraph | OpenClaw | OpenAI Agents |
-|--|-----------|--------|-----------|----------|---------------|
-| **設計思想** | 自律エージェントの組織 | ロールベースのチーム | グラフワークフロー | 個人アシスタント | 軽量SDK |
-| **記憶** | 脳科学ベース: RAG（Chroma＋グラフ）・統合・能動的忘却・自動想起・行動前の記憶確認 | Cognitive Memory（手動forget） | チェックポイント＋cross-threadストア | SuperMemory知識グラフ | セッション内のみ |
-| **自律性** | Heartbeat（観察→計画→振返り）+ Cron + TaskExec — 24/7稼働 | 人間がキック | 人間がキック | Cron + heartbeat | 人間がキック |
-| **組織構造** | 上司→部下の階層・委譲・監査・ダッシュボード | Crew内フラットロール | — | 単一エージェント | Handoffのみ |
-| **プロセス** | エージェント毎に独立OSプロセス・IPC・自動再起動 | 共有プロセス | 共有プロセス | 単一プロセス | 共有プロセス |
-| **マルチモデル** | 7エンジン: Claude SDK / Codex / Cursor Agent / Gemini CLI / Grok Build / LiteLLM / Assisted（Agent SDK 未導入時は Anthropic SDK が A モード内でフォールバック） | LiteLLM | LangChainモデル | OpenAI互換 | OpenAI中心 |
-
-> AnimaWorksはタスクランナーではありません。考えて、覚えて、忘れて、少しずつ育つ組織です。僕は実際の事業運営の中で、AIのチームとして使いながら開発しています。
-
----
-
 ## :rocket: 今すぐ試す
 
-60秒で動きます。**Claude Code / Codex にログイン済みならAPIキーは不要**です。
+**Claude Code CLIが入っているか、Codexにログイン済みならAPIキーは不要**です。
 
 まず、ワンライナーでクローンとインストールを実行:
 
@@ -46,19 +51,17 @@ curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setu
 cd animaworks
 ```
 
-次に、3人チームのデモをすぐに起動:
+次に、デモチームを起動:
 
 ```bash
 uv run animaworks demo
 ```
 
-**http://localhost:18501** を開けば準備完了。3人のチーム（マネージャー＋エンジニア＋コーディネーター）がすぐに動き出します。3日分のアクティビティ履歴付きです。[デモの詳細はこちら →](demo/README.ja.md)
+**http://localhost:18501** を開けば準備完了。3人のチーム（マネージャー＋エンジニア＋アシスタント）が3日分のアクティビティ履歴付きで動き出します。初回インストールはPython 3.12+とML系依存パッケージをダウンロードするため数分かかりますが、2回目以降のデモ起動は数秒です。[デモの詳細はこちら →](demo/README.ja.md)
 
-**APIキーは不要** — **Claude Code** か **Codex** にログイン済みなら認証は自動検出されます。どちらも無ければ `ANTHROPIC_API_KEY` をexportするか、先に `codex login` を実行してください。
+> プリセット: `en-business`（既定）/ `en-anime` / `ja-business` / `ja-anime` — 例: `uv run animaworks demo --preset ja-anime`。既存デモのプリセット切替には `--reset` が必要です。デモはクローンしたリポジトリが必要です（pipパッケージには同梱されません）。
 
-> 言語・スタイルの切替: `uv run animaworks demo --preset ja-anime` — [全プリセット一覧](demo/README.ja.md#プリセット)
-
-自分の組織を作りたいときは `uv run animaworks start` を実行 — 下のセットアップウィザードが最初のチーム作成を案内します。
+自分の組織を作りたいときは `uv run animaworks start` を実行 — 下のセットアップウィザードが最初のエージェント作成を案内します。
 
 ---
 
@@ -69,6 +72,7 @@ macOS / Linux / WSL:
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
+uv sync --all-extras        # codex/claude実行系のextraを追加
 uv run animaworks start     # サーバー起動 — 初回はセットアップウィザードが開きます
 ```
 
@@ -77,22 +81,25 @@ Windows (PowerShell):
 ```powershell
 git clone https://github.com/xuiltul/animaworks.git
 cd animaworks
-uv sync
+uv sync --all-extras
 uv run animaworks start
 ```
 
 OpenAI の Codex を APIキーなしで使う場合は、初回起動前に `codex login` を実行してください。
 
-**http://localhost:18500/** を開くと、セットアップウィザードが順番に聞いてきます:
+**http://localhost:18500/** を開くと、セットアップウィザードが5ステップで案内します:
 
 1. **言語** — UIの表示言語を選択
 2. **ユーザー情報** — オーナーアカウントを作成
-3. **プロバイダ認証** — APIキーを入力するか、OpenAI では Codex Login を選択
+3. **プロバイダ認証** — APIキー入力（OpenAIはCodex Loginも可）とアバター画風の選択
 4. **最初のAnima** — 最初のエージェントに名前をつける
+5. **確認** — 内容を確認して完了
 
 `.env` を手で書く必要はありません。ウィザードが `config.json` に自動保存します。
 
-セットアップスクリプトが [uv](https://docs.astral.sh/uv/) のインストール、リポジトリのクローン、Python 3.12+と全依存パッケージのダウンロードまで全部やってくれます。**macOS、Linux、WSL** では Python の事前インストールなしに動きます。**Windows** は上の PowerShell 手順を使ってください。
+セットアップスクリプトが [uv](https://docs.astral.sh/uv/) のインストール、リポジトリのクローン、依存パッケージの導入までやってくれます。**macOS、Linux、WSL** では Python の事前インストールなしに動きます。**Windows** は上の PowerShell 手順を使ってください。なお Mode S（Claude Agent SDK）は Windows では利用できません — Codex / Gemini / API系モードを使ってください。
+
+> **`uv sync` には必ず `--all-extras` を付けてください。** `setup.sh` が実行する素の `uv sync` でも本体は動きますが、Mode C（Codex）には `codex` extra が必要です。また後から extras 無しの sync を実行すると、venv から `codex` / `claude` 実行パッケージが消えて該当モードのAnimaが一斉に壊れます。
 
 > **他のLLMを使いたい場合:** Claude、GPT、Gemini、ローカルモデル等に対応しています。セットアップウィザードでAPIキーを入力するか、OpenAI/Codex では **Codex Login** も使えます。後からダッシュボードの **Settings** で変更できます。詳細は [APIキーリファレンス](#apiキーリファレンス) を参照してください。
 
@@ -119,7 +126,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # クローンとインストール
 git clone https://github.com/xuiltul/animaworks.git && cd animaworks
-uv sync                 # Python 3.12+と全依存パッケージを自動ダウンロード
+uv sync --all-extras    # Python 3.12+と全依存パッケージ（codex/claude extras含む）を自動ダウンロード
 
 # 起動
 uv run animaworks start
@@ -132,7 +139,7 @@ uv run animaworks start
 
 > **macOS ユーザーへ:** macOS Sonoma以前のシステムPython (`/usr/bin/python3`) はバージョン3.9のため、AnimaWorksの要件（3.12+）を満たしません。[Homebrew](https://brew.sh/) で `brew install python@3.13` をインストールするか、上のuvによる方法を使ってください（uvはPythonを自動管理します）。
 
-Python 3.12+ がシステムにインストール済みであること。
+Python 3.12+（3.12/3.13推奨）がシステムにインストール済みであること。
 
 ```bash
 git clone https://github.com/xuiltul/animaworks.git && cd animaworks
@@ -142,7 +149,40 @@ pip install --upgrade pip && pip install -e .
 animaworks start
 ```
 
+注: 素の `pip install -e .` には Codex extra が含まれません。Mode C を使う場合は `.[codex]` を追加してください。
+
 </details>
+
+---
+
+## ループの仕組み
+
+典型的な変更は、組織の中をこう流れます:
+
+1. **タスクが届く** — 人間から、他のエージェントから、スケジュール（heartbeat / cron）から、あるいはGitHubイベントから。Webhookゲートウェイが、CIの失敗・レビューコメント・`@bot` コマンド・マージコンフリクトを自動でエージェントのタスクに変換します（`gh-ci-*` / `gh-review-*` / `gh-comment-*`）。PR単位の重複排除と再試行上限付きです。
+2. **マネージャーが分解する** — `delegate_task` で受け入れ条件・作業場所・排他キーを付けてエンジニアに委譲します。同じPRに触れるタスクは排他キーで直列化され、エージェント同士が同じブランチで衝突することはありません。
+3. **エンジニアが隔離worktreeで実装・テストする** — 共有知識として同梱されるロール別の作業規約（PdM / エンジニア / レビュアー / テスター）に従います。この隔離は固定のパイプライン段ではなく、エージェントがgitで実行する運用規約です — だからこそ厄介なケースにも対応できます。
+4. **レビューはマルチモデル** — PRごとに、設定された各モデルで1本ずつレビューパスを発行し、全パスの指摘を統合タスクが総合判定します（承認 / 修正要求）。新しいpushが来ると古いレビュータスクは自動キャンセルされ、やり直します。
+5. **CIの失敗は仕事として戻ってくる** — 失敗したworkflow runは、PR番号とコミットに紐づく修復タスクとして実装エージェントに届きます（二重発行なし）。実験的なスタンドアロンループ（`python3 -m swe.ci_autofix`）は、修正→lint/テストゲート→レビュー→コミットを回し、3回失敗で人間にエスカレーションします。
+6. **デプロイと実行時確認もエージェントの仕事** — エージェントはブランチを隔離環境にデプロイし、ログ・エラー・UIの状態を読んで、テストで捕まらなかった問題を見つけます。本番の組織の活動記録には、数百件のデプロイ・実行時観測アクションが残っています。
+7. **人間は例外に介入する** — 組織は、詰まったときや権限を超える判断のときにエスカレーションします（`call_human`）。スーパーバイザプロセスは別途、エージェントの死活を監視し、ハングしたプロセスを再起動し、自身の記憶インデックスを修復します。
+
+人間の役割は「エージェントの操作」から「組織のオーナー」へ移ります。意図を伝え、重要なものをレビューし、例外を判断する。
+
+---
+
+## 他のフレームワークとの違い
+
+|  | AnimaWorks | CrewAI | LangGraph | OpenClaw | OpenAI Agents |
+|--|-----------|--------|-----------|----------|---------------|
+| **設計思想** | 自律エージェントの組織 | ロールベースのチーム | グラフワークフロー | 個人アシスタント | 軽量SDK |
+| **記憶** | 脳科学ベース: ハイブリッドRAG（ベクトル＋BM25＋グラフ）・atomic facts・統合・能動的忘却・自動想起 | Cognitive Memory（手動forget） | チェックポイント＋cross-threadストア | SuperMemory知識グラフ | セッション内のみ |
+| **自律性** | Heartbeat（観察→計画→振返り）+ Cron + TaskExec + GitHubイベントゲートウェイ — 24/7稼働 | 人間がキック | 人間がキック | Cron + heartbeat | 人間がキック |
+| **組織構造** | 上司→部下の階層・委譲・監査・ダッシュボード | Crew内フラットロール | — | 単一エージェント | Handoffのみ |
+| **プロセス** | エージェント毎に独立OSプロセス・IPC・自動再起動 | 共有プロセス | 共有プロセス | 単一プロセス | 共有プロセス |
+| **マルチモデル** | 7エンジン: Claude SDK / Codex / Cursor Agent / Gemini CLI / Grok Build / LiteLLM / Assisted — エンジン別のフォールバック連鎖付き | LiteLLM | LangChainモデル | OpenAI互換 | OpenAI中心 |
+
+> AnimaWorksはタスクランナーではありません。考えて、覚えて、忘れて、少しずつ育つ組織です。僕は実際の事業運営の中で、AIのチームとして使いながら開発しています。
 
 ---
 
@@ -151,22 +191,20 @@ animaworks start
 ### ダッシュボード
 
 <p align="center">
-  <img src="docs/images/dashboard.png" alt="AnimaWorks ダッシュボード — 19体のAnima組織図" width="720">
-  <br><em>ダッシュボード: 4階層・19体のAnimaが稼働中。リアルタイムステータス表示。</em>
+  <img src="docs/images/dashboard.png" alt="AnimaWorks ダッシュボード — リアルタイム組織図" width="720">
+  <br><em>ダッシュボード: 全Animaのリアルタイムステータス付き組織図。</em>
 </p>
 
-左サイドバーから主要画面に遷移します（ハッシュルーター `#/…`）。
+Web UIは6つの画面（ハッシュルーター `#/…`）とWorkspaceアプリで構成されます:
 
-- **ダッシュボード（ホーム）** — 組織の概要・ステータス・組織図
-- **Animas** — アバター付きリッチ一覧。各Animaの詳細タブ（overview / process / schedule / memory / assets）。旧来の独立ページ（プロセス監視・サーバー・メモリ・アセット）は Anima 詳細またはダッシュボードへリダイレクト
-- **アクティビティ** — SVGスイムレーンタイムライン、Nowボード＋ライブtoolティッカー、セッション再生（ログは `#/activity/logs`）
-- **タスク（TaskBoard）** — タスク、処理中、保留、抑制、バックグラウンド実行などをまとめて扱う作業盤。プライミングにも連動し、今見るべきタスクだけを会話に出します
-- **チャット** — 好きなAnimaとリアルタイムで会話。ストリーミング応答（SSE）、画像添付、マルチスレッド、全履歴。ツール実行中は入力欄上に作業中ミニインジケータを表示。**ミーティングモード**では複数Animaを同じ部屋に集め、司会者を指定して議論できます（最大5名・専用API）
-- **音声チャット** — ブラウザだけで声で会話（押して話す or ハンズフリー）。WebSocket経由。VOICEVOX / SBV2 / ElevenLabs対応
-- **Board** — Slack風の共有チャネル。Anima同士が議論・連携します
-- **設定** — 4タブ（general / activity / API・認証 / users）でサーバー・認証・ロケール・プロンプト・ユーザー管理。初回は `http://HOST/setup/` のウィザード。完了後は同じ項目を `#/settings` から開けます
-- **Workspace** — `/workspace/` を別タブで開く3Dオフィス（会話・Board・組織ツリー等）。ダッシュボード本体とは静的アプリを分離
-- **多言語** — **初回セットアップウィザード**は17言語のUI文言。**メインダッシュボード**の画面文言は `ja` / `en` / `ko` のJSON翻訳を同梱（未整備キーは日本語へフォールバック）。Anima向けテンプレートは日本語＋英語をベースに展開
+- **ホーム** — ライブステータス付き組織図、要対応を示す注目チップ、LLM使用量パネル（Claude / OpenAI / nanoGPT）、システムステータスバー、最近の活動、外部タスクウィジェット。各Animaの詳細ページ（overview / process / schedule / memory / assets）はここから開きます
+- **チャット** — 好きなAnimaとリアルタイム会話: ストリーミング応答（SSE）、画像添付、マルチスレッド履歴、右側タブ（state / activity / heartbeat / cron）、記憶ブラウザ（episodes / knowledge / procedures）。**ミーティングモード**は最大5名のAnimaを司会者付きで同じ部屋に集めます。チャットタブ長押しで**音声ポップアップ**（しゃべるアニメーションアバター付き）
+- **Board** — Slack風の共有チャネルとDM。Anima同士が議論・連携します。ブリッジされたDiscordチャネルもここに表示
+- **タスク** — タスクボード: キュー・処理中・保留・抑制・バックグラウンド実行・結果。プライミングにも連動し、今見るべきタスクだけを会話に出します
+- **アクティビティ** — 組織全体のSVGスイムレーンタイムライン、ライブtoolティッカー付きNowボード、セッション再生、ログ
+- **設定** — 4タブ（general / activity / API・認証 / users）。初回は `/setup/` のウィザード
+- **Workspace** — 別タブで開く独立アプリ: **3Dオフィス**（`/workspace/`、組織図ビュー切替・しゃべるバストアップ付き）と**ドット絵オフィス**（`/workspace/pixel/`、ステータスラベルの全てが実タスクのライブ2Dビュー）
+- **テーマと言語** — UIテーマ11種＋アニメ/リアル表示モード。セットアップウィザードは17言語、ダッシュボード本体は `ja` / `en` / `ko`
 
 ### 組織を作って、任せる
 
@@ -175,9 +213,10 @@ animaworks start
 チームが揃うと、Animaは自分のスケジュールと記憶を使って継続的に動きます:
 
 - **ハートビート** — 定期的に状況を確認して、次に何をするか自分で判断します
-- **cronジョブ** — 日次レポート、週次まとめ、監視。Animaごとにスケジュール設定できます
-- **タスク委譲** — マネージャーが部下にタスクを振って、進捗を追って、報告を受けます
-- **並列タスク実行** — 複数タスクを同時投入。依存関係を解決して独立タスクを並列実行します
+- **cronジョブ** — 日次レポート、週次まとめ、監視。Animaごとに設定でき、LLMタスクとコマンド実行の両方に対応
+- **タスク委譲** — マネージャーが受け入れ条件付きでタスクを振り、進捗を追い、報告を受けます
+- **並列タスク実行** — 複数タスクを同時投入。独立タスクは並列、排他キーを共有するタスクは順番に実行されます
+- **GitHubイベントゲートウェイ** — 監視対象リポジトリのCI失敗・レビューコメント・コンフリクトが自動でタスクになります
 - **夜間統合** — 日中のエピソード記憶が、寝ている間に知識へ昇華されます
 - **チーム連携** — 共有チャネルとDMで、必要な相手へ状況を共有します
 
@@ -185,12 +224,12 @@ animaworks start
 
 従来のAIエージェントは、コンテキストウィンドウに入る分しか覚えていません。AnimaWorksのAnimaはファイルベースの長期記憶を持ち、必要な時に検索して思い出します。すべてを毎回詰め込むのではなく、今の会話や行動に関係する記憶だけを取り出します。
 
-- **自動想起（Priming）** — メッセージが届くと、送信者、直近活動、重要知識、関連知識、タスク、エピソード、グラフ文脈などを並列に取得します。取得した記憶は deterministic gate によって、本文・ポインタ・根拠・抑制のどれで出すかを決めます
-- **意図的想起** — 自動想起だけで足りない時は、Anima自身が `search_memory` や `read_memory_file` で記憶を探します。ポインタ形式の記憶は、必要になった時だけ本文を読みに行けます
-- **行動前の記憶確認** — 外部送信や記憶書き込みなど副作用のある操作では、関連する action rule や過去のルールを確認してから実行します。必要な記憶を読んでいない場合は、実行前に止まります
-- **統合（Consolidation）** — 毎晩、日中のエピソードや解決済みイベントから知識・手順を更新します。週次で重複や矛盾を整理し、RAGインデックスも再構築します
-- **忘却（Forgetting）** — 使われない記憶は低活性化、統合、アーカイブの段階を通って整理されます。重要な知識や成熟した手順は保護しつつ、検索ノイズを増やしすぎないようにします
-- **RAG修復** — ChromaDBやベクトル検索の不整合を検出した場合、vector worker 経由で隔離・再構築できます。通常運用では `legacy` backend が安定版、Neo4j backend は明示的に選ぶ実験的なグラフ記憶です
+- **自動想起（Priming）** — メッセージが届くと6チャンネルが並列で動きます: 送信者プロファイル、直近活動、重要知識、関連知識、保留タスク、エピソード（Neo4jバックエンドではグラフ文脈も）。取得した記憶は決定論的なゲートが、本文・ポインタ・根拠・抑制のどれで出すかを決めます
+- **意図的想起** — 自動想起で足りない時は、Anima自身が `search_memory` や `read_memory_file` で記憶を探します。検索はハイブリッド（ベクトル＋BM25＋atomic facts＋エンティティレジストリ）で、確信度ゲート付きです
+- **行動前のアクションルール照合** — 外部送信など副作用のある操作の前に、関連するアクションルールを照合して提示します。必要な記憶を読むまで実行を保留する設定も可能です
+- **統合（Consolidation）** — 毎晩、Anima自身が2相のパスを回します（エピソード抽出→自分のツールループでの知識抽出）。フレームワークは後処理としてインデックス再構築と活性度調整を行います。週次では重複・矛盾する知識のマージ候補を提示し、検索インデックスを再構築します
+- **忘却（Forgetting）** — 数ヶ月使われない記憶は低活性化マークを経て月次でアーカイブされます。重要な知識と成熟した手順は保護されます。失敗をきっかけに、機能しなくなった手順を改訂する再統合もあります
+- **プラグイン式バックエンド** — 安定既定は `legacy`（隔離vector worker経由のChromaDB。破損時は自動隔離・再構築）。Neo4jグラフバックエンド（エンティティ抽出・コミュニティ検出・グラフ想起）は実験的なオプトインです
 
 <p align="center">
   <img src="docs/images/chat-memory.png" alt="AnimaWorks チャット — 複数Animaとのマルチスレッド会話" width="720">
@@ -203,15 +242,25 @@ animaworks start
 
 | モード | エンジン | 対象 | ツール |
 |--------|----------|------|--------|
-| S (SDK) | Claude Agent SDK | Claudeモデル（推奨） | Claude Code 組込み（Read/Write/Edit/Bash/Grep/Glob 等）＋ **stdio MCP**（`mcp__aw__*`）で AnimaWorks 内部ツール。外部連携はスキル文書 / `animaworks-tool` |
+| S (SDK) | Claude Agent SDK | Claudeモデル（推奨） | Claude Code 組込み（Read/Write/Edit/Bash/Grep/Glob 等）＋ **stdio MCP**（`mcp__aw__*`）で AnimaWorks 内部ツール。Agent SDK が使えない環境では専用の Anthropic SDK エグゼキュータにフォールバック |
 | C (Codex) | Codex CLI（SDK ラッパ） | OpenAI Codex CLIモデル | Codex サンドボックス＋ **AnimaWorks MCP**（`core/mcp/server.py`）で内部ツール |
 | D (Cursor) | Cursor Agent CLI | `cursor/*` モデル | MCP統合のエージェントループ |
 | G (Gemini CLI) | Gemini CLI | `gemini/*` モデル | stream-json パース・ツールループ |
 | X (Grok Build) | Grok Build CLI ラッパー（ACP stdio） | `grok/*` モデル | ACP stdio 経由の Grok Build エージェントループ |
-| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI 等 | CC 互換（Read/Write/Edit/Bash/Grep/Glob、**WebSearch/WebFetch**）＋記憶・メッセージ・タスク（**submit_tasks** 等）・**todo_write**・スキル作成/整理などを統合（通知・上司ツールで構成が増減） |
+| A (Autonomous) | LiteLLM + tool_use | GPT, Gemini, Mistral, Bedrock, Vertex, xAI, DeepSeek 等 | CC 互換（Read/Write/Edit/Bash/Grep/Glob、**WebSearch/WebFetch**）＋記憶・メッセージ・タスク・**todo_write**・スキル作成など |
 | B (Basic) | LiteLLM 1ショット | tool_use が不安定なローカル系（例: 小型 Ollama） | プロンプト内の擬似ツール呼び出しでループ。フレームワークが記憶I/O を代行 |
 
-モードは `status.json` の `execution_mode` が最優先、なければモデル名パターン（`fnmatch`）で自動判定されます。Ollama は **tool_use 対応モデル**（例: `ollama/qwen3:14b`, `ollama/glm-4.7*`）が A、それ以外は B にフォールバックしやすいです。Heartbeat・Cron・Inbox はメインとは別の **background_model** で回せます（コスト最適化）。拡張思考（Extended thinking）にも対応しています。
+モード解決は `status.json` の `execution_mode` が最優先、次に `models.json` のテーブル、最後に組み込みのモデル名パターン（`fnmatch`）。tool_use対応のOllamaモデル（例: `ollama/qwen3:14b`, `ollama/glm-4.7*`）はA、それ以外の `ollama/*` はBに割り当てられます。各CLIエンジンにはLiteLLMまで落ちるフォールバック連鎖があります（Codex/Grokはレートガード連動）。Heartbeat・Cron・Inbox はメインとは別の **background_model** で回せます（コスト最適化）。拡張思考（Extended thinking）にも対応しています。
+
+### 音声チャット
+
+ブラウザだけでAnimaと声で会話できます（押して話す or ハンズフリー、WebSocket経由）。
+
+- **STT**: faster-whisper（ストリーミング・LocalAgreement-2の逐次確定）
+- **TTS**: VOICEVOX / Style-BERT-VITS2（AivisSpeech） / ElevenLabs / Irodori。Animaごとに声・話速・ピッチを設定可能
+- **低遅延フロントレーン** — 小型ローカルモデルが即座に応答し、必要に応じて本体エージェントへの委譲（`ask_anima`）や記憶の読み出しを行います
+- **自発発語** — フロントレーン有効時、沈黙が続くとAnimaが自分から話し始めます
+- **アニメーションアバター** — 音声ポップアップは疑似Live2Dのバストアップを駆動します（静止画5フレームの瞬き・口パク。リギング・Live2D SDK不使用）
 
 ### アバター自動生成
 
@@ -220,11 +269,13 @@ animaworks start
   <br><em>性格設定から全身・バストアップ・表情バリアントを自動生成します。上司の画風を自動継承するVibe Transfer付き。</em>
 </p>
 
-NovelAI（アニメ調）、fal.ai/Flux（スタイライズド/フォトリアル）、Meshy（3Dモデル）に対応しています。画像サービスを設定しなくても本体は動きます。アバターがあると、チームのメンバーとして認識しやすくなります。
+7ステップのパイプラインが、全身画・7種の表情付きバストアップ・アイコン・ちびキャラ、さらに（アニメ調では）idle/sitting/waving/talkingアニメーション付きのリグ済み3Dモデルまで生成します。バックエンドは NovelAI（アニメ調）、fal.ai/Flux（スタイライズド/フォトリアル）、Meshy（3D）に加え、Codex画像生成とローカルDiffusersに対応。Vibe Transfer（NovelAI）で新しいAnimaが上司の画風を継承できます。画像サービスを設定しなくても本体は動きます。
 
 ---
 
 ## なぜAnimaWorksなのか
+
+**一人では何もできない。だから、組織を作りました。**
 
 このプロジェクトは、3つのキャリアの交差点から生まれました。
 
@@ -265,11 +316,13 @@ NovelAI（アニメ調）、fal.ai/Flux（スタイライズド/フォトリア�
 
 **Ollama** 等のローカルモデルはAPIキー不要です。`OLLAMA_SERVERS`（デフォルト: `http://localhost:11434`）で接続先を指定します。
 
+認証情報は `config.json` の `credentials` → vault → 共有credentialsファイル → 環境変数の順で解決されるため、多くのキーは暗号化vault（`animaworks vault`）にも置けます。
+
 #### 画像生成（オプション）
 
 | キー | サービス | 生成物 | 取得先 |
 |-----|---------|-------|--------|
-| `NOVELAI_API_TOKEN` | NovelAI | アニメ調キャラクター画像 | [novelai.net](https://novelai.net/) |
+| `NOVELAI_TOKEN` | NovelAI | アニメ調キャラクター画像 | [novelai.net](https://novelai.net/) |
 | `FAL_KEY` | fal.ai (Flux) | スタイライズド / フォトリアル | [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys) |
 | `MESHY_API_KEY` | Meshy | 3Dキャラクターモデル | [meshy.ai](https://www.meshy.ai/) |
 
@@ -277,21 +330,23 @@ NovelAI（アニメ調）、fal.ai/Flux（スタイライズド/フォトリア�
 
 | 要件 | サービス | 備考 |
 |------|---------|------|
-| `pip install faster-whisper` | STT（Whisper） | 初回使用時にモデル自動DL。GPU推奨 |
+| `pip install animaworks[transcribe]` | STT（faster-whisper） | 初回使用時にモデル自動DL。GPU推奨 |
 | VOICEVOX Engineを起動 | TTS（VOICEVOX） | デフォルト: `http://localhost:50021` |
 | AivisSpeech/SBV2を起動 | TTS（Style-BERT-VITS2） | デフォルト: `http://localhost:5000` |
-| `ELEVENLABS_API_KEY` | TTS（ElevenLabs） | クラウドAPI |
+| Irodoriサーバーを起動 | TTS（Irodori） | デフォルト: `http://localhost:7861` |
+| `ELEVENLABS_API_KEY` | TTS（ElevenLabs） | クラウドAPI（環境変数） |
 
 #### 外部連携（オプション）
 
 | キー | サービス | 取得先 |
 |-----|---------|--------|
-| `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` | Slack | [セットアップガイド](docs/slack-socket-mode-setup.ja.md) |
-| `CHATWORK_API_TOKEN` | Chatwork | [chatwork.com](https://www.chatwork.com/) |
-| `DISCORD_BOT_TOKEN`（または Anima 単位 `DISCORD_BOT_TOKEN__<名前>`） | Discord | [Discord Developer Portal](https://discord.com/developers/applications) |
+| `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` | Slack（ツール＋Socket Mode受信） | [セットアップガイド](docs/slack-socket-mode-setup.ja.md) |
+| `CHATWORK_API_TOKEN` | Chatwork（ツール＋Webhook受信） | [chatwork.com](https://www.chatwork.com/) |
+| `DISCORD_BOT_TOKEN`（または Anima 単位 `DISCORD_BOT_TOKEN__<名前>`） | Discord（ツール＋Gateway受信＋通知） | [Discord Developer Portal](https://discord.com/developers/applications) |
 | `NOTION_API_TOKEN`（または `NOTION_API_TOKEN__<名前>`） | Notion | [Notion integrations](https://www.notion.so/my-integrations) |
+| `GITHUB_WEBHOOK_SECRET` ＋ `gh auth login` | GitHub Webhookゲートウェイ（CI/レビュー/コンフリクト→タスク化） | リポジトリ設定 |
 
-Google Calendar / Google Tasks / Gmail 等は `config.json` の `credentials`（OAuth またはサービスアカウント）で設定します。詳細は [技術仕様](docs/spec.ja.md) を参照してください。
+Gmail / Google Calendar / Google Sheets / Google Tasks / X検索 / AWSコレクタ / Zoom会議取り込み（RTMS）/ ローカルLLMツールは `config.json` の `credentials`（OAuth またはサービスアカウント）で設定します。人間への通知チャネル: Slack, Chatwork, Discord, LINE, Telegram, ntfy。詳細は [技術仕様](docs/spec.ja.md) を参照してください。
 
 </details>
 
@@ -308,7 +363,7 @@ Google Calendar / Google Tasks / Gmail 等は `config.json` の `credentials`（
 | `manager` | Claude Opus 4.6 | 調整、意思決定 |
 | `writer` | Claude Sonnet 4.6 | コンテンツ作成 |
 | `researcher` | Claude Sonnet 4.6 | 情報収集 |
-| `ops` | vLLM (GLM-4.7-flash) | ログ監視、定型業務 |
+| `ops` | Ollama (GLM-4.7) | ログ監視、定型業務 |
 | `general` | Claude Sonnet 4.6 | 汎用 |
 
 マネージャーには**スーパーバイザーツール**が自動で付きます。タスク委譲、進捗追跡、部下の再起動/無効化、組織ダッシュボード、部下の状態読み取り——現実の管理職がやることと同じです。
@@ -320,20 +375,22 @@ Google Calendar / Google Tasks / Gmail 等は `config.json` の `credentials`（
 <details>
 <summary><strong>セキュリティ</strong></summary>
 
-自律的に動くエージェントにツールを渡す以上、セキュリティは本気でやる必要があります。実際に仕事で使うので、妥協はできません。AnimaWorksは10層の多層防御を実装しています:
+自律的に動くエージェントにツールを渡す以上、セキュリティは本気でやる必要があります。実際に仕事で使うので、妥協はできません。AnimaWorksは防御を多層に重ねています:
 
 | レイヤー | 内容 |
 |---------|------|
-| **信頼境界ラベリング** | 外部データ（Web検索、Slack、メール）はすべて `untrusted` タグ付き — untrustedソースからの指示には従わないようモデルに明示 |
-| **5層コマンドセキュリティ** | シェルインジェクション検出 → ハードコードブロックリスト → 個別エージェント禁止コマンド → 個別エージェント許可リスト → パストラバーサル検出 |
-| **ファイルサンドボックス** | 各エージェントは自ディレクトリに閉じ込め。`identity.md` は保護。コマンド許可は per-anima の `permissions.md` と、サーバー起動時に必須のグローバル `permissions.global.json` で管理 |
-| **プロセス隔離** | エージェントごとに独立OSプロセス。ローカルIPCで通信（Unix socket または loopback TCP） |
-| **3層レート制限** | セッション内重複排除 → ロール別送信上限 → 直近送信履歴のプロンプト注入による自己認識 |
-| **カスケード防止** | 深度制限＋カスケード検出。5分クールダウンと遅延処理 |
-| **認証・セッション管理** | Argon2idハッシュ、48バイトランダムトークン、最大10セッション |
-| **Webhook検証** | Slack（リプレイ防止付きHMAC-SHA256）とChatworkの署名検証 |
-| **SSRF緩和** | メディアプロキシがプライベートIPをブロック、HTTPS強制、Content-Type検証 |
+| **信頼境界ラベリング** | 外部データ（Web検索、Slack、メール）は出所でタグ付けされ、セッション中に見た最小信頼度が伝播。untrustedソースからの指示には従わないようモデルに明示 |
+| **記憶の出所追跡** | 外部コンテンツ由来の記憶は出所がRAGメタデータまで保持され、想起時もAnima自身の知識と区別されます |
+| **コマンドセキュリティ** | シェルインジェクション検出（既定は記録・enforce可） → グローバル禁止リスト（強制。`permissions.global.json` 無しではサーバーが起動しない） → 個別エージェント禁止コマンド → 個別エージェント許可リスト → パストラバーサル検出 |
+| **ファイルサンドボックス** | 各エージェントは `permissions.json` で自ディレクトリに閉じ込め。identityと権限ファイル自体は書き込み保護 |
+| **プロセス隔離** | エージェントごとに独立OSプロセス。ローカルIPCで通信（Unix socket、Windowsは loopback TCP） |
+| **レート制限** | セッション内の宛先重複排除とロール別上限 → 時間・日単位の横断上限（ログが読めない場合はfail-closed） → 直近送信履歴のプロンプト注入による自己認識 |
+| **カスケード防止** | 会話深度制限＋カスケード検出。5分クールダウンと遅延処理 |
+| **認証・セッション管理** | Argon2idハッシュ、48バイトランダムトークン、最大10セッション、TTLは設定可能 |
+| **Webhook検証** | Slack・Chatwork・Zoom・GitHub のHMAC署名検証（リプレイ防止付き） |
+| **SSRF緩和** | メディアプロキシがプライベートIPとDNSリバインディングをブロック、HTTPS強制、Content-Type・マジックバイト検証 |
 | **アウトバウンドルーティング** | 未知の宛先はfail-closed。明示的な設定なしに任意の外部送信は不可 |
+| **エージェント間メッセージの完全性** | 送信者名の名簿照合と、中継メッセージ全件のorigin chain追跡 |
 
 詳細: **[セキュリティアーキテクチャ](docs/security.ja.md)**
 
@@ -344,36 +401,33 @@ Google Calendar / Google Tasks / Gmail 等は `config.json` の `credentials`（
 
 CLIはパワーユーザーと自動化向けです。日常操作はWeb UIで十分です。
 
-### サーバー
+### サーバー・デモ
 
 | コマンド | 説明 |
 |---|---|
-| `animaworks start [--host HOST] [--port PORT] [-f]` | サーバー起動（`-f` でフォアグラウンド実行） |
-| `animaworks stop [--force]` | サーバー停止 |
-| `animaworks restart [--host HOST] [--port PORT]` | サーバー再起動 |
+| `animaworks start [--host HOST] [--port PORT] [-f]` | サーバー起動（`-f` でフォアグラウンド。既定ポート18500） |
+| `animaworks stop [--force]` / `restart` | サーバー停止 / 再起動 |
+| `animaworks demo [--preset NAME] [--port PORT] [--reset]` | デモ組織を起動（既定ポート18501・専用データディレクトリ） |
 
 ### 初期化
 
 | コマンド | 説明 |
 |---|---|
-| `animaworks init` | ランタイムディレクトリを初期化（非対話） |
-| `animaworks init --force` | テンプレート差分マージ（データ保持） |
-| `animaworks migrate [--dry-run] [--list] [--force]` | ランタイムデータのマイグレーション（起動時に自動実行） |
+| `animaworks init [--force] [--template NAME] [--from-md PATH] [--blank]` | ランタイムディレクトリを初期化 |
+| `animaworks migrate [--dry-run] [--list] [--force] [--resync-db]` | ランタイムデータのマイグレーション（起動時にも自動実行） |
 | `animaworks reset [--restart]` | ランタイムディレクトリをリセット |
+| `animaworks import hermes\|openclaw --path P [--apply]` | 他フレームワークからのエージェント移行 |
 
 ### Anima管理
 
 | コマンド | 説明 |
 |---|---|
 | `animaworks anima create [--from-md PATH] [--template NAME] [--role ROLE] [--supervisor NAME] [--name NAME]` | 新規作成 |
-| `animaworks anima list [--local]` | 全Anima一覧 |
-| `animaworks anima info ANIMA [--json]` | 詳細設定 |
-| `animaworks anima status [ANIMA]` | プロセス状態表示 |
-| `animaworks anima restart ANIMA` | プロセス再起動 |
-| `animaworks anima disable ANIMA` / `enable ANIMA` | 無効化 / 有効化 |
-| `animaworks anima set-model ANIMA MODEL` | モデル変更 |
-| `animaworks anima set-background-model ANIMA MODEL` | バックグラウンドモデル設定 |
-| `animaworks anima reload ANIMA [--all]` | status.jsonからホットリロード |
+| `animaworks anima list / info / status / restart / disable / enable` | 確認・制御 |
+| `animaworks anima set-model / set-background-model / set-memory-backend / set-role / set-outbound-limit` | Anima単位の設定 |
+| `animaworks anima reload [--all]` | status.jsonからホットリロード |
+| `animaworks anima delete / rename / merge / merge-finalize` | ライフサイクル操作 |
+| `animaworks anima audit [--days N]` / `permissions` / `repair-bootstrap` | 診断 |
 
 ### コミュニケーション
 
@@ -381,23 +435,31 @@ CLIはパワーユーザーと自動化向けです。日常操作はWeb UIで�
 |---|---|
 | `animaworks chat ANIMA "メッセージ" [--from NAME]` | メッセージ送信 |
 | `animaworks send FROM TO "メッセージ"` | Anima間メッセージ |
+| `animaworks board read/post/dm-history …` | 共有チャネルの読み書き |
 | `animaworks heartbeat ANIMA` | ハートビート手動トリガー |
 
 ### 設定・メンテナンス
 
 | コマンド | 説明 |
 |---|---|
-| `animaworks config list [--section SECTION]` | 設定一覧 |
-| `animaworks config get KEY` / `set KEY VALUE` | 値の取得 / 設定 |
-| `animaworks status` | システムステータス |
-| `animaworks logs [ANIMA] [--lines N] [--all]` | ログ表示 |
-| `animaworks index [--reindex] [--anima NAME]` | RAGインデックス管理 |
-| `animaworks repair-rag --anima NAME --full` | RAGの隔離・再構築 |
-| `animaworks memory status` / `migrate` / `backup` / `cleanup` | memory backend と記憶データの運用 |
-| `animaworks skills install` / `list` / `inspect` / `remove` / `quarantine` | Skill Hub の操作 |
-| `animaworks task ...` | TaskBoard / タスク実行まわりの操作 |
-| `animaworks cost` / `profile` | コスト・プロファイル確認 |
-| `animaworks models list` / `models info MODEL` | モデル一覧・詳細 |
+| `animaworks config list / get KEY / set KEY VALUE` | 設定 |
+| `animaworks status` / `logs [ANIMA]` | システムステータス・ログ |
+| `animaworks index [--anima NAME] [--full]` | RAGインデックス管理 |
+| `animaworks repair-rag --anima NAME --full` / `rag-repair-status` | RAGの隔離・再構築 |
+| `animaworks memory status / migrate / backup / rollback / cleanup` | memory backendと記憶データ |
+| `animaworks skills install / list / inspect / remove / quarantine` | Skill Hub の操作 |
+| `animaworks task add / update / list` | タスクキュー操作 |
+| `animaworks vault status / init / get / store / list` | 暗号化credentialボールト |
+| `animaworks company create / list / assign / adopt / split / export` | 複数会社の組織管理 |
+| `animaworks cost` / `profile` / `models list` / `tmp list/clean` | コスト・プロファイル・モデル・一時ファイル整理 |
+| `animaworks mcp --anima NAME` | 外部クライアント向けstdio MCPサーバーを起動 |
+
+### 自動化ヘルパー
+
+`python3 -m swe.ci_autofix` は失敗したCIランを修復する実験的なv0ループです。`gh` で最新の失敗ログを読み、
+設定されたArchitectに修正させ、ローカルゲート（ruff / pytest）を通し、Reviewerに判定させてコミットし、
+3回失敗したら `call_human` でエスカレーションします。詳細は
+[`swe/README.md`](swe/README.md#4-ci-auto-fix-loop-v0)。
 
 </details>
 
@@ -410,19 +472,19 @@ CLIはパワーユーザーと自動化向けです。日常操作はWeb UIで�
 | Mode S 連携 | stdio **MCP**（`python -m core.mcp.server`、ツール名 `mcp__aw__*`） |
 | LLMプロバイダ | Anthropic, OpenAI, Google, Azure, Vertex AI, AWS Bedrock, Ollama, vLLM ほか（LiteLLM 経由） |
 | Webフレームワーク | FastAPI + Uvicorn |
-| HTTPミドルウェア | リクエストログ用ASGIミドルウェア（`structlog` + `X-Request-ID`）。SSE本文を壊さないよう `BaseHTTPMiddleware` は不使用 |
-| リアルタイム | WebSocket（ダッシュボード通知・音声など）、SSE（チャット・ミーティングストリーム等）、`StreamRegistry` でストリーム生产者の寿命管理 |
-| タスクスケジュール | APScheduler（孤児Anima検出、資産リコンサイル、Claude CLI/SDK自動更新チェック、グローバル権限整合性など） |
+| GitHub連携 | Webhookゲートウェイ（HMAC検証）→タスクディスパッチ、マルチパスレビュー編成、Anima別identity付き `gh` CLIツール |
+| リアルタイム | WebSocket（ダッシュボード・音声）、SSE（チャット・ミーティング）、`StreamRegistry` でストリーム寿命管理 |
+| タスクスケジュール | APScheduler（ハートビート・cron・統合・死活監視・RAG修復） |
+| タスク管理 | タスクキュー（JSONL）＋PR単位排他キー付きpendingタスク実行器＋TaskBoard（SQLite） |
+| 記憶基盤 | ChromaDB（隔離vector worker経由）＋BM25＋sentence-transformers＋NetworkX＋atomic facts＋エンティティレジストリ。オプションでNeo4jグラフバックエンド |
 | 設定・マイグレーション | Pydantic 2.0+ / JSON / Markdown、`core/migrations/`（起動時マイグレーション） |
-| 国際化（コード） | `core/i18n` の `t()`（UI・ツールスキーマ文言など） |
-| 記憶基盤 | ChromaDB + sentence-transformers + NetworkX + optional Neo4j。ChromaDBは通常 vector worker 経由で隔離し、RAG repair で再構築可能 |
-| タスク管理 | TaskBoard + TaskExec + persistent task queue |
+| 国際化 | `core/i18n` の `t()`。ウィザード17言語・ダッシュボード ja/en/ko |
 | スキル基盤 | Skill Hub、明示的skill activation、router、curator、procedure-to-skill promotion |
-| 拡張ツール | `core/tools/*.py` の自動登録に加え、`~/.animaworks/common_tools/` と `animas/<名>/tools/` をスキャンして併用 |
-| 音声チャット | faster-whisper (STT) + VOICEVOX / SBV2 / ElevenLabs (TTS) |
-| 人間通知 | Slack, Chatwork, LINE, Telegram, ntfy |
-| 外部メッセージング | Slack Socket Mode, Chatwork Webhook |
-| 画像生成 | NovelAI, fal.ai (Flux), Meshy (3D) |
+| 拡張ツール | `core/tools/*.py` の自動登録に加え、`~/.animaworks/common_tools/` と `animas/<名>/tools/` をスキャン |
+| 音声チャット | faster-whisper (STT) + VOICEVOX / SBV2 / ElevenLabs / Irodori (TTS) + ローカルフロントレーンモデル |
+| メッセージング | 受信: Slack Socket Mode, Chatwork Webhook, Discord Gateway, Zoom RTMS ／ 人間通知: Slack, Chatwork, Discord, LINE, Telegram, ntfy |
+| 画像生成 | NovelAI, fal.ai (Flux), Meshy (3D), Codex画像生成, ローカルDiffusers |
+| Workspaceアプリ | Three.js 3Dオフィス＋2Dドット絵オフィス（同じライブイベントストリームで駆動） |
 
 </details>
 
@@ -434,40 +496,34 @@ animaworks/
 ├── main.py              # CLIエントリポイント
 ├── core/                # Digital Animaコアエンジン
 │   ├── anima.py, agent.py  # コアエンティティ・オーケストレーション
-│   ├── lifecycle/       # スケジューラ・統合ジョブ・inbox ウォッチ等
-│   ├── memory/          # 記憶（priming, consolidation, forgetting, RAG, activity）
+│   ├── lifecycle/       # スケジューラ・統合ジョブ・inboxウォッチ等
+│   ├── memory/          # 記憶（priming, consolidation, forgetting, RAG, facts, retrieval）
 │   ├── skills/          # Skill Hub・activation・router・curator・promotion
 │   ├── taskboard/       # TaskBoard ストア・状態・クリーンアップ
-│   ├── execution/       # 実行エンジン（S/C/D/G/X/A/B）
-│   ├── mcp/             # Mode S 向け stdio MCP サーバー
+│   ├── execution/       # 実行エンジン（S/C/D/G/X/A/B）＋サニタイズ
+│   ├── mcp/             # Mode S・外部クライアント向け stdio MCP サーバー
 │   ├── platform/        # 子プロセス・ロック・Codex/Cursor/Gemini/Grok 周辺
-│   ├── tooling/         # ToolHandler・スキーマ・外部ディスパッチ
-│   ├── prompt/          # システムプロンプト構築（6グループ構造）
-│   ├── supervisor/      # ProcessSupervisor・IPC・TaskExec・ストリーミング
-│   ├── voice/           # 音声チャット（STT + TTS）
+│   ├── tooling/         # ToolHandler・スキーマ・権限・外部ディスパッチ
+│   ├── prompt/          # システムプロンプト構築
+│   ├── supervisor/      # ProcessSupervisor・IPC・TaskExec・死活監視・ストリーミング
+│   ├── voice/           # 音声チャット（STT + TTS + フロントレーン）
 │   ├── config/          # 設定（Pydantic・models.json・グローバル権限）
 │   ├── auth/            # UI 認証まわり
 │   ├── notification/    # 人間通知チャネル
 │   ├── migrations/      # ランタイムデータマイグレーション
 │   ├── i18n/            # 翻訳文字列（`t()`）
-│   ├── tools/           # 外部ツール実装（slack, discord, gmail, …）
-│   ├── anima_factory.py, init.py   # Anima 生成・ランタイム初期化
-│   ├── outbound.py      # 送信先解決（内部 / Slack / Chatwork 等）
-│   ├── org_sync.py      # 組織階層の config 同期
-│   ├── asset_reconciler.py, background.py, schedule_parser.py, messenger.py, paths.py, schemas.py
+│   ├── tools/           # 外部ツール実装（slack, discord, gmail, github, …）
+│   ├── tasks_dispatch.py, review_multipass.py  # GitHubイベント→タスク配線、マルチモデルレビュー
 │   └── …
-├── cli/                 # CLIパッケージ
-├── server/              # FastAPI + 静的Web UI + Workspace
+├── cli/                 # CLIパッケージ（demo含む）
+├── server/              # FastAPI + 静的Web UI + Workspaceアプリ
 │   ├── app.py           # アプリ生成・lifespan・認証/セットアップガード・静的マウント
-│   ├── websocket.py     # ダッシュボード用WebSocketハブ
-│   ├── stream_registry.py  # SSE等ストリーム生产者の登録・クリーンアップ
-│   ├── room_manager.py  # ミーティングルーム状態（共有ディレクトリ永続化）
-│   ├── reload_manager.py   # 設定ホットリロード
-│   ├── slack_socket.py     # Slack Socket Mode
-│   ├── localhost.py        # ローカル信頼リクエスト判定
-│   ├── routes/          # REST/WebSocketルート（chat, room, voice, brainstorm, team_presets, …）
-│   └── static/          # ダッシュボード（modules/, pages/, styles/, i18n/）、setup/（多言語ウィザード）、workspace/（3Dクライアント）
-└── templates/           # 初期化テンプレート（ja / en）
+│   ├── github_gateway.py, slack_socket.py, discord_gateway.py, zoom_gateway.py
+│   ├── routes/          # REST/WebSocketルート（chat, room, voice, webhooks, …）
+│   └── static/          # ダッシュボード、setupウィザード、workspace/（3D）、workspace/pixel/
+├── swe/                 # 実験的CI自動修復ループ・SWEハーネス
+├── demo/                # デモプリセットと同梱履歴
+└── templates/           # 初期化テンプレート（ja / en / ko）ロール別作業規約を含む
 ```
 
 </details>
