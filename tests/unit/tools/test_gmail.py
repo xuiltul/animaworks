@@ -41,6 +41,7 @@ _GOOGLE_MODULES = [
 @pytest.fixture(autouse=True, scope="module")
 def _mock_google_modules():
     """Inject mock google modules into sys.modules for the test session."""
+    saved_gmail = sys.modules.get("core.tools.gmail")
     saved = {}
     for mod_name in _GOOGLE_MODULES:
         saved[mod_name] = sys.modules.get(mod_name)
@@ -70,8 +71,13 @@ def _mock_google_modules():
             sys.modules.pop(mod_name, None)
         else:
             sys.modules[mod_name] = saved[mod_name]
-    if "core.tools.gmail" in sys.modules:
-        del sys.modules["core.tools.gmail"]
+    if saved_gmail is None:
+        sys.modules.pop("core.tools.gmail", None)
+    else:
+        # Reload the original module in place. Other test modules may already
+        # hold classes whose methods reference this module's globals.
+        sys.modules["core.tools.gmail"] = saved_gmail
+        importlib.reload(saved_gmail)
 
 
 # Now import from core.tools.gmail (after mocks are in place)
