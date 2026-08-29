@@ -1080,9 +1080,7 @@ class GrokCLIExecutor(BaseExecutor):
             elif state.stderr and state.failed and "unexpected EOF" in state.error_text:
                 # The child died before answering (e.g. grok 1.0.13 refusing to
                 # start its sandbox); the reason is only on stderr.
-                state.error_text = self._translated_error(
-                    f"{state.error_text}: {state.stderr.strip()[-500:]}"
-                )
+                state.error_text = self._translated_error(f"{state.error_text}: {state.stderr.strip()[-500:]}")
             # A successful prompt response is terminal even though we then
             # terminate the long-lived stdio server ourselves.  Only classify
             # an independently failed child exit as an execution error.

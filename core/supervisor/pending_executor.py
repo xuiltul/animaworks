@@ -2318,7 +2318,9 @@ class PendingTaskExecutor:
                             next_cancel_poll = time.monotonic() + _CANCEL_POLL_SECONDS
                             _q = self._get_task_queue_entry(task_id)
                             if _q is not None and _q.status == "cancelled":
-                                logger.info("[%s] Task %s cancelled in task_queue; interrupting", self._anima_name, task_id)
+                                logger.info(
+                                    "[%s] Task %s cancelled in task_queue; interrupting", self._anima_name, task_id
+                                )
                                 interrupt_event.set()
                         chunk_type = chunk.get("type")
                         if chunk_type == "text_delta":

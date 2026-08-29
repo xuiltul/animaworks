@@ -40,7 +40,9 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.backlog_task.deadline": {
         "ja": "期限（必須）。相対形式 '15m','30m','1h' またはISO8601。例: '30m' = 30分後。値は例、作業量から決める",
-        "en": ("Deadline (required). Relative format '15m','30m','1h' or ISO8601. Example: '30m' = 30 minutes from now. The value is an example; decide based on the workload"),
+        "en": (
+            "Deadline (required). Relative format '15m','30m','1h' or ISO8601. Example: '30m' = 30 minutes from now. The value is an example; decide based on the workload"
+        ),
     },
     "schema.backlog_task.desc": {
         "ja": (
