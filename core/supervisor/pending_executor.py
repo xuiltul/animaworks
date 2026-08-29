@@ -2012,11 +2012,6 @@ class PendingTaskExecutor:
             ctx=trigger,
             meta=task_meta,
         )
-        # Mirror execution start into task_queue so observers see in_progress
-        # instead of pending while the task runs.  A cancel or blocked
-        # declaration that already landed must remain authoritative.
-        self._sync_task_queue(task_id, "in_progress")
-
         try:
             result = await self._run_llm_task_under_agent_session_context(
                 task_desc,
@@ -2218,6 +2213,11 @@ class PendingTaskExecutor:
                     return _SENTINEL_EXPIRED
             except (ValueError, TypeError):
                 pass
+
+        # Mirror the start only after the final cancellation, attention, and
+        # expiry gates, so a deferred task remains pending for its later
+        # wake-up. A blocked declaration that already landed stays authoritative.
+        self._sync_task_queue(task_id, "in_progress")
 
         # Build dependency context for batch tasks
         dep_context = ""
