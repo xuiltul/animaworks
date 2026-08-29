@@ -2010,6 +2010,10 @@ class PendingTaskExecutor:
             ctx=trigger,
             meta=task_meta,
         )
+        # Mirror execution start into task_queue so observers see in_progress
+        # instead of pending while the task runs.  A cancel that already
+        # landed wins: update_status refuses cancelled -> in_progress.
+        self._sync_task_queue(task_id, "in_progress")
 
         try:
             result = await self._run_llm_task_under_agent_session_context(
