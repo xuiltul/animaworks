@@ -748,6 +748,8 @@ class PendingTaskExecutor:
             entry = manager.get_task_by_id(task_id)
             if entry and status == "cancelled" and entry.status in _QUEUE_TERMINAL_STATUSES:
                 return
+            if entry and status == "in_progress" and entry.status == "blocked":
+                return
             manager.update_status(task_id, status, summary=summary)
         except Exception:
             logger.warning(
@@ -2011,8 +2013,8 @@ class PendingTaskExecutor:
             meta=task_meta,
         )
         # Mirror execution start into task_queue so observers see in_progress
-        # instead of pending while the task runs.  A cancel that already
-        # landed wins: update_status refuses cancelled -> in_progress.
+        # instead of pending while the task runs.  A cancel or blocked
+        # declaration that already landed must remain authoritative.
         self._sync_task_queue(task_id, "in_progress")
 
         try:
