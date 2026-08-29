@@ -9,17 +9,14 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from core.review_multipass import (
-    TERMINAL_TASK_STATUSES,
     check_multipass_synth,
+    default_state,
     dispatch_multipass_reviews,
     load_state,
     locked_state,
     model_slug,
     save_state,
-    default_state,
 )
 
 SHA = "a" * 40
@@ -122,12 +119,8 @@ def test_dispatch_is_idempotent_within_scan():
     recorder = _DispatchRecorder()
     state = default_state()
     items = [{"repo": "o/r", "number": 1, "sha": SHA, "title": "t"}]
-    dispatch_multipass_reviews(
-        state, items, reviewer="sumire", models=["c:codex/gpt-5.6-sol"], dispatch=recorder
-    )
-    dispatch_multipass_reviews(
-        state, items, reviewer="sumire", models=["c:codex/gpt-5.6-sol"], dispatch=recorder
-    )
+    dispatch_multipass_reviews(state, items, reviewer="sumire", models=["c:codex/gpt-5.6-sol"], dispatch=recorder)
+    dispatch_multipass_reviews(state, items, reviewer="sumire", models=["c:codex/gpt-5.6-sol"], dispatch=recorder)
     assert len(recorder.tasks) == 1
 
 
@@ -161,10 +154,40 @@ def test_newer_exact_supersedes_queued_reviews_of_older_exact(tmp_path):
         animas_dir=animas_dir,
     )
 
-    # 未着手の旧exactは放棄、実行中のものは殺さない
+    # 未着手の旧exactと実行中の旧exactの両方を放棄する（cancelled）
     assert manager.get_task_by_id("old-pending").status == "cancelled"
     assert "superseded" in manager.get_task_by_id("old-pending").summary
-    assert manager.get_task_by_id("old-running").status == "in_progress"
+    assert manager.get_task_by_id("old-running").status == "cancelled"
+    assert "superseded" in manager.get_task_by_id("old-running").summary
+    assert len(recorder.tasks) == 1
+
+
+def test_new_exact_dispatch_drops_older_multipass_entry(tmp_path):
+    """新shaをdispatchすると、同一repo/numberで異なるshaのmulti_model_passes entryが消える。"""
+    old_sha = "b" * 40
+    old_base = f"gh-ci-o-r#1-{old_sha[:8]}"
+    state = default_state()
+    state["multi_model_passes"] = {
+        old_base: {
+            "repo": "o/r",
+            "number": 1,
+            "sha": old_sha,
+            "models": ["c:gpt-5.6-sol"],
+            "task_ids": [f"{old_base}-m-c-gpt-5-6-sol"],
+            "attempt": 1,
+        }
+    }
+    recorder = _DispatchRecorder()
+    dispatch_multipass_reviews(
+        state,
+        [{"repo": "o/r", "number": 1, "sha": SHA, "title": "t"}],
+        reviewer="sumire",
+        models=["c:gpt-5.6-sol"],
+        dispatch=recorder,
+    )
+    # 旧shaのentryは消え、新shaのentryだけが残る
+    assert old_base not in state["multi_model_passes"]
+    assert BASE in state["multi_model_passes"]
     assert len(recorder.tasks) == 1
 
 
@@ -199,37 +222,14 @@ def test_same_exact_review_is_not_superseded(tmp_path):
 def test_empty_models_noop():
     recorder = _DispatchRecorder()
     state = default_state()
-    dispatch_multipass_reviews(state, [{"repo": "o/r", "number": 1, "sha": SHA}],
-                              reviewer="sumire", models=[], dispatch=recorder)
+    dispatch_multipass_reviews(
+        state, [{"repo": "o/r", "number": 1, "sha": SHA}], reviewer="sumire", models=[], dispatch=recorder
+    )
     assert recorder.tasks == []
     assert "multi_model_passes" not in state
 
 
 # ── check_multipass_synth: 通常の統合発行 ──────────────────────────────
-def _run_synth(state, statuses, **kw):
-    tasks: list[str] = []
-    dispatch = lambda **kwargs: tasks.append(kwargs["task_id"]) or True
-    import core.review_multipass as rmp
-
-    monkey = None
-
-    class _Monkey:
-        class func:
-            def __call__(self, *a, **k):
-                return None
-
-    def fake_review_task(reviewer, tid, animas_dir=None):
-        return SimpleNamespace(task_id=tid, status=statuses.get(tid, "done"))
-
-    check_multipass_synth(
-        state,
-        reviewer="sumire",
-        synth_model="c:codex/gpt-5.6-sol",
-        dispatch=dispatch,
-    )
-    return tasks, dispatch
-
-
 def test_synth_dispatched_once_when_all_done(monkeypatch):
     state = _state_with_entry()
     dispatched: list[dict] = []
@@ -271,9 +271,7 @@ def test_synth_waits_for_active_pass(monkeypatch):
     state = _state_with_entry()
 
     def fake_review_task(reviewer, tid, animas_dir=None):
-        return SimpleNamespace(
-            task_id=tid, status="in_progress" if tid == TASK_IDS[0] else "done"
-        )
+        return SimpleNamespace(task_id=tid, status="in_progress" if tid == TASK_IDS[0] else "done")
 
     monkeypatch.setattr("core.review_multipass.review_task", fake_review_task)
     dispatched: list[dict] = []
@@ -319,6 +317,22 @@ def test_missing_task_waits(monkeypatch):
 
 
 # ── 全滅時: -r2 再発行 → 2回目全滅で放棄 (H-5.3) ─────────────────────
+def test_all_cancelled_superseded_entry_dropped_without_r2(monkeypatch):
+    """全パスがcancelled（superseded）のentryは -r2 を投入せずに消える。"""
+    state = _state_with_entry()
+
+    def fake_review_task(reviewer, tid, animas_dir=None):
+        return SimpleNamespace(task_id=tid, status="cancelled")
+
+    monkeypatch.setattr("core.review_multipass.review_task", fake_review_task)
+    dispatched: list[dict] = []
+    check_multipass_synth(
+        state, reviewer="sumire", synth_model=None, dispatch=lambda **kw: dispatched.append(kw) or True
+    )
+    assert dispatched == []
+    assert BASE not in state["multi_model_passes"]
+
+
 def test_all_failed_redispatch_with_r2_once(monkeypatch):
     state = _state_with_entry()
 
@@ -385,9 +399,7 @@ def test_synth_sweep_continues_when_models_unset(monkeypatch):
 # ── state ロック・読み書き (H-4 共有化) ────────────────────────────────
 def test_locked_state_preserves_unknown_fields(tmp_path: Path):
     state_file = tmp_path / "state.json"
-    state_file.write_text(
-        json.dumps({"prs": {}, "future_schema": {"x": 1}}), encoding="utf-8"
-    )
+    state_file.write_text(json.dumps({"prs": {}, "future_schema": {"x": 1}}), encoding="utf-8")
     with locked_state(state_file) as state:
         state["seen_comments"]["k"] = "v"
     restored = json.loads(state_file.read_text(encoding="utf-8"))

@@ -42,6 +42,10 @@ _TASK_RUNNER_EXIT_TIMEOUT = 30.0
 _TASK_RUNNER_GRACE_TIMEOUT = 5.0
 _TASK_RUNNER_TERM_TIMEOUT = 5.0
 _HANG_CHECK_INTERVAL_MAX = 5.0
+# External (queue) cancel watch cadence; 30s so the queue file is not read on
+# every hang-check tick (max 5s).  Patching this to 0 lets tests drive a check
+# on the next loop iteration.
+_CANCEL_CHECK_INTERVAL = 30.0
 
 OnSpawned = Callable[["TaskRunnerJob"], Awaitable[None] | None]
 
@@ -610,13 +614,33 @@ class TaskRunnerSupervisor:
             self._recover_task_journals((lane,))
 
     async def _watch_job(self, job: TaskRunnerJob) -> None:
-        """Kill only this task-runner group after progress stops."""
+        """Kill only this task-runner group after progress stops.
+
+        Besides hang detection, a ``task``-lane job whose queue entry was
+        externally cancelled (e.g. superseded by a newer PR exact) is terminated
+        here.  The queue cancel check is rate-limited to ``_CANCEL_CHECK_INTERVAL``
+        seconds to avoid reading the queue file on every hang-check tick.
+        """
+        last_cancel_check = 0.0
         while job.identity.job_id in self._jobs:
             await asyncio.sleep(self._hang_check_interval)
             process = job.process
             if process is None or process.returncode is not None:
                 return
-            idle_sec = asyncio.get_running_loop().time() - job.last_progress_at
+            now = asyncio.get_running_loop().time()
+            if job.identity.lane == "task" and now - last_cancel_check >= _CANCEL_CHECK_INTERVAL:
+                last_cancel_check = now
+                if await self._task_is_externally_cancelled(job):
+                    job.hang_kill_started = True
+                    logger.info(
+                        "Task runner external cancel: anima=%s job=%s task_id=%s",
+                        self.anima_name,
+                        job.identity.job_id,
+                        (job.params.get("task_desc") or {}).get("task_id"),
+                    )
+                    await self._terminate_hung_job(job)
+                    return
+            idle_sec = now - job.last_progress_at
             if idle_sec <= self._busy_hang_threshold_sec:
                 continue
             job.hang_kill_started = True
@@ -632,6 +656,33 @@ class TaskRunnerSupervisor:
             )
             await self._terminate_hung_job(job)
             return
+
+    async def _task_is_externally_cancelled(self, job: TaskRunnerJob) -> bool:
+        """Return True when the task's queue entry was externally cancelled.
+
+        Reads the live task queue (via a thread so the event loop is not blocked)
+        and returns True only for a ``cancelled`` status.  Any queue read error
+        is swallowed and treated as not-cancelled so the watcher keeps going.
+        """
+        try:
+            task_desc = job.params.get("task_desc") or {}
+            task_id = task_desc.get("task_id")
+            if not task_id:
+                return False
+            from core.memory.task_queue import TaskQueueManager
+
+            entry = await asyncio.to_thread(
+                TaskQueueManager(self.anima_dir).get_task_by_id,
+                task_id,
+            )
+            return entry is not None and entry.status == "cancelled"
+        except Exception:
+            logger.debug(
+                "Task runner external-cancel check failed for job=%s",
+                job.identity.job_id,
+                exc_info=True,
+            )
+            return False
 
     async def _terminate_hung_job(self, job: TaskRunnerJob) -> None:
         """Terminate a hung task group, escalating to SIGKILL after grace."""

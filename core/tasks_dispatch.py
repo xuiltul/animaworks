@@ -29,7 +29,15 @@ def pr_exclusive_key(meta: dict | None) -> str:
     Matches the manual ``delegate_task`` convention (e.g. ``pr-3999``), so an
     automated gh-ci/gh-review task and a hand-delegated task on the same PR
     share one lock instead of racing on the same worktree.
+
+    Multi-model review passes (``multipass is True``) are findings-only and
+    write to per-model output files (``reviews/pr<N>-frc-...-<slug>.md``), so
+    they do not race on a shared worktree and are left parallel (no key) to halve
+    pipeline latency.  The ``multipass == "synth"`` integration pass and plain
+    gh-ci/gh-cmd/gh-review tasks still serialize on ``pr-<N>``.
     """
+    if (meta or {}).get("multipass") is True:
+        return ""
     number = (meta or {}).get("number")
     return f"pr-{number}" if number else ""
 
@@ -179,8 +187,9 @@ def dispatch_direct_task(
         "reply_to": "",
         "source": "delegation",
         "working_directory": "",
-        "exclusive_key": exclusive_key,
     }
+    if exclusive_key:
+        task_desc["exclusive_key"] = exclusive_key
     if model:
         task_desc["model"] = model
     atomic_write_text(

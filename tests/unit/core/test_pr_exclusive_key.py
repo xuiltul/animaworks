@@ -15,6 +15,31 @@ def test_pr_exclusive_key_from_meta() -> None:
     assert pr_exclusive_key(None) == ""
 
 
+def test_pr_exclusive_key_multipass_parallel() -> None:
+    """Multi-model review passes run in parallel (no key); synth still serializes."""
+    assert pr_exclusive_key({"repo": "o/r", "number": 1, "multipass": True}) == ""
+    assert pr_exclusive_key({"repo": "o/r", "number": 1, "multipass": "synth"}) == "pr-1"
+
+
+def test_dispatch_multipass_task_has_no_exclusive_key(tmp_path: Path) -> None:
+    """A multipass model pass must not carry any exclusive_key in queue or pending json."""
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True)
+    assert dispatch_direct_task(
+        target="natsume",
+        task_id="gh-ci-o-r#1-abcdef12",
+        summary="multi-pass review",
+        instruction="review",
+        meta={"repo": "o/r", "number": 1, "sha": "abcdef12", "multipass": True},
+        animas_dir=tmp_path / "animas",
+    )
+    task_desc = json.loads((anima_dir / "state" / "pending" / "gh-ci-o-r#1-abcdef12.json").read_text())
+    assert "exclusive_key" not in task_desc
+    entry = TaskQueueManager(anima_dir).get_task_by_id("gh-ci-o-r#1-abcdef12")
+    assert entry is not None
+    assert "exclusive_key" not in entry.meta
+
+
 def test_pr_key_from_text() -> None:
     assert _pr_key_from_text("fix CI on PR #5008 now") == "pr-5008"
     assert _pr_key_from_text("see https://github.com/o/r/pull/4985 please") == "pr-4985"

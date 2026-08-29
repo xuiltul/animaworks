@@ -684,6 +684,18 @@ class PendingTaskExecutor:
         from core.execution._sanitize import ORIGIN_ANIMA
 
         task_id, title, _description = _task_activity_identity(task_desc)
+        # If the queue entry was already externally cancelled (e.g. superseded by
+        # a newer PR exact), the runner was killed by the supervisor watcher and
+        # nobody is waiting on this task: skip the failure notification and
+        # failed-result marker (cancelled is sticky and won't become failed).
+        try:
+            from core.memory.task_queue import TaskQueueManager
+
+            queued = TaskQueueManager(self._anima_dir).get_task_by_id(task_id)
+            if queued is not None and queued.status == "cancelled":
+                return
+        except Exception:
+            pass  # queue unreadable → fall through to the default failure path
         self._sync_task_queue(task_id, "failed", summary=reason)
         self._write_failed_result(task_id, reason)
 

@@ -28,9 +28,7 @@ def test_dispatch_direct_task_queues_and_publishes_pending(tmp_path: Path) -> No
     assert task.meta["origin"] == "github-event"
     assert task.meta["executor"] == "taskexec"
     assert task.meta["repo"] == "o/r"
-    pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-cmd-101.json").read_text(encoding="utf-8")
-    )
+    pending = json.loads((target_dir / "state" / "pending" / "gh-cmd-101.json").read_text(encoding="utf-8"))
     assert pending == {
         "task_type": "llm",
         "task_id": "gh-cmd-101",
@@ -45,7 +43,6 @@ def test_dispatch_direct_task_queues_and_publishes_pending(tmp_path: Path) -> No
         "reply_to": "",
         "source": "delegation",
         "working_directory": "",
-        "exclusive_key": "",
     }
 
 
@@ -84,9 +81,7 @@ def test_dispatch_direct_task_stores_model_in_task_and_pending(tmp_path: Path) -
     assert task is not None
     assert task.meta["model"] == "x:grok/grok-4.5"
     pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-ci-o-r#1-m-grok-grok-4-5.json").read_text(
-            encoding="utf-8"
-        )
+        (target_dir / "state" / "pending" / "gh-ci-o-r#1-m-grok-grok-4-5.json").read_text(encoding="utf-8")
     )
     assert pending["model"] == "x:grok/grok-4.5"
 
@@ -101,11 +96,7 @@ def test_dispatch_direct_task_without_model_omits_key(tmp_path: Path) -> None:
         instruction="Review it.",
         animas_dir=tmp_path,
     )
-    pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-ci-o-r#1-aaaaaaaa.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    pending = json.loads((target_dir / "state" / "pending" / "gh-ci-o-r#1-aaaaaaaa.json").read_text(encoding="utf-8"))
     assert "model" not in pending
 
 

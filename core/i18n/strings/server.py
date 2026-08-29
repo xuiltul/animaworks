@@ -237,8 +237,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Gemini CLI Auth",
     },
     "github_gateway.queue_ack": {
-        "ja": "受領しました（task `{task_id}`）。同一PRの先行タスク `{holder_task_id}` の完了後に着手します。",
-        "en": "Received (task `{task_id}`). Will start after the preceding task `{holder_task_id}` on this PR completes.",
+        "ja": "受領しました（task `{task_id}`）。同一PRで実行中の先行タスク `{holder_task_id}` が終わり次第、自動で着手します。この間に新しいpushがあった場合は旧headの処理を打ち切り、最新headを優先します。",
+        "en": "Received (task `{task_id}`). It will start automatically once the in-flight task `{holder_task_id}` on this PR finishes. If a new push lands in the meantime, work on the old head is dropped and the latest head takes priority.",
     },
     "github_gateway.review_dispatch": {
         "ja": (
