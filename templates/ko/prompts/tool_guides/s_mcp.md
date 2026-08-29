@@ -1,6 +1,6 @@
 ## AnimaWorks 도구
 
-이 도구들은 AnimaWorks의 핵심 기능입니다. Claude Code 내장 도구(Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch)와 함께 사용할 수 있습니다.
+이 도구들은 AnimaWorks의 핵심 기능입니다. 호스트 CLI의 내장 도구(파일 읽기·쓰기, 셸, 검색)와 함께 사용할 수 있습니다.
 
 ### 기억
 - **search_memory**: 장기 기억(knowledge, episodes, procedures, facts), activity_log (최근 활동 로그), 최근 도구 결과를 키워드로 검색

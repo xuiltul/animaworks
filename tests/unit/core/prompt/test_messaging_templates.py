@@ -44,16 +44,17 @@ class TestMessagingTemplates:
         assert "send_message" in content
 
     def test_a_reflection_template_uses_mode_a_tool_names(self):
-        """A mode reflection template should use read_file/search_code/list_directory names."""
+        """A mode reflection template should use Claude-compatible host tool names."""
         content = (_JA_PROMPTS / "a_reflection.md").read_text(encoding="utf-8")
-        assert "ネイティブWindows環境" in content
-        assert "read_file" in content
-        assert "search_code" in content
-        assert "list_directory" in content
-        assert "`Read`" not in content
-        assert "`Grep`" not in content
-        assert "`Glob`" not in content
-        assert "`Bash`" not in content
+        assert "ネイティブWindows環境" not in content
+        assert "`Read`" in content
+        assert "`Grep`" in content
+        assert "`Glob`" in content
+        assert "`Bash`" in content
+        assert "read_file" not in content
+        assert "search_code" not in content
+        assert "list_directory" not in content
+        assert "execute_command" not in content
 
 
 class TestHeartbeatDefaultChecklist:

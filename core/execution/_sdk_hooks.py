@@ -345,7 +345,7 @@ def _intercept_task_to_delegation(
             original_instruction=prompt,
             assignee=target_name,
             summary=description[:100],
-            deadline="2h",
+            deadline="30m",
             relay_chain=[my_name],
         )
     except Exception as e:
@@ -390,7 +390,7 @@ def _intercept_task_to_delegation(
             content=t(
                 "handler.delegation_dm_content",
                 instruction=prompt[:500],
-                deadline="2h",
+                deadline="30m",
                 task_id=sub_entry.task_id,
             ),
             intent="delegation",
@@ -408,7 +408,7 @@ def _intercept_task_to_delegation(
             original_instruction=prompt,
             assignee=target_name,
             summary=f"[delegated→{target_name}] {description[:80]}",
-            deadline="2h",
+            deadline="30m",
             relay_chain=[my_name, target_name],
             meta={
                 "delegated_to": target_name,

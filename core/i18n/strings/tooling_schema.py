@@ -39,8 +39,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Assignee name (yourself or the delegated Anima name)",
     },
     "schema.backlog_task.deadline": {
-        "ja": "期限（必須）。相対形式 '30m','2h','1d' またはISO8601。例: '1h' = 1時間後",
-        "en": ("Deadline (required). Relative format '30m','2h','1d' or ISO8601. Example: '1h' = 1 hour from now"),
+        "ja": "期限（必須）。相対形式 '15m','30m','1h' またはISO8601。例: '30m' = 30分後。値は例、作業量から決める",
+        "en": ("Deadline (required). Relative format '15m','30m','1h' or ISO8601. Example: '30m' = 30 minutes from now. The value is an example; decide based on the workload"),
     },
     "schema.backlog_task.desc": {
         "ja": (
@@ -161,8 +161,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Files to place in templates/ (optional)",
     },
     "schema.delegate_task.deadline": {
-        "ja": "期限（相対形式: '30m', '2h', '1d' または ISO8601）",
-        "en": "Deadline (relative format: '30m', '2h', '1d' or ISO8601)",
+        "ja": "期限（相対形式: '15m', '30m', '1h' または ISO8601）",
+        "en": "Deadline (relative format: '15m', '30m', '1h' or ISO8601)",
     },
     "schema.delegate_task.desc": {
         "ja": (

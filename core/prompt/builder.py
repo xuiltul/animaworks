@@ -512,6 +512,20 @@ def _skill_visible_in_prompt_context(meta: Any, *, is_background_auto: bool) -> 
     return not (is_background_auto and _requires_human_approval(meta))
 
 
+def _host_tool_line(execution_mode: str) -> str:
+    """Return the host built-in tool line for the given execution mode.
+
+    d (Cursor) and g (Gemini) are unused, so they reuse the 's' wording.
+    Unknown modes return an empty string (no injection).
+    """
+    mode = (execution_mode or "").lower()
+    if mode in ("d", "g"):
+        mode = "s"
+    if mode not in ("s", "c", "x", "a"):
+        return ""
+    return t(f"tool_guide.host_tools.{mode}")
+
+
 def _build_group4(
     pd: Path,
     data_dir: Path,
@@ -569,10 +583,16 @@ def _build_group4(
         sm = load_guide("s_mcp")
         g = "\n\n".join(p for p in (sb, sm) if p)
         if g:
+            host_line = _host_tool_line(execution_mode)
+            if host_line:
+                g = host_line + "\n\n" + g
             _add(g, "tool_guides", 2)
     else:
         ns = load_guide("non_s")
         if ns:
+            host_line = _host_tool_line(execution_mode)
+            if host_line:
+                ns = host_line + "\n\n" + ns
             _add(ns, "tool_guides", 2)
 
     if not is_heartbeat:

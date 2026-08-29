@@ -1,6 +1,6 @@
 ## AnimaWorks Tools
 
-These tools are your core AnimaWorks capabilities, available alongside Claude Code built-in tools (Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch).
+These tools are your core AnimaWorks capabilities, available alongside the host CLI's built-in tools (file read/write, shell, and search).
 
 ### Memory
 - **search_memory**: Search long-term memory (knowledge, episodes, procedures, facts), activity_log (recent action logs), and recent tool results by keyword

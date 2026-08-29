@@ -1458,6 +1458,39 @@ def step_v063_behavior_rules_action_rules_skill_sync(
     return StepResult(changed=total, skipped=skipped, details=details, error=error)
 
 
+def step_v0120_prompt_deadline_engine_neutral_resync(
+    data_dir: Path,
+    dry_run: bool,
+    verbose: bool,
+) -> StepResult:
+    """v0.12.0: Resync prompts/ (deadline rule + engine-neutral tool wording) and drop stale files."""
+    details: list[str] = []
+    total = 0
+    skipped = 0
+    errors: list[str] = []
+
+    r1 = step_prompt_resync(data_dir, dry_run, verbose)
+    total += r1.changed
+    skipped += r1.skipped
+    details.extend(r1.details)
+    if r1.error:
+        errors.append(f"step_prompt_resync: {r1.error}")
+
+    stale = data_dir / "prompts" / "task_delegation_rules.md"
+    if stale.is_file():
+        if dry_run:
+            details.append("Would remove stale prompts/task_delegation_rules.md")
+        else:
+            stale.unlink()
+            details.append("Removed stale prompts/task_delegation_rules.md")
+        total += 1
+    else:
+        skipped += 1
+
+    error = "; ".join(errors) if errors else None
+    return StepResult(changed=total, skipped=skipped, details=details, error=error)
+
+
 def step_remove_precompletion_guide(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Resync templates after pre-completion verification removal and delete the guide file.
 
@@ -1744,6 +1777,12 @@ def register_all_steps(runner: Any) -> None:
             "Remove retired common_knowledge/team-design/ trees",
             "template_sync",
             step_remove_team_design,
+        ),
+        MigrationStep(
+            "v0120_prompt_deadline_engine_neutral_resync",
+            "v0.12.0: Resync prompts (deadline rule + engine-neutral tool wording)",
+            "template_sync",
+            step_v0120_prompt_deadline_engine_neutral_resync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

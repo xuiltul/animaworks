@@ -1,6 +1,6 @@
 ## AnimaWorks Tools
 
-これらのツールはAnimaWorksのコア機能です。Claude Code組込みツール（Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch）と併用できます。
+これらのツールはAnimaWorksのコア機能です。ホスト CLI の組込みツール（ファイル読み書き・シェル・検索）と併用できます。
 
 ### Memory
 - **search_memory**: 長期記憶（knowledge, episodes, procedures）、activity_log（直近の行動ログ）、直近のツール結果をキーワード検索
