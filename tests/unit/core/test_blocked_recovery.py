@@ -13,6 +13,14 @@ from core._anima_heartbeat import HeartbeatMixin
 from core.blocked_recovery import revalidate_blocked_tasks
 from core.config.schemas import BackgroundTaskConfig
 from core.memory.task_queue import TaskQueueManager
+
+
+@pytest.fixture(autouse=True)
+def _no_ssh_dropin_tmpfs():
+    # Host-dependent bwrap args (see foreign_owned_ssh_config_dirs) would
+    # otherwise leak into the exact-argv assertions below.
+    with patch("core.file_access_policy.foreign_owned_ssh_config_dirs", return_value=[]):
+        yield
 from core.time_utils import now_local
 
 

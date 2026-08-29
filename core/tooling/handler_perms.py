@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config.models import PermissionsConfig, load_permissions
+from core.config.schemas import command_deny_matches
 from core.file_access_policy import (
     effective_write_roots,
     find_denied_root,
@@ -438,7 +439,7 @@ class PermissionsMixin:
                     continue
                 cmd_base = seg_argv[0]
                 for denied in denied_items:
-                    if denied in cmd_base or denied in segment:
+                    if command_deny_matches(denied, segment, cmd_base):
                         logger.warning(
                             "permission_denied anima=%s command=%s reason=denied_list(%s)",
                             self._anima_name,

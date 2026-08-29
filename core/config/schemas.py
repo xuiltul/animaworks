@@ -1123,6 +1123,23 @@ class GlobalPermissionsConfig(BaseModel):
 # ── Per-Anima Permissions Config ──────────────────────────────────────────────
 
 
+def command_deny_matches(denied: str, segment: str, cmd_base: str) -> bool:
+    """Match one per-anima ``commands.deny`` entry against a command segment.
+
+    Plain entries are substrings (``"gh pr merge"``).  An entry prefixed with
+    ``re:`` is a regex, so a rule can cover every spelling of a flag
+    (``re:\\brm\\s+(-\\w*[rR]|--recursive)`` catches ``rm -r``/``-fr``/``-R``,
+    where the substring ``"rm -rf"`` was bypassed by ``rm -r``).
+    """
+    if denied.startswith("re:"):
+        try:
+            return re.search(denied[3:], segment) is not None
+        except re.error:
+            logger.warning("Invalid regex in commands.deny: %r", denied)
+            return False
+    return denied in cmd_base or denied in segment
+
+
 class CommandsPermission(BaseModel):
     """Permission rules for command execution."""
 

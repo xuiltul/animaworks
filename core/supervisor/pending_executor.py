@@ -70,6 +70,7 @@ _WAITING_REENQUEUE_DELAY_SECONDS = 300.0
 _CONTINUATION_BACKOFF_SECONDS = {1: 0.0, 2: 180.0, 3: 600.0}
 
 _QUEUE_TERMINAL_STATUSES = {"done", "cancelled", "failed"}
+_CANCEL_POLL_SECONDS = 5.0
 _QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "blocked", "delegated"}
 _TASKBOARD_QUEUE_CANCEL_REASONS = {"expired", "archived", "tombstoned"}
 
@@ -2299,12 +2300,22 @@ class PendingTaskExecutor:
                 try:
                     agent.reset_reply_tracking(session_type="task")
                     agent.reset_read_paths()
+                    next_cancel_poll = time.monotonic() + _CANCEL_POLL_SECONDS
                     async for chunk in agent.run_cycle_streaming(
                         prompt,
                         trigger=trigger,
                         thread_id=task_id,
                         model_config_override=model_config_override,
                     ):
+                        # A cancel written to task_queue by another process
+                        # (supervisor, TaskBoard, server) only reaches the
+                        # running stream through the interrupt event.
+                        if interrupt_event is not None and time.monotonic() >= next_cancel_poll:
+                            next_cancel_poll = time.monotonic() + _CANCEL_POLL_SECONDS
+                            _q = self._get_task_queue_entry(task_id)
+                            if _q is not None and _q.status == "cancelled":
+                                logger.info("[%s] Task %s cancelled in task_queue; interrupting", self._anima_name, task_id)
+                                interrupt_event.set()
                         chunk_type = chunk.get("type")
                         if chunk_type == "text_delta":
                             accumulated_text += chunk.get("text", "")
@@ -2384,6 +2395,11 @@ class PendingTaskExecutor:
 
         if cycle_error_category == "auth":
             raise TaskExecError("task execution failed due to a terminal authentication error (credential problem)")
+
+        if stop_kind == "interrupted":
+            _q = self._get_task_queue_entry(task_id)
+            if _q is not None and _q.status == "cancelled":
+                return _SENTINEL_CANCELLED
 
         if stop_kind in {"interrupted", "runaway_halt", "empty_response", "hard_timeout"}:
             continuation_count = task_desc.get("continuation_count", 0)

@@ -203,6 +203,22 @@ def find_internal_cache_root(path: str | Path, anima_dir: Path) -> Path | None:
     return None
 
 
+def foreign_owned_ssh_config_dirs(ssh_config_d: Path = Path("/etc/ssh/ssh_config.d")) -> list[str]:
+    """Return ssh drop-in dirs that would fail ssh's owner check inside bwrap.
+
+    Inside the sandbox's user namespace only the current uid keeps its
+    identity; everything else (root included) shows up as ``nobody``.  ssh
+    requires included config files to be owned by root or the caller, so any
+    drop-in not owned by us makes *every* ``ssh`` exit 255.
+    """
+    try:
+        if any(p.stat().st_uid != os.getuid() for p in ssh_config_d.glob("*.conf")):
+            return [str(ssh_config_d)]
+    except OSError:
+        pass
+    return []
+
+
 def shell_internal_deny_paths(anima_dir: Path) -> tuple[Path, ...]:
     """Return credential/runtime-control paths hidden from the model shell."""
     anima_root = anima_dir.resolve()
