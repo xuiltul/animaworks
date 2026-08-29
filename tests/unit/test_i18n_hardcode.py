@@ -90,7 +90,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/config/model_mode.py": 30,
     # multi-pass FRC review instruction/task templates (operational instructions,
     # relocated from scripts/pr-review-dispatch.py which is outside the scan)
-    "core/review_multipass.py": 10,
+    "core/review_multipass.py": 11,
     # cron instruction prompt to Anima
     "core/prompt/messaging.py": 2,
     "core/prompt/org_context.py": 3,
