@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -931,3 +932,40 @@ class TestExtractNameFromMdTable:
 | 役割 | developer |
 """
         assert _extract_name_from_md(content) == "hinata"
+
+
+# ── published anima templates completeness ──────────────
+
+
+class TestPublishedAnimaTemplates:
+    """Each published (non-underscore) anima template must ship a defined
+    identity and a valid JSON status.json, so it is directly usable with
+    ``animaworks create <name> --template <template>``.
+
+    This is intentionally generic and walks the disk rather than hardcoding
+    template names, so newly added templates are covered automatically.
+    """
+
+    def _template_dirs(self) -> list[tuple[str, Path]]:
+        templates_dir = Path(__file__).resolve().parents[3] / "templates"
+        found: list[tuple[str, Path]] = []
+        for locale in ("ja", "en", "ko"):
+            anima_dir = templates_dir / locale / "anima_templates"
+            if not anima_dir.exists():
+                continue
+            for d in sorted(anima_dir.iterdir()):
+                if d.is_dir() and not d.name.startswith("_"):
+                    found.append((f"{locale}/{d.name}", d))
+        return found
+
+    def test_non_underscore_templates_have_anima_templates_present(self):
+        assert len(self._template_dirs()) >= 2  # at least librarian + dev ones
+
+    def test_each_template_has_identity_and_valid_status(self):
+        for label, d in self._template_dirs():
+            assert (d / "identity.md").is_file(), f"{label}: missing identity.md"
+            status_path = d / "status.json"
+            assert status_path.is_file(), f"{label}: missing status.json"
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+            assert isinstance(data, dict), f"{label}: status.json must be a JSON object"
+            assert data.get("role"), f"{label}: status.json must declare a role"
