@@ -971,6 +971,7 @@ class HeartbeatConfig(BaseModel):
         False  # Send read-receipt ACK to message senders (disabled by default to prevent gratitude loops)
     )
     channel_post_cooldown_s: int = 300  # Min seconds between board posts per Anima (0 = no limit)
+    outbound_limit_enabled: bool = True  # False disables the global hourly/daily outbound message caps
     max_messages_per_hour: int = 30  # Deprecated: use ROLE_OUTBOUND_DEFAULTS + status.json override
     max_messages_per_day: int = 100  # Deprecated: use ROLE_OUTBOUND_DEFAULTS + status.json override
     idle_compaction_minutes: float = Field(
