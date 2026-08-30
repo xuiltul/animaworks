@@ -625,6 +625,23 @@ class TestConfigWriting:
         instructions = (codex_home / "instructions.md").read_text(encoding="utf-8")
         assert instructions == "Test system prompt"
 
+    def test_write_codex_config_installs_command_hook_with_trust_bypass(self, executor, anima_dir):
+        """Codex only runs hooks.json with persisted trust; both launch paths bypass it."""
+        import json
+
+        executor._write_codex_config("My prompt")
+        hooks = json.loads((anima_dir / ".codex_home" / "hooks.json").read_text(encoding="utf-8"))
+        (entry,) = hooks["hooks"]["PreToolUse"]
+        assert entry["matcher"] == "Bash"
+        assert "core.tooling.codex_command_hook" in entry["hooks"][0]["command"]
+        assert str(anima_dir.resolve()) in entry["hooks"][0]["command"]
+
+        permissions = SimpleNamespace(file_roots=["/"], file_roots_denied=[])
+        with patch("core.config.models.load_permissions", return_value=permissions):
+            assert executor._codex_thread_kwargs("prompt")["config"] == {"bypass_hook_trust": True}
+        with patch("core.execution.codex_sdk.get_codex_executable", return_value="/usr/bin/codex"):
+            assert "--dangerously-bypass-hook-trust" in executor._build_cli_exec_command()
+
     def test_write_codex_config_toml_content(self, executor, anima_dir):
         executor._write_codex_config("My prompt")
         config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")

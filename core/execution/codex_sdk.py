@@ -1433,6 +1433,42 @@ class CodexSDKExecutor(BaseExecutor):
             f"{mcp_env_lines}\n"
         )
         (self._codex_home / "config.toml").write_text(config_toml, encoding="utf-8")
+        self._write_hooks()
+
+    def _write_hooks(self) -> None:
+        """Point Codex's PreToolUse hook at ``core.tooling.codex_command_hook``.
+
+        The hook runs on the host (outside the sandbox) and denies commands by the
+        global/per-anima deny lists plus the recursive-search guard.  ``-m`` works
+        from any cwd because the venv has an editable install of this repo.
+        """
+        import shlex
+
+        from core.paths import get_global_permissions_path
+
+        hook_cmd = " ".join(
+            shlex.quote(part)
+            for part in (
+                sys.executable,
+                "-m",
+                "core.tooling.codex_command_hook",
+                "--anima-dir",
+                str(self._anima_dir.resolve()),
+                "--global-permissions",
+                str(get_global_permissions_path()),
+            )
+        )
+        hooks = {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [{"type": "command", "command": hook_cmd, "timeout": 30}],
+                    }
+                ]
+            }
+        }
+        (self._codex_home / "hooks.json").write_text(json.dumps(hooks, indent=2) + "\n", encoding="utf-8")
 
     def _create_codex_client(self) -> Any:
         """Create an ``AsyncCodex`` SDK client instance."""
@@ -1499,6 +1535,11 @@ class CodexSDKExecutor(BaseExecutor):
             "developer_instructions": self._CODEX_DEVELOPER_INSTRUCTIONS,
             "model": provider_config.model,
             "model_provider": provider_config.provider,
+            # hooks.json (written by _write_hooks) only runs with persisted hook
+            # trust, which Codex grants via a TUI prompt we never see.  The hook
+            # source is our own module, so bypass the trust gate.  Verified on
+            # codex 0.151: config.toml keys / -c overrides do NOT enable it.
+            "config": {"bypass_hook_trust": True},
         }
         from core.config.models import load_permissions
         from core.file_access_policy import resolve_effective_denied_roots
@@ -1537,6 +1578,7 @@ class CodexSDKExecutor(BaseExecutor):
             "-C",
             str(self._task_cwd or self._anima_dir),
             "--skip-git-repo-check",
+            "--dangerously-bypass-hook-trust",  # see _codex_thread_kwargs
             "--json",
             "-",
         ]
