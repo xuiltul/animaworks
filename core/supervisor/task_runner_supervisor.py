@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from core.i18n import t
 from core.platform.process import subprocess_session_kwargs
 from core.schemas import CronTask
@@ -1012,30 +1014,48 @@ class TaskRunnerSupervisor:
         self._recover_task_journals()
 
     @staticmethod
-    def _terminate_job_group(job: TaskRunnerJob) -> None:
+    def _descendant_processes(job: TaskRunnerJob) -> list[psutil.Process]:
+        """Every descendant of the runner, including ones outside its process group.
+
+        Codex's ``codex-linux-sandbox`` starts each shell tool in its own session,
+        so ``killpg`` alone leaves its ``grep -R``/``find`` children alive as
+        orphans (2026-08-30: 84 orphan sessions saturated disk IO and hang-killed
+        every TaskExec in a loop).  Collect them *before* the parent dies, because
+        orphans are reparented and become untraceable.
+        """
+        if not job.pid:
+            return []
+        try:
+            return psutil.Process(job.pid).children(recursive=True)
+        except psutil.Error:
+            return []
+
+    @staticmethod
+    def _signal_job_group(job: TaskRunnerJob, sig: int) -> None:
         process = job.process
         if process is None:
             return
+        descendants = TaskRunnerSupervisor._descendant_processes(job)
         try:
             if os.name == "posix" and job.pgid:
-                os.killpg(job.pgid, signal.SIGTERM)
+                os.killpg(job.pgid, sig)
             elif process.returncode is None:
-                process.terminate()
+                process.send_signal(sig)
         except ProcessLookupError:
-            return
+            pass
+        for child in descendants:
+            try:
+                child.send_signal(sig)
+            except psutil.Error:
+                continue
+
+    @staticmethod
+    def _terminate_job_group(job: TaskRunnerJob) -> None:
+        TaskRunnerSupervisor._signal_job_group(job, signal.SIGTERM)
 
     @staticmethod
     def _kill_job_group(job: TaskRunnerJob) -> None:
-        process = job.process
-        if process is None:
-            return
-        try:
-            if os.name == "posix" and job.pgid:
-                os.killpg(job.pgid, signal.SIGKILL)
-            elif process.returncode is None:
-                process.kill()
-        except ProcessLookupError:
-            return
+        TaskRunnerSupervisor._signal_job_group(job, signal.SIGKILL)
 
 
 __all__ = ["TaskRunnerError", "TaskRunnerJob", "TaskRunnerSupervisor"]
