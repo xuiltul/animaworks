@@ -28,6 +28,8 @@ logger = logging.getLogger("animaworks.github_gateway")
 
 STATE_FILENAME = "pr-review-dispatch-state.json"
 MAX_FAILED_REDISPATCHES = 2
+# Sweep interval for re-dispatching failed gh-ci tasks without a new push.
+CI_RETRY_INTERVAL_SEC = 600.0
 
 
 def _now_iso() -> str:
@@ -67,6 +69,7 @@ class GitHubWebhookManager:
         self._started = False
         self._debounce_tasks: dict[str, asyncio.Task[None]] = {}
         self._event_tasks: set[asyncio.Task[None]] = set()
+        self._ci_retry_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         """Load configuration and enable webhook processing when configured."""
@@ -83,12 +86,16 @@ class GitHubWebhookManager:
                 len(self._config.repos),
                 self._config.quiet_seconds,
             )
+            self._ci_retry_task = asyncio.create_task(self._ci_retry_loop())
         else:
             logger.info("GitHub webhook gateway is disabled")
 
     async def stop(self) -> None:
         """Cancel pending event and debounce tasks."""
         tasks = [*self._event_tasks, *self._debounce_tasks.values()]
+        if self._ci_retry_task is not None:
+            tasks.append(self._ci_retry_task)
+            self._ci_retry_task = None
         for task in tasks:
             task.cancel()
         if tasks:
@@ -495,17 +502,55 @@ class GitHubWebhookManager:
             str(workflow.get("html_url") or ""),
         )
 
+    async def _ci_retry_loop(self) -> None:
+        while True:
+            try:
+                await asyncio.to_thread(self.retry_failed_ci_tasks)
+            except Exception:
+                logger.exception("GitHub webhook CI retry sweep failed")
+            await asyncio.sleep(CI_RETRY_INTERVAL_SEC)
+
+    def retry_failed_ci_tasks(self) -> int:
+        """Re-dispatch failed gh-ci tasks for PRs still sitting on the failing head.
+
+        The webhook path only retries when GitHub sends another ``workflow_run``,
+        i.e. after a new push.  A task killed mid-way (2026-08-30 hang storm)
+        was therefore never retried.  ``_dispatch_ci_once`` owns the retry
+        budget (``MAX_FAILED_REDISPATCHES``), so this only feeds it candidates.
+        """
+        candidates: list[tuple[str, int, str, str, str]] = []
+        if not self._require_state_file().is_file():
+            return 0  # nothing was ever dispatched; don't materialise state on a sweep
+        with locked_dispatch_state(self._require_state_file()) as state:
+            urls = state.get("ci_workflow_urls") or {}
+            for key in list(state["ci_notified"]):
+                repo, _, rest = key.rpartition("#")
+                number, _, sha8 = rest.partition("_")
+                sha = str((state["prs"].get(f"{repo}#{number}") or {}).get("sha") or "")
+                if not number.isdigit() or not sha8 or not sha.startswith(sha8):
+                    continue
+                workflow_name = str(state["ci_failure_signatures"].get(key) or "CI")
+                candidates.append((repo, int(number), sha, workflow_name, str(urls.get(key) or "")))
+        dispatched = 0
+        for repo, number, sha, workflow_name, url in candidates:
+            dispatched += self._dispatch_ci_once(repo, [(number, sha)], workflow_name, url)
+        if dispatched:
+            logger.info("GitHub webhook CI retry sweep re-dispatched %d task(s)", dispatched)
+        return dispatched
+
     def _dispatch_ci_once(
         self,
         repo: str,
         items: list[tuple[int, str]],
         workflow_name: str,
         url: str,
-    ) -> None:
+    ) -> int:
+        """Dispatch CI-fix tasks for *items*; returns how many were (re)dispatched."""
         with locked_dispatch_state(self._require_state_file()) as state:
             notified = state["ci_notified"]
             failure_signatures = state["ci_failure_signatures"]
             retries = state["failed_task_retries"]
+            urls = state.setdefault("ci_workflow_urls", {})
             target_dir = get_animas_dir() / self._config.implementer_anima
             for number, sha in items:
                 key = f"{repo}#{number}_{sha[:8]}"
@@ -530,7 +575,7 @@ class GitHubWebhookManager:
                 if f"{repo}#{number}_{sha[:8]}" not in notified
             ]
             if not fresh:
-                return
+                return 0
             now = _now_iso()
             for number, sha, key in fresh:
                 pr_url = f"https://github.com/{repo}/pull/{number}"
@@ -551,6 +596,8 @@ class GitHubWebhookManager:
                 )
                 notified[key] = now
                 failure_signatures[key] = workflow_name
+                urls[key] = url
+            return len(fresh)
 
     def _is_bot(self, author: str) -> bool:
         """True when the author is bot_login or reviewer_login."""

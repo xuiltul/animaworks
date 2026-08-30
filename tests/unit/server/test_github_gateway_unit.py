@@ -241,6 +241,9 @@ class TestPullRequestDebounce:
         sleep_gates: list[asyncio.Event] = []
 
         async def controlled_sleep(_delay: float) -> None:
+            if _delay == github_gateway.CI_RETRY_INTERVAL_SEC:  # retry sweep, not a debounce
+                await real_sleep(3600)
+                return
             gate = asyncio.Event()
             sleep_gates.append(gate)
             await gate.wait()
@@ -644,6 +647,42 @@ class TestWorkflowRunDispatch:
         assert sends == []
         direct_task = github_gateway.dispatch_direct_task
         assert direct_task.call_count == 2
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        assert state["failed_task_retries"][task_id] == 2
+        assert key in state["ci_notified"]
+
+    async def test_retry_sweep_redispatches_failed_ci_task_without_new_push(self, gateway) -> None:
+        manager, sends, state_file = gateway
+        target_dir = github_gateway.get_animas_dir() / "natsume"
+        target_dir.mkdir(parents=True)
+        task_id = f"gh-ci-example-org-example-repo#17-{SHA_1[:8]}"
+        queue = github_gateway.TaskQueueManager(target_dir)
+        queue.add_task(
+            source="anima",
+            original_instruction="fix CI",
+            assignee="natsume",
+            summary="failed CI task",
+            task_id=task_id,
+            meta={"executor": "taskexec"},
+        )
+        queue.update_status(task_id, "failed")
+        key = f"{REPO}#17_{SHA_1[:8]}"
+        with locked_dispatch_state(state_file) as state:
+            state["ci_notified"][key] = "2026-08-11T00:00:00Z"
+            state["ci_failure_signatures"][key] = "unit-tests"
+            state["prs"][f"{REPO}#17"] = {"sha": SHA_1, "notified_sha": SHA_1, "title": "t"}
+            # A PR that moved on to a new head must not be retried for the old one.
+            state["ci_notified"][f"{REPO}#18_{SHA_1[:8]}"] = "2026-08-11T00:00:00Z"
+            state["prs"][f"{REPO}#18"] = {"sha": "f" * 40, "notified_sha": "", "title": "t"}
+
+        assert manager.retry_failed_ci_tasks() == 1
+        assert manager.retry_failed_ci_tasks() == 1
+        assert manager.retry_failed_ci_tasks() == 0  # budget exhausted
+
+        assert sends == []
+        direct_task = github_gateway.dispatch_direct_task
+        assert direct_task.call_count == 2
+        assert direct_task.call_args.kwargs["task_id"] == task_id
         state = json.loads(state_file.read_text(encoding="utf-8"))
         assert state["failed_task_retries"][task_id] == 2
         assert key in state["ci_notified"]
