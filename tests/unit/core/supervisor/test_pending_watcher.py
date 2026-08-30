@@ -146,6 +146,20 @@ class TestPendingTaskWatcherLoop:
 
         assert not corrupt_path.exists()
 
+    async def test_parks_non_object_llm_pending_json(self, tmp_path: Path) -> None:
+        """A list-shaped JSON in state/pending/ is moved to failed/ instead of crashing the loop."""
+        executor = _make_executor_with_anima(tmp_path)
+        llm_pending_dir = executor._anima_dir / "state" / "pending"
+        llm_pending_dir.mkdir(parents=True, exist_ok=True)
+        junk = llm_pending_dir / "pr4894-reviews-raw.json"
+        junk.write_text("[]", encoding="utf-8")
+
+        with patch("core.supervisor.pending_executor.asyncio.wait_for", side_effect=self._stop_after_first(executor)):
+            await executor.watcher_loop()
+
+        assert not junk.exists()
+        assert (llm_pending_dir / "failed" / "pr4894-reviews-raw.json").read_text(encoding="utf-8") == "[]"
+
     async def test_processes_multiple_pending_files(self, tmp_path: Path) -> None:
         """Watcher processes all pending files in a single scan iteration."""
         executor = _make_executor_with_anima(tmp_path)

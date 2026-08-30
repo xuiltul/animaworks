@@ -1559,6 +1559,16 @@ class PendingTaskExecutor:
                         )
                         path.unlink(missing_ok=True)
                         continue
+                    if not isinstance(task_desc, dict):
+                        # Not a task descriptor (e.g. an anima's scratch JSON
+                        # dropped into pending/); park it instead of crashing
+                        # the watcher loop on every tick (sumire, 2026-08-30).
+                        logger.warning(
+                            "Non-object JSON in LLM pending task file, moving to failed: %s",
+                            path.name,
+                        )
+                        path.rename(llm_failed_dir / path.name)
+                        continue
 
                     if not self._handle_llm_attention_gate(
                         path,
