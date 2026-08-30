@@ -695,7 +695,13 @@ class PendingTaskExecutor:
             if queued is not None and queued.status == "cancelled":
                 return
         except Exception:
-            pass  # queue unreadable → fall through to the default failure path
+            logger.warning(
+                "[%s] Could not check whether failed task %s was already cancelled; "
+                "continuing with the default failure path",
+                self._anima_name,
+                task_id,
+                exc_info=True,
+            )
         self._sync_task_queue(task_id, "failed", summary=reason)
         self._write_failed_result(task_id, reason)
 
