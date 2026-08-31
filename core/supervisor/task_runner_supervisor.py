@@ -35,6 +35,7 @@ from core.supervisor.transport import cleanup_ipc_endpoint, start_ipc_server
 logger = logging.getLogger(__name__)
 
 _TASK_RUNNER_CONNECT_TIMEOUT = 10.0
+_RECEIVE_POLL_TIMEOUT_SEC = 15.0
 # Post-result exit wait. Under load the child's interpreter shutdown (CLI
 # grandchild reaping, thread joins, MCP cleanup) can exceed several seconds;
 # a laggy exit must not turn a delivered result into a failure (2026-08-12).
@@ -859,7 +860,17 @@ class TaskRunnerSupervisor:
                 await connection.send_event("interrupt", {"thread_id": job.interrupt_thread_id})
 
             while True:
-                envelope = await asyncio.wait_for(connection.receive(), timeout=15.0)
+                try:
+                    envelope = await asyncio.wait_for(connection.receive(), timeout=_RECEIVE_POLL_TIMEOUT_SEC)
+                except TimeoutError:
+                    # A quiet interval is not an error: runner liveness is judged
+                    # by the hang watchdog (busy_hang_threshold), not this socket.
+                    # Severing here used to permanently mute healthy runners and
+                    # produce mass false hang-kills after root event-loop stalls.
+                    current = self._jobs.get(job.identity.job_id)
+                    if current is None or current.connection is not connection:
+                        break  # superseded by a reconnect, or the job is gone
+                    continue
                 if envelope.kind == "request":
                     await self._handle_memory_request(connection, envelope)
                     continue

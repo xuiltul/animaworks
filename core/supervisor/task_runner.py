@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 _CONNECT_DEADLINE_SECONDS = 10.0
 _PROGRESS_INTERVAL_SECONDS = 5.0
+_RECONNECT_RETRY_SECONDS = 5.0
 _SUPPORTED_LANES = frozenset({"chat", "cron", "heartbeat", "task", "background"})
 
 # Module-level registry of open StreamingJournal instances for grace flush.
@@ -398,20 +399,97 @@ async def _connect(
     raise IPCV2ConnectionError(f"could not connect to anima root: {last_error}")
 
 
-async def _progress_loop(connection: IPCV2Connection, identity: IPCV2Identity) -> None:
+class _RootLink:
+    """Owns the connection to the anima root and re-dials it when it breaks.
+
+    The hang watchdog kills any runner whose progress stops for
+    busy_hang_threshold seconds, so a broken control socket must never
+    permanently silence a healthy runner: every consumer goes through this
+    link and any of them may heal it (single-flight via the lock).
+    """
+
+    def __init__(
+        self,
+        connection: IPCV2Connection,
+        socket_path: Path,
+        state: IPCV2ConnectionState,
+        request_id: str,
+        memory_client: _MemoryRpcClient | None = None,
+    ) -> None:
+        self.connection = connection
+        self._socket_path = socket_path
+        self._state = state
+        self._request_id = request_id
+        self.memory_client = memory_client
+        self._lock = asyncio.Lock()
+
+    async def send_event(self, event: str, data: dict[str, Any] | None = None) -> int:
+        return await self.connection.send_event(event, data)
+
+    async def reconnect(self, broken: IPCV2Connection) -> IPCV2Connection:
+        """Re-dial the anima root after *broken* died; returns the live connection."""
+        async with self._lock:
+            if self.connection is not broken:
+                return self.connection  # another consumer already healed it
+            try:
+                await broken.close()
+            except Exception:
+                logger.debug("Failed to close broken root connection", exc_info=True)
+            connection, replayed_run = await _connect(self._socket_path, self._state)
+            if replayed_run.body["request_id"] != self._request_id:
+                await connection.close()
+                raise IPCV2ConnectionError("reconnect returned a different run contract")
+            self.connection = connection
+            if self.memory_client is not None:
+                self.memory_client.connection = connection
+            logger.info("Task runner IPC reconnected to anima root")
+            return connection
+
+
+async def _progress_loop(link: _RootLink, identity: IPCV2Identity) -> None:
+    """Send progress heartbeats forever; survive and heal IPC failures.
+
+    This loop must never die while execution is alive — a silent runner is
+    hang-killed after busy_hang_threshold even when it is working fine.
+    """
     while True:
-        await connection.send_event(
-            "progress",
-            {
-                "pid": os.getpid(),
-                "pgid": os.getpgrp() if hasattr(os, "getpgrp") else os.getpid(),
-                "lane": identity.lane,
-                "job_id": identity.job_id,
-                "display_lane": identity.display_lane,
-                "progress_at": asyncio.get_running_loop().time(),
-            },
-        )
+        connection = link.connection
+        try:
+            await connection.send_event(
+                "progress",
+                {
+                    "pid": os.getpid(),
+                    "pgid": os.getpgrp() if hasattr(os, "getpgrp") else os.getpid(),
+                    "lane": identity.lane,
+                    "job_id": identity.job_id,
+                    "display_lane": identity.display_lane,
+                    "progress_at": asyncio.get_running_loop().time(),
+                },
+            )
+        except Exception as exc:
+            logger.warning("Task runner progress send failed; reconnecting: %s", exc)
+            try:
+                await link.reconnect(connection)
+            except Exception as reconnect_exc:
+                logger.warning(
+                    "Task runner reconnect to anima root failed; will retry: %s", reconnect_exc
+                )
+                await asyncio.sleep(_RECONNECT_RETRY_SECONDS)
+            continue
         await asyncio.sleep(_PROGRESS_INTERVAL_SECONDS)
+
+
+async def _receive_after_reconnect(link: _RootLink, broken: IPCV2Connection) -> IPCV2Envelope:
+    """Heal the root connection, then behave like ``connection.receive()``."""
+    while True:
+        try:
+            connection = await link.reconnect(broken)
+        except Exception as exc:
+            logger.warning("Task runner reconnect to anima root failed; retrying: %s", exc)
+            broken = link.connection
+            await asyncio.sleep(_RECONNECT_RETRY_SECONDS)
+            continue
+        return await connection.receive()
 
 
 async def _parent_monitor(expected_parent_pid: int) -> None:
@@ -583,13 +661,15 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
         memory_client = _MemoryRpcClient(connection)
         configure_ipc_vector_requester(memory_client.request)
 
+    link = _RootLink(connection, socket_path, state, request_id, memory_client)
+
     try:
         execution_control: dict[str, Any] = {}
         execution = await _prepare_execution(
             args,
             identity,
             params,
-            send_stream_event=connection.send_event,
+            send_stream_event=link.send_event,
             control=execution_control,
         )
         anima = execution_control.get("anima")
@@ -615,7 +695,7 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
         )
         await connection.close()
         return 1
-    progress = asyncio.create_task(_progress_loop(connection, identity))
+    progress = asyncio.create_task(_progress_loop(link, identity))
     expected_parent_pid = int(os.environ.get("ANIMAWORKS_TASK_ROOT_PID", os.getppid()))
     parent_monitor = asyncio.create_task(_parent_monitor(expected_parent_pid))
     receiver: asyncio.Task[IPCV2Envelope] | None = asyncio.create_task(connection.receive())
@@ -635,11 +715,16 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
                 root_lost = True
                 break
             if receiver is not None and receiver in done:
+                # The link may have been healed by another consumer while we
+                # were waiting; always act on the current connection.
+                connection = link.connection
                 try:
                     control = receiver.result()
                 except IPCV2ConnectionError:
-                    receiver = None
-                    progress.cancel()
+                    # Do NOT silence progress: heal the link and keep both the
+                    # control channel and the heartbeat alive. A permanently
+                    # mute runner gets hang-killed even while working fine.
+                    receiver = asyncio.create_task(_receive_after_reconnect(link, connection))
                     continue
                 if control.kind == "response":
                     if memory_client is None or not memory_client.accept_response(control):
@@ -698,6 +783,7 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
                     continue
                 receiver = asyncio.create_task(connection.receive())
 
+        connection = link.connection
         if cancelled or root_lost:
             try:
                 await execution
@@ -761,7 +847,10 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
             *(tuple([receiver]) if receiver is not None else ()),
             return_exceptions=True,
         )
-        await connection.close()
+        # _send_terminal may have re-dialed on its own; close every connection
+        # this runner still holds (close() is idempotent).
+        for conn in {connection, link.connection}:
+            await conn.close()
 
 
 def _setup_logging(anima_name: str) -> None:

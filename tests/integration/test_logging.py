@@ -159,7 +159,7 @@ async def test_log_file_date_format(data_dir: Path, make_anima):
         log_files = list(anima_log_dir.glob("*.log"))
 
         # Find dated log file (exclude current.log and stderr.log)
-        dated_logs = [f for f in log_files if f.name not in ("current.log", "stderr.log")]
+        dated_logs = [f for f in log_files if f.name not in ("current.log", "stderr.log", "errors.log")]
         assert len(dated_logs) > 0
 
         # Verify filename format (YYYYMMDD.log)
