@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import threading
+import traceback
 import uuid
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from core.schemas import CronTask
 from core.supervisor.ipc import IPCRequest
 from core.supervisor.ipc_v2 import (
     IPC_V2_MAX_FRAME_BYTES,
+    IPCV2BackpressureTimeout,
     IPCV2Connection,
     IPCV2ConnectionError,
     IPCV2ConnectionState,
@@ -393,7 +395,9 @@ async def _connect(
                     continue
                 if envelope.kind == "request" and envelope.body["method"] == "run":
                     return connection, envelope
-        except (OSError, IPCV2ConnectionError) as exc:
+        except (OSError, IPCV2ConnectionError, IPCV2BackpressureTimeout) as exc:
+            # BackpressureTimeout: hello ack >5s under root load spikes — retry
+            # within the connect deadline instead of failing the whole startup.
             last_error = exc
             await asyncio.sleep(0.1)
     raise IPCV2ConnectionError(f"could not connect to anima root: {last_error}")
@@ -888,5 +892,8 @@ if __name__ == "__main__":
     try:
         raise SystemExit(asyncio.run(main()))
     except Exception as exc:
+        # Full traceback: the bare message ("[Errno 2] ... current.log") has
+        # proven undiagnosable without the raising frame.
+        traceback.print_exc(file=sys.stderr)
         print(f"task runner startup failed: {exc}", file=sys.stderr)
         raise SystemExit(2) from exc
