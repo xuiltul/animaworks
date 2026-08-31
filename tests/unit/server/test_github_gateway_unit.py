@@ -687,6 +687,43 @@ class TestWorkflowRunDispatch:
         assert state["failed_task_retries"][task_id] == 2
         assert key in state["ci_notified"]
 
+    async def test_synth_sweep_dispatches_once_all_model_passes_are_done(self, gateway) -> None:
+        """The gateway sweep must issue the synth task; the cron fallback may be off."""
+        manager, sends, state_file = gateway
+        target_dir = github_gateway.get_animas_dir() / "sumire"
+        target_dir.mkdir(parents=True)
+        base = f"gh-ci-example-org-example-repo#17-{SHA_1[:8]}"
+        task_ids = [f"{base}-m-c-gpt-5-6-sol", f"{base}-m-x-grok-grok-4-5"]
+        queue = github_gateway.TaskQueueManager(target_dir)
+        for tid in task_ids:
+            queue.add_task(
+                source="anima",
+                original_instruction="review pass",
+                assignee="sumire",
+                summary="model pass",
+                task_id=tid,
+                meta={"executor": "taskexec"},
+            )
+            queue.update_status(tid, "done")
+        with locked_dispatch_state(state_file) as state:
+            state.setdefault("multi_model_passes", {})[base] = {
+                "repo": REPO,
+                "number": 17,
+                "sha": SHA_1,
+                "models": ["c:gpt-5.6-sol", "x:grok/grok-4.5"],
+                "task_ids": task_ids,
+                "attempt": 1,
+            }
+
+        manager.sweep_multipass_synth()
+
+        direct_task = github_gateway.dispatch_direct_task
+        synth_calls = [c for c in direct_task.call_args_list if c.kwargs["task_id"] == f"{base}-synth"]
+        assert len(synth_calls) == 1
+        assert synth_calls[0].kwargs["target"] == "sumire"
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        assert base not in state["multi_model_passes"]
+
 
 class TestSharedStateLocking:
     def test_fallback_poller_respects_webhook_dedupe_state(

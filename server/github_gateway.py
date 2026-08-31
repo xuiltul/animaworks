@@ -508,7 +508,30 @@ class GitHubWebhookManager:
                 await asyncio.to_thread(self.retry_failed_ci_tasks)
             except Exception:
                 logger.exception("GitHub webhook CI retry sweep failed")
+            try:
+                await asyncio.to_thread(self.sweep_multipass_synth)
+            except Exception:
+                logger.exception("GitHub webhook multipass synth sweep failed")
             await asyncio.sleep(CI_RETRY_INTERVAL_SEC)
+
+    def sweep_multipass_synth(self) -> None:
+        """Dispatch pending synthesis passes for completed multipass reviews.
+
+        ``check_multipass_synth`` used to run only from the fallback cron
+        (``scripts/pr-review-dispatch.py``); with that cron disabled the
+        final GitHub-posting synth task was never issued (2026-08-31).
+        """
+        if not self._require_state_file().is_file():
+            return
+        with locked_dispatch_state(self._require_state_file()) as state:
+            review_multipass.check_multipass_synth(
+                state,
+                reviewer=self._config.reviewer_anima,
+                synth_model=self._config.review_synth_model,
+                quiet_seconds=self._config.quiet_seconds,
+                dispatch=dispatch_direct_task,
+                logger=logger.info,
+            )
 
     def retry_failed_ci_tasks(self) -> int:
         """Re-dispatch failed gh-ci tasks for PRs still sitting on the failing head.
