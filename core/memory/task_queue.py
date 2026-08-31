@@ -33,6 +33,12 @@ logger = logging.getLogger("animaworks.task_queue")
 # Valid task statuses
 _VALID_STATUSES = frozenset({"pending", "in_progress", "done", "cancelled", "blocked", "delegated", "failed"})
 _TERMINAL_STATUSES = frozenset({"done", "cancelled", "failed"})
+# TaskBoard cards are only archived for statuses that cannot be retried.
+# "failed" is deliberately excluded: attention_resolver keeps failed tasks
+# visible for FAILED_REVIEW_WINDOW, and a failed task re-queued to pending
+# must not be strangled by a stale archived card (Issue #5143 deadlock).
+_ARCHIVE_SYNC_STATUSES = frozenset({"done", "cancelled"})
+_REACTIVATE_SYNC_STATUSES = frozenset({"pending", "in_progress"})
 _ACTIVE_STATUSES = frozenset({"pending", "in_progress", "blocked", "delegated"})
 
 # Valid task sources
@@ -394,8 +400,10 @@ class TaskQueueManager:
             task.summary = summary
         logger.info("Task updated: id=%s status=%s", task_id, status)
 
-        if status in _TERMINAL_STATUSES:
+        if status in _ARCHIVE_SYNC_STATUSES:
             self._sync_taskboard_archived(task_id)
+        elif status in _REACTIVATE_SYNC_STATUSES:
+            self._sync_taskboard_reactivated(task_id)
 
         return task
 
@@ -431,6 +439,36 @@ class TaskQueueManager:
         except Exception:
             logger.debug(
                 "Failed to archive TaskBoard metadata for task %s",
+                task_id,
+                exc_info=True,
+            )
+
+    def _sync_taskboard_reactivated(self, task_id: str) -> None:
+        """Best-effort: revive an archived TaskBoard card when a task re-enters
+        an active status, so the pending attention gate does not cancel the
+        revived task as "archived by TaskBoard". Tombstoned/expired cards are
+        deliberate suppressions and stay untouched.
+        """
+        try:
+            from core.taskboard.models import AttentionVisibility
+            from core.taskboard.store import TaskBoardStore
+
+            anima_name = self.anima_dir.name
+            store = TaskBoardStore()
+            metadata = store.get_metadata(anima_name, task_id)
+            if metadata is None or metadata.visibility != AttentionVisibility.ARCHIVED:
+                return
+            store.upsert_metadata(
+                anima_name=anima_name,
+                task_id=task_id,
+                actor=anima_name,
+                event_type="visibility_changed",
+                visibility="active",
+                column="todo",
+            )
+        except Exception:
+            logger.debug(
+                "Failed to reactivate TaskBoard metadata for task %s",
                 task_id,
                 exc_info=True,
             )

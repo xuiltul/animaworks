@@ -708,7 +708,7 @@ def test_update_status_terminal_archives_existing_metadata(
         column="waiting",
     )
 
-    for terminal in ("done", "cancelled", "failed"):
+    for terminal in ("done", "cancelled"):
         # Reset to active so each terminal path is exercised independently.
         tqm.update_status(entry.task_id, "pending")
         store.upsert_metadata(
@@ -728,6 +728,85 @@ def test_update_status_terminal_archives_existing_metadata(
         assert meta.updated_by == "sakura"
         events = store.list_events(anima_name="sakura", task_id=entry.task_id)
         assert any(event["event_type"] == "archived" for event in events)
+
+
+def test_update_status_failed_keeps_metadata_active(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """failed must NOT archive the card: it stays retriable (failed_review_window)."""
+    from core.taskboard.models import AttentionVisibility
+    from core.taskboard.store import TaskBoardStore
+
+    tqm, data_dir = _tqm_with_data_dir(tmp_path, monkeypatch)
+    entry = tqm.add_task(
+        source="human",
+        original_instruction="flaky work",
+        assignee="sakura",
+        summary="flaky work",
+        task_id="task-fail-1",
+    )
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id=entry.task_id,
+        actor="delegator",
+        visibility="active",
+        column="todo",
+    )
+
+    result = tqm.update_status(entry.task_id, "failed")
+    assert result is not None and result.status == "failed"
+    meta = store.get_metadata("sakura", entry.task_id)
+    assert meta is not None
+    assert meta.visibility == AttentionVisibility.ACTIVE
+
+
+def test_update_status_pending_reactivates_archived_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-queueing an archived task to pending revives the board card so the
+    pending attention gate does not cancel it as "archived by TaskBoard"."""
+    from core.taskboard.models import AttentionVisibility, BoardColumn
+    from core.taskboard.store import TaskBoardStore
+
+    tqm, data_dir = _tqm_with_data_dir(tmp_path, monkeypatch)
+    entry = tqm.add_task(
+        source="human",
+        original_instruction="revivable work",
+        assignee="sakura",
+        summary="revivable work",
+        task_id="task-revive-1",
+    )
+    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id=entry.task_id,
+        actor="delegator",
+        visibility="active",
+        column="todo",
+    )
+    tqm.update_status(entry.task_id, "cancelled")
+    meta = store.get_metadata("sakura", entry.task_id)
+    assert meta is not None and meta.visibility == AttentionVisibility.ARCHIVED
+
+    result = tqm.update_status(entry.task_id, "pending")
+    assert result is not None and result.status == "pending"
+    meta = store.get_metadata("sakura", entry.task_id)
+    assert meta is not None
+    assert meta.visibility == AttentionVisibility.ACTIVE
+    assert meta.column == BoardColumn.TODO
+
+    # Tombstoned cards are deliberate suppressions and must stay suppressed.
+    store.upsert_metadata(
+        anima_name="sakura",
+        task_id=entry.task_id,
+        actor="test",
+        visibility="tombstoned",
+    )
+    tqm.update_status(entry.task_id, "pending")
+    meta = store.get_metadata("sakura", entry.task_id)
+    assert meta is not None
+    assert meta.visibility == AttentionVisibility.TOMBSTONED
 
 
 def test_update_status_terminal_does_not_create_metadata_row(

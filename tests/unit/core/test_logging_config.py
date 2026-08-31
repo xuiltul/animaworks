@@ -466,3 +466,37 @@ def test_anima_daily_file_handler_switches_to_new_date_without_renaming_old_log(
     assert (tmp_path / "20260611.log").read_text(encoding="utf-8").strip() == "before midnight"
     assert (tmp_path / "20260612.log").read_text(encoding="utf-8").strip() == "after midnight"
     assert not (tmp_path / "20260611.log.20260612.log").exists()
+
+
+# ── _replace_current_link: atomic current.log symlink swap ─────────────
+
+
+def test_replace_current_link_creates_and_replaces(tmp_path):
+    from core.logging_config import _replace_current_link
+
+    link = tmp_path / "current.log"
+    (tmp_path / "a.log").write_text("a")
+    (tmp_path / "b.log").write_text("b")
+
+    _replace_current_link(link, "a.log")
+    assert link.is_symlink() and link.readlink().name == "a.log"
+
+    # Replacing an existing link must succeed without an unlink window.
+    _replace_current_link(link, "b.log")
+    assert link.is_symlink() and link.readlink().name == "b.log"
+    # No temp files left behind.
+    assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".current")] == []
+
+
+def test_replace_current_link_concurrent_calls(tmp_path):
+    """Two racing swaps both succeed and leave a valid link (regression:
+    unlink+symlink_to crashed task-runner startups with FileNotFoundError)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from core.logging_config import _replace_current_link
+
+    link = tmp_path / "current.log"
+    (tmp_path / "x.log").write_text("x")
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda _: _replace_current_link(link, "x.log"), range(200)))
+    assert link.is_symlink() and link.readlink().name == "x.log"
