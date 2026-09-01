@@ -425,6 +425,23 @@ class PermissionsMixin:
                 )
                 return _error_result("PermissionDenied", reason)
 
+        # Layer 2.6: Recursive searches over the runtime data tree — same guard
+        # as the codex PreToolUse hook. Broad grep/find over ~/.animaworks
+        # (activity_log is >1GB per anima) saturates disk IO fleet-wide
+        # (2026-09-01 storm); non-codex engines bypass the hook, so enforce here.
+        from core.tooling.codex_command_hook import check_recursive_search
+
+        search_reason = check_recursive_search(
+            command, self._anima_dir, self._anima_dir.resolve().parent.parent
+        )
+        if search_reason:
+            logger.warning(
+                "permission_denied anima=%s command=%s reason=broad_recursive_search",
+                self._anima_name,
+                command[:80],
+            )
+            return _error_result("PermissionDenied", search_reason)
+
         # Layer 2.5: Per-anima denied commands from permissions config
         config = self._load_permissions_config()
         denied_items = config.commands.deny
