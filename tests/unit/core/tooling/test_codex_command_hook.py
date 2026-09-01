@@ -40,6 +40,9 @@ def _decide(anima_dir: Path, command: str, cwd: Path | None = None, global_permi
         # 2026-09-01: newline-separated compounds evaded the segment split
         "set -o pipefail\nprintf '%s\\n' '--- x ---'\ngrep -RniE 'abc' {data}/animas/natsume {data}/shared",
         "printf x\ngrep -R -n 5213 {data}/animas/natsume/state",
+        # 2026-09-01: command substitution hid the search behind an assignment token
+        "f=$(find {data}/animas/natsume {data}/companies/fs -path '*checklist*' -print -quit); echo $f",
+        "out=`grep -RIl foo {data}/shared`",
     ],
 )
 def test_recursive_search_over_data_tree_is_denied(anima_dir: Path, command: str) -> None:

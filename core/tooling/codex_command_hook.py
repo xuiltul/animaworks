@@ -20,7 +20,7 @@ import shlex
 import sys
 from pathlib import Path
 
-_SEGMENT_SPLIT = re.compile(r"\|(?!\|)|&&|\|\||;|\n")
+_SEGMENT_SPLIT = re.compile(r"\|(?!\|)|&&|\|\||;|\n|\$\(|`|<\(|\)")
 _GREP_FAMILY = {"grep", "egrep", "fgrep"}
 _ALWAYS_RECURSIVE = {"rg", "ag", "ack", "find", "fd", "fdfind", "du"}
 _GREP_RECURSIVE_FLAGS = {"--recursive", "--dereference-recursive"}
