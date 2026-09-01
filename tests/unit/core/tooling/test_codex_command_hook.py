@@ -37,6 +37,9 @@ def _decide(anima_dir: Path, command: str, cwd: Path | None = None, global_permi
         "find {data}/companies/fs/shared -type f -iname '*5119*'",
         "grep -n foo state/task_queue.jsonl && grep -RIl bar activity_log",
         "cd {data}/animas && grep -rn foo natsume",
+        # 2026-09-01: newline-separated compounds evaded the segment split
+        "set -o pipefail\nprintf '%s\\n' '--- x ---'\ngrep -RniE 'abc' {data}/animas/natsume {data}/shared",
+        "printf x\ngrep -R -n 5213 {data}/animas/natsume/state",
     ],
 )
 def test_recursive_search_over_data_tree_is_denied(anima_dir: Path, command: str) -> None:
