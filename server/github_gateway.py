@@ -33,6 +33,8 @@ STATE_FILENAME = "pr-review-dispatch-state.json"
 MAX_FAILED_REDISPATCHES = 2
 # Sweep interval for re-dispatching failed gh-ci tasks without a new push.
 CI_RETRY_INTERVAL_SEC = 600.0
+SYNTH_SWEEP_INTERVAL_SEC = 120.0
+_SLOW_SWEEP_EVERY_TICKS = int(CI_RETRY_INTERVAL_SEC / SYNTH_SWEEP_INTERVAL_SEC)
 REVIEW_SLO_THRESHOLD = timedelta(minutes=45)
 REVIEW_SLO_STATE_KEY = "review_slo_alerted"
 
@@ -533,24 +535,29 @@ class GitHubWebhookManager:
         )
 
     async def _ci_retry_loop(self) -> None:
+        # Synth dispatch runs every tick (2 min) so a finished model-pass pair
+        # waits minutes, not up to 10; the heavier sweeps keep the 10-min cadence.
+        tick = 0
         while True:
-            try:
-                await asyncio.to_thread(self.retry_failed_ci_tasks)
-            except Exception:
-                logger.exception("GitHub webhook CI retry sweep failed")
             try:
                 await asyncio.to_thread(self.sweep_multipass_synth)
             except Exception:
                 logger.exception("GitHub webhook multipass synth sweep failed")
-            try:
-                await asyncio.to_thread(self.check_review_slo)
-            except Exception:
-                logger.exception("GitHub webhook review SLO sweep failed")
-            try:
-                await asyncio.to_thread(reap_dead_commands)
-            except Exception:
-                logger.exception("dead command reaper sweep failed")
-            await asyncio.sleep(CI_RETRY_INTERVAL_SEC)
+            if tick % _SLOW_SWEEP_EVERY_TICKS == 0:
+                try:
+                    await asyncio.to_thread(self.retry_failed_ci_tasks)
+                except Exception:
+                    logger.exception("GitHub webhook CI retry sweep failed")
+                try:
+                    await asyncio.to_thread(self.check_review_slo)
+                except Exception:
+                    logger.exception("GitHub webhook review SLO sweep failed")
+                try:
+                    await asyncio.to_thread(reap_dead_commands)
+                except Exception:
+                    logger.exception("dead command reaper sweep failed")
+            tick += 1
+            await asyncio.sleep(SYNTH_SWEEP_INTERVAL_SEC)
 
     def sweep_multipass_synth(self) -> None:
         """Dispatch pending synthesis passes for completed multipass reviews.

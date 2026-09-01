@@ -241,7 +241,10 @@ class TestPullRequestDebounce:
         sleep_gates: list[asyncio.Event] = []
 
         async def controlled_sleep(_delay: float) -> None:
-            if _delay == github_gateway.CI_RETRY_INTERVAL_SEC:  # retry sweep, not a debounce
+            if _delay in (
+                github_gateway.CI_RETRY_INTERVAL_SEC,
+                github_gateway.SYNTH_SWEEP_INTERVAL_SEC,
+            ):  # retry sweep, not a debounce
                 await real_sleep(3600)
                 return
             gate = asyncio.Event()
