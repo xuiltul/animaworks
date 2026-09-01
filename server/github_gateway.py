@@ -38,6 +38,7 @@ _SLOW_SWEEP_EVERY_TICKS = int(CI_RETRY_INTERVAL_SEC / SYNTH_SWEEP_INTERVAL_SEC)
 REVIEW_SLO_THRESHOLD = timedelta(minutes=45)
 REVIEW_SLO_STATE_KEY = "review_slo_alerted"
 
+
 def _now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -395,7 +396,13 @@ class GitHubWebhookManager:
                     task_id=f"gh-cmd-{comment_id}",
                     summary=t("github_gateway.command_summary", repo=repo, number=number),
                     instruction=instruction,
-                    meta={"repo": repo, "number": number, "url": url, "kind": kind},
+                    meta={
+                        "repo": repo,
+                        "number": number,
+                        "url": url,
+                        "kind": kind,
+                        "priority_class": "directive",
+                    },
                 )
                 seen[dedupe_key] = _now_iso()
                 return
@@ -416,6 +423,7 @@ class GitHubWebhookManager:
                     "url": url,
                     "kind": kind,
                     "author": author,
+                    "priority_class": "directive",
                 },
             )
             content = (
@@ -642,7 +650,7 @@ class GitHubWebhookManager:
                 "--json",
                 "headRefOid,state",
                 "--jq",
-                "select(.state == \"OPEN\") | .headRefOid",
+                'select(.state == "OPEN") | .headRefOid',
             ]
         )
         return (out or "").strip()
@@ -656,9 +664,13 @@ class GitHubWebhookManager:
                 "--paginate",
                 "--jq",
                 (
-                    ".[] | select(.user.login == \"{}\" and .commit_id == \"{}\")"
-                    " | select(.state != \"PENDING\")"
-                ).format(self._config.reviewer_login, sha),
+                    '.[] | select(.user.login == "'
+                    f"{self._config.reviewer_login}"
+                    '" and .commit_id == "'
+                    f"{sha}"
+                    '")'
+                    ' | select(.state != "PENDING")'
+                ),
             ]
         )
         return bool(out and out.strip())

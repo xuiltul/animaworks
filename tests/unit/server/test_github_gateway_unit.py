@@ -392,6 +392,7 @@ class TestReviewAndCommentDispatch:
         assert task.call_args.kwargs["target"] == "natsume"
         assert task.call_args.kwargs["task_id"] == f"gh-comment-{dedupe_key.replace(':', '-')}"
         assert "Please fix this\nedge case." in task.call_args.kwargs["instruction"]
+        assert task.call_args.kwargs["meta"]["priority_class"] == "directive"
         state = json.loads(state_file.read_text(encoding="utf-8"))
         assert dedupe_key in state["seen_comments"]
 
@@ -413,6 +414,7 @@ class TestReviewAndCommentDispatch:
         assert body in kwargs["instruction"]
         assert f"{REPO}#17" in kwargs["instruction"]
         assert "force-push禁止" in kwargs["instruction"]
+        assert kwargs["meta"]["priority_class"] == "directive"
         state = json.loads(state_file.read_text(encoding="utf-8"))
         assert (
             f"{'review' if event == 'pull_request_review_comment' else 'issue'}-comment:101" in state["seen_comments"]

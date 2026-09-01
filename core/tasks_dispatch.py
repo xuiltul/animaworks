@@ -95,6 +95,59 @@ def _find_holder_task(manager: TaskQueueManager, exclusive_key: str, task_id: st
     return candidates[0].task_id
 
 
+def request_preemption(target_dir: Path, exclusive_key: str, preemptor_task_id: str) -> str | None:
+    """Ask the oldest in-progress task holding *exclusive_key* to yield.
+
+    Human directives should not sit behind a long-running serialized task on
+    the same PR.  When a directive task lands on a key that is already held by
+    another in-progress task, we record a preemption request on the holder's
+    queue meta.  The running executor observes ``preempt_requested_by`` during
+    its cancel polling, interrupts with a checkpoint, re-enqueues, and lets
+    the directive run first.
+
+    Preemption is best-effort: failures only log and fall back to the legacy
+    FIFO serialization.  Only ``in_progress`` holders are considered; pending
+    tasks that have not yet been claimed cannot be interrupted.
+
+    Returns the holder's task_id when a preemption was requested, else None.
+    """
+    try:
+        manager = TaskQueueManager(target_dir)
+        holders = [
+            task
+            for task in manager.list_tasks()
+            if task.task_id != preemptor_task_id
+            and task.status == "in_progress"
+            and (task.meta or {}).get("exclusive_key") == exclusive_key
+        ]
+        if not holders:
+            return None
+        holders.sort(key=lambda task: task.ts)
+        holder_id = holders[0].task_id
+        manager.update_meta(
+            holder_id,
+            {
+                "preempt_requested_by": preemptor_task_id,
+                "preempt_requested_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        logger.info(
+            "Preemption requested: holder=%s key=%s by=%s",
+            holder_id,
+            exclusive_key,
+            preemptor_task_id,
+        )
+        return holder_id
+    except Exception as exc:
+        logger.warning(
+            "Preemption request failed for key=%s by=%s: %s",
+            exclusive_key,
+            preemptor_task_id,
+            exc,
+        )
+        return None
+
+
 def _maybe_post_queue_ack(target_dir: Path, task_id: str, meta: dict) -> None:
     """Best-effort PR ack so the requester sees the task was received."""
     if not meta.get("exclusive_key"):
@@ -172,6 +225,12 @@ def dispatch_direct_task(
         return False
 
     _maybe_post_queue_ack(target_dir, task_id, task_meta)
+
+    # A human directive on a serialized PR key should not wait behind the
+    # long-running task currently holding that key.  Request preemption so
+    # the running task yields with a checkpoint and the directive runs first.
+    if (task_meta or {}).get("priority_class") == "directive" and exclusive_key:
+        request_preemption(target_dir, exclusive_key, task_id)
 
     task_desc = {
         "task_type": "llm",

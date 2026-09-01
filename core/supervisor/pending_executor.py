@@ -368,9 +368,38 @@ class PendingTaskExecutor:
         not_before = task_desc.get("continuation_not_before")
         if isinstance(not_before, (int, float)) and not isinstance(not_before, bool) and time.time() < not_before:
             return True
+        # A task that yielded to a directive preemptor stays deferred while that
+        # preemptor is pending/in_progress; once it is terminal or gone, claim.
+        yield_to = task_desc.get("yield_to")
+        if isinstance(yield_to, str) and yield_to.strip():
+            target = self._get_task_queue_entry(yield_to.strip())
+            if target is not None and target.status in ("pending", "in_progress"):
+                return True
         if task_id in self._active_task_ids:
             return True
         return (processing_dir / pending_path.name).exists()
+
+    def _order_pending_claims(self, paths: list[Path]) -> list[Path]:
+        """Order pending descriptors so human directives claim first.
+
+        Directive tasks (``priority_class == "directive"``) are processed before
+        non-directive tasks; within each group the original filename order is
+        preserved.  Unreadable descriptors are kept with the non-directive group
+        so the existing error handling in each scan loop processes them.
+        """
+        directive_paths: list[Path] = []
+        non_directive_paths: list[Path] = []
+        for path in paths:
+            try:
+                task_desc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                non_directive_paths.append(path)
+                continue
+            if isinstance(task_desc, dict) and (task_desc.get("priority_class") == "directive"):
+                directive_paths.append(path)
+            else:
+                non_directive_paths.append(path)
+        return directive_paths + non_directive_paths
 
     def _claim_processing_task(
         self,
@@ -544,8 +573,15 @@ class PendingTaskExecutor:
         stop_kind: str = "normal",
         *,
         waiting: bool = False,
+        preempted_by: str | None = None,
     ) -> None:
-        """Re-enqueue an undeclared task with enough context to resume safely."""
+        """Re-enqueue an undeclared task with enough context to resume safely.
+
+        When *preempted_by* is set, this is a directive-driven preemption eviction:
+        the running task yields to the named preemptor without consuming a
+        continuation, records ``yield_to`` / ``preempt_reenqueue_count`` on the
+        re-enqueued descriptor, and defers re-claim for 30 seconds.
+        """
         from core.memory._io import atomic_write_text
 
         task_id = str(task_desc.get("task_id") or "unknown")
@@ -555,8 +591,13 @@ class PendingTaskExecutor:
         waiting_count = task_desc.get("waiting_reenqueue_count", 0)
         if not isinstance(waiting_count, int) or isinstance(waiting_count, bool):
             waiting_count = 0
+        preempt_reenqueue_count = task_desc.get("preempt_reenqueue_count", 0)
+        if not isinstance(preempt_reenqueue_count, int) or isinstance(preempt_reenqueue_count, bool):
+            preempt_reenqueue_count = 0
         if waiting:
             waiting_count += 1
+        elif preempted_by:
+            preempt_reenqueue_count += 1
         else:
             continuation_count += 1
         records = []
@@ -569,19 +610,28 @@ class PendingTaskExecutor:
         record_text = "\n".join(records) or f"- {t('pending_executor.none_value')}"
         checkpoint = t(
             "pending_executor.continuation_checkpoint",
-            count=waiting_count if waiting else continuation_count,
-            stop_kind="waiting" if waiting else stop_kind,
+            count=preempt_reenqueue_count if preempted_by else (waiting_count if waiting else continuation_count),
+            stop_kind="preempted" if preempted_by else ("waiting" if waiting else stop_kind),
             output=accumulated_text[-2000:],
             records=record_text,
         )
         next_desc = dict(task_desc)
-        next_desc["continuation_count"] = continuation_count
-        if waiting:
+        if preempted_by:
+            next_desc["preempt_reenqueue_count"] = preempt_reenqueue_count
+            next_desc["yield_to"] = preempted_by
+        elif waiting:
+            next_desc["continuation_count"] = continuation_count
             next_desc["waiting_reenqueue_count"] = waiting_count
+        else:
+            next_desc["continuation_count"] = continuation_count
         backoff = (
-            _WAITING_REENQUEUE_DELAY_SECONDS
-            if waiting
-            else _CONTINUATION_BACKOFF_SECONDS.get(continuation_count, 600.0)
+            30.0
+            if preempted_by
+            else (
+                _WAITING_REENQUEUE_DELAY_SECONDS
+                if waiting
+                else _CONTINUATION_BACKOFF_SECONDS.get(continuation_count, 600.0)
+            )
         )
         if backoff > 0:
             next_desc["continuation_not_before"] = time.time() + backoff
@@ -606,9 +656,13 @@ class PendingTaskExecutor:
                     {"completed_by": None, "result_note": None},
                 )
             summary = (
-                "background work waiting; automatic recheck scheduled"
-                if waiting
-                else "automatic continuation scheduled"
+                f"preempted by {preempted_by}; checkpoint re-enqueued"
+                if preempted_by
+                else (
+                    "background work waiting; automatic recheck scheduled"
+                    if waiting
+                    else "automatic continuation scheduled"
+                )
             )
             self._sync_task_queue(task_id, "in_progress", summary=summary)
         if backoff <= 0:
@@ -1475,8 +1529,8 @@ class PendingTaskExecutor:
             try:
                 await self._run_recovery_scan_if_due()
 
-                # Process command-type pending tasks
-                for path in sorted(pending_dir.glob("*.json")):
+                # Process command-type pending tasks, giving human directives priority.
+                for path in self._order_pending_claims(sorted(pending_dir.glob("*.json"))):
                     try:
                         task_desc = json.loads(path.read_text(encoding="utf-8"))
                     except json.JSONDecodeError:
@@ -1555,7 +1609,7 @@ class PendingTaskExecutor:
                     llm_failed_dir,
                 )
 
-                for path in sorted(llm_pending_dir.glob("*.json")):
+                for path in self._order_pending_claims(sorted(llm_pending_dir.glob("*.json"))):
                     try:
                         task_desc = json.loads(path.read_text(encoding="utf-8"))
                     except json.JSONDecodeError:
@@ -2304,6 +2358,7 @@ class PendingTaskExecutor:
         had_error = False
         error_message = ""
         stop_kind = "normal"
+        preempted_by: str | None = None
         cycle_error_category = ""
         try:
             if worker_slot is not None:
@@ -2352,6 +2407,50 @@ class PendingTaskExecutor:
                                     "[%s] Task %s cancelled in task_queue; interrupting", self._anima_name, task_id
                                 )
                                 interrupt_event.set()
+                            elif (
+                                _q is not None
+                                and _q.status == "in_progress"
+                                and isinstance(_q.meta, dict)
+                                and _q.meta.get("preempt_requested_by")
+                            ):
+                                # A human directive on the same exclusive key
+                                # requested this task to yield.  Honor it unless
+                                # the task has already yielded too many times.
+                                preempt_reenqueue_count = task_desc.get("preempt_reenqueue_count", 0)
+                                if (
+                                    isinstance(preempt_reenqueue_count, int)
+                                    and not isinstance(preempt_reenqueue_count, bool)
+                                    and preempt_reenqueue_count >= 5
+                                ):
+                                    from core.memory.task_queue import TaskQueueManager
+
+                                    try:
+                                        TaskQueueManager(self._anima_dir).update_meta(
+                                            task_id,
+                                            {"preempt_requested_by": None, "preempt_requested_at": None},
+                                        )
+                                    except Exception as exc:
+                                        logger.warning(
+                                            "[%s] Failed to clear preempt request for %s: %s",
+                                            self._anima_name,
+                                            task_id,
+                                            exc,
+                                        )
+                                    logger.warning(
+                                        "[%s] Task %s ignoring preemption by %s (limit reached)",
+                                        self._anima_name,
+                                        task_id,
+                                        _q.meta["preempt_requested_by"],
+                                    )
+                                else:
+                                    preempted_by = str(_q.meta["preempt_requested_by"])
+                                    logger.info(
+                                        "[%s] Task %s preempted by %s; interrupting",
+                                        self._anima_name,
+                                        task_id,
+                                        preempted_by,
+                                    )
+                                    interrupt_event.set()
                         chunk_type = chunk.get("type")
                         if chunk_type == "text_delta":
                             accumulated_text += chunk.get("text", "")
@@ -2436,6 +2535,36 @@ class PendingTaskExecutor:
             _q = self._get_task_queue_entry(task_id)
             if _q is not None and _q.status == "cancelled":
                 return _SENTINEL_CANCELLED
+            if preempted_by:
+                # Directive-driven preemption: yield with a checkpoint, do not
+                # consume a continuation, and clear the queue-side request.
+                self._reenqueue_with_checkpoint(
+                    task_desc,
+                    accumulated_text,
+                    tool_call_records,
+                    preempted_by=preempted_by,
+                )
+                try:
+                    from core.memory.task_queue import TaskQueueManager
+
+                    TaskQueueManager(self._anima_dir).update_meta(
+                        task_id,
+                        {"preempt_requested_by": None, "preempt_requested_at": None},
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[%s] Failed to clear preempt request after eviction for %s: %s",
+                        self._anima_name,
+                        task_id,
+                        exc,
+                    )
+                logger.info(
+                    "[%s] LLM task %s preempted by %s; checkpoint re-enqueued",
+                    self._anima_name,
+                    task_id,
+                    preempted_by,
+                )
+                return _SENTINEL_CONTINUED
 
         if stop_kind in {"interrupted", "runaway_halt", "empty_response", "hard_timeout"}:
             continuation_count = task_desc.get("continuation_count", 0)
