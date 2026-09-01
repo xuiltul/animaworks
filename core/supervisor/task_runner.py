@@ -43,6 +43,10 @@ _PROGRESS_INTERVAL_SECONDS = 5.0
 _RECONNECT_RETRY_SECONDS = 5.0
 _SUPPORTED_LANES = frozenset({"chat", "cron", "heartbeat", "task", "background"})
 
+# Total budget and per-try wait for retrying a backpressured terminal ack.
+_TERMINAL_ACK_TIMEOUT = 60.0
+_TERMINAL_ACK_RETRY_SLEEP_SECONDS = 2.0
+
 # Module-level registry of open StreamingJournal instances for grace flush.
 _ACTIVE_JOURNALS: list[Any] = []
 
@@ -564,12 +568,42 @@ async def _send_terminal(
     if receiver is not None:
         receiver.cancel()
         await asyncio.gather(receiver, return_exceptions=True)
-    ack_receiver = asyncio.create_task(connection.receive())
-    try:
-        await connection.wait_for_ack(terminal_seq)
-    finally:
-        ack_receiver.cancel()
-        await asyncio.gather(ack_receiver, return_exceptions=True)
+
+    # Wait for the ack with backpressure retries.  A stalled root event loop
+    # (e.g. disk saturation) can push ack delivery past the fixed backpressure
+    # timeout; retrying instead of dying lets the root catch up.  Ack progress
+    # is tracked on the shared connection state, so re-waiting is safe.  A
+    # lost socket is recovered the same way as the main send path above.
+    deadline = asyncio.get_running_loop().time() + _TERMINAL_ACK_TIMEOUT
+    while True:
+        ack_receiver = asyncio.create_task(connection.receive())
+        try:
+            await connection.wait_for_ack(terminal_seq)
+            break
+        except IPCV2BackpressureTimeout:
+            now = asyncio.get_running_loop().time()
+            if now >= deadline:
+                raise
+            logger.warning(
+                "terminal ack backpressured, retrying seq=%s",
+                terminal_seq,
+            )
+            await asyncio.sleep(
+                min(_TERMINAL_ACK_RETRY_SLEEP_SECONDS, deadline - now)
+            )
+        except IPCV2ConnectionError:
+            # Recover like the main send path: reconnect and resend.
+            await connection.close()
+            connection, replayed_run = await _connect(socket_path, state)
+            if replayed_run.body["request_id"] != request_id:
+                await connection.close()
+                raise
+            terminal_seq = await connection.send_response(
+                request_id, result=result, error=error
+            )
+        finally:
+            ack_receiver.cancel()
+            await asyncio.gather(ack_receiver, return_exceptions=True)
     return connection
 
 
@@ -874,6 +908,42 @@ def _setup_logging(anima_name: str) -> None:
     )
 
 
+def _cleanup_descendants() -> None:
+    """Reap leaked descendant processes that a dying runner would otherwise orphan.
+
+    External CLI tools (e.g. codex-linux-sandbox's per-tool sessions) may
+    outlive the runner that launched them, so on the way out we politely TERM
+    every descendant (letting it flush) and then KILL the stubborn ones.
+    """
+    try:
+        import psutil
+
+        children = psutil.Process().children(recursive=True)
+    except Exception:
+        return
+    if not children:
+        return
+    pid_count = len(children)
+    for child in children:
+        try:
+            child.terminate()
+        except psutil.Error:
+            pass
+    try:
+        _, alive = psutil.wait_procs(children, timeout=2.0)
+    except Exception:
+        alive = children
+    for child in alive:
+        try:
+            child.kill()
+        except psutil.Error:
+            pass
+    logger.warning(
+        "cleaned up leaked child processes: pid_count=%s",
+        pid_count,
+    )
+
+
 async def main() -> int:
     args = parse_args()
     socket_path, identity = _required_environment(args)
@@ -885,13 +955,18 @@ async def main() -> int:
         GlobalPermissionsCache.get().load(get_global_permissions_path(), interactive=False)
     except FileNotFoundError:
         logger.warning("permissions.global.json not found; global command checks disabled")
-    return await run_task(args, socket_path, identity)
+    try:
+        return await run_task(args, socket_path, identity)
+    finally:
+        _cleanup_descendants()
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(asyncio.run(main()))
     except Exception as exc:
+        # A runner that died mid-execution must not leave external tools orphaned.
+        _cleanup_descendants()
         # Full traceback: the bare message ("[Errno 2] ... current.log") has
         # proven undiagnosable without the raising frame.
         traceback.print_exc(file=sys.stderr)

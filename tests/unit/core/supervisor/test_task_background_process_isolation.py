@@ -86,7 +86,7 @@ def _executor(
     return executor, anima, anima_dir
 
 
-def test_isolated_task_journal_recovery_attaches_checkpoint_before_delete(tmp_path: Path) -> None:
+async def test_isolated_task_journal_recovery_attaches_checkpoint_before_delete(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "sakura"
     anima_dir.mkdir(parents=True)
     journal = StreamingJournal(anima_dir, session_type="task", thread_id="task-1")
@@ -102,7 +102,7 @@ def test_isolated_task_journal_recovery_attaches_checkpoint_before_delete(tmp_pa
         busy_status_owner=owner,
     )
 
-    supervisor._recover_task_journals(("task",))
+    await supervisor._recover_task_journals(("task",))
 
     pending_executor.add_recovered_task_checkpoint.assert_called_once_with(
         "task-1",
