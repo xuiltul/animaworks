@@ -9,9 +9,11 @@ from __future__ import annotations
 import asyncio
 import fcntl  # noqa: F401  # Backward-compatible module attribute for lock tests.
 import logging
+import os
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,7 @@ from core.i18n import t
 from core.memory.task_queue import TaskQueueManager
 from core.messenger import Messenger
 from core.paths import get_animas_dir, get_shared_dir
+from core.supervisor.dead_command_reaper import reap_dead_commands
 from core.tasks_dispatch import FAILING_CI_CONCLUSIONS, dispatch_direct_task
 
 logger = logging.getLogger("animaworks.github_gateway")
@@ -30,10 +33,37 @@ STATE_FILENAME = "pr-review-dispatch-state.json"
 MAX_FAILED_REDISPATCHES = 2
 # Sweep interval for re-dispatching failed gh-ci tasks without a new push.
 CI_RETRY_INTERVAL_SEC = 600.0
-
+REVIEW_SLO_THRESHOLD = timedelta(minutes=45)
+REVIEW_SLO_STATE_KEY = "review_slo_alerted"
 
 def _now_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _iso_to_utc(value: str | None) -> datetime | None:
+    """Parse an ISO-8601 UTC timestamp (with or without trailing Z) to a UTC datetime."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+" + "00:00")).astimezone(UTC)
+    except (ValueError, TypeError):
+        return None
+
+
+def gh(args: list[str]) -> str:
+    """Run the GitHub CLI; returns stdout (empty string on failure)."""
+    env = dict(os.environ)
+    proc = subprocess.run(
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=env,
+    )
+    if proc.returncode != 0:
+        logger.warning("gh %s failed: %s", " ".join(args[:3]), proc.stderr.strip()[:300])
+        return ""
+    return proc.stdout
 
 
 def _default_state() -> dict[str, Any]:
@@ -512,6 +542,14 @@ class GitHubWebhookManager:
                 await asyncio.to_thread(self.sweep_multipass_synth)
             except Exception:
                 logger.exception("GitHub webhook multipass synth sweep failed")
+            try:
+                await asyncio.to_thread(self.check_review_slo)
+            except Exception:
+                logger.exception("GitHub webhook review SLO sweep failed")
+            try:
+                await asyncio.to_thread(reap_dead_commands)
+            except Exception:
+                logger.exception("dead command reaper sweep failed")
             await asyncio.sleep(CI_RETRY_INTERVAL_SEC)
 
     def sweep_multipass_synth(self) -> None:
@@ -532,6 +570,128 @@ class GitHubWebhookManager:
                 dispatch=dispatch_direct_task,
                 logger=logger.info,
             )
+
+    def _slo_candidate_green_key(self, key: str, sha: str) -> str | None:
+        return f"{key}_{sha[:8]}"
+
+    def check_review_slo(self) -> list[dict[str, Any]]:
+        """Escalate PRs reviewed (CI green) more than REVIEW_SLO_THRESHOLD ago.
+
+        A PR passed the review beacon (``ci_green_notified``) but the reviewer
+        has still not posted on the current head within the SLO window.  For
+        each such PR we (a) re-dispatch the multipass review if no pass is in
+        flight for that head and (b) dispatch an investigation task to the
+        dispatcher anima.  GitHub API calls are limited to PRs that are green-
+        notified, past the window, and not yet alerted (no per-sweep sweep of
+        every open PR).  Alerts are deduplicated per PR+sha via the state key
+        ``review_slo_alerted``.
+        """
+        if not self._require_state_file().is_file():
+            return []
+        now = datetime.now(UTC)
+        alerted: list[dict[str, Any]] = []
+        with locked_dispatch_state(self._require_state_file()) as state:
+            prs = state.setdefault("prs", {})
+            green = state.setdefault("ci_green_notified", {})
+            slo_alerts = state.setdefault(REVIEW_SLO_STATE_KEY, {})
+            candidates: list[tuple[str, str]] = []
+            for key, entry in prs.items():
+                sha = str(entry.get("sha") or "")
+                notified_sha = str(entry.get("notified_sha") or "")
+                if not sha or notified_sha != sha:
+                    continue
+                green_key = self._slo_candidate_green_key(key, sha)
+                green_at = _iso_to_utc(green.get(green_key))
+                if green_at is None or (now - green_at) < REVIEW_SLO_THRESHOLD:
+                    continue
+                if slo_alerts.get(green_key):
+                    continue  # already alerted for this head; don't loop
+                candidates.append((key, sha))
+            # Only now (crime still possible within the window) hit GitHub.
+            for key, sha in candidates:
+                repo, _, number = key.partition("#")
+                if not repo or not number.isdigit():
+                    continue
+                current_sha = self._gh_current_head(repo, int(number))
+                if not current_sha or current_sha != sha:
+                    continue  # PR moved on; a fresher beacon will take over
+                if self._gh_has_review(repo, int(number), sha):
+                    continue  # reviewer already posted on this head
+                self._slo_dispatch(state, key, repo, int(number), sha)
+                slo_alerts[self._slo_candidate_green_key(key, sha)] = _now_iso()
+                logger.info("review SLO exceeded: %s sha=%s", key, sha[:8])
+                alerted.append({"key": key, "sha": sha})
+        return alerted
+
+    def _gh_current_head(self, repo: str, number: int) -> str:
+        """Return the current head SHA of an open PR, or '' (empty) on error."""
+        out = gh(
+            [
+                "pr",
+                "view",
+                str(number),
+                "--repo",
+                repo,
+                "--json",
+                "headRefOid,state",
+                "--jq",
+                "select(.state == \"OPEN\") | .headRefOid",
+            ]
+        )
+        return (out or "").strip()
+
+    def _gh_has_review(self, repo: str, number: int, sha: str) -> bool:
+        """True when animaworks-reviewer has posted a review on this head."""
+        out = gh(
+            [
+                "api",
+                f"repos/{repo}/pulls/{number}/reviews",
+                "--paginate",
+                "--jq",
+                (
+                    ".[] | select(.user.login == \"{}\" and .commit_id == \"{}\")"
+                    " | select(.state != \"PENDING\")"
+                ).format(self._config.reviewer_login, sha),
+            ]
+        )
+        return bool(out and out.strip())
+
+    def _slo_dispatch(self, state: dict, key: str, repo: str, number: int, sha: str) -> None:
+        """Re-dispatch the multipass review (if absent) and alert the dispatcher."""
+        models = list(getattr(self._config, "review_multipass_models", None) or [])
+        if models:
+            base_id = f"gh-ci-{repo.replace('/', '-')}#{number}-{sha[:8]}"
+            multipass = state.setdefault("multi_model_passes", {})
+            if base_id not in multipass:
+                entry = state["prs"].get(key) or {}
+                review_multipass.dispatch_multipass_reviews(
+                    state,
+                    [
+                        {
+                            "repo": repo,
+                            "number": number,
+                            "sha": sha,
+                            "title": str(entry.get("title") or f"PR #{number}"),
+                        }
+                    ],
+                    reviewer=self._config.reviewer_anima,
+                    models=models,
+                    quiet_seconds=self._config.quiet_seconds,
+                    dispatch=dispatch_direct_task,
+                )
+        dispatch_direct_task(
+            target=self._config.dispatcher_anima,
+            task_id=f"gh-slo-{repo.replace('/', '-')}#{number}-{sha[:8]}",
+            summary=t("github_gateway.review_slo_summary", repo=repo, number=number),
+            instruction=t(
+                "github_gateway.review_slo_task",
+                repo=repo,
+                number=number,
+                sha=sha,
+                url=f"https://github.com/{repo}/pull/{number}",
+            ),
+            meta={"repo": repo, "number": number, "sha": sha, "kind": "review-slo"},
+        )
 
     def retry_failed_ci_tasks(self) -> int:
         """Re-dispatch failed gh-ci tasks for PRs still sitting on the failing head.

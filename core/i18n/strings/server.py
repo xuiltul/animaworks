@@ -274,6 +274,22 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
     },
     "github_gateway.unknown_verdict": {"ja": "判定不明", "en": "Unknown verdict"},
+    "github_gateway.review_slo_summary": {
+        "ja": "PRレビューSLO超過調査 {repo}#{number}",
+        "en": "PR review SLO exceeded investigation {repo}#{number}",
+    },
+    "github_gateway.review_slo_task": {
+        "ja": (
+            "PR {repo}#{number}（head {sha}）がレビューSLOを超過した（CI greenから45分経過しても"
+            "レビュー未投稿）。原因を調査し復旧させよ。\nURL: {url}\n\n"
+            "トリアージし、必要なら滞っているレビューの再ディスパッチや担当レビュアーへの連絡を行ってください。"
+        ),
+        "en": (
+            "PR {repo}#{number} (head {sha}) exceeded the review SLO (no review posted within 45 min of CI "
+            "turning green). Investigate the cause and restore service.\nURL: {url}\n\n"
+            "Triage and, if needed, re-dispatch the stalled review or contact the assigned reviewer."
+        ),
+    },
     "github_gateway.frc_result": {
         "ja": (
             "【FRC結果検知】\n\n"
