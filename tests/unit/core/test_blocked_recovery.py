@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from core._anima_heartbeat import HeartbeatMixin
-from core.blocked_recovery import revalidate_blocked_tasks
+from core.blocked_recovery import regenerate_pending_json, revalidate_blocked_tasks
 from core.config.schemas import BackgroundTaskConfig
 from core.memory.task_queue import TaskQueueManager
 
@@ -21,6 +21,8 @@ def _no_ssh_dropin_tmpfs():
     # otherwise leak into the exact-argv assertions below.
     with patch("core.file_access_policy.foreign_owned_ssh_config_dirs", return_value=[]):
         yield
+
+
 from core.time_utils import now_local
 
 
@@ -553,3 +555,22 @@ def test_recovery_can_be_disabled(tmp_path: Path) -> None:
     current = manager.get_task_by_id("disabled")
     assert current is not None
     assert current.status == "blocked"
+
+
+def test_regenerate_pending_json_restores_exclusive_key(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "natsume"
+    (anima_dir / "state" / "pending").mkdir(parents=True)
+    manager = TaskQueueManager(anima_dir)
+    manager.add_task(
+        source="anima",
+        original_instruction="fix PR",
+        assignee="natsume",
+        summary="fix PR",
+        task_id="regen-1",
+        meta={"exclusive_key": "pr-5008"},
+    )
+    entry = manager.get_task_by_id("regen-1")
+    assert entry is not None
+    assert regenerate_pending_json(anima_dir, "natsume", entry)
+    task_desc = json.loads((anima_dir / "state" / "pending" / "regen-1.json").read_text())
+    assert task_desc["exclusive_key"] == "pr-5008"
