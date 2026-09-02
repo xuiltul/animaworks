@@ -432,17 +432,21 @@ class PendingTaskExecutor:
                 parts.append(t("pending_executor.dep_result_header", dep_id=dep_id) + f"\n{result}")
         return "\n\n".join(parts)
 
-    def _record_run_ended(self, task_id: str, stop_kind: str) -> None:
-        """Stamp when and how the last run of a task ended, for its owner."""
+    def _record_run_ended(self, task_id: str, stop_kind: str, note: str | None = None) -> None:
+        """Stamp when and how the last run of a task ended, for its owner.
+
+        The task's summary (its title) is left alone: an error string in the
+        summary made the owner's pending list unreadable.
+        """
         if not task_id:
             return
         try:
             from core.memory.task_queue import TaskQueueManager
 
-            TaskQueueManager(self._anima_dir).update_meta(
-                task_id,
-                {"last_run_ended_at": now_iso(), "last_run_stop_kind": stop_kind},
-            )
+            patch: dict[str, Any] = {"last_run_ended_at": now_iso(), "last_run_stop_kind": stop_kind}
+            if note:
+                patch["last_run_note"] = note[:300]
+            TaskQueueManager(self._anima_dir).update_meta(task_id, patch)
         except Exception:
             logger.warning(
                 "[%s] Failed to record run end for task %s",
@@ -467,8 +471,8 @@ class PendingTaskExecutor:
         if entry is not None and entry.status == "cancelled":
             return
         self._save_task_result(task_id, reason)
-        self._record_run_ended(task_id, stop_kind)
-        self._sync_task_queue(task_id, "pending", summary=reason)
+        self._record_run_ended(task_id, stop_kind, note=reason)
+        self._sync_task_queue(task_id, "pending")
 
         reply_to = task_desc.get("reply_to")
         if isinstance(reply_to, dict):

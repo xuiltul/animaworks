@@ -191,10 +191,10 @@ async def test_child_crash_returns_task_to_pending_and_root_continues(tmp_path: 
     assert record_end.call_args[0] == ("t-crash", "crash")
     sync.assert_called()
     assert sync.call_args[0][1] == "pending"
-    summary = str(sync.call_args.kwargs.get("summary") or sync.call_args[1].get("summary", ""))
-    assert "INTERRUPTED" in summary
-    # The original TaskRunnerError must survive into the summary (no flattening).
-    assert "exit=-9" in summary
+    note = str(record_end.call_args.kwargs.get("note", ""))
+    assert "INTERRUPTED" in note
+    # The original TaskRunnerError must survive into the run note (no flattening).
+    assert "exit=-9" in note
 
 
 @pytest.mark.asyncio

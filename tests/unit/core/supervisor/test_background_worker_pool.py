@@ -329,7 +329,7 @@ async def test_cancelled_claim_syncs_layer2_task_queue_to_failed(tmp_path: Path)
 
     entry = queue.get_task_by_id(task_id)
     assert entry.status == "pending"
-    assert entry.summary == (
+    assert entry.meta["last_run_note"] == (
         "INTERRUPTED: the run was cancelled outside shutdown and may have "
         "PARTIALLY EXECUTED. Verify the actual state before running it again."
     )

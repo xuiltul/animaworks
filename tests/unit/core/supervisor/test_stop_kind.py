@@ -183,7 +183,9 @@ async def test_cancelled_batch_result_does_not_start_dependent(tmp_path: Path) -
     child = manager.get_task_by_id("child")
     assert child is not None
     assert child.status == "pending"
-    assert child.summary == "a task this one depends on did not complete"
+    assert child.summary == "stop kind test"  # title survives; the reason goes to meta
+    assert child.meta["last_run_note"] == "a task this one depends on did not complete"
+    assert child.meta["last_run_stop_kind"] == "dependency"
 
 
 @pytest.mark.asyncio
@@ -221,5 +223,5 @@ async def test_stream_error_is_not_suppressed_without_declaration(tmp_path: Path
     entry = manager.get_task_by_id("stream-error")
     assert entry is not None
     assert entry.status == "pending"
-    assert "streaming error" in entry.summary
+    assert "streaming error" in entry.meta["last_run_note"]
     assert entry.meta["last_run_stop_kind"] == "crash"
