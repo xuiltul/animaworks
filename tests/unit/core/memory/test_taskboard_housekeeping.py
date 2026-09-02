@@ -34,7 +34,7 @@ def _write_json(path: Path, payload: dict[str, object], *, age_hours: int = 0) -
     return path
 
 
-def test_stale_processing_moves_to_failed_syncs_queue_and_appends_event(tmp_path: Path) -> None:
+def test_stale_processing_moves_to_failed_dir_and_requeues_to_pending(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = _anima_dir(data_dir)
     queue = TaskQueueManager(anima_dir)
@@ -61,8 +61,10 @@ def test_stale_processing_moves_to_failed_syncs_queue_and_appends_event(tmp_path
 
     task = queue.get_task_by_id("task-processing")
     assert task is not None
-    assert task.status == "failed"
-    assert task.summary == "FAILED: stale processing task recovered by housekeeping"
+    # "failed" was retired (A1 task-model teardown): a stale processing task
+    # is requeued to pending, not parked as failed.
+    assert task.status == "pending"
+    assert task.summary == "auto-recovered: stale processing task requeued by housekeeping"
 
     events = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3").list_events(
         anima_name="sakura",
@@ -129,7 +131,8 @@ def test_stale_processing_with_dead_lease_is_recovered(tmp_path: Path) -> None:
     assert failed.exists()
     assert not processing_lease_path(processing).exists()
     assert processing_lease_path(failed).exists()
-    assert queue.get_task_by_id("dead-processing").status == "failed"
+    # "failed" was retired (A1 task-model teardown): requeued to pending.
+    assert queue.get_task_by_id("dead-processing").status == "pending"
 
 
 def test_unreadable_processing_file_is_moved_without_queue_sync(tmp_path: Path) -> None:

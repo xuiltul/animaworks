@@ -113,7 +113,6 @@ def test_human_task_defers_continuation(tmp_path: Path, monkeypatch) -> None:
         original_instruction="urgent user task",
         assignee="alice",
         summary="urgent",
-        deadline="1h",
     )
 
     result = manager.enqueue_continuation(
@@ -339,11 +338,7 @@ async def test_goal_judge_background_model_call_is_narrow_and_parseable(tmp_path
     async def fake_acompletion(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"verdict":"done","reason":"tests pass"}')
-                )
-            ]
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"verdict":"done","reason":"tests pass"}'))]
         )
 
     monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=fake_acompletion))

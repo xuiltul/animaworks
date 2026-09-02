@@ -38,12 +38,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "担当者名（自分自身または委任先のAnima名）",
         "en": "Assignee name (yourself or the delegated Anima name)",
     },
-    "schema.backlog_task.deadline": {
-        "ja": "期限（必須）。相対形式 '15m','30m','1h' またはISO8601。例: '30m' = 30分後。値は例、作業量から決める",
-        "en": (
-            "Deadline (required). Relative format '15m','30m','1h' or ISO8601. Example: '30m' = 30 minutes from now. The value is an example; decide based on the workload"
-        ),
-    },
     "schema.backlog_task.desc": {
         "ja": (
             "タスクキューに新しいタスクを追加する。人間からの指示は必ず source='human' で記録すること。Anima間の委任は source='anima' で記録する。"
@@ -162,10 +156,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "templates/ に配置するファイル群（任意）",
         "en": "Files to place in templates/ (optional)",
     },
-    "schema.delegate_task.deadline": {
-        "ja": "期限（相対形式: '15m', '30m', '1h' または ISO8601）",
-        "en": "Deadline (relative format: '15m', '30m', '1h' or ISO8601)",
-    },
     "schema.delegate_task.desc": {
         "ja": (
             "【重要】直属部下のAnimaにタスクを委譲する（部下のTaskExecが実行する。あなた自身は実行しない）。"
@@ -247,17 +237,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "登録aliasを使う（例: aischreiber）。ディレクトリ名表記(AI-Schreiber)も正規化で受理される。ワークスペースエイリアスまたはalias#hash。部下がこのディレクトリで作業する",
         "en": "Use a registered alias (e.g. aischreiber). Directory-style names (AI-Schreiber) are also accepted via normalization. Workspace alias or alias#hash. The subordinate will work in this directory",
     },
-    "schema.delegate_task.exclusive_key": {
-        "ja": "同時実行を避けたいタスク群で共有する排他キー（例: pr-3999）。同一キーのタスクは直列実行される。省略時は排他なし",
-        "en": (
-            "An exclusion key shared by tasks that must not run concurrently (e.g. pr-3999). "
-            "Tasks with the same key run serially. Omit for no exclusion"
-        ),
-        "ko": (
-            "동시 실행을 피해야 하는 태스크 그룹이 공유하는 배타 키(예: pr-3999). "
-            "동일한 키의 태스크는 직렬 실행된다. 생략 시 배타 없음"
-        ),
-    },
     "schema.delegate_task.acceptance_criteria": {
         "ja": "検証可能な受入条件。部下の実行プロンプトに埋め込まれる",
         "en": "Verifiable acceptance criteria. Embedded in the subordinate's execution prompt",
@@ -305,10 +284,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.list_tasks.desc": {
         "ja": (
-            "タスクキューの一覧を取得する。デフォルトはアクティブタスク（pending/in_progress/blocked/delegated）のみ。statusで特定ステータスをフィルタ可能。"
+            "タスクキューの一覧を取得する。デフォルトはアクティブタスク（pending/in_progress/delegated）のみ。statusで特定ステータスをフィルタ可能。"
         ),
         "en": (
-            "List tasks in the task queue. Defaults to active tasks (pending/in_progress/blocked/delegated). Use status to filter by specific status."
+            "List tasks in the task queue. Defaults to active tasks (pending/in_progress/delegated). Use status to filter by specific status."
         ),
     },
     "schema.list_tasks.detail": {

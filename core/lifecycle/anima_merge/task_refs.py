@@ -22,7 +22,7 @@ from core.schemas import TaskEntry
 
 from .taskboard_refs import rewrite_taskboard, taskboard_ids
 
-_ACTIVE_STATUSES = frozenset({"pending", "in_progress", "blocked", "delegated"})
+_ACTIVE_STATUSES = frozenset({"pending", "in_progress", "delegated"})
 _NAME_FIELDS = frozenset(
     {
         "anima",

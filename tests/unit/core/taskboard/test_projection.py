@@ -43,7 +43,7 @@ def test_projection_replays_latest_status_and_skips_corrupt_lines(tmp_path: Path
 
 def test_projection_status_to_column_mapping(tmp_path: Path) -> None:
     manager = _queue(tmp_path, "sakura")
-    statuses = ["pending", "in_progress", "blocked", "delegated", "failed", "done", "cancelled"]
+    statuses = ["pending", "in_progress", "delegated", "done", "cancelled"]
 
     for status in statuses:
         task = manager.add_task(
@@ -67,7 +67,6 @@ def test_projection_status_to_column_mapping(tmp_path: Path) -> None:
     assert {status: by_status[status].column for status in statuses} == QUEUE_STATUS_TO_COLUMN
     for terminal_status in {"done", "cancelled"}:
         assert by_status[terminal_status].visibility == AttentionVisibility.ARCHIVED
-    assert by_status["failed"].visibility == AttentionVisibility.ACTIVE
 
 
 def test_metadata_column_overrides_board_only_without_mutating_queue_status(tmp_path: Path) -> None:
@@ -112,26 +111,6 @@ def test_terminal_tasks_are_archived_by_default_view(tmp_path: Path) -> None:
     projected = project_anima(manager.anima_dir, store, include_archived=True)
     assert projected[0].visibility == AttentionVisibility.ARCHIVED
     assert projected[0].column == BoardColumn.DONE
-
-
-def test_failed_tasks_stay_visible_for_review_by_default(tmp_path: Path) -> None:
-    manager = _queue(tmp_path, "sakura")
-    task = manager.add_task(
-        source="anima",
-        original_instruction="review failure",
-        assignee="sakura",
-        summary="review failure",
-        task_id="task-1",
-        status="in_progress",
-    )
-    manager.update_status(task.task_id, "failed")
-    store = TaskBoardStore(tmp_path / "taskboard.sqlite3")
-
-    projected = project_anima(manager.anima_dir, store)
-
-    assert len(projected) == 1
-    assert projected[0].visibility == AttentionVisibility.ACTIVE
-    assert projected[0].column == BoardColumn.REVIEW
 
 
 def test_missing_queue_metadata_is_hidden_unless_requested(tmp_path: Path) -> None:

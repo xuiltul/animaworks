@@ -83,18 +83,9 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "### Tool List",
     },
     "schema.update_task.desc": {
-        "ja": (
-            "タスクのステータスを更新する。完了時は status='done'、中断時は status='cancelled' に設定する。"
-            "blocked宣言時は可能な限り unblock_check を添える。"
-        ),
-        "en": (
-            "Update a task's status. Set status='done' on completion, status='cancelled' on abort. "
-            "When declaring blocked, include unblock_check whenever possible."
-        ),
-        "ko": (
-            "작업 상태를 업데이트한다. 완료 시 status='done', 중단 시 status='cancelled'로 설정한다. "
-            "blocked 선언 시 가능하면 unblock_check를 첨부한다."
-        ),
+        "ja": ("タスクのステータスを更新する。完了時は status='done'、中断時は status='cancelled' に設定する。"),
+        "en": ("Update a task's status. Set status='done' on completion, status='cancelled' on abort."),
+        "ko": ("작업 상태를 업데이트한다. 완료 시 status='done', 중단 시 status='cancelled'로 설정한다."),
     },
     "schema.update_task.status": {
         "ja": "新しいステータス",
@@ -109,11 +100,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "完了時の成果要約（任意）",
         "en": "Completion result summary (optional)",
         "ko": "완료 결과 요약(선택 사항)",
-    },
-    "schema.update_task.unblock_check": {
-        "ja": "blockerが解消済みならexit 0で終了する読み取り検証専用シェルコマンド（blocked時、任意）",
-        "en": "Read-only verification shell command that exits 0 when the blocker is resolved (optional for blocked)",
-        "ko": "차단 원인이 해결되면 exit 0으로 종료하는 읽기 전용 검증 셸 명령(blocked 시 선택 사항)",
     },
     "schema.update_task.task_id": {
         "ja": "タスクID（backlog_task時に返されたID）",

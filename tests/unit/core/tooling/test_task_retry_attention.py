@@ -37,7 +37,9 @@ def test_update_task_pending_returns_task_suppressed_for_archived_task(tmp_path:
         task_id="archived1234",
         meta={"task_desc": {"title": "old work"}},
     )
-    queue.update_status(entry.task_id, "failed", summary="FAILED: old failure")
+    # "failed" was retired (A1 task-model teardown); "cancelled" is the
+    # closest still-valid terminal status for this archived-task scenario.
+    queue.update_status(entry.task_id, "cancelled", summary="cancelled: old failure")
     _store_for(handler).upsert_metadata(
         anima_name="sakura",
         task_id=entry.task_id,
@@ -49,7 +51,7 @@ def test_update_task_pending_returns_task_suppressed_for_archived_task(tmp_path:
     assert result["status"] == "error"
     assert result["error_type"] == "TaskSuppressed"
     assert not (handler._anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
-    assert TaskQueueManager(handler._anima_dir).get_task_by_id(entry.task_id).status == "failed"
+    assert TaskQueueManager(handler._anima_dir).get_task_by_id(entry.task_id).status == "cancelled"
 
 
 def test_update_task_pending_persists_retry_count(tmp_path: Path) -> None:

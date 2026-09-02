@@ -25,13 +25,11 @@ def _add_delegated(sup_tqm: TaskQueueManager, sub_tqm: TaskQueueManager, target:
         original_instruction="Do the work",
         assignee=target,
         summary="Review document",
-        deadline="1d",
     )
     sup_entry = sup_tqm.add_delegated_task(
         original_instruction="Do the work",
         assignee=target,
         summary="Delegated: Review document",
-        deadline="1d",
         meta={"delegated_to": target, "delegated_task_id": sub_entry.task_id},
     )
     return sup_entry.task_id, sub_entry.task_id
@@ -78,23 +76,13 @@ class TestSyncDelegated:
         assert "完了" in task.summary or "done" in task.summary
         assert (task.meta or {}).get("acceptance") == "legacy_unverified"
 
-    def test_subordinate_failed_syncs_to_failed(self, tmp_path):
-        animas_dir = _make_animas_dir(tmp_path)
-        sup_tqm = TaskQueueManager(animas_dir / "supervisor")
-        sub_tqm = TaskQueueManager(animas_dir / "subordinate")
+    # "failed" was retired (A1 task-model teardown): a subordinate task can no
+    # longer reach status="failed", so the old
+    # test_subordinate_failed_syncs_to_failed scenario no longer applies.
 
-        sup_id, sub_id = _add_delegated(sup_tqm, sub_tqm, "subordinate")
-        sub_tqm.update_status(sub_id, "failed", summary="Error occurred")
-
-        synced = sup_tqm.sync_delegated(animas_dir)
-
-        assert synced == 1
-        task = sup_tqm.get_task_by_id(sup_id)
-        assert task is not None
-        assert task.status == "failed"
-        assert "再委任" in task.summary or "re-delegation" in task.summary
-
-    def test_subordinate_cancelled_syncs_to_failed(self, tmp_path):
+    def test_subordinate_cancelled_syncs_to_cancelled(self, tmp_path):
+        """A cancelled subordinate task closes the delegator's tracking entry
+        as cancelled too ("failed" was retired; see A1 task-model teardown)."""
         animas_dir = _make_animas_dir(tmp_path)
         sup_tqm = TaskQueueManager(animas_dir / "supervisor")
         sub_tqm = TaskQueueManager(animas_dir / "subordinate")
@@ -107,7 +95,7 @@ class TestSyncDelegated:
         assert synced == 1
         task = sup_tqm.get_task_by_id(sup_id)
         assert task is not None
-        assert task.status == "failed"
+        assert task.status == "cancelled"
         assert "キャンセル" in task.summary or "cancelled" in task.summary
 
     def test_subordinate_still_pending_no_sync(self, tmp_path):
@@ -131,7 +119,6 @@ class TestSyncDelegated:
             original_instruction="Do something",
             assignee="nonexistent",
             summary="Task for missing anima",
-            deadline="1d",
             meta={"delegated_to": "nonexistent", "delegated_task_id": "abc123"},
         )
 
@@ -164,7 +151,6 @@ class TestSyncDelegated:
             original_instruction="No meta",
             assignee="someone",
             summary="Missing meta fields",
-            deadline="1d",
             meta={},
         )
 
@@ -222,16 +208,18 @@ class TestFormatDelegatedForPriming:
         result = sup_tqm.format_delegated_for_priming(animas_dir)
         assert "✅" in result
 
-    def test_delegated_with_failed_subordinate(self, tmp_path):
+    def test_delegated_with_cancelled_subordinate(self, tmp_path):
+        """ "failed" was retired (A1 task-model teardown); the icon map only
+        covers done/cancelled now."""
         animas_dir = _make_animas_dir(tmp_path)
         sup_tqm = TaskQueueManager(animas_dir / "supervisor")
         sub_tqm = TaskQueueManager(animas_dir / "subordinate")
 
         _sup_id, sub_id = _add_delegated(sup_tqm, sub_tqm, "subordinate")
-        sub_tqm.update_status(sub_id, "failed")
+        sub_tqm.update_status(sub_id, "cancelled")
 
         result = sup_tqm.format_delegated_for_priming(animas_dir)
-        assert "❌" in result
+        assert "🚫" in result
 
     def test_capped_at_five(self, tmp_path):
         animas_dir = _make_animas_dir(tmp_path)

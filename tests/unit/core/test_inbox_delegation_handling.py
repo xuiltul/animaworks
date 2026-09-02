@@ -192,7 +192,9 @@ class TestCheckTaskState:
         queue_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
         assert _check_task_state(anima_dir, "abc123def456") == "terminal"
 
-    def test_terminal_failed(self, tmp_path: Path) -> None:
+    def test_legacy_failed_row_is_not_terminal(self, tmp_path: Path) -> None:
+        """ "failed" was retired (A1 task-model teardown): a legacy jsonl row
+        with status="failed" reads back as pending, not terminal."""
         anima_dir = _setup_anima_dir(tmp_path)
         queue_path = anima_dir / "state" / "task_queue.jsonl"
         entry = {
@@ -206,7 +208,7 @@ class TestCheckTaskState:
             "updated_at": "2026-03-19T00:00:00",
         }
         queue_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
-        assert _check_task_state(anima_dir, "abc123def456") == "terminal"
+        assert _check_task_state(anima_dir, "abc123def456") == "missing"
 
     def test_missing(self, tmp_path: Path) -> None:
         anima_dir = _setup_anima_dir(tmp_path)

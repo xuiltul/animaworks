@@ -103,8 +103,6 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Implement the login form",
                     "summary": "Login form implementation",
-                    "deadline": "1d",
-                    "exclusive_key": "pr-3999",
                 },
             )
 
@@ -119,7 +117,7 @@ class TestDelegateTaskWritesPending:
         assert task_data["submitted_by"] == "boss"
         assert task_data["reply_to"] == "boss"
         assert task_data["source"] == "delegation"
-        assert task_data["exclusive_key"] == "pr-3999"
+        assert "exclusive_key" not in task_data
         assert "task_id" in task_data
         assert "submitted_at" in task_data
 
@@ -138,7 +136,6 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Do something",
                     "summary": "Task summary",
-                    "deadline": "2h",
                 },
             )
 
@@ -166,7 +163,6 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Test instruction",
                     "summary": "Test summary",
-                    "deadline": "30m",
                 },
             )
 
@@ -203,7 +199,6 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Ship the fix",
                     "summary": "Ship fix",
-                    "deadline": "1h",
                     "acceptance_criteria": criteria,
                 },
             )
@@ -229,7 +224,6 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Do something",
                     "summary": "Task",
-                    "deadline": "1h",
                 },
             )
 
@@ -255,7 +249,6 @@ class TestPendingExecutorCancelledCheck:
             original_instruction="test task",
             assignee="anima",
             summary="test",
-            deadline="1d",
         )
         tqm.update_status(entry.task_id, status="cancelled")
 

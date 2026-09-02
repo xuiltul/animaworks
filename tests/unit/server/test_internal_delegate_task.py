@@ -84,9 +84,7 @@ class TestInternalDelegateTask:
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        with patch(
-            "core.tooling.handler_delegation._record_taskboard_delegation"
-        ):
+        with patch("core.tooling.handler_delegation._record_taskboard_delegation"):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
                     "/api/internal/delegate-task",
@@ -108,17 +106,13 @@ class TestInternalDelegateTask:
         assert pending_data["model"] == "c:codex/gpt-5.6-sol"
 
     @pytest.mark.anyio
-    async def test_success_writes_queues_and_pending(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_success_writes_queues_and_pending(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        with patch(
-            "core.tooling.handler_delegation._record_taskboard_delegation"
-        ) as mock_tb:
+        with patch("core.tooling.handler_delegation._record_taskboard_delegation") as mock_tb:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
                     "/api/internal/delegate-task",
@@ -190,9 +184,7 @@ class TestInternalDelegateTask:
         assert pending.exists()
 
     @pytest.mark.anyio
-    async def test_invalid_anima_name_returns_400(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_invalid_anima_name_returns_400(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
@@ -208,9 +200,7 @@ class TestInternalDelegateTask:
         assert "Invalid anima name" in resp.json()["detail"]
 
     @pytest.mark.anyio
-    async def test_missing_target_dir_returns_404(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_target_dir_returns_404(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         # remove target
         import shutil
@@ -252,27 +242,28 @@ class TestInternalDelegateTask:
         assert pending_data["acceptance_criteria"] == criteria
 
     @pytest.mark.anyio
-    async def test_invalid_deadline_returns_422(
+    async def test_invalid_deadline_is_accepted_and_ignored(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """deadline was retired (A1 task-model teardown): the field is still
+        accepted for external-client compat but never validated or persisted."""
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(
-                "/api/internal/delegate-task",
-                json=_base_payload(deadline="not-a-deadline"),
-            )
+        with patch("core.tooling.handler_delegation._record_taskboard_delegation"):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/internal/delegate-task",
+                    json=_base_payload(deadline="not-a-deadline"),
+                )
 
-        assert resp.status_code == 422
-        assert "deadline" in resp.json()["detail"].lower() or "Invalid" in resp.json()["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
 
     @pytest.mark.anyio
-    async def test_cross_company_returns_403(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_cross_company_returns_403(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(
             tmp_path,
             delegator_company="alpha",

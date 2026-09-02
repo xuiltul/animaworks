@@ -542,7 +542,10 @@ class TestMigrationSteps:
         environment = (prompts_dir / "environment.md").read_text(encoding="utf-8")
         assert "Glob" not in behavior_rules
         assert "検索ツール" in behavior_rules
-        assert "タスク期限" in environment
+        # Task deadlines were torn out of environment.md (A1 task-model teardown);
+        # resync should propagate the current template, not the retired section.
+        assert "タスク期限" not in environment
+        assert "行動の基本原則" in environment
         assert "AI-speed" not in environment
         assert not (prompts_dir / "task_delegation_rules.md").exists(), (
             "stale prompts/task_delegation_rules.md should be removed"

@@ -14,9 +14,7 @@ from core.taskboard.store import TaskBoardStore
 QUEUE_STATUS_TO_COLUMN: dict[str, BoardColumn] = {
     "pending": BoardColumn.TODO,
     "in_progress": BoardColumn.RUNNING,
-    "blocked": BoardColumn.BLOCKED,
     "delegated": BoardColumn.WAITING,
-    "failed": BoardColumn.REVIEW,
     "done": BoardColumn.DONE,
     "cancelled": BoardColumn.DONE,
 }
@@ -164,7 +162,6 @@ def _project_queue_task(
         assignee=task.assignee,
         queue_status=task.status,
         summary=task.summary,
-        deadline=task.deadline,
         relay_chain=task.relay_chain,
         meta=task.meta,
         queue_updated_at=task.updated_at,

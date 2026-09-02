@@ -60,7 +60,7 @@ _THREAD_CTX_BUDGET = 300
 _MSG_BODY_BUDGET = 2000
 _MAX_INBOX_RETRIES = 3
 _INBOX_THREAD_ID = "inbox"
-_RESCUE_QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "blocked", "delegated"}
+_RESCUE_QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "delegated"}
 _RESCUE_QUEUE_CANCEL_REASONS = {"expired", "archived", "tombstoned"}
 
 
@@ -254,7 +254,10 @@ def _check_task_state(anima_dir: Path, task_id: str) -> str:
 
         tqm = TaskQueueManager(anima_dir)
         entry = tqm.get_task_by_id(task_id)
-        if entry and entry.status in ("done", "failed", "cancelled"):
+        # "failed" was retired (A1 task-model teardown): a legacy failed row
+        # now reads back as "pending" via TaskQueueManager, so it is no
+        # longer terminal here either.
+        if entry and entry.status in ("done", "cancelled"):
             return "terminal"
     except Exception:
         logger.debug("Failed to check task_queue for %s", task_id, exc_info=True)

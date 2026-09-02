@@ -451,10 +451,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "(auto: TaskExec)",
         "en": "(auto: TaskExec)",
     },
-    "task_queue.deadline_by": {
-        "ja": "📅 {time}まで",
-        "en": "📅 By {time}",
-    },
     "task_queue.elapsed_hours": {
         "ja": "⏱️ {hours}時間経過",
         "en": "⏱️ {hours}h elapsed",
@@ -467,31 +463,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "⏱️ {minutes}分経過",
         "en": "⏱️ {minutes}m elapsed",
     },
-    "task_queue.failed_line": {
-        "ja": "- [{task_id}] {summary}",
-        "en": "- [{task_id}] {summary}",
-    },
-    "task_queue.failed_section_header": {
-        "ja": ("\n❌ Failed (要対処):"),
-        "en": ("\n❌ Failed (action required):"),
-    },
-    "task_queue.overdue": {
-        "ja": "🔴 OVERDUE({time}期限)",
-        "en": "🔴 OVERDUE(deadline {time})",
-    },
-    "task_queue.overdue_aggregate": {
-        "ja": '🔴 OVERDUE集約（{count}件）: {summaries}\n  → list_tasks(status="pending") で詳細確認',
-        "en": '🔴 OVERDUE aggregate ({count}): {summaries}\n  → list_tasks(status="pending") for details',
-    },
     "task_queue.sync_done": {
         "ja": "{orig} (→{target}: 完了)",
         "en": "{orig} (→{target}: done)",
         "ko": "{orig} (→{target}: 완료)",
-    },
-    "task_queue.sync_failed": {
-        "ja": "{orig} (→{target}: 失敗 — 再委任を検討)",
-        "en": "{orig} (→{target}: failed — consider re-delegation)",
-        "ko": "{orig} (→{target}: 실패 — 재위임 검토)",
     },
     "task_queue.sync_cancelled": {
         "ja": "{orig} (→{target}: 部下タスクがキャンセルされた)",

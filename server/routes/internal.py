@@ -136,11 +136,11 @@ class DelegateTaskPersistRequest(BaseModel):
     target: str  # destination anima name
     instruction: str  # full delegation text
     summary: str
-    deadline: str  # relative ('30m','2h','1d') or ISO8601
+    deadline: str = ""  # retired; accepted for external client compat, ignored
     sub_task_id: str  # client-assigned 12hex id
     tracking_task_id: str  # client-assigned 12hex id
     workspace: str = ""  # resolve_workspace absolute path string
-    exclusive_key: str = ""  # optional task exclusion group
+    exclusive_key: str = ""  # retired; accepted for external client compat, ignored
     acceptance_criteria: list[str] = []  # verifiable acceptance criteria for pending JSON
     persist_sub: bool = True  # write to subordinate queue
     persist_tracking: bool = True  # write delegated entry on delegator queue
@@ -163,7 +163,7 @@ class InternalPostChannelRequest(BaseModel):
 class UpdateTaskPersistRequest(BaseModel):
     anima_name: str
     task_id: str
-    status: Literal["pending", "in_progress", "done", "cancelled", "blocked", "failed"]
+    status: Literal["pending", "in_progress", "done", "cancelled"]
     meta: dict[str, Any] = {}
     summary: str | None = None
 
@@ -682,7 +682,6 @@ def create_internal_router() -> APIRouter:
                     original_instruction=body.instruction,
                     assignee=body.target,
                     summary=body.summary,
-                    deadline=body.deadline,
                     relay_chain=[body.delegator],
                     task_id=body.sub_task_id,
                     meta={"model": body.model} if body.model else None,
@@ -692,7 +691,6 @@ def create_internal_router() -> APIRouter:
                     original_instruction=body.instruction,
                     assignee=body.target,
                     summary=t("handler.delegation_summary", summary=body.summary),
-                    deadline=body.deadline,
                     relay_chain=[body.delegator, body.target],
                     task_id=body.tracking_task_id,
                     meta={
@@ -716,7 +714,6 @@ def create_internal_router() -> APIRouter:
                     "reply_to": body.delegator,
                     "source": "delegation",
                     "working_directory": body.workspace,
-                    "exclusive_key": body.exclusive_key,
                     "model": body.model,
                 }
                 pending_dir = target_dir / "state" / "pending"

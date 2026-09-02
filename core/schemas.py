@@ -241,9 +241,8 @@ class TaskEntry(BaseModel):
     source: Literal["human", "anima"]
     original_instruction: str  # 原文（委任時は引用を含む）
     assignee: str  # 担当Anima名
-    status: str  # "pending" | "in_progress" | "done" | "cancelled" | "blocked" | "delegated"
+    status: str  # "pending" | "in_progress" | "delegated" | "done" | "cancelled"
     summary: str  # 1行要約
-    deadline: str | None = None  # ISO8601 期限（任意）
     relay_chain: list[str] = Field(default_factory=list)  # 委任経路
     updated_at: str  # ISO8601 最終更新日時
     meta: dict[str, Any] = Field(default_factory=dict)  # 追加メタデータ（委譲追跡等）

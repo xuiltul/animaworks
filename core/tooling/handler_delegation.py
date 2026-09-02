@@ -9,7 +9,6 @@ from __future__ import annotations
 import json as _json
 import logging
 import os
-import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,15 +19,6 @@ from core.i18n import t
 from core.memory._io import atomic_write_text
 from core.tooling.handler_base import _error_result, build_outgoing_origin_chain
 from core.tooling.org_helpers import OrgHelpersMixin
-
-_PR_REF = re.compile(r"(?:#|/pull/)(\d{2,7})\b")
-
-
-def _pr_key_from_text(text: str) -> str:
-    """Fallback ``pr-NNNN`` exclusion key from a PR reference in the task text."""
-    match = _PR_REF.search(text)
-    return f"pr-{match.group(1)}" if match else ""
-
 
 if TYPE_CHECKING:
     from core.memory.activity import ActivityLogger
@@ -91,11 +81,9 @@ class DelegationMixin(OrgHelpersMixin):
         target_name: str,
         instruction: str,
         summary: str,
-        deadline: str,
         sub_task_id: str,
         tracking_task_id: str,
         workspace: str,
-        exclusive_key: str,
         acceptance_criteria: list[str],
         persist_sub: bool,
         persist_tracking: bool,
@@ -116,11 +104,9 @@ class DelegationMixin(OrgHelpersMixin):
             "target": target_name,
             "instruction": instruction,
             "summary": summary,
-            "deadline": deadline,
             "sub_task_id": sub_task_id,
             "tracking_task_id": tracking_task_id,
             "workspace": workspace,
-            "exclusive_key": exclusive_key,
             "acceptance_criteria": acceptance_criteria,
             "persist_sub": persist_sub,
             "persist_tracking": persist_tracking,
@@ -169,8 +155,6 @@ class DelegationMixin(OrgHelpersMixin):
         target_name = resolve_anima_name(args.get("name", ""))
         instruction = args.get("instruction", "")
         summary = args.get("summary", "") or instruction[:100]
-        deadline = args.get("deadline", "")
-        exclusive_key = args.get("exclusive_key", "") or _pr_key_from_text(f"{summary}\n{instruction}")
         raw_criteria = args.get("acceptance_criteria")
         acceptance_criteria: list[str] = (
             [c for c in raw_criteria if isinstance(c, str)] if isinstance(raw_criteria, list) else []
@@ -199,11 +183,6 @@ class DelegationMixin(OrgHelpersMixin):
             return _error_result("InvalidArguments", "name is required")
         if not instruction:
             return _error_result("InvalidArguments", "instruction is required")
-        if not deadline:
-            return _error_result(
-                "InvalidArguments",
-                "deadline is required. Use relative format ('30m', '2h', '1d') or ISO8601.",
-            )
 
         err = self._check_subordinate(target_name)
         if err:
@@ -252,23 +231,15 @@ class DelegationMixin(OrgHelpersMixin):
                 original_instruction=instruction,
                 assignee=target_name,
                 summary=summary,
-                deadline=deadline,
                 relay_chain=[self._anima_name],
                 task_id=sub_task_id,
-                meta=(
-                    {
-                        **({"model": model} if model else {}),
-                        **({"exclusive_key": exclusive_key} if exclusive_key else {}),
-                    }
-                    or None
-                ),
+                meta=({"model": model} if model else None),
             )
             persisted_sub = True
             own_tqm.add_delegated_task(
                 original_instruction=instruction,
                 assignee=target_name,
                 summary=t("handler.delegation_summary", summary=summary),
-                deadline=deadline,
                 relay_chain=[self._anima_name, target_name],
                 task_id=tracking_task_id,
                 meta={
@@ -293,7 +264,6 @@ class DelegationMixin(OrgHelpersMixin):
                 "reply_to": self._anima_name,
                 "source": "delegation",
                 "working_directory": resolved_wd,
-                "exclusive_key": exclusive_key,
                 "model": model,
             }
             pending_dir = target_dir / "state" / "pending"
@@ -314,11 +284,9 @@ class DelegationMixin(OrgHelpersMixin):
                 target_name=target_name,
                 instruction=instruction,
                 summary=summary,
-                deadline=deadline,
                 sub_task_id=sub_task_id,
                 tracking_task_id=tracking_task_id,
                 workspace=resolved_wd,
-                exclusive_key=exclusive_key,
                 acceptance_criteria=acceptance_criteria,
                 persist_sub=not persisted_sub,
                 persist_tracking=not persisted_tracking,
@@ -383,7 +351,6 @@ class DelegationMixin(OrgHelpersMixin):
                     content=t(
                         "handler.delegation_dm_content",
                         instruction=instruction,
-                        deadline=deadline,
                         task_id=sub_task_id,
                     ),
                     intent="delegation",
@@ -457,7 +424,6 @@ class DelegationMixin(OrgHelpersMixin):
                 "delegated_to": delegated_to,
                 "summary": task.summary,
                 "delegated_at": task.ts,
-                "deadline": task.deadline or "",
                 "subordinate_status": "unknown",
                 "last_updated": "",
             }
@@ -474,7 +440,7 @@ class DelegationMixin(OrgHelpersMixin):
                     entry["subordinate_status"] = "unknown"
 
             sub_status = entry["subordinate_status"]
-            _terminal = {"done", "cancelled", "failed"}
+            _terminal = {"done", "cancelled"}
             if status_filter == "active" and sub_status in _terminal:
                 continue
             if status_filter == "completed" and sub_status not in _terminal:

@@ -52,7 +52,6 @@ class TestChannelE:
             original_instruction="Test task",
             assignee="rin",
             summary="Test summary",
-            deadline="1h",
         )
         engine = PrimingEngine(temp_anima_dir)
         result = await engine._channel_e_pending_tasks()
@@ -129,7 +128,6 @@ class TestPrimeMemoriesIncludesChannelE:
             original_instruction="Important task",
             assignee="test",
             summary="Important task summary",
-            deadline="1h",
         )
 
         engine = PrimingEngine(temp_anima_dir)

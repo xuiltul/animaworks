@@ -76,7 +76,6 @@ class BoardTask(BaseModel):
     assignee: str | None = None
     queue_status: str | None = None
     summary: str | None = None
-    deadline: str | None = None
     relay_chain: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     queue_updated_at: str | None = None

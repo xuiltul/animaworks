@@ -58,7 +58,6 @@ def test_delegate_task_records_taskboard_metadata(monkeypatch, tmp_path: Path) -
                 "name": "worker",
                 "instruction": "Prepare the incident summary",
                 "summary": "Incident summary",
-                "deadline": "2h",
             }
         )
 
@@ -110,7 +109,6 @@ def test_delegate_task_keeps_queue_entries_when_taskboard_write_fails(monkeypatc
                 "name": "worker",
                 "instruction": "Prepare the incident summary",
                 "summary": "Incident summary",
-                "deadline": "2h",
             }
         )
 
@@ -119,7 +117,7 @@ def test_delegate_task_keeps_queue_entries_when_taskboard_write_fails(monkeypatc
     assert (boss_dir / "state" / "task_queue.jsonl").exists()
 
 
-def test_delegate_task_invalid_deadline_does_not_write_taskboard(monkeypatch, tmp_path: Path) -> None:
+def test_delegate_task_missing_instruction_does_not_write_taskboard(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
     animas_dir = tmp_path / "animas"
     boss_dir = animas_dir / "boss"
@@ -146,9 +144,8 @@ def test_delegate_task_invalid_deadline_does_not_write_taskboard(monkeypatch, tm
         result = harness._handle_delegate_task(
             {
                 "name": "worker",
-                "instruction": "Prepare the incident summary",
+                "instruction": "",
                 "summary": "Incident summary",
-                "deadline": "tomorrow",
             }
         )
 

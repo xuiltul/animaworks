@@ -7,8 +7,9 @@
 Verifies that the prompt builder:
 - prepends the per-mode host built-in tool line (tool_guide.host_tools.{s,c,x,a})
 - does not emit Claude-specific tool names for non-S modes (c/x/a)
-- includes the new "タスク期限" section and no longer includes the AI-speed table
-Implemented per issue 20260829_prompt-deadline-and-engine-neutral.
+- no longer includes the retired "タスク期限" section or the AI-speed table
+Implemented per issue 20260829_prompt-deadline-and-engine-neutral;
+task deadlines removed per the A1 task-model teardown plan (2026-09).
 """
 
 from __future__ import annotations
@@ -109,11 +110,9 @@ def test_s_mode_retains_host_tool_names(prompt_factory) -> None:
     assert "Glob" in prompt
 
 
-def test_task_deadline_section_added_no_ai_speed_table(prompt_factory) -> None:
-    """New deadline rule replaces the AI-speed table."""
+def test_no_task_deadline_section_or_ai_speed_table(prompt_factory) -> None:
+    """Task deadlines were torn out (A1 task-model teardown); AI-speed table stays gone too."""
     prompt = prompt_factory("s")
-    assert "タスク期限" in prompt
+    assert "タスク期限" not in prompt
     assert "AI-speed" not in prompt
     assert "| New implementation" not in prompt
-    assert "4h" not in prompt
-    assert "2h" not in prompt

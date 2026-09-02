@@ -538,18 +538,12 @@ class SkillsToolsMixin:
         instruction = args.get("original_instruction", "")
         assignee = args.get("assignee", "")
         summary = args.get("summary", "") or instruction[:100]
-        deadline = args.get("deadline")
         relay_chain = args.get("relay_chain", [])
 
         if not instruction:
             return _error_result("InvalidArguments", "original_instruction is required")
         if not assignee:
             return _error_result("InvalidArguments", "assignee is required")
-        if not deadline:
-            return _error_result(
-                "InvalidArguments",
-                "deadline is required. Use relative format ('30m', '2h', '1d') or ISO8601.",
-            )
 
         try:
             entry = manager.add_task(
@@ -557,7 +551,6 @@ class SkillsToolsMixin:
                 original_instruction=instruction,
                 assignee=assignee,
                 summary=summary,
-                deadline=deadline,
                 relay_chain=relay_chain,
             )
         except ValueError as e:
@@ -622,16 +615,18 @@ class SkillsToolsMixin:
         status = args.get("status", "")
         summary = args.get("summary")
         result = args.get("result")
-        unblock_check = args.get("unblock_check")
 
         if not task_id:
             return _error_result("InvalidArguments", "task_id is required")
         if not status:
             return _error_result("InvalidArguments", "status is required")
+        if status in ("blocked", "failed"):
+            return _error_result(
+                "InvalidArguments",
+                f"status={status!r} was retired. Use status='cancelled' and message the requester with the reason.",
+            )
         if result is not None and not isinstance(result, str):
             return _error_result("InvalidArguments", "result must be a string")
-        if unblock_check is not None and not isinstance(unblock_check, str):
-            return _error_result("InvalidArguments", "unblock_check must be a string")
         if result is not None:
             summary = result
 
@@ -657,16 +652,6 @@ class SkillsToolsMixin:
             }
             if result is not None:
                 declaration_meta["result_note"] = result
-        elif status == "blocked":
-            declaration_meta = {
-                "blocked_at": now_iso(),
-                "unblock_check_failures": 0,
-            }
-            # Preserve an omitted check only when re-declaring the same blocked
-            # state. A new blocker must not inherit a stale release condition.
-            current = manager.get_task_by_id(task_id)
-            if unblock_check is not None or current is None or current.status != "blocked":
-                declaration_meta["unblock_check"] = unblock_check
 
         try:
             if declaration_meta:

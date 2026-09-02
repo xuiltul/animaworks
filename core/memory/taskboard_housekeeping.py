@@ -100,7 +100,7 @@ def _cleanup_pending_processing(
                 synced = False
                 missing = False
                 if task_id:
-                    synced = _mark_queue_task_failed(anima_dir, task_id)
+                    synced = _requeue_stale_processing_task(anima_dir, task_id)
                     missing = not synced
                     if synced:
                         queue_synced += 1
@@ -455,7 +455,14 @@ def _move_with_collision(path: Path, target_dir: Path, *, collision_label: str) 
     return target
 
 
-def _mark_queue_task_failed(anima_dir: Path, task_id: str) -> bool:
+def _requeue_stale_processing_task(anima_dir: Path, task_id: str) -> bool:
+    """Re-queue a stale processing task to pending.
+
+    "failed" was retired from the task status vocabulary (see the A1
+    task-model teardown plan): a stale/crashed process no longer parks the
+    task as "failed" — it goes back to "pending" so it stays visible on the
+    owner's own list instead of a separate failure-review queue.
+    """
     try:
         from core.memory.task_queue import TaskQueueManager
 
@@ -463,8 +470,8 @@ def _mark_queue_task_failed(anima_dir: Path, task_id: str) -> bool:
         return (
             manager.update_status(
                 task_id,
-                "failed",
-                summary="FAILED: stale processing task recovered by housekeeping",
+                "pending",
+                summary="auto-recovered: stale processing task requeued by housekeeping",
             )
             is not None
         )

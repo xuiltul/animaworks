@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 
 import pytest
 
@@ -16,6 +15,7 @@ class TestTaskToolSchemas:
         assert names == {"backlog_task", "update_task", "list_tasks"}
 
     def test_backlog_task_schema(self):
+        """deadline was retired (A1 task-model teardown): no longer a param at all."""
         task_tools = _task_tools()
         backlog_task = next(t for t in task_tools if t["name"] == "backlog_task")
         required = backlog_task["parameters"]["required"]
@@ -23,18 +23,24 @@ class TestTaskToolSchemas:
         assert "original_instruction" in required
         assert "assignee" in required
         assert "summary" in required
-        assert "deadline" in required
+        assert "deadline" not in required
+        assert "deadline" not in backlog_task["parameters"]["properties"]
 
     def test_update_task_schema(self):
+        """blocked/failed/unblock_check were retired (A1 task-model teardown)."""
         task_tools = _task_tools()
         update_task = next(t for t in task_tools if t["name"] == "update_task")
         required = update_task["parameters"]["required"]
         assert "task_id" in required
         assert "status" in required
         assert update_task["parameters"]["properties"]["result"]["type"] == "string"
-        assert update_task["parameters"]["properties"]["unblock_check"]["type"] == "string"
-        assert "exit 0" in update_task["parameters"]["properties"]["unblock_check"]["description"]
-        assert "読み取り検証専用" in update_task["parameters"]["properties"]["unblock_check"]["description"]
+        assert update_task["parameters"]["properties"]["status"]["enum"] == [
+            "pending",
+            "in_progress",
+            "done",
+            "cancelled",
+        ]
+        assert "unblock_check" not in update_task["parameters"]["properties"]
         assert "unblock_check" not in required
 
     def test_list_tasks_schema(self):
@@ -77,7 +83,6 @@ class TestTaskToolHandler:
                 "original_instruction": "Test instruction",
                 "assignee": "rin",
                 "summary": "Test summary",
-                "deadline": "1h",
             },
         )
         data = json.loads(result)
@@ -93,7 +98,6 @@ class TestTaskToolHandler:
                 "source": "human",
                 "assignee": "rin",
                 "summary": "s",
-                "deadline": "1h",
             },
         )
         data = json.loads(result)
@@ -109,7 +113,6 @@ class TestTaskToolHandler:
                     "original_instruction": "test",
                     "assignee": "rin",
                     "summary": "s",
-                    "deadline": "1h",
                 },
             )
         )
@@ -126,7 +129,10 @@ class TestTaskToolHandler:
         data = json.loads(result)
         assert data["status"] == "in_progress"
 
-    def test_handle_update_task_blocked_saves_unblock_check(self, handler):
+    @pytest.mark.parametrize("status", ["blocked", "failed"])
+    def test_handle_update_task_retired_status_rejected(self, handler, status):
+        """blocked/failed/unblock_check were retired (A1 task-model teardown):
+        update_task now rejects them instead of persisting a blocked/failed state."""
         task = json.loads(
             handler.handle(
                 "backlog_task",
@@ -135,7 +141,6 @@ class TestTaskToolHandler:
                     "original_instruction": "test",
                     "assignee": "rin",
                     "summary": "s",
-                    "deadline": "1h",
                 },
             )
         )
@@ -145,45 +150,18 @@ class TestTaskToolHandler:
                 "update_task",
                 {
                     "task_id": task["task_id"],
-                    "status": "blocked",
+                    "status": status,
                     "unblock_check": "test -w .",
                 },
             )
         )
 
-        assert result["status"] == "blocked"
-        assert result["meta"]["unblock_check"] == "test -w ."
-        datetime.fromisoformat(result["meta"]["blocked_at"])
+        assert result["status"] == "error"
+        assert result["error_type"] == "InvalidArguments"
 
-        # Omitting unblock_check must preserve the existing value (not null it out).
-        repeated = json.loads(
-            handler.handle(
-                "update_task",
-                {
-                    "task_id": task["task_id"],
-                    "status": "blocked",
-                },
-            )
-        )
-        assert repeated["meta"]["unblock_check"] == "test -w ."
-
-        handler.handle(
-            "update_task",
-            {
-                "task_id": task["task_id"],
-                "status": "in_progress",
-            },
-        )
-        new_blocker = json.loads(
-            handler.handle(
-                "update_task",
-                {
-                    "task_id": task["task_id"],
-                    "status": "blocked",
-                },
-            )
-        )
-        assert new_blocker["meta"]["unblock_check"] is None
+        # The task itself must remain untouched (still pending).
+        reloaded = json.loads(handler.handle("list_tasks", {"status": "pending"}))
+        assert any(t["task_id"] == task["task_id"] for t in reloaded)
 
     def test_handle_update_nonexistent(self, handler):
         result = handler.handle(
@@ -204,7 +182,6 @@ class TestTaskToolHandler:
                 "original_instruction": "t1",
                 "assignee": "a",
                 "summary": "s1",
-                "deadline": "1h",
             },
         )
         handler.handle(
@@ -214,7 +191,6 @@ class TestTaskToolHandler:
                 "original_instruction": "t2",
                 "assignee": "b",
                 "summary": "s2",
-                "deadline": "2h",
             },
         )
         result = json.loads(handler.handle("list_tasks", {}))
@@ -229,7 +205,6 @@ class TestTaskToolHandler:
                     "original_instruction": "t1",
                     "assignee": "a",
                     "summary": "s1",
-                    "deadline": "1h",
                 },
             )
         )
@@ -247,7 +222,6 @@ class TestTaskToolHandler:
                 "original_instruction": "t2",
                 "assignee": "b",
                 "summary": "s2",
-                "deadline": "2h",
             },
         )
         result = json.loads(handler.handle("list_tasks", {"status": "pending"}))

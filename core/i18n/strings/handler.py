@@ -306,8 +306,8 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
     },
     "handler.delegation_dm_content": {
-        "ja": ("[タスク委譲]\n{instruction}\n\n期限: {deadline}\nタスクID: {task_id}"),
-        "en": ("[Task delegation]\n{instruction}\n\nDeadline: {deadline}\nTask ID: {task_id}"),
+        "ja": ("[タスク委譲]\n{instruction}\n\nタスクID: {task_id}"),
+        "en": ("[Task delegation]\n{instruction}\n\nTask ID: {task_id}"),
     },
     "handler.delegation_intent_deprecated": {
         "ja": (

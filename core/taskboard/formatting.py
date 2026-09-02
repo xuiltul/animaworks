@@ -10,9 +10,7 @@ from core.memory.task_queue import (
     _STALE_TASK_THRESHOLD_SEC,
     TaskQueueManager,
     _elapsed_seconds,
-    _format_deadline_display,
     _format_elapsed_from_sec,
-    _is_overdue,
 )
 from core.taskboard.models import BoardTask
 from core.time_utils import now_local
@@ -31,17 +29,11 @@ def format_tasks_for_priming(
     now = now_local()
 
     active: list[BoardTask] = []
-    overdue: list[BoardTask] = []
-    failed: list[BoardTask] = []
     delegated: list[BoardTask] = []
 
     for task in board_tasks:
-        if task.queue_status == "failed":
-            failed.append(task)
-        elif task.queue_status == "delegated":
+        if task.queue_status == "delegated":
             delegated.append(task)
-        elif task.deadline and _is_overdue(task.deadline, now):
-            overdue.append(task)
         else:
             active.append(task)
 
@@ -53,16 +45,6 @@ def format_tasks_for_priming(
             break
         lines.append(line)
         total += len(line) + 1
-
-    if overdue:
-        summaries = ", ".join(f"[{task.task_id[:8]}] {_summary(task)[:20]}" for task in overdue)
-        aggregate_line = t("task_queue.overdue_aggregate", count=len(overdue), summaries=summaries)
-        if total + len(aggregate_line) + 1 <= max_chars:
-            lines.append(aggregate_line)
-            total += len(aggregate_line) + 1
-
-    if failed and total < max_chars:
-        total = _append_failed_section(lines, failed, total, max_chars)
 
     if delegated and total < max_chars:
         delegated_section = _format_delegated_tasks(delegated, now, animas_dir, max_chars - total)
@@ -91,26 +73,7 @@ def _format_active_task(task: BoardTask, now: datetime) -> str:
     if elapsed_sec is not None and elapsed_sec >= _STALE_TASK_THRESHOLD_SEC:
         line += " ⚠️ STALE"
 
-    if task.deadline:
-        deadline_str = _format_deadline_display(task.deadline, now)
-        if deadline_str:
-            line += f" {deadline_str}"
     return line
-
-
-def _append_failed_section(lines: list[str], failed: list[BoardTask], total: int, max_chars: int) -> int:
-    header = t("task_queue.failed_section_header")
-    if total + len(header) <= max_chars:
-        lines.append(header)
-        total += len(header) + 1
-    for task in failed:
-        if total >= max_chars:
-            break
-        line = t("task_queue.failed_line", task_id=task.task_id[:8], summary=_summary(task))
-        if total + len(line) <= max_chars:
-            lines.append(line)
-            total += len(line) + 1
-    return total
 
 
 def _format_delegated_tasks(
@@ -121,7 +84,7 @@ def _format_delegated_tasks(
 ) -> str:
     lines: list[str] = []
     total = 0
-    status_icons = {"done": "✅", "failed": "❌", "cancelled": "🚫"}
+    status_icons = {"done": "✅", "cancelled": "🚫"}
     unknown_label = t("task_queue.delegated_unknown")
     for task in delegated[:5]:
         meta = task.meta or {}

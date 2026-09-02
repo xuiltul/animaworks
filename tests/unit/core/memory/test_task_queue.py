@@ -42,20 +42,19 @@ def test_append_raises_task_persistence_error_on_oserror(tmp_path: Path) -> None
                 original_instruction="test task",
                 assignee="anima",
                 summary="test",
-                deadline="1h",
             )
     finally:
         state_dir.chmod(0o755)
 
 
-# ── Test 2: "failed" status is valid ───────────────────────────────────
+# ── Test 2: "blocked"/"failed" statuses are retired ─────────────────────
 
 
-def test_update_status_failed_is_valid(tmp_path: Path) -> None:
-    """Test that update_status("failed") works correctly.
+@pytest.mark.parametrize("status", ["blocked", "failed"])
+def test_update_status_retired_status_raises(tmp_path: Path, status: str) -> None:
+    """update_status("blocked"/"failed") is rejected — both were retired.
 
-    Create a task, update to "failed", verify it returns the entry
-    with status="failed".
+    Use status='cancelled' and message the requester with the reason instead.
     """
     anima_dir = tmp_path / "anima"
     anima_dir.mkdir()
@@ -67,13 +66,10 @@ def test_update_status_failed_is_valid(tmp_path: Path) -> None:
         original_instruction="test",
         assignee="anima",
         summary="test task",
-        deadline="1h",
     )
 
-    result = tqm.update_status(entry.task_id, "failed")
-    assert result is not None
-    assert result.status == "failed"
-    assert result.task_id == entry.task_id
+    with pytest.raises(ValueError, match="retired"):
+        tqm.update_status(entry.task_id, status)
 
 
 def test_update_meta_is_durable_and_preserves_status(tmp_path: Path) -> None:
@@ -105,7 +101,7 @@ def test_update_meta_is_durable_and_preserves_status(tmp_path: Path) -> None:
 
 
 def test_compact_removes_terminal_statuses(tmp_path: Path) -> None:
-    """Test that compact() removes "failed" tasks (along with "done" and "cancelled").
+    """Test that compact() removes "done" and "cancelled" tasks.
 
     Create tasks with various statuses, compact, verify only non-terminal remain.
     """
@@ -120,62 +116,50 @@ def test_compact_removes_terminal_statuses(tmp_path: Path) -> None:
         original_instruction="task 1",
         assignee="anima",
         summary="pending",
-        deadline="1h",
     )
     e2 = tqm.add_task(
         source="human",
         original_instruction="task 2",
         assignee="anima",
         summary="in progress",
-        deadline="1h",
     )
     e3 = tqm.add_task(
         source="human",
         original_instruction="task 3",
         assignee="anima",
         summary="done",
-        deadline="1h",
-    )
-    e4 = tqm.add_task(
-        source="human",
-        original_instruction="task 4",
-        assignee="anima",
-        summary="failed",
-        deadline="1h",
     )
     e5 = tqm.add_task(
         source="human",
         original_instruction="task 5",
         assignee="anima",
         summary="cancelled",
-        deadline="1h",
     )
 
     tqm.update_status(e3.task_id, "done")
-    tqm.update_status(e4.task_id, "failed")
     tqm.update_status(e5.task_id, "cancelled")
 
-    assert "failed" in _TERMINAL_STATUSES
+    assert "failed" not in _TERMINAL_STATUSES
+    assert "blocked" not in _TERMINAL_STATUSES
     assert "done" in _TERMINAL_STATUSES
     assert "cancelled" in _TERMINAL_STATUSES
 
     removed = tqm.compact()
 
-    assert removed == 3  # done, failed, cancelled
+    assert removed == 2  # done, cancelled
     remaining = tqm.list_tasks()
     remaining_ids = {t.task_id for t in remaining}
     assert e1.task_id in remaining_ids
     assert e2.task_id in remaining_ids
     assert e3.task_id not in remaining_ids
-    assert e4.task_id not in remaining_ids
     assert e5.task_id not in remaining_ids
 
 
-# ── Test 4: task_tracker filters "failed" correctly ─────────────────────
+# ── Test 4: task_tracker filters "cancelled" correctly ───────────────────
 
 
-def test_task_tracker_completed_includes_failed(tmp_path: Path) -> None:
-    """Test that task_tracker with status='completed' includes 'failed' tasks."""
+def test_task_tracker_completed_includes_cancelled(tmp_path: Path) -> None:
+    """Test that task_tracker with status='completed' includes 'cancelled' tasks."""
     from unittest.mock import MagicMock
 
     from core.tooling.handler import ToolHandler
@@ -200,15 +184,13 @@ def test_task_tracker_completed_includes_failed(tmp_path: Path) -> None:
         original_instruction="subordinate task",
         assignee="hinata",
         summary="sub task",
-        deadline="1h",
     )
-    hinata_tqm.update_status(hinata_task.task_id, "failed")
+    hinata_tqm.update_status(hinata_task.task_id, "cancelled")
 
     sakura_tqm.add_delegated_task(
         original_instruction="delegate to hinata",
         assignee="hinata",
         summary="delegated",
-        deadline="1h",
         meta={"delegated_to": "hinata", "delegated_task_id": hinata_task.task_id},
     )
 
@@ -238,11 +220,11 @@ def test_task_tracker_completed_includes_failed(tmp_path: Path) -> None:
 
     parsed = json.loads(result)
     assert len(parsed) >= 1
-    assert any(e["subordinate_status"] == "failed" for e in parsed)
+    assert any(e["subordinate_status"] == "cancelled" for e in parsed)
 
 
-def test_task_tracker_active_excludes_failed(tmp_path: Path) -> None:
-    """Test that task_tracker with status='active' excludes 'failed' tasks."""
+def test_task_tracker_active_excludes_cancelled(tmp_path: Path) -> None:
+    """Test that task_tracker with status='active' excludes 'cancelled' tasks."""
     from unittest.mock import MagicMock
 
     from core.tooling.handler import ToolHandler
@@ -266,15 +248,13 @@ def test_task_tracker_active_excludes_failed(tmp_path: Path) -> None:
         original_instruction="subordinate task",
         assignee="hinata",
         summary="sub task",
-        deadline="1h",
     )
-    hinata_tqm.update_status(hinata_task.task_id, "failed")
+    hinata_tqm.update_status(hinata_task.task_id, "cancelled")
 
     sakura_tqm.add_delegated_task(
         original_instruction="delegate to hinata",
         assignee="hinata",
         summary="delegated",
-        deadline="1h",
         meta={"delegated_to": "hinata", "delegated_task_id": hinata_task.task_id},
     )
 
@@ -300,15 +280,15 @@ def test_task_tracker_active_excludes_failed(tmp_path: Path) -> None:
         )
         result = handler.handle("task_tracker", {"status": "active"})
 
-    # "active" should exclude failed — so we expect no matching delegated tasks
+    # "active" should exclude cancelled — so we expect no matching delegated tasks
     # (or the "no matching" message)
     import json
 
     try:
         parsed = json.loads(result)
-        # If we get a list, it should not contain failed tasks
+        # If we get a list, it should not contain cancelled tasks
         if isinstance(parsed, list):
-            assert not any(e["subordinate_status"] == "failed" for e in parsed)
+            assert not any(e["subordinate_status"] == "cancelled" for e in parsed)
     except json.JSONDecodeError:
         # May return i18n message like "no matching delegated tasks"
         assert "委譲" in result or "delegated" in result.lower() or "matching" in result.lower()
@@ -320,13 +300,12 @@ def test_task_tracker_active_excludes_failed(tmp_path: Path) -> None:
 def _make_tasks_with_statuses(tqm: TaskQueueManager) -> dict[str, str]:
     """Helper: create tasks and update to various statuses. Returns {task_id: status}."""
     ids: dict[str, str] = {}
-    for status in ("pending", "in_progress", "done", "failed", "cancelled", "delegated", "blocked"):
+    for status in ("pending", "in_progress", "done", "cancelled", "delegated"):
         e = tqm.add_task(
             source="human",
             original_instruction=f"instruction for {status} task " + "x" * 300,
             assignee="anima",
             summary=f"summary-{status}",
-            deadline="1h",
         )
         if status != "pending":
             tqm.update_status(e.task_id, status)
@@ -345,7 +324,7 @@ def test_compact_creates_archive_file(tmp_path: Path) -> None:
 
     removed = tqm.compact()
 
-    assert removed == 3  # done, failed, cancelled
+    assert removed == 2  # done, cancelled
     assert tqm.archive_path.exists()
 
 
@@ -401,11 +380,11 @@ def test_compact_appends_to_existing_archive(tmp_path: Path) -> None:
     (anima_dir / "state").mkdir(parents=True)
     tqm = TaskQueueManager(anima_dir)
 
-    e1 = tqm.add_task(source="human", original_instruction="t1", assignee="a", summary="s1", deadline="1h")
+    e1 = tqm.add_task(source="human", original_instruction="t1", assignee="a", summary="s1")
     tqm.update_status(e1.task_id, "done")
     tqm.compact()
 
-    e2 = tqm.add_task(source="human", original_instruction="t2", assignee="a", summary="s2", deadline="1h")
+    e2 = tqm.add_task(source="human", original_instruction="t2", assignee="a", summary="s2")
     tqm.update_status(e2.task_id, "cancelled")
     tqm.compact()
 
@@ -422,7 +401,7 @@ def test_compact_no_terminal_returns_zero(tmp_path: Path) -> None:
     (anima_dir / "state").mkdir(parents=True)
     tqm = TaskQueueManager(anima_dir)
 
-    tqm.add_task(source="human", original_instruction="t", assignee="a", summary="s", deadline="1h")
+    tqm.add_task(source="human", original_instruction="t", assignee="a", summary="s")
     assert tqm.compact() == 0
     assert not tqm.archive_path.exists()
 
@@ -489,7 +468,6 @@ def test_handle_list_tasks_truncates_instruction(tmp_path: Path) -> None:
         original_instruction=long_instruction,
         assignee="anima",
         summary="test",
-        deadline="1h",
     )
 
     from core.tooling.handler_skills import SkillsToolsMixin
@@ -519,7 +497,6 @@ def test_handle_list_tasks_detail_returns_full(tmp_path: Path) -> None:
         original_instruction=long_instruction,
         assignee="anima",
         summary="test",
-        deadline="1h",
     )
 
     from core.tooling.handler_skills import SkillsToolsMixin
@@ -544,7 +521,6 @@ def test_handle_list_tasks_no_indent(tmp_path: Path) -> None:
         original_instruction="short",
         assignee="anima",
         summary="test",
-        deadline="1h",
     )
 
     from core.tooling.handler_skills import SkillsToolsMixin
@@ -594,39 +570,9 @@ def test_add_task_with_meta_and_status_in_progress(tmp_path: Path) -> None:
     assert entry.meta.get("executor") == "taskexec"
 
 
-# ── Test: get_failed_taskexec and format_for_priming failed section ─────────
-
-
-def test_get_failed_taskexec_returns_only_taskexec_failed(tmp_path: Path) -> None:
-    """get_failed_taskexec returns only failed tasks with meta.executor=taskexec."""
-    anima_dir = tmp_path / "anima"
-    (anima_dir / "state").mkdir(parents=True)
-    tqm = TaskQueueManager(anima_dir)
-
-    e1 = tqm.add_task(
-        source="human",
-        original_instruction="t1",
-        assignee="a",
-        summary="s1",
-        deadline="1h",
-    )
-    tqm.update_status(e1.task_id, "failed")
-
-    e2 = tqm.add_task(
-        source="anima",
-        original_instruction="t2",
-        assignee="self",
-        summary="s2",
-        task_id="taskexec2",
-        meta={"executor": "taskexec"},
-        status="in_progress",
-    )
-    tqm.update_status(e2.task_id, "failed", summary="API timeout")
-
-    failed = tqm.get_failed_taskexec()
-    assert len(failed) == 1
-    assert failed[0].task_id == "taskexec2"
-    assert failed[0].summary == "API timeout"
+# ── Test: format_for_priming auto-taskexec marker ────────────────────────
+# (get_failed_taskexec and the format_for_priming "failed" section were
+# removed along with the "failed" status — see A1 task-model teardown plan.)
 
 
 def test_format_for_priming_shows_auto_taskexec_for_in_progress(tmp_path: Path) -> None:
@@ -650,29 +596,6 @@ def test_format_for_priming_shows_auto_taskexec_for_in_progress(tmp_path: Path) 
     assert "abc12345" in result or "abc1234" in result
 
 
-def test_format_for_priming_includes_failed_section(tmp_path: Path) -> None:
-    """format_for_priming includes failed TaskExec tasks when present."""
-    anima_dir = tmp_path / "anima"
-    (anima_dir / "state").mkdir(parents=True)
-    tqm = TaskQueueManager(anima_dir)
-
-    tqm.add_task(
-        source="anima",
-        original_instruction="fetch data",
-        assignee="self",
-        summary="データ取得",
-        task_id="xyz99999",
-        meta={"executor": "taskexec"},
-        status="in_progress",
-    )
-    tqm.update_status("xyz99999", "failed", summary="データ取得 — FAILED: API timeout")
-
-    result = tqm.format_for_priming(budget_tokens=500)
-    assert "❌ Failed" in result or "Failed (要対処)" in result or "Failed (action required)" in result
-    assert "xyz99999" in result or "xyz9999" in result  # truncated to 8 chars
-    assert "データ取得" in result
-
-
 # ── TaskBoard metadata sync on terminal status ─────────────────────────
 
 
@@ -684,9 +607,7 @@ def _tqm_with_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: st
     return TaskQueueManager(anima_dir), data_dir
 
 
-def test_update_status_terminal_archives_existing_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_status_terminal_archives_existing_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Terminal status closes existing TaskBoard metadata to archived/done."""
     from core.taskboard.models import AttentionVisibility, BoardColumn
     from core.taskboard.store import TaskBoardStore
@@ -730,40 +651,7 @@ def test_update_status_terminal_archives_existing_metadata(
         assert any(event["event_type"] == "archived" for event in events)
 
 
-def test_update_status_failed_keeps_metadata_active(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """failed must NOT archive the card: it stays retriable (failed_review_window)."""
-    from core.taskboard.models import AttentionVisibility
-    from core.taskboard.store import TaskBoardStore
-
-    tqm, data_dir = _tqm_with_data_dir(tmp_path, monkeypatch)
-    entry = tqm.add_task(
-        source="human",
-        original_instruction="flaky work",
-        assignee="sakura",
-        summary="flaky work",
-        task_id="task-fail-1",
-    )
-    store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
-    store.upsert_metadata(
-        anima_name="sakura",
-        task_id=entry.task_id,
-        actor="delegator",
-        visibility="active",
-        column="todo",
-    )
-
-    result = tqm.update_status(entry.task_id, "failed")
-    assert result is not None and result.status == "failed"
-    meta = store.get_metadata("sakura", entry.task_id)
-    assert meta is not None
-    assert meta.visibility == AttentionVisibility.ACTIVE
-
-
-def test_update_status_pending_reactivates_archived_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_status_pending_reactivates_archived_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Re-queueing an archived task to pending revives the board card so the
     pending attention gate does not cancel it as "archived by TaskBoard"."""
     from core.taskboard.models import AttentionVisibility, BoardColumn
@@ -809,9 +697,7 @@ def test_update_status_pending_reactivates_archived_metadata(
     assert meta.visibility == AttentionVisibility.TOMBSTONED
 
 
-def test_update_status_terminal_does_not_create_metadata_row(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_status_terminal_does_not_create_metadata_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Terminal status must not invent a TaskBoard metadata row when none exists."""
     from core.taskboard.store import TaskBoardStore
 
@@ -869,9 +755,7 @@ def test_update_status_terminal_preserves_suppressed_visibility(
     assert metadata.updated_by == "planner"
 
 
-def test_update_status_succeeds_when_taskboard_store_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_status_succeeds_when_taskboard_store_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Queue terminal update remains successful if TaskBoard store fails."""
     tqm, _data_dir = _tqm_with_data_dir(tmp_path, monkeypatch)
     entry = tqm.add_task(
@@ -899,9 +783,7 @@ def test_update_status_succeeds_when_taskboard_store_raises(
     assert reloaded.status == "done"
 
 
-def test_update_status_non_terminal_does_not_touch_metadata(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_update_status_non_terminal_does_not_touch_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-terminal transitions leave TaskBoard metadata unchanged."""
     from core.taskboard.models import AttentionVisibility, BoardColumn
     from core.taskboard.store import TaskBoardStore
@@ -938,3 +820,109 @@ def test_update_status_non_terminal_does_not_touch_metadata(
     assert after.position == 3.0
     assert after.updated_at == before_updated_at
     assert after.updated_by == "planner"
+
+
+# ── Legacy jsonl compat: blocked/failed/deadline rows read as pending ──────
+
+
+def test_load_all_remaps_legacy_blocked_creation_row_to_pending(tmp_path: Path) -> None:
+    """A pre-teardown jsonl row created with status='blocked' plus deadline/
+    unblock_check fields must load as 'pending' with no exception, and the
+    retired fields must not leak into the reconstructed TaskEntry."""
+    import json
+
+    anima_dir = tmp_path / "anima"
+    (anima_dir / "state").mkdir(parents=True)
+    queue_path = anima_dir / "state" / "task_queue.jsonl"
+    legacy_row = {
+        "task_id": "legacy-blocked-1",
+        "ts": "2026-08-01T00:00:00+09:00",
+        "source": "human",
+        "original_instruction": "legacy work",
+        "assignee": "anima",
+        "status": "blocked",
+        "summary": "legacy blocked task",
+        "deadline": "2026-08-01T01:00:00+09:00",
+        "relay_chain": [],
+        "updated_at": "2026-08-01T00:30:00+09:00",
+        "meta": {
+            "unblock_check": "test -w .",
+            "blocked_at": "2026-08-01T00:30:00+09:00",
+            "unblock_check_failures": 2,
+        },
+    }
+    queue_path.write_text(json.dumps(legacy_row, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    tqm = TaskQueueManager(anima_dir)
+    entry = tqm.get_task_by_id("legacy-blocked-1")
+
+    assert entry is not None
+    assert entry.status == "pending"
+    assert not hasattr(entry, "deadline")
+    # legacy meta keys are preserved verbatim (they are just data now)
+    assert entry.meta.get("unblock_check") == "test -w ."
+
+
+def test_load_all_remaps_legacy_failed_update_event_to_pending(tmp_path: Path) -> None:
+    """A pre-teardown update event with status='failed' must not raise and
+    must be read back as 'pending'."""
+    import json
+
+    anima_dir = tmp_path / "anima"
+    (anima_dir / "state").mkdir(parents=True)
+    tqm = TaskQueueManager(anima_dir)
+
+    entry = tqm.add_task(
+        source="anima",
+        original_instruction="do a thing",
+        assignee="anima",
+        summary="do a thing",
+        task_id="legacy-failed-1",
+    )
+
+    # Hand-append a legacy "failed" update event (as an old TaskExec runner would have).
+    legacy_update = {
+        "task_id": entry.task_id,
+        "status": "failed",
+        "updated_at": "2026-08-01T02:00:00+09:00",
+        "summary": "crashed: OOM",
+        "_event": "update",
+    }
+    with tqm.queue_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(legacy_update, ensure_ascii=False) + "\n")
+
+    reloaded = tqm.get_task_by_id(entry.task_id)
+    assert reloaded is not None
+    assert reloaded.status == "pending"
+    assert reloaded.summary == "crashed: OOM"
+
+    # The queue must remain usable — no exception building the priming view either.
+    assert isinstance(tqm.format_for_priming(), str)
+
+
+def test_update_status_pending_on_legacy_blocked_task_succeeds(tmp_path: Path) -> None:
+    """Even without touching the file directly, a legacy blocked row must not
+    block a subsequent update_status() call to a valid status."""
+    import json
+
+    anima_dir = tmp_path / "anima"
+    (anima_dir / "state").mkdir(parents=True)
+    queue_path = anima_dir / "state" / "task_queue.jsonl"
+    legacy_row = {
+        "task_id": "legacy-blocked-2",
+        "ts": "2026-08-01T00:00:00+09:00",
+        "source": "human",
+        "original_instruction": "legacy work 2",
+        "assignee": "anima",
+        "status": "blocked",
+        "summary": "legacy blocked task 2",
+        "relay_chain": [],
+        "updated_at": "2026-08-01T00:30:00+09:00",
+        "meta": {},
+    }
+    queue_path.write_text(json.dumps(legacy_row, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    tqm = TaskQueueManager(anima_dir)
+    result = tqm.update_status("legacy-blocked-2", "cancelled", summary="won't proceed")
+    assert result is not None
+    assert result.status == "cancelled"
