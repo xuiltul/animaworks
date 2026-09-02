@@ -1,1 +1,1 @@
-Update task status. Use status='done' when complete and status='cancelled' when aborted. When declaring blocked, include an unblock_check command that exits 0 once resolved whenever possible.
+Update task status. Use status='done' when complete and status='cancelled' when withdrawn. Record interim progress with status='in_progress' and a summary.

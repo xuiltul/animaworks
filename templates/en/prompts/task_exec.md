@@ -29,10 +29,10 @@ Other workers of the same Anima (your siblings) are currently executing the foll
 - You have access to the same identity, behavior guidelines, memory directories, and organization info as the main Anima. Use memory search and file reading as needed
 - Focus on and execute the work described above
 - End the task when completion criteria are met
-- After completing the task, call `update_task(status="done", result="summary of results")` before ending. This is the only completion declaration mechanism
-- Ending the session without a completion declaration automatically continues the task (up to 3 times), after which it is marked failed
+- After completing the task, call `update_task(status="done", result="summary of results")` before ending
+- If the session ends without a declaration, the task goes back to pending and stays on your list. Nothing auto-continues or nags you; decide yourself next time whether to continue it or cancel it
 - When waiting for background work, call `update_task(status="in_progress", summary="[waiting] <what you are waiting for>")` before ending (the system also treats an undeclared exit as waiting, but declaring it is more reliable)
-- If an external factor (missing permission, dependency, environment failure) prevents progress, do not repeat the same operations; declare `update_task(status="blocked", summary="<blocker>")` and stop. Automatic continuation is then cancelled
+- If an external factor (missing permission, dependency, environment failure) prevents progress, do not repeat the same operations; report the facts, what you tried and your recommendation to the requester and you may stop (the task stays pending). If it is no longer needed, set `update_task(status="cancelled", summary="<reason>")`
 - Observe the constraints
 - If anything is unclear, do your best within the information provided
 - **Parallel worker coordination**: The parallel worker status above is a snapshot from task start. Right before starting work on a new PR, branch, or resource, re-check what your siblings are working on via `list_tasks` (status="in_progress"). If a sibling is touching the same resource (same PR, same branch, etc.), avoid that resource and pick another target, or wait for the sibling to finish

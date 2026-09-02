@@ -1,1 +1,1 @@
-タスクのステータスを更新する。完了時はstatus='done'、中断時はstatus='cancelled'に設定する。blocked宣言時は可能な限り、blocker解消時にexit 0となるunblock_checkを添えること。
+タスクのステータスを更新する。完了時はstatus='done'、取り下げ時はstatus='cancelled'に設定する。進行中の途中経過はstatus='in_progress'とsummaryで残す。
