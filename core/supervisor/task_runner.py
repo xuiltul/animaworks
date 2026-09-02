@@ -206,10 +206,7 @@ async def execute_task_contract(anima: DigitalAnima, task_desc: dict[str, Any]) 
     produces the result string (and related metadata) for the root to apply.
     """
     from core.supervisor.pending_executor import (
-        _SENTINEL_CANCELLED,
-        _SENTINEL_CONTINUED,
-        _SENTINEL_DEFERRED,
-        _SENTINEL_EXPIRED,
+        _NON_COMPLETING_SENTINELS,
         PendingTaskExecutor,
     )
 
@@ -227,7 +224,7 @@ async def execute_task_contract(anima: DigitalAnima, task_desc: dict[str, Any]) 
     return {
         "task_type": "llm",
         "result": result,
-        "success": result not in {_SENTINEL_CANCELLED, _SENTINEL_CONTINUED, _SENTINEL_EXPIRED, _SENTINEL_DEFERRED},
+        "success": result not in _NON_COMPLETING_SENTINELS,
     }
 
 
@@ -479,9 +476,7 @@ async def _progress_loop(link: _RootLink, identity: IPCV2Identity) -> None:
             try:
                 await link.reconnect(connection)
             except Exception as reconnect_exc:
-                logger.warning(
-                    "Task runner reconnect to anima root failed; will retry: %s", reconnect_exc
-                )
+                logger.warning("Task runner reconnect to anima root failed; will retry: %s", reconnect_exc)
                 await asyncio.sleep(_RECONNECT_RETRY_SECONDS)
             continue
         await asyncio.sleep(_PROGRESS_INTERVAL_SECONDS)
@@ -588,9 +583,7 @@ async def _send_terminal(
                 "terminal ack backpressured, retrying seq=%s",
                 terminal_seq,
             )
-            await asyncio.sleep(
-                min(_TERMINAL_ACK_RETRY_SLEEP_SECONDS, deadline - now)
-            )
+            await asyncio.sleep(min(_TERMINAL_ACK_RETRY_SLEEP_SECONDS, deadline - now))
         except IPCV2ConnectionError:
             # Recover like the main send path: reconnect and resend.
             await connection.close()
@@ -598,9 +591,7 @@ async def _send_terminal(
             if replayed_run.body["request_id"] != request_id:
                 await connection.close()
                 raise
-            terminal_seq = await connection.send_response(
-                request_id, result=result, error=error
-            )
+            terminal_seq = await connection.send_response(request_id, result=result, error=error)
         finally:
             ack_receiver.cancel()
             await asyncio.gather(ack_receiver, return_exceptions=True)
