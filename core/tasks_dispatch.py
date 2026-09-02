@@ -18,11 +18,6 @@ from core.paths import get_animas_dir
 logger = logging.getLogger("animaworks.tasks_dispatch")
 
 
-def request_preemption(target_dir: Path, exclusive_key: str, preemptor_task_id: str) -> str | None:
-    # removed in teardown; A2 deletes the caller
-    return None
-
-
 def dispatch_direct_task(
     *,
     target: str,
