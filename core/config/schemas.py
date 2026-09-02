@@ -767,7 +767,6 @@ class BackgroundTaskConfig(BaseModel):
     """Configuration for background tool execution."""
 
     enabled: bool = True
-    completion_declaration_required: bool = True
     shutdown_drain_seconds: float = Field(default=600.0, ge=0)
     eligible_tools: dict[str, BackgroundToolConfig] = {
         "generate_character_assets": BackgroundToolConfig(threshold_s=30),
@@ -786,16 +785,9 @@ class BackgroundTaskConfig(BaseModel):
     max_completed_tasks_in_memory: int = Field(default=200, ge=0)
     max_parallel_llm_tasks: int = Field(default=3, ge=1, le=10)
     worker_pool_size: int = Field(default=1, ge=1, le=10)
-    blocked_recovery_enabled: bool = True
-    blocked_reprobe_after_hours: float = Field(default=6.0, ge=0)
-    blocked_reprobe_batch_limit: int = Field(default=3, ge=1)
-    blocked_recovery_scan_minutes: float = Field(default=15.0, ge=1)
-    blocked_max_reprobes: int = Field(default=4, ge=0)
-    blocked_check_timeout_seconds: int = Field(default=60, ge=1)
-    # True (default) = a checkless blocked task is handed back to the anima to
-    # re-judge its own blocker, up to blocked_max_reprobes times, before the
-    # supervisor is alerted. False fails closed and alerts without any self review.
-    blocked_checkless_reprobe_enabled: bool = True
+    # The task-control keys retired with the teardown are deliberately absent.
+    # This model ignores unknown keys, so an older config.json that still
+    # carries them loads without error.
 
 
 def resolve_background_worker_pool_size(

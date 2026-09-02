@@ -751,14 +751,11 @@ class TaskRunnerSupervisor:
         """Best-effort orphan StreamingJournal recovery after a child exits.
 
         All disk work runs in a thread so a saturated disk can never stall the
-        root event loop (which would delay every child's ack).  In-memory
-        checkpoints on event-loop-owned objects are applied on the loop after
-        the disk pass returns.
+        root event loop (which would delay every child's ack).
         """
         # Snapshot event-loop-owned inputs before handing disk work to a thread.
         owner = self._busy_status_owner
         model_config = getattr(owner, "model_config", None)
-        pending_executor = getattr(owner, "_pending_executor", None)
 
         def _disk_recovery() -> list[dict[str, Any]]:
             outcomes: list[dict[str, Any]] = []
@@ -782,9 +779,7 @@ class TaskRunnerSupervisor:
                             continue
                         if session_type == "chat" and recovery.recovered_text:
                             if model_config is None:
-                                logger.error(
-                                    "Cannot persist recovered chat journal without root model config"
-                                )
+                                logger.error("Cannot persist recovered chat journal without root model config")
                             else:
                                 conversation = ConversationMemory(
                                     self.anima_dir,
@@ -794,11 +789,7 @@ class TaskRunnerSupervisor:
                                 marker = t("anima.response_interrupted")
                                 saved_text = recovery.recovered_text + "\n" + marker
                                 last_assistant = next(
-                                    (
-                                        turn
-                                        for turn in reversed(conversation.load().turns)
-                                        if turn.role == "assistant"
-                                    ),
+                                    (turn for turn in reversed(conversation.load().turns) if turn.role == "assistant"),
                                     None,
                                 )
                                 already_saved = last_assistant is not None and (
@@ -837,19 +828,7 @@ class TaskRunnerSupervisor:
                     )
             return outcomes
 
-        outcomes = await asyncio.to_thread(_disk_recovery)
-
-        # Apply in-memory checkpoints on the event loop (not inside the thread).
-        if pending_executor is not None:
-            for outcome in outcomes:
-                if outcome["session_type"] in {"task", "task_exec"} and (
-                    outcome["recovered_text"].strip() or outcome["tool_calls"]
-                ):
-                    pending_executor.add_recovered_task_checkpoint(
-                        outcome["thread_id"],
-                        outcome["recovered_text"],
-                        outcome["tool_calls"],
-                    )
+        await asyncio.to_thread(_disk_recovery)
 
     async def _handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connection: IPCV2Connection | None = None

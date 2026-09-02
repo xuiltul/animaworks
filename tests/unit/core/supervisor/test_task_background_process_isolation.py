@@ -86,15 +86,14 @@ def _executor(
     return executor, anima, anima_dir
 
 
-async def test_isolated_task_journal_recovery_attaches_checkpoint_before_delete(tmp_path: Path) -> None:
+async def test_isolated_task_journal_recovery_clears_the_orphan(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "sakura"
     anima_dir.mkdir(parents=True)
     journal = StreamingJournal(anima_dir, session_type="task", thread_id="task-1")
     journal.open(trigger="task:task-1")
     journal.write_text("partial task output")
     journal.close()
-    pending_executor = MagicMock()
-    owner = SimpleNamespace(_pending_executor=pending_executor)
+    owner = SimpleNamespace(_pending_executor=MagicMock())
     supervisor = TaskRunnerSupervisor(
         "sakura",
         anima_dir,
@@ -104,12 +103,9 @@ async def test_isolated_task_journal_recovery_attaches_checkpoint_before_delete(
 
     await supervisor._recover_task_journals(("task",))
 
-    pending_executor.add_recovered_task_checkpoint.assert_called_once_with(
-        "task-1",
-        "partial task output",
-        [],
-    )
+    # The journal is collected; no checkpoint is injected into any descriptor.
     assert not StreamingJournal.has_orphan(anima_dir, "task")
+    owner._pending_executor.add_recovered_task_checkpoint.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -170,7 +166,7 @@ async def test_task_flag_true_uses_child_result_without_root_llm(tmp_path: Path)
 
 
 @pytest.mark.asyncio
-async def test_child_crash_records_failed_retryable_and_root_continues(tmp_path: Path) -> None:
+async def test_child_crash_returns_task_to_pending_and_root_continues(tmp_path: Path) -> None:
     executor, anima, anima_dir = _executor(tmp_path, task_isolated=True)
     assert executor._task_runner_supervisor is not None
     type(anima)._acquire_background_worker = None  # type: ignore[attr-defined]
@@ -185,14 +181,16 @@ async def test_child_crash_records_failed_retryable_and_root_continues(tmp_path:
         "task_type": "llm",
     }
     with (
-        patch.object(executor, "_write_failed_result") as write_failed,
+        patch.object(executor, "_save_task_result") as save_result,
+        patch.object(executor, "_record_run_ended") as record_end,
         patch.object(executor, "_sync_task_queue") as sync,
     ):
         await executor._execute_llm_task(task_desc)
 
-    write_failed.assert_called_once()
+    save_result.assert_called_once()
+    assert record_end.call_args[0] == ("t-crash", "crash")
     sync.assert_called()
-    assert sync.call_args[0][1] == "failed"
+    assert sync.call_args[0][1] == "pending"
     summary = str(sync.call_args.kwargs.get("summary") or sync.call_args[1].get("summary", ""))
     assert "INTERRUPTED" in summary
     # The original TaskRunnerError must survive into the summary (no flattening).
@@ -214,17 +212,14 @@ async def test_child_crash_during_shutdown_stays_for_startup_recovery(tmp_path: 
         "task_type": "llm",
     }
     processing = anima_dir / "state" / "pending" / "processing"
-    failed = anima_dir / "state" / "pending" / "failed"
     processing.mkdir(parents=True)
-    failed.mkdir()
     processing_path = processing / "t-shutdown-crash.json"
     processing_path.write_text(json.dumps(task_desc), encoding="utf-8")
     executor._shutdown_event.set()
 
-    await executor._execute_claimed_llm_task(task_desc, processing_path, failed, None)
+    await executor._execute_claimed_llm_task(task_desc, processing_path, None)
 
     assert processing_path.exists()
-    assert not list(failed.glob("*.json"))
     anima.messenger.send.assert_not_called()
 
 
@@ -233,8 +228,6 @@ async def test_same_attempt_not_reclaimed_while_lease_live(tmp_path: Path) -> No
     executor, _, anima_dir = _executor(tmp_path, task_isolated=True)
     processing = anima_dir / "state" / "pending" / "processing"
     processing.mkdir(parents=True)
-    failed = anima_dir / "state" / "pending" / "failed"
-    failed.mkdir(parents=True)
     path = processing / "t-attempt.json"
     path.write_text('{"task_id":"t-attempt"}', encoding="utf-8")
 
@@ -257,7 +250,7 @@ async def test_same_attempt_not_reclaimed_while_lease_live(tmp_path: Path) -> No
     ):
         # Force attempt tracker to same attempt as lease.
         executor._attempt_by_task_id["t-attempt"] = attempt
-        claimed = executor._claim_processing_task(path, failed, {"task_id": "t-attempt"})
+        claimed = executor._claim_processing_task(path, {"task_id": "t-attempt"})
     assert claimed is None
 
 

@@ -62,18 +62,6 @@ class SubordinateControlMixin(OrgHelpersMixin):
             _json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        try:
-            from core.delegation_recovery import surface_disabled_delegations_for_supervisor
-
-            reassignment_alerts = surface_disabled_delegations_for_supervisor(
-                self._anima_name,
-                get_animas_dir(),
-                target_name=target_name,
-            )
-        except Exception:
-            reassignment_alerts = []
-            logger.debug("Failed to surface disabled delegation alerts for %s", target_name, exc_info=True)
-
         log_summary = t("handler.disable_log_summary", target_name=target_name)
         if reason:
             log_summary += t("handler.disable_reason", reason=reason)
@@ -94,11 +82,6 @@ class SubordinateControlMixin(OrgHelpersMixin):
         result = t("handler.disabled_success", target_name=target_name)
         if reason:
             result += "\n" + t("handler.reason_prefix", reason=reason)
-        if reassignment_alerts:
-            result += "\n" + t(
-                "handler.disabled_open_delegations_alerted",
-                count=len(reassignment_alerts),
-            )
         return result
 
     def _handle_enable_subordinate(self, args: dict[str, Any]) -> str:

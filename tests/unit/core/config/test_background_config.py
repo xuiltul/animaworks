@@ -93,19 +93,28 @@ class TestBackgroundTaskConfig:
         """BackgroundTaskConfig has expected defaults."""
         btc = BackgroundTaskConfig()
         assert btc.enabled is True
-        assert btc.completion_declaration_required is True
         assert btc.result_retention_hours == 24
         assert btc.result_memory_retention_minutes == 60
         assert btc.max_completed_tasks_in_memory == 200
         assert btc.worker_pool_size == 1
         assert btc.shutdown_drain_seconds == 600
-        assert btc.blocked_recovery_enabled is True
-        assert btc.blocked_reprobe_after_hours == 6.0
-        assert btc.blocked_reprobe_batch_limit == 3
-        assert btc.blocked_recovery_scan_minutes == 15.0
-        assert btc.blocked_max_reprobes == 4
-        assert btc.blocked_check_timeout_seconds == 60
         assert isinstance(btc.eligible_tools, dict)
+
+    def test_retired_task_control_keys_are_ignored(self):
+        """A config.json left over from before the task-control teardown loads."""
+        btc = BackgroundTaskConfig(
+            completion_declaration_required=True,
+            blocked_recovery_enabled=True,
+            blocked_reprobe_after_hours=6.0,
+            blocked_reprobe_batch_limit=3,
+            blocked_recovery_scan_minutes=15.0,
+            blocked_max_reprobes=4,
+            blocked_check_timeout_seconds=60,
+            blocked_checkless_reprobe_enabled=True,
+        )
+        assert btc.enabled is True
+        assert not hasattr(btc, "completion_declaration_required")
+        assert not hasattr(btc, "blocked_recovery_enabled")
 
     @pytest.mark.parametrize(
         ("field", "value"),
@@ -113,8 +122,6 @@ class TestBackgroundTaskConfig:
             ("result_memory_retention_minutes", -1),
             ("max_completed_tasks_in_memory", -1),
             ("shutdown_drain_seconds", -1),
-            ("blocked_reprobe_batch_limit", 0),
-            ("blocked_recovery_scan_minutes", 0),
         ],
     )
     def test_background_task_config_rejects_negative_memory_limits(self, field, value):

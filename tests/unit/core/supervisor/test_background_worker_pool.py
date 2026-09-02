@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -158,10 +157,10 @@ async def test_duplicate_task_id_is_quarantined_without_layer2_update(tmp_path: 
     (pending_dir / "second.json").write_text(json.dumps(duplicate), encoding="utf-8")
     executor.wake()
 
-    failed_path = pending_dir / "failed" / "second.json"
-    await _wait_until(failed_path.exists)
+    dropped = pending_dir / "processing" / "second.json"
+    await _wait_until(lambda: not dropped.exists() and not (pending_dir / "second.json").exists())
     assert calls == ["duplicate-id"]
-    assert processing_lease_path(failed_path).exists()
+    assert not (pending_dir / "failed").exists()
     assert queue.get_task_by_id("duplicate-id").status == "in_progress"
 
     release_first.set()
@@ -196,7 +195,8 @@ async def test_duplicate_batch_task_id_is_quarantined_before_dispatch(tmp_path: 
     await asyncio.wait_for(executor.watcher_loop(), timeout=1)
 
     assert [task["task_id"] for task in dispatched] == ["duplicate-batch-id"]
-    assert (pending_dir / "failed" / "batch-b.json").exists()
+    assert not (pending_dir / "batch-b.json").exists()
+    assert not (pending_dir / "failed").exists()
     assert not executor._active_task_ids
 
 
@@ -228,8 +228,8 @@ async def test_duplicate_task_id_is_rejected_while_batch_is_running(tmp_path: Pa
     (pending_dir / "batch-duplicate.json").write_text(json.dumps(duplicate), encoding="utf-8")
     executor.wake()
 
-    failed_path = pending_dir / "failed" / "batch-duplicate.json"
-    await _wait_until(failed_path.exists)
+    await _wait_until(lambda: not (pending_dir / "batch-duplicate.json").exists())
+    await _wait_until(lambda: not (pending_dir / "processing" / "batch-duplicate.json").exists())
     assert len(dispatched) == 1
     assert [task["task_id"] for task in dispatched[0]] == ["running-batch-id"]
 
@@ -279,7 +279,6 @@ async def test_active_task_id_removed_after_claimed_dispatch_ends(tmp_path: Path
     processing_path = tmp_path / "processing" / f"{outcome}.json"
     processing_path.parent.mkdir()
     processing_path.write_text(json.dumps({"task_id": outcome}), encoding="utf-8")
-    (tmp_path / "failed").mkdir()
     write_processing_lease(processing_path, anima="pool-test", task_id=outcome)
     executor._active_task_ids.add(outcome)
 
@@ -290,12 +289,7 @@ async def test_active_task_id_removed_after_claimed_dispatch_ends(tmp_path: Path
             raise asyncio.CancelledError
 
     executor.execute_pending_task = fake_execute  # type: ignore[method-assign]
-    run = executor._execute_claimed_llm_task(
-        {"task_id": outcome},
-        processing_path,
-        tmp_path / "failed",
-        None,
-    )
+    run = executor._execute_claimed_llm_task({"task_id": outcome}, processing_path, None)
     if outcome == "cancel":
         with pytest.raises(asyncio.CancelledError):
             await run
@@ -304,13 +298,9 @@ async def test_active_task_id_removed_after_claimed_dispatch_ends(tmp_path: Path
 
     assert outcome not in executor._active_task_ids
     assert not processing_lease_path(processing_path).exists()
-    if outcome == "success":
-        assert not processing_path.exists()
-    elif outcome == "failure":
-        assert (tmp_path / "failed" / processing_path.name).exists()
-    else:
-        assert not processing_path.exists()
-        assert (tmp_path / "failed" / processing_path.name).exists()
+    # Every outcome drops the descriptor: there is no failed/ quarantine.
+    assert not processing_path.exists()
+    assert not (tmp_path / "failed").exists()
 
 
 async def test_cancelled_claim_syncs_layer2_task_queue_to_failed(tmp_path: Path) -> None:
@@ -328,8 +318,6 @@ async def test_cancelled_claim_syncs_layer2_task_queue_to_failed(tmp_path: Path)
     processing_path = tmp_path / "processing" / f"{task_id}.json"
     processing_path.parent.mkdir()
     processing_path.write_text(json.dumps({"task_id": task_id}), encoding="utf-8")
-    failed_dir = tmp_path / "failed"
-    failed_dir.mkdir()
 
     async def cancel_execute(task_desc, *, worker_slot=None):
         raise asyncio.CancelledError
@@ -337,19 +325,15 @@ async def test_cancelled_claim_syncs_layer2_task_queue_to_failed(tmp_path: Path)
     executor.execute_pending_task = cancel_execute  # type: ignore[method-assign]
 
     with pytest.raises(asyncio.CancelledError):
-        await executor._execute_claimed_llm_task(
-            {"task_id": task_id},
-            processing_path,
-            failed_dir,
-            None,
-        )
+        await executor._execute_claimed_llm_task({"task_id": task_id}, processing_path, None)
 
     entry = queue.get_task_by_id(task_id)
-    assert entry.status == "failed"
+    assert entry.status == "pending"
     assert entry.summary == (
-        "INTERRUPTED: task was cancelled outside shutdown and may have "
-        "PARTIALLY EXECUTED. Verify actual completion state before re-delegating."
+        "INTERRUPTED: the run was cancelled outside shutdown and may have "
+        "PARTIALLY EXECUTED. Verify the actual state before running it again."
     )
+    assert entry.meta["last_run_stop_kind"] == "cancelled"
     assert executor._anima.messenger.send.call_args.kwargs["to"] == "pool-test"
 
 
@@ -423,7 +407,6 @@ async def test_command_claim_stays_active_until_background_task_finishes(tmp_pat
         background_task,
         task_id="command",
         processing_path=processing_path,
-        failed_dir=failed_dir,
     )
     assert "command" in executor._active_task_ids
     assert processing_path.exists()
@@ -437,7 +420,7 @@ async def test_command_claim_stays_active_until_background_task_finishes(tmp_pat
     assert not processing_lease_path(processing_path).exists()
 
 
-async def _measure_exclusive_key_concurrency(
+async def _measure_concurrency(
     executor: PendingTaskExecutor,
     task_descriptions: list[dict[str, str]],
 ) -> int:
@@ -457,112 +440,73 @@ async def _measure_exclusive_key_concurrency(
     return maximum_active
 
 
-async def test_same_working_directory_without_exclusive_key_can_overlap(tmp_path: Path) -> None:
+async def test_same_working_directory_can_overlap(tmp_path: Path) -> None:
     executor = _executor(tmp_path)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
 
-    maximum_active = await _measure_exclusive_key_concurrency(
+    maximum_active = await _measure_concurrency(
         executor,
         [
             {"task_id": "same-one", "working_directory": str(workspace)},
-            {
-                "task_id": "same-two",
-                "working_directory": str(workspace),
-                "exclusive_key": "",
-            },
+            {"task_id": "same-two", "working_directory": str(workspace)},
         ],
     )
 
     assert maximum_active == 2
-    assert len(executor._exclusion_locks) == 0
 
 
-async def test_same_exclusive_key_is_serialized(tmp_path: Path) -> None:
+async def test_tasks_touching_the_same_pr_are_not_serialised(tmp_path: Path) -> None:
+    """There is no exclusion any more: two tasks about the same PR run together."""
     executor = _executor(tmp_path)
 
-    maximum_active = await _measure_exclusive_key_concurrency(
+    maximum_active = await _measure_concurrency(
         executor,
         [
-            {"task_id": "same-key-one", "exclusive_key": "pr-3999"},
-            {"task_id": "same-key-two", "exclusive_key": "pr-3999"},
-        ],
-    )
-
-    assert maximum_active == 1
-    assert len(executor._exclusion_locks) == 1
-
-
-async def test_distinct_exclusive_keys_can_overlap(tmp_path: Path) -> None:
-    executor = _executor(tmp_path)
-
-    maximum_active = await _measure_exclusive_key_concurrency(
-        executor,
-        [
-            {"task_id": "distinct-one", "exclusive_key": "pr-3999"},
-            {"task_id": "distinct-two", "exclusive_key": "pr-4000"},
+            {"task_id": "pr-one", "summary": "review pr-3999", "exclusive_key": "pr-3999"},
+            {"task_id": "pr-two", "summary": "merge pr-3999", "exclusive_key": "pr-3999"},
         ],
     )
 
     assert maximum_active == 2
-    assert len(executor._exclusion_locks) == 2
 
 
-async def test_exclusive_key_wait_is_logged_without_regressing_queue_status(
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    executor = _executor(tmp_path)
-    queue = TaskQueueManager(executor._anima_dir)
-    queue.add_task(
-        source="anima",
-        original_instruction="pending waiter",
-        assignee="pool-test",
-        summary="pending waiter",
-        task_id="pending-wait",
-    )
-    queue.add_task(
-        source="anima",
-        original_instruction="active waiter",
-        assignee="pool-test",
-        summary="active waiter",
-        task_id="active-wait",
-        status="in_progress",
-    )
-    holder_started = asyncio.Event()
-    release_holder = asyncio.Event()
+async def test_same_pr_descriptors_are_claimed_in_parallel(tmp_path: Path) -> None:
+    """Two pending descriptors naming the same PR are both claimed by the pool."""
+    executor = _executor(tmp_path, pool_size=2)
+    pending_dir = executor._anima_dir / "state" / "pending"
+    pending_dir.mkdir(parents=True)
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+    started: set[str] = set()
 
-    async def fake_run_llm_task(task_desc, *args, **kwargs) -> str:
-        if task_desc["task_id"] == "lock-holder":
-            holder_started.set()
-            await release_holder.wait()
-        return "ok"
+    async def fake_execute(task_desc, *, worker_slot=None):
+        started.add(task_desc["task_id"])
+        if len(started) == 2:
+            both_started.set()
+        await release.wait()
 
-    executor._run_llm_task = fake_run_llm_task  # type: ignore[method-assign]
-    caplog.set_level(logging.INFO, logger="core.supervisor.pending_executor")
-    holder = asyncio.create_task(executor._run_task_in_worker({"task_id": "lock-holder", "exclusive_key": "pr-3999"}))
-    await holder_started.wait()
-    pending_waiter = asyncio.create_task(
-        executor._run_task_in_worker({"task_id": "pending-wait", "exclusive_key": "pr-3999"})
-    )
-    active_waiter = asyncio.create_task(
-        executor._run_task_in_worker({"task_id": "active-wait", "exclusive_key": "pr-3999"})
-    )
+    executor.execute_pending_task = fake_execute  # type: ignore[method-assign]
+    for task_id, summary in (("pr-review", "review pr-42"), ("pr-merge", "merge pr-42")):
+        descriptor = {
+            "task_type": "llm",
+            "task_id": task_id,
+            "description": summary,
+            "summary": summary,
+            "exclusive_key": "pr-42",
+        }
+        (pending_dir / f"{task_id}.json").write_text(json.dumps(descriptor), encoding="utf-8")
 
-    await _wait_until(
-        lambda: len([message for message in caplog.messages if "waiting on exclusive key: pr-3999" in message]) == 2
-    )
-    pending_entry = queue.get_task_by_id("pending-wait")
-    assert pending_entry.status == "pending"
-    assert pending_entry.summary == "pending waiter"
-    active_entry = queue.get_task_by_id("active-wait")
-    assert active_entry.status == "in_progress"
-    assert active_entry.summary == "active waiter"
-    assert caplog.messages.count("[pool-test] Task pending-wait waiting on exclusive key: pr-3999") == 1
-    assert caplog.messages.count("[pool-test] Task active-wait waiting on exclusive key: pr-3999") == 1
+    watcher = asyncio.create_task(executor.watcher_loop())
+    await asyncio.wait_for(both_started.wait(), timeout=1)
+    assert started == {"pr-review", "pr-merge"}
 
-    release_holder.set()
-    await asyncio.gather(holder, pending_waiter, active_waiter)
+    release.set()
+    await _wait_until(lambda: not executor._active_dispatch_tasks)
+    executor._shutdown_event.set()
+    executor.wake()
+    await asyncio.wait_for(watcher, timeout=1)
+    assert not executor._active_task_ids
 
 
 def test_active_worker_is_busy_and_drives_primary_status() -> None:

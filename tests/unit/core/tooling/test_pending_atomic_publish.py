@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -66,35 +65,6 @@ def test_submit_tasks_atomically_publishes_pending_json(
     target = handler._anima_dir / "state" / "pending" / "task-atomic.json"
     assert observe_pending_publish == [target]
     assert json.loads(target.read_text(encoding="utf-8"))["task_id"] == "task-atomic"
-    assert list(target.parent.glob("*.tmp")) == []
-
-
-def test_retry_atomically_regenerates_pending_json(
-    tmp_path: Path,
-    observe_pending_publish: list[Path],
-) -> None:
-    from core.tooling.handler_skills import SkillsToolsMixin
-
-    handler = object.__new__(SkillsToolsMixin)
-    handler._anima_dir = tmp_path / "animas" / "sakura"
-    handler._anima_name = "sakura"
-    handler._pending_executor_wake = None
-    handler._retry_attention_decision = lambda *_args, **_kwargs: SimpleNamespace(
-        executable=True,
-        reason="active",
-    )
-    entry = SimpleNamespace(
-        task_id="retry-atomic",
-        summary="Retry task",
-        original_instruction="Retry this task",
-        meta={"task_desc": {}},
-    )
-
-    assert handler._regenerate_pending_json(entry) is True
-
-    target = handler._anima_dir / "state" / "pending" / "retry-atomic.json"
-    assert observe_pending_publish == [target]
-    assert json.loads(target.read_text(encoding="utf-8"))["task_id"] == "retry-atomic"
     assert list(target.parent.glob("*.tmp")) == []
 
 

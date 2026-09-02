@@ -11,9 +11,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-
 from core.tooling.handler import ToolHandler
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -479,7 +477,8 @@ class TestDelegateTask:
         sub_queue = tmp_path / "animas" / "hinata" / "state" / "task_queue.jsonl"
         assert sub_queue.exists()
 
-    def test_disable_subordinate_surfaces_open_delegation(self, tmp_path):
+    def test_disable_subordinate_no_longer_reassigns_open_delegations(self, tmp_path):
+        """Disabling a subordinate is a plain state change; nothing is re-filed."""
         messenger = MagicMock()
         msg_mock = MagicMock()
         msg_mock.id = "msg1"
@@ -507,15 +506,14 @@ class TestDelegateTask:
                     "name": "hinata",
                     "instruction": "Prepare the monthly report",
                     "summary": "Monthly report",
-                    "deadline": "2h",
                 },
             )
             result = handler.handle("disable_subordinate", {"name": "hinata", "reason": "maintenance"})
 
-        assert "再割当" in result or "reassignment" in result
+        assert "maintenance" in result
         own_queue = tmp_path / "animas" / "sakura" / "state" / "task_queue.jsonl"
         records = [json.loads(line) for line in own_queue.read_text(encoding="utf-8").splitlines()]
-        assert any(record.get("meta", {}).get("kind") == "disabled_delegation_reassignment" for record in records)
+        assert not any(record.get("meta", {}).get("kind") == "disabled_delegation_reassignment" for record in records)
 
 
 # ── task_tracker tests ─────────────────────────────────────

@@ -333,10 +333,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "配下のstatus.json, identity.md, injection.md, state/, task_queue.jsonl",
         "en": "Descendant status.json, identity.md, injection.md, state/, task_queue.jsonl",
     },
-    "handler.disabled_open_delegations_alerted": {
-        "ja": "未完了の委譲タスク {count} 件を再割当が必要なタスクとして上司側に記録しました。",
-        "en": "Recorded {count} open delegated task(s) as needing reassignment for the supervisor.",
-    },
     "handler.description_field_required": {
         "ja": "`description` フィールドが必要です。",
         "en": "The `description` field is required.",

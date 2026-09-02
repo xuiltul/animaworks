@@ -341,16 +341,15 @@ def _rescue_regenerate_pending(anima_dir: Path, task_id: str, msg: Any) -> None:
         "source": "delegation_rescue",
     }
 
-    target_dir = pending_dir / "deferred" if decision.reason == "snoozed" else pending_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
-    path = target_dir / f"{task_id}.json"
+    # Always land in pending/: nothing restores state/pending/deferred any more,
+    # so a descriptor parked there would never be picked up again.
+    path = pending_dir / f"{task_id}.json"
     path.write_text(
         json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     logger.info(
-        "Rescue: regenerated %s file for task %s from delegation DM",
-        target_dir.name,
+        "Rescue: regenerated pending file for task %s from delegation DM",
         task_id,
     )
 

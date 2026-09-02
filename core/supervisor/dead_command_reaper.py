@@ -27,8 +27,9 @@ import logging
 import os
 import signal
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import psutil
 
@@ -85,9 +86,7 @@ def _parent_is_orphaning(proc: Any) -> bool:
             par_name = ""
         return "systemd" in par_name
     joined = " ".join(par_cmd)
-    if SYSTEMD_MARKER in joined or joined.strip().endswith("systemd"):
-        return True
-    return False
+    return SYSTEMD_MARKER in joined or joined.strip().endswith("systemd")
 
 
 def _is_orphan_sandbox(proc: Any) -> bool:
@@ -99,9 +98,7 @@ def _is_orphan_sandbox(proc: Any) -> bool:
     if not _parent_is_orphaning(proc):
         return False
     age = _age_seconds(proc)
-    if age is None or age <= ORPHAN_SANDBOX_MIN_AGE:
-        return False
-    return True
+    return age is not None and age > ORPHAN_SANDBOX_MIN_AGE
 
 
 def _is_broad_search(proc: Any, data_dir: Path) -> bool:

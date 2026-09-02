@@ -16,12 +16,11 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from core.exceptions import ToolExecutionError
-from core.memory.task_queue import TaskQueueManager
 from core.supervisor.pending_executor import PendingTaskExecutor
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -146,8 +145,8 @@ class TestPendingTaskWatcherLoop:
 
         assert not corrupt_path.exists()
 
-    async def test_parks_non_object_llm_pending_json(self, tmp_path: Path) -> None:
-        """A list-shaped JSON in state/pending/ is moved to failed/ instead of crashing the loop."""
+    async def test_drops_non_object_llm_pending_json(self, tmp_path: Path) -> None:
+        """A list-shaped JSON in state/pending/ is dropped instead of crashing the loop."""
         executor = _make_executor_with_anima(tmp_path)
         llm_pending_dir = executor._anima_dir / "state" / "pending"
         llm_pending_dir.mkdir(parents=True, exist_ok=True)
@@ -158,7 +157,6 @@ class TestPendingTaskWatcherLoop:
             await executor.watcher_loop()
 
         assert not junk.exists()
-        assert (llm_pending_dir / "failed" / "pr4894-reviews-raw.json").read_text(encoding="utf-8") == "[]"
 
     async def test_processes_multiple_pending_files(self, tmp_path: Path) -> None:
         """Watcher processes all pending files in a single scan iteration."""
@@ -203,138 +201,6 @@ class TestPendingTaskWatcherLoop:
 
         with patch("core.supervisor.pending_executor.asyncio.wait_for", side_effect=cancel_wait):
             await executor.watcher_loop()
-
-
-class TestPendingTaskRecoveryScan:
-    async def test_scan_is_throttled_and_runs_in_thread(self, tmp_path: Path) -> None:
-        executor = _make_executor(tmp_path)
-
-        with (
-            patch.object(executor, "_recovery_scan_interval_seconds", return_value=900),
-            patch("core.supervisor.pending_executor.asyncio.to_thread", new=AsyncMock()) as to_thread,
-        ):
-            await executor._run_recovery_scan_if_due(now=100)
-            await executor._run_recovery_scan_if_due(now=999)
-            await executor._run_recovery_scan_if_due(now=1000)
-
-        assert to_thread.call_count == 2
-        assert all(call.args == (executor._recover_blocked_and_orphaned_tasks,) for call in to_thread.call_args_list)
-
-    def test_regenerates_orphan_but_skips_delegation_tracking_parent(self, tmp_path: Path) -> None:
-        executor = _make_executor(tmp_path)
-        queue = TaskQueueManager(executor._anima_dir)
-        orphan = queue.add_task(
-            source="anima",
-            original_instruction="finish orphan",
-            assignee="test-anima",
-            summary="orphan",
-            status="pending",
-            task_id="orphan-task",
-        )
-        tracking = queue.add_task(
-            source="anima",
-            original_instruction="track child",
-            assignee="worker",
-            summary="tracking",
-            status="pending",
-            task_id="tracking-parent",
-            meta={"delegated_to": "worker", "delegated_task_id": "child-task"},
-        )
-
-        with (
-            patch("core.blocked_recovery.revalidate_blocked_tasks"),
-            patch("core.blocked_recovery.regenerate_pending_json", return_value=True) as regenerate,
-        ):
-            executor._recover_blocked_and_orphaned_tasks()
-
-        regenerate.assert_called_once()
-        assert regenerate.call_args.args == (executor._anima_dir, "test-anima", orphan)
-        assert "descriptor消失" in regenerate.call_args.kwargs["description_suffix"]
-        assert tracking.task_id != regenerate.call_args.args[2].task_id
-        events = [
-            json.loads(line)
-            for path in (executor._anima_dir / "activity_log").glob("*.jsonl")
-            for line in path.read_text(encoding="utf-8").splitlines()
-        ]
-        assert any(
-            event["type"] == "blocked_recovery"
-            and event["meta"] == {"task_id": orphan.task_id, "method": "descriptor_regeneration"}
-            for event in events
-        )
-
-    def test_in_progress_without_runner_is_repended_and_regenerated(self, tmp_path: Path) -> None:
-        """update_task(in_progress) from a non-runner session (e.g. inbox cycle) must not strand the task."""
-        executor = _make_executor(tmp_path)
-        queue = TaskQueueManager(executor._anima_dir)
-        stranded = queue.add_task(
-            source="anima",
-            original_instruction="set in_progress by inbox cycle",
-            assignee="test-anima",
-            summary="stranded",
-            status="in_progress",
-            task_id="stranded-task",
-        )
-        active = queue.add_task(
-            source="anima",
-            original_instruction="really running",
-            assignee="test-anima",
-            summary="running",
-            status="in_progress",
-            task_id="active-task",
-        )
-        fresh = queue.add_task(
-            source="anima",
-            original_instruction="just flipped",
-            assignee="test-anima",
-            summary="fresh",
-            status="in_progress",
-            task_id="fresh-task",
-        )
-        executor._active_task_ids.add(active.task_id)
-        old = "2000-01-01T00:00:00+00:00"
-        listed = {
-            "pending": [],
-            "in_progress": [
-                stranded.model_copy(update={"updated_at": old}),
-                active.model_copy(update={"updated_at": old}),
-                fresh,
-            ],
-        }
-        with (
-            patch.object(TaskQueueManager, "list_tasks", lambda self, status=None: listed[status]),
-            patch("core.blocked_recovery.revalidate_blocked_tasks"),
-            patch("core.blocked_recovery.regenerate_pending_json", return_value=True) as regenerate,
-        ):
-            executor._recover_blocked_and_orphaned_tasks()
-
-        regenerate.assert_called_once()
-        assert regenerate.call_args.args[2].task_id == stranded.task_id
-        assert queue.get_task_by_id(stranded.task_id).status == "pending"
-        assert queue.get_task_by_id(active.task_id).status == "in_progress"
-        assert queue.get_task_by_id(fresh.task_id).status == "in_progress"
-
-    def test_existing_processing_descriptor_is_not_regenerated(self, tmp_path: Path) -> None:
-        executor = _make_executor(tmp_path)
-        queue = TaskQueueManager(executor._anima_dir)
-        entry = queue.add_task(
-            source="anima",
-            original_instruction="already claimed",
-            assignee="test-anima",
-            summary="running",
-            status="pending",
-            task_id="already-claimed",
-        )
-        processing_dir = executor._anima_dir / "state" / "pending" / "processing"
-        processing_dir.mkdir(parents=True)
-        (processing_dir / f"{entry.task_id}.json").write_text("{}", encoding="utf-8")
-
-        with (
-            patch("core.blocked_recovery.revalidate_blocked_tasks"),
-            patch("core.blocked_recovery.regenerate_pending_json") as regenerate,
-        ):
-            executor._recover_blocked_and_orphaned_tasks()
-
-        regenerate.assert_not_called()
 
 
 # ── TestExecutePendingTask ───────────────────────────────────

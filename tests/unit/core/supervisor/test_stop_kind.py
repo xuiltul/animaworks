@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -76,22 +75,56 @@ def _execution_patches():
     with (
         patch("core.paths.load_prompt", return_value="prompt"),
         patch("core.memory.activity.ActivityLogger"),
-        patch("core.supervisor.pending_executor._completion_declaration_required", return_value=True),
     ):
         yield
 
 
 @pytest.mark.asyncio
-async def test_interrupted_reenqueues_even_with_completion_declaration(tmp_path: Path) -> None:
+async def test_interrupted_without_declaration_returns_to_pending(tmp_path: Path) -> None:
+    """An interrupted run that never declared goes back to pending, not re-enqueued."""
     executor = _make_executor(tmp_path, "interrupted")
     manager = _queue_task(executor, "interrupted")
-    manager.update_meta(
-        "interrupted",
-        {"completed_by": "agent_declaration", "result_note": "premature"},
-    )
+
+    with _execution_patches():
+        await executor._execute_llm_task(_task("interrupted"))
+
+    entry = manager.get_task_by_id("interrupted")
+    assert entry is not None
+    assert entry.status == "pending"
+    assert entry.meta["last_run_stop_kind"] == "interrupted"
+    assert entry.meta["last_run_ended_at"]
+    assert not (executor._anima_dir / "state" / "pending" / "interrupted.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_normal_stop_without_declaration_returns_to_pending(tmp_path: Path) -> None:
+    """A run that finishes normally but never declares is handed back as pending."""
+    executor = _make_executor(tmp_path)
+    manager = _queue_task(executor, "undeclared")
+
+    with _execution_patches():
+        await executor._execute_llm_task(_task("undeclared"))
+
+    entry = manager.get_task_by_id("undeclared")
+    assert entry is not None
+    assert entry.status == "pending"
+    assert entry.summary == "run ended without a completion declaration"
+    assert entry.meta["last_run_stop_kind"] == "normal"
+    assert entry.meta["last_run_ended_at"]
+    # No descriptor is regenerated: nothing re-runs it on the anima's behalf.
+    assert not list((executor._anima_dir / "state" / "pending").glob("*.json"))
+    executor._anima.messenger.send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_interrupted_after_declaration_stays_done(tmp_path: Path) -> None:
+    """A run that declared done before being interrupted keeps its declaration."""
+    executor = _make_executor(tmp_path, "interrupted")
+    manager = _queue_task(executor, "declared")
 
     async def declared_then_interrupted(*_args, **_kwargs):
-        manager.update_status("interrupted", "done")
+        manager.update_status("declared", "done")
+        manager.update_meta("declared", {"completed_by": "agent_declaration", "result_note": "verified"})
         yield {"type": "text_delta", "text": "output"}
         yield {
             "type": "cycle_done",
@@ -106,16 +139,12 @@ async def test_interrupted_reenqueues_even_with_completion_declaration(tmp_path:
     executor._anima.agent.run_cycle_streaming = declared_then_interrupted
 
     with _execution_patches():
-        await executor._execute_llm_task(_task("interrupted"))
+        await executor._execute_llm_task(_task("declared"))
 
-    entry = manager.get_task_by_id("interrupted")
-    pending = json.loads(
-        (executor._anima_dir / "state" / "pending" / "interrupted.json").read_text(encoding="utf-8")
-    )
+    entry = manager.get_task_by_id("declared")
     assert entry is not None
-    assert entry.status == "in_progress"
-    assert entry.meta.get("completed_by") is None
-    assert "interrupted" in pending["context"]
+    assert entry.status == "done"
+    assert not (executor._anima_dir / "state" / "pending" / "declared.json").exists()
 
 
 @pytest.mark.asyncio
@@ -126,7 +155,6 @@ async def test_budget_skipped_keeps_queue_pending_and_records_activity(tmp_path:
     with (
         patch("core.paths.load_prompt", return_value="prompt"),
         patch("core.memory.activity.ActivityLogger") as activity,
-        patch("core.supervisor.pending_executor._completion_declaration_required", return_value=True),
     ):
         await executor._execute_llm_task(_task("budget"))
 
@@ -154,8 +182,8 @@ async def test_cancelled_batch_result_does_not_start_dependent(tmp_path: Path) -
     assert executor._run_task_in_worker.await_count == 1
     child = manager.get_task_by_id("child")
     assert child is not None
-    assert child.status == "failed"
-    assert child.summary == "FAILED: failed_dependency"
+    assert child.status == "pending"
+    assert child.summary == "a task this one depends on did not complete"
 
 
 @pytest.mark.asyncio
@@ -163,6 +191,7 @@ async def test_normal_stop_with_declaration_completes(tmp_path: Path) -> None:
     executor = _make_executor(tmp_path)
     manager = _queue_task(executor, "normal")
     manager.update_meta("normal", {"completed_by": "agent_declaration", "result_note": "verified"})
+    manager.update_status("normal", "done")
 
     with _execution_patches():
         await executor._execute_llm_task(_task("normal"))
@@ -179,7 +208,6 @@ async def test_stream_error_is_not_suppressed_without_declaration(tmp_path: Path
     manager = _queue_task(executor, "stream-error")
 
     async def error_stream(*_args, **_kwargs):
-        manager.update_status("stream-error", "done")
         yield {"type": "error", "message": "connection lost"}
         yield {
             "type": "cycle_done",
@@ -192,5 +220,6 @@ async def test_stream_error_is_not_suppressed_without_declaration(tmp_path: Path
 
     entry = manager.get_task_by_id("stream-error")
     assert entry is not None
-    assert entry.status == "failed"
+    assert entry.status == "pending"
     assert "streaming error" in entry.summary
+    assert entry.meta["last_run_stop_kind"] == "crash"

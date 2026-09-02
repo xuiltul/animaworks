@@ -144,20 +144,16 @@ async def test_three_single_pending_llm_tasks_overlap_across_worker_slots(
             shutdown_event=shutdown_event,
         )
 
-        with patch(
-            "core.supervisor.pending_executor._completion_declaration_required",
-            return_value=False,
-        ):
-            watcher = asyncio.create_task(executor.watcher_loop())
-            await asyncio.wait_for(recorder.all_ended.wait(), timeout=5.0)
-            # Let each detached coordinator task finish its processing-file
-            # cleanup before asking watcher_loop to shut down.
-            async with asyncio.timeout(2.0):
-                while executor._active_dispatch_tasks:
-                    await asyncio.sleep(0.01)
-            shutdown_event.set()
-            executor.wake()
-            await asyncio.wait_for(watcher, timeout=2.0)
+        watcher = asyncio.create_task(executor.watcher_loop())
+        await asyncio.wait_for(recorder.all_ended.wait(), timeout=5.0)
+        # Let each detached coordinator task finish its processing-file
+        # cleanup before asking watcher_loop to shut down.
+        async with asyncio.timeout(2.0):
+            while executor._active_dispatch_tasks:
+                await asyncio.sleep(0.01)
+        shutdown_event.set()
+        executor.wake()
+        await asyncio.wait_for(watcher, timeout=2.0)
 
         assert set(recorder.started) == set(task_ids)
         assert set(recorder.ended) == set(task_ids)

@@ -16,15 +16,6 @@ from core.i18n import t
 from core.supervisor.pending_executor import PendingTaskExecutor
 
 
-@pytest.fixture(autouse=True)
-def _legacy_completion_semantics():
-    with patch(
-        "core.supervisor.pending_executor._completion_declaration_required",
-        return_value=False,
-    ):
-        yield
-
-
 def _make_executor(tmp_path: Path) -> PendingTaskExecutor:
     """Create a PendingTaskExecutor with minimal dependencies."""
     anima_dir = tmp_path / "animas" / "test-anima"
@@ -383,18 +374,12 @@ class TestStreamErrorSuppression:
         mock_entry.summary = "Task completed successfully"
         mock_entry.meta = {"completed_by": "agent_declaration"}
 
-        from core.taskboard.models import AttentionDecision
-
         with (
             patch("core.paths.load_prompt", return_value="test prompt"),
             patch("core.memory.activity.ActivityLogger") as mock_activity,
             patch("core.supervisor.pending_executor._resolve_default_workspace", return_value=""),
             patch("core.memory.task_queue.TaskQueueManager") as mock_tqm,
-            patch(
-                "core.supervisor.pending_executor.resolver_for_anima_dir",
-            ) as mock_resolver,
         ):
-            mock_resolver.return_value.should_execute.return_value = AttentionDecision(reason="active")
             mock_activity.return_value.log = MagicMock()
             mock_tqm.return_value.get_task_by_id.return_value = mock_entry
 
@@ -589,6 +574,6 @@ class TestLlmTaskFailurePropagation:
         assert start_call.args == ("task_exec_start",)
         assert end_call.args == ("task_exec_end",)
         assert end_call.kwargs["ctx"] == "task:llm-fail-1"
-        assert end_call.kwargs["meta"]["status"] == "failed"
+        assert end_call.kwargs["meta"]["status"] == "error"
         assert end_call.kwargs["meta"]["error"] == "stream retry exhausted"
         assert end_call.kwargs["meta"]["error_type"] == "RuntimeError"

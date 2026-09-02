@@ -436,19 +436,6 @@ class AnimaRunner:
                 )
 
                 has_recovered_payload = bool(recovery.recovered_text.strip()) or bool(recovery.tool_calls)
-                pending_executor = getattr(self, "_pending_executor", None)
-                if session_type in {"task", "task_exec"} and has_recovered_payload and pending_executor is not None:
-                    try:
-                        pending_executor.add_recovered_task_checkpoint(
-                            thread_id,
-                            recovery.recovered_text,
-                            recovery.tool_calls,
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Failed to attach recovered journal checkpoint for task %s",
-                            thread_id,
-                        )
                 if session_type == "heartbeat" and not has_recovered_payload:
                     StreamingJournal.confirm_recovery(self._anima_dir, session_type, thread_id=thread_id)
                     logger.info(

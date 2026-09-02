@@ -452,17 +452,6 @@ class HeartbeatMixin:
                         animas_dir=str(get_animas_dir()),
                     )
                 )
-                try:
-                    from core.delegation_recovery import build_supervision_context
-
-                    supervision_context = build_supervision_context(
-                        self.name,
-                        get_animas_dir(),
-                    )
-                    if supervision_context:
-                        parts.append(supervision_context)
-                except Exception:
-                    logger.debug("[%s] Failed to build supervision recovery context", self.name, exc_info=True)
         except Exception:
             logger.debug(
                 "[%s] Failed to inject delegation check",

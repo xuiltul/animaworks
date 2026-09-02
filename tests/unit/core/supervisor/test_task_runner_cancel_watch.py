@@ -2,8 +2,7 @@
 
 Verifies that ``TaskRunnerSupervisor._watch_job`` kills the child process group of
 a ``task``-lane job whose queue entry is externally cancelled, and that
-``PendingTaskExecutor._fail_task_terminal`` skips the failure notification when the
-entry is already cancelled.
+``PendingTaskExecutor._return_task_to_pending`` leaves a cancelled entry alone.
 """
 
 from __future__ import annotations
@@ -111,7 +110,7 @@ def test_watch_job_does_not_terminate_when_not_cancelled(monkeypatch) -> None:
     asyncio.run(main())
 
 
-def test_fail_task_terminal_skips_notify_when_cancelled(tmp_path) -> None:
+def test_return_to_pending_skips_cancelled_entry(tmp_path) -> None:
     from core.supervisor.pending_executor import PendingTaskExecutor
 
     anima_dir = tmp_path / "animas" / "test-anima"
@@ -130,8 +129,10 @@ def test_fail_task_terminal_skips_notify_when_cancelled(tmp_path) -> None:
             "core.memory.task_queue.TaskQueueManager",
             lambda *a, **k: queue,
         )
-        executor._fail_task_terminal(
+        executor._return_task_to_pending(
             {"task_id": "t1", "title": "T", "description": "D"},
-            "FAILED: interrupted",
+            "INTERRUPTED",
+            stop_kind="crash",
         )
     executor._anima.messenger.send.assert_not_called()
+    queue.update_status.assert_not_called()

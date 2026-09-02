@@ -23,15 +23,6 @@ from core.supervisor.pending_executor import PendingTaskExecutor
 
 
 @pytest.fixture(autouse=True)
-def _legacy_completion_semantics():
-    with patch(
-        "core.supervisor.pending_executor._completion_declaration_required",
-        return_value=False,
-    ):
-        yield
-
-
-@pytest.fixture(autouse=True)
 def _silence_activity():
     with patch("core.memory.activity.ActivityLogger") as mock_activity:
         mock_activity.return_value.log = MagicMock()
@@ -94,9 +85,7 @@ class TestTaskModelOverrideConstruction:
         # fields — each authenticates via its own CLI store.
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t1", "model": "c:codex/gpt-5.6-sol"}
-            )
+            override = executor._task_model_config_override({"task_id": "t1", "model": "c:codex/gpt-5.6-sol"})
         assert override is not None
         assert override.model == "codex/gpt-5.6-sol"
         assert override.resolved_mode == "C"
@@ -109,9 +98,7 @@ class TestTaskModelOverrideConstruction:
         # S-mode resolves the family credential and replaces credential fields.
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t2", "model": "claude-sonnet-4-6"}
-            )
+            override = executor._task_model_config_override({"task_id": "t2", "model": "claude-sonnet-4-6"})
         assert override is not None
         assert override.model == "claude-sonnet-4-6"
         assert override.resolved_mode == "S"
@@ -128,17 +115,13 @@ class TestTaskModelOverrideConstruction:
         executor = _make_executor(tmp_path)
         cfg = AnimaWorksConfig(credentials={})
         with patch("core.config.load_config", return_value=cfg):
-            override = executor._task_model_config_override(
-                {"task_id": "t2", "model": "claude-sonnet-4-6"}
-            )
+            override = executor._task_model_config_override({"task_id": "t2", "model": "claude-sonnet-4-6"})
         assert override is None
 
     def test_invalid_value_returns_none(self, tmp_path):
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t3", "model": "z:bad-model"}
-            )
+            override = executor._task_model_config_override({"task_id": "t3", "model": "z:bad-model"})
         assert override is None
 
     def test_unset_model_returns_none(self, tmp_path):
@@ -164,8 +147,9 @@ class TestTaskModelOverridePassedToCycle:
         agent.reset_read_paths = MagicMock()
         agent.set_interrupt_event = MagicMock()
         agent.set_task_cwd = MagicMock()
-        with patch("core.paths.load_prompt", return_value="prompt"), patch(
-            "core.config.load_config", return_value=_config_with_anthropic()
+        with (
+            patch("core.paths.load_prompt", return_value="prompt"),
+            patch("core.config.load_config", return_value=_config_with_anthropic()),
         ):
             await executor._run_llm_task(
                 {
