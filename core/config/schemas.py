@@ -618,24 +618,24 @@ class ZoomRTMSConfig(BaseModel):
 
 
 class GitHubWebhookConfig(BaseModel):
-    """Configuration for GitHub webhook-driven PR dispatch."""
+    """Configuration for GitHub webhook-driven PR dispatch.
+
+    2026-09 teardown: the gateway only sends one notification per PR event to
+    ``dispatcher_anima`` and no longer creates tasks or posts to GitHub.  The
+    old reviewer/implementer routing and multi-model review-pass fields were
+    dropped from this model; this class has no ``extra="forbid"``, so an
+    existing ``config.json`` still carrying those keys loads fine (pydantic
+    silently ignores unknown keys by default).
+    """
 
     enabled: bool = False
     repos: list[str] = Field(default_factory=list)
-    reviewer_anima: str = "sumire"
     dispatcher_anima: str = "rin"
-    implementer_anima: str = "natsume"
     bot_login: str = ""
     # Dedicated review-bot GitHub login (e.g. animaworks-reviewer).
-    # Treated like bot_login for comment exclusion and FRC review dispatch.
+    # Treated like bot_login for comment exclusion.
     reviewer_login: str = ""
     quiet_seconds: float = Field(default=180, ge=0)
-    # Multi-pass FRC review: "mode:model" entries, one review pass each.  Empty
-    # preserves the historic single (model-less) dispatch.  Squares with the
-    # cron fallback env override PR_DISPATCH_REVIEW_MODELS.
-    review_multipass_models: list[str] = Field(default_factory=list)
-    # Model used for the final synthesis pass; None uses the reviewer default.
-    review_synth_model: str | None = None
 
 
 class EventExportConfig(BaseModel):

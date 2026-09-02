@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.models import AnimaModelConfig, AnimaWorksConfig
+from core.tooling.handler_delegation import _pr_key_from_text
 
 
 def _make_config(animas: dict[str, dict]) -> AnimaWorksConfig:
@@ -141,3 +142,10 @@ class TestDelegateTaskModelValidation:
             validate.assert_not_called()
         pending = list((animas_dir / "alice" / "state" / "pending").glob("*.json"))
         assert len(pending) == 1, result
+
+
+def test_pr_key_from_text() -> None:
+    assert _pr_key_from_text("fix CI on PR #5008 now") == "pr-5008"
+    assert _pr_key_from_text("see https://github.com/o/r/pull/4985 please") == "pr-4985"
+    assert _pr_key_from_text("no reference here") == ""
+    assert _pr_key_from_text("item #1 of the list") == ""
