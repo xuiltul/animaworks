@@ -211,9 +211,9 @@ animaworks cost --json                   # JSON output
 
 ```bash
 animaworks task list                     # List tasks
-animaworks task list --status pending    # Filter by status (pending/in_progress/done/cancelled/blocked)
+animaworks task list --status pending    # Filter by status (pending/in_progress/done/cancelled)
 animaworks task add --assignee {name} --instruction "task description"
-animaworks task add --assignee {name} --instruction "desc" --source human --deadline 2026-03-10T18:00:00
+animaworks task add --assignee {name} --instruction "desc" --source human
 animaworks task update --task-id {id} --status done
 animaworks task update --task-id {id} --status done --summary "completion summary"
 ```

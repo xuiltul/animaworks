@@ -296,9 +296,9 @@ animaworks cost --json                   # JSON出力
 
 ```bash
 animaworks task list                     # タスク一覧（JSON）
-animaworks task list --status pending    # ステータスでフィルタ（pending/in_progress/done/cancelled/blocked）
+animaworks task list --status pending    # ステータスでフィルタ（pending/in_progress/done/cancelled）
 animaworks task add --assignee {名前} --instruction "タスク内容"   # 既定 --source anima
-animaworks task add --assignee {名前} --instruction "内容" --source human --deadline 2026-03-10T18:00:00
+animaworks task add --assignee {名前} --instruction "内容" --source human
 animaworks task add ... --relay-chain alice,bob   # カンマ区切りリレー鎖（任意）
 animaworks task add ... --summary "1行要約"       # 省略時は instruction の先頭100文字
 animaworks task update --task-id {ID} --status done

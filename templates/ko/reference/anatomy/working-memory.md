@@ -13,8 +13,7 @@ state/
 ├── task_queue.jsonl           # 태스크 레지스트리 (append-only JSONL)
 ├── pending/                   # LLM 태스크 실행 큐 (JSON)
 │   ├── {task_id}.json         # 제출된 태스크
-│   ├── processing/            # 실행 중 (PendingTaskExecutor가 이동)
-│   └── failed/                # 실패 태스크
+│   └── processing/            # 실행 중 (PendingTaskExecutor가 이동)
 ├── task_results/              # TaskExec 완료 결과
 │   └── {task_id}.md           # 결과 요약 (최대 2000자, 7일 TTL)
 ├── conversation.json          # 대화 상태
@@ -112,9 +111,8 @@ Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇
 | `source` | `"human"` / `"anima"` | 태스크 출처 |
 | `original_instruction` | string | 원본 지시문 |
 | `assignee` | string | 담당 Anima명 |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
+| `status` | string | `pending` / `in_progress` / `delegated` / `done` / `cancelled` (`blocked` / `failed`는 폐지됨. 선언 없이 세션이 끝난 태스크는 `pending`으로 돌아감) |
 | `summary` | string | 한 줄 요약 |
-| `deadline` | ISO8601 / null | 기한 |
 | `relay_chain` | array | 위임 체인 |
 | `updated_at` | ISO8601 | 최종 업데이트 일시 |
 | `meta` | object | `executor`, `batch_id`, `task_desc`, `origin` 등 |
@@ -128,12 +126,12 @@ LLM 태스크 실행 큐입니다. 상세는 `common_knowledge/anatomy/task-arch
 ### 라이프사이클
 
 ```
-pending/{task_id}.json → processing/{task_id}.json → 성공: 삭제 / 실패: failed/로 이동
+pending/{task_id}.json → processing/{task_id}.json → 성공: 삭제 / 비정상 종료: task_queue.jsonl의 pending으로 복귀 ("실패" 상태는 없으며 자동 재시도도 하지 않음)
 ```
 
 - TTL: 24시간 (`_LLM_TASK_TTL_HOURS`). 초과한 태스크는 건너뜀
 - 폴링 간격: 3초 (`_PENDING_WATCHER_POLL_INTERVAL`)
-- `task_queue.jsonl`에서 `cancelled`인 태스크는 자동 건너뜀 → `failed/`로 이동
+- `task_queue.jsonl`에서 `cancelled`인 태스크는 자동 건너뜀
 
 ### JSON 스키마
 

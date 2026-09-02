@@ -65,7 +65,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 
 #### update_task
 
-태스크 상태를 업데이트합니다. 완료 시 `done`, 중단 시 `cancelled`, 실패 시 `failed`로 설정합니다.
+태스크 상태를 업데이트합니다. 완료 시 `done`, 취소 시 `cancelled`로 설정합니다.
 
 ```
 update_task(task_id="abc123def456", status="in_progress")
@@ -75,8 +75,9 @@ update_task(task_id="abc123def456", status="done", summary="리포트 작성 완
 | 파라미터 | 필수 | 설명 |
 |----------|------|------|
 | `task_id` | MUST | 태스크 ID (submit_tasks 시 반환된 ID) |
-| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `failed` |
+| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` |
 | `summary` | MAY | 업데이트 후 요약 |
+| `result` | MAY | 성과 상세 (긴 텍스트, 의존 태스크 자동 주입 등에 사용) |
 
 #### 태스크 목록 조회 (CLI)
 
@@ -87,22 +88,22 @@ Bash: animaworks-tool task list                    # 전체
 Bash: animaworks-tool task list --status pending   # 미착수만
 Bash: animaworks-tool task list --status in_progress
 Bash: animaworks-tool task list --status done
-Bash: animaworks-tool task list --status failed
+Bash: animaworks-tool task list --status cancelled
 ```
 
 #### 태스크 큐의 상태와 마커
 
 | 상태 | 의미 |
 |------|------|
-| `pending` | 미착수 |
+| `pending` | 미착수 (선언 없이 세션이 끝난 태스크도 여기로 돌아옴) |
 | `in_progress` | 작업 중 |
 | `done` | 완료 |
 | `cancelled` | 취소 |
-| `blocked` | 블록 중 |
-| `failed` | 실패 (TaskExec 등에서 실행에 실패한 경우) |
 | `delegated` | 위임 완료 (delegate_task로 부하에게 위임한 추적용) |
 
-Priming 표시에서는 사람 유래 태스크 (source=human)에 🔴 HIGH 마커, 30분 이상 업데이트되지 않은 태스크에 ⚠️ STALE, 기한 초과 태스크에 🔴 OVERDUE 마커가 부여됩니다.
+`blocked`와 `failed`는 폐지되었습니다. 선언 없이 세션이 끝난 태스크는 자동으로 `pending`으로 돌아가며, 재촉이나 자동 재개는 없습니다. 진행할 수 없는 경우 의뢰자에게 보고한 뒤 `cancelled`로 설정하세요 (뒤의 "진행할 수 없을 때" 참조).
+
+Priming 표시에서는 사람 유래 태스크 (source=human)에 🔴 HIGH 마커, 30분 이상 업데이트되지 않은 태스크에 ⚠️ STALE 마커가 부여됩니다.
 
 ## current_state.md 사용법
 
@@ -154,7 +155,7 @@ Heartbeat에서 확인했을 때 `idle`이면 특별한 액션은 불필요합�
 
 ```
 submit_tasks 등록 → update_task(status="in_progress") → 작업 → update_task(status="done")
-                                                          ↘ blocked → 보고 → 다른 태스크로 전환
+                                                          ↘ 진행 불가 → 의뢰자에게 보고 → 다른 태스크로 (태스크는 pending 유지)
 ```
 
 ### 상태 전이 절차
@@ -168,10 +169,10 @@ submit_tasks 등록 → update_task(status="in_progress") → 작업 → update_
 2. `current_state.md`를 `status: idle`로 복귀
 3. 태스크 의뢰자에게 결과를 보고 (assigned_by가 타인인 경우 MUST)
 
-**블록**:
-1. `current_state.md`의 `status`를 `blocked`로 변경하고 `blockers`에 구체적인 이유를 기재 (MUST)
-2. 블록 해소를 위한 액션을 실행 (아래의 블록 대응 플로우 참조)
-3. 블록 해소에 시간이 걸리는 경우, `task_queue.jsonl`의 다음 태스크에 착수 가능 (MAY)
+**진행할 수 없을 때**:
+1. 같은 행동을 반복하지 말고, 의뢰자에게 사실·시도한 것·권장 사항을 보고 (MUST)
+2. 계속할 수 있다면 `pending`인 채로 두고 (선언 없이 세션이 끝나도 자동으로 돌아옴), 불필요해졌다면 `update_task(status="cancelled", summary="이유")`로 설정
+3. 다른 태스크에 착수해도 됩니다 (MAY). "조건이 갖춰질 때까지 대기"라는 상태는 존재하지 않습니다
 
 ## 복수 태스크의 우선순위 관리
 
@@ -179,8 +180,7 @@ submit_tasks 등록 → update_task(status="in_progress") → 작업 → update_
 
 1. **사람 유래 태스크 최우선**: source=human인 태스크는 최우선으로 처리 (MUST)
 2. **상사 태스크 우선**: supervisor의 지시는 동일 수준의 다른 태스크보다 우선 (SHOULD)
-3. **기한순**: deadline이 가까운 것부터 착수 (SHOULD)
-4. **선입선출**: 동일 우선순위 및 동일 기한이면 수신 순서대로 처리 (MAY)
+3. **선입선출**: 동일 우선순위면 수신 순서대로 처리 (MAY)
 
 ### 태스크 중단 시 절차
 
@@ -189,38 +189,14 @@ submit_tasks 등록 → update_task(status="in_progress") → 작업 → update_
 1. 현재 태스크를 `update_task(status="pending")`으로 큐에 복귀
 2. `current_state.md`에 진행 상황을 메모한 후, 새 태스크의 컨텍스트로 전환
 
-## 블록된 태스크의 대응 플로우
+## 진행할 수 없을 때
 
-태스크가 블록된 경우 다음 절차로 대응합니다.
+"조건이 갖춰질 때까지 대기"나 "블록 중"이라는 상태는 존재하지 않습니다. 선택지는 진행 / 종료 / 상담, 이 3가지뿐입니다.
 
-### 단계 1: 블록 원인의 특정과 기록
-
-current_state.md의 `blockers`에 구체적인 원인을 기재합니다 (MUST).
-
-```markdown
-status: blocked
-task: AWS S3 버킷 설정
-blockers: |
-  AWS 크레덴셜이 미설정.
-  config.json에 aws credential이 존재하지 않음.
-  aoi에게 설정을 의뢰할 필요가 있음.
-```
-
-### 단계 2: 해소 액션
-
-블록 원인에 따른 액션을 실행합니다:
-
-| 원인 | 액션 |
-|------|------|
-| 정보 부족 | 의뢰자에게 질문 메시지를 전송 (SHOULD) |
-| 권한 부족 | supervisor에게 권한 추가를 의뢰 (SHOULD) |
-| 외부 의존 | 대기 중임을 의뢰자에게 보고 (SHOULD) |
-| 기술적 문제 | knowledge/나 procedures/를 검색하여 해결책을 탐색. 찾을 수 없으면 보고 |
-
-### 단계 3: 다른 태스크로 전환
-
-블록 해소에 시간이 걸리는 경우, `task_queue.jsonl`의 다음 태스크에 착수해도 됩니다 (MAY).
-블록된 태스크는 `update_task(status="blocked")`로 기록하고 블록 해소 후 재개합니다.
+1. 권한 부족·정보 부족·외부 의존 등으로 진행할 수 없는 경우, 같은 행동을 반복하지 않습니다 (MUST)
+2. 의뢰자에게 사실·시도한 것·권장 사항을 보고합니다 (MUST). 기술적 문제라면 먼저 knowledge/나 procedures/를 검색합니다
+3. 아무 것도 하지 않으면 태스크는 `pending`인 채로 남습니다. 불필요해졌다면 `update_task(status="cancelled", summary="이유")`로 설정합니다 (MAY)
+4. 대기하는 동안 `task_queue.jsonl`의 다른 태스크에 착수해도 됩니다 (MAY)
 
 ## 태스크 파일 템플릿
 
@@ -242,23 +218,9 @@ context: |
 blockers: 없음
 ```
 
-### current_state.md — 블록 중
-
-```markdown
-status: blocked
-task: {태스크명}
-assigned_by: {의뢰자명 or self}
-started: {YYYY-MM-DD HH:MM}
-context: |
-  {태스크의 상세 및 배경 정보}
-blockers: |
-  {블록 이유의 구체적인 설명}
-  {해소를 위해 실행한 액션}
-```
-
 ## episodes/에의 태스크 로그 기록
 
-태스크의 착수, 완료, 블록 등 상태 변화를 episodes/에 기록합니다 (SHOULD).
+태스크의 착수, 완료, 중단 등 상태 변화를 episodes/에 기록합니다 (SHOULD).
 파일명은 `YYYY-MM-DD.md` (일별 로그)입니다.
 
 ```markdown
@@ -315,7 +277,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 4. TaskExec가 배치를 감지하고 토폴로지컬 정렬로 실행 순서를 결정
 5. 의존 없는 `parallel: true` 태스크는 세마포어 상한 내에서 동시 실행
 6. 선행 태스크의 결과는 의존 태스크의 컨텍스트에 자동 주입
-7. 선행 태스크가 실패하면 의존 태스크는 건너뜀
+7. 선행 태스크가 완료되지 못한 경우 (크래시, 의존 미충족 등), 의존 태스크는 실행되지 않고 `pending`으로 돌아감 ("실패" 상태는 없으며 자동 재시도도 하지 않음)
 8. 태스크는 기록 후 24시간 이내에 실행되지 않으면 건너뜀 (TTL)
 
 ### 병렬 실행 상한
@@ -325,7 +287,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 ### 태스크 결과의 저장
 
 완료된 태스크의 결과 요약은 `state/task_results/{task_id}.md`에 저장됩니다 (최대 2,000자).
-의존 태스크는 이 결과를 컨텍스트로 자동 수신합니다. 선행 태스크가 실패한 경우 의존 태스크는 건너뛰며 `FAILED: {사유}`가 기록됩니다.
+의존 태스크는 이 결과를 컨텍스트로 자동 수신합니다. 선행 태스크가 비정상 종료된 경우 의존 태스크는 실행되지 않고 `pending`으로 돌아갑니다 (자동 재시도 없음).
 각 태스크 완료 시, submit_tasks를 실행한 Anima에게 완료 통지가 DM으로 전송됩니다.
 
 ### submit_tasks와 delegate_task의 구분 사용
@@ -356,14 +318,13 @@ S모드의 Chat 경로에서는 Task tool (및 Agent tool)으로도 위임이 �
 ### 사용법
 
 ```
-delegate_task(name="dave", instruction="API 테스트를 실시하고 결과를 보고해 주세요", deadline="2d", summary="API 테스트")
+delegate_task(name="dave", instruction="API 테스트를 실시하고 결과를 보고해 주세요", summary="API 테스트")
 ```
 
 | 파라미터 | 필수 | 설명 |
 |----------|------|------|
 | `name` | MUST | 위임 대상 배하 Anima명 (자식, 손자, 증손자 등 모든 배하에 지정 가능) |
 | `instruction` | MUST | 태스크 지시 내용 |
-| `deadline` | MUST | 기한. 상대 형식 `30m` / `2h` / `1d` 또는 ISO8601 |
 | `summary` | MAY | 태스크의 한 줄 요약 (생략 시 instruction의 첫 100자) |
 | `workspace` | MAY | 작업 디렉토리. 워크스페이스 에일리어스를 지정하면 위임 대상이 해당 디렉토리에서 작업 |
 
@@ -380,9 +341,9 @@ task_tracker(status="completed")   # 완료만
 
 | status | 의미 |
 |--------|------|
-| `active` | 진행 중 (done/cancelled/failed 이외). 기본값 |
+| `active` | 진행 중 (done/cancelled 이외). 기본값 |
 | `all` | 전체 |
-| `completed` | 완료 (done/cancelled/failed)만 |
+| `completed` | 완료 (done/cancelled)만 |
 
 ### 위임을 받은 측의 대응
 

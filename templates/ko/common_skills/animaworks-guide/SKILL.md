@@ -211,9 +211,9 @@ animaworks cost --json                   # JSON 출력
 
 ```bash
 animaworks task list                     # 태스크 목록
-animaworks task list --status pending    # 상태로 필터 (pending/in_progress/done/cancelled/blocked)
+animaworks task list --status pending    # 상태로 필터 (pending/in_progress/done/cancelled)
 animaworks task add --assignee {name} --instruction "태스크 설명"
-animaworks task add --assignee {name} --instruction "설명" --source human --deadline 2026-03-10T18:00:00
+animaworks task add --assignee {name} --instruction "설명" --source human
 animaworks task update --task-id {id} --status done
 animaworks task update --task-id {id} --status done --summary "완료 요약"
 ```

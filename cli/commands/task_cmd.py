@@ -52,7 +52,6 @@ def _cmd_add(args: argparse.Namespace, manager) -> None:
     instruction = getattr(args, "instruction", "")
     assignee = getattr(args, "assignee", "")
     summary = getattr(args, "summary", "") or instruction[:100]
-    deadline = getattr(args, "deadline", None)
     relay_chain_raw = getattr(args, "relay_chain", None)
     relay_chain = relay_chain_raw.split(",") if relay_chain_raw else []
 
@@ -68,7 +67,6 @@ def _cmd_add(args: argparse.Namespace, manager) -> None:
         original_instruction=instruction,
         assignee=assignee,
         summary=summary,
-        deadline=deadline,
         relay_chain=relay_chain,
     )
     result = entry.model_dump()
@@ -114,17 +112,18 @@ def register_task_command(subparsers) -> None:
     p_add.add_argument("--instruction", required=True, help="Original instruction text")
     p_add.add_argument("--assignee", required=True, help="Assignee anima name")
     p_add.add_argument("--summary", default=None, help="1-line summary (default: instruction[:100])")
-    p_add.add_argument("--deadline", default=None, help="ISO8601 deadline")
     p_add.add_argument("--relay-chain", default=None, help="Comma-separated relay chain")
 
     # task update
     p_update = task_sub.add_parser("update", help="Update task status")
     p_update.add_argument("--task-id", required=True, help="Task ID")
-    p_update.add_argument("--status", required=True, choices=["pending", "in_progress", "done", "cancelled", "blocked"])
+    p_update.add_argument(
+        "--status", required=True, choices=["pending", "in_progress", "delegated", "done", "cancelled"]
+    )
     p_update.add_argument("--summary", default=None, help="Updated summary")
 
     # task list
     p_list = task_sub.add_parser("list", help="List tasks")
-    p_list.add_argument("--status", default=None, choices=["pending", "in_progress", "done", "cancelled", "blocked"])
+    p_list.add_argument("--status", default=None, choices=["pending", "in_progress", "delegated", "done", "cancelled"])
 
     p_task.set_defaults(func=cmd_task)

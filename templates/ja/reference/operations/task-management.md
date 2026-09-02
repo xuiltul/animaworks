@@ -32,7 +32,7 @@ AnimaWorks ではタスクが3つの独立パスで処理される:
 
 **PendingTaskExecutor**（`core/supervisor/pending_executor.py`）は、上記の `state/pending/`（LLM）と、**別ルート**の `state/background_tasks/pending/`（`animaworks-tool submit`）を**同じワッチャーループ**（最大約3秒間隔、`wake()` で即時も可）で監視する。後者は会話ロック外で **BackgroundTaskManager**（`core/background.py`）に載せ替え、長時間の外部ツールだけをバックグラウンド実行する。詳細は `operations/background-tasks.md` を参照。
 
-**語彙の整理（混同禁止）**: `task_queue.jsonl` のステータス（`pending` / `in_progress` / `done` / `failed` 等）は**業務タスク追跡用**。一方 `state/background_tasks/{task_id}.json` の `status`（`running` / `completed` / `failed`）は **BackgroundTaskManager** の実行状態用で、別のライフサイクルである。
+**語彙の整理（混同禁止）**: `task_queue.jsonl` のステータス（`pending` / `in_progress` / `delegated` / `done` / `cancelled`）は**業務タスク追跡用**。一方 `state/background_tasks/{task_id}.json` の `status`（`running` / `completed` / `failed`）は **BackgroundTaskManager** の実行状態用で、別のライフサイクルである。両者は名前が似ていても無関係（`failed` は後者にのみ存在する）。
 
 Heartbeat は **実行しない**。実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`submit_tasks` でタスク投入して TaskExec パスに委譲する。
 
@@ -72,7 +72,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 
 #### update_task
 
-タスクのステータスを更新する。完了時は `done`、中断時は `cancelled`、失敗時は `failed` に設定する。
+タスクのステータスを更新する。完了時は `done`、取り消す時は `cancelled` に設定する。
 
 ```
 update_task(task_id="abc123def456", status="in_progress")
@@ -82,8 +82,9 @@ update_task(task_id="abc123def456", status="done", summary="レポート作成�
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
 | `task_id` | MUST | タスクID（submit_tasks 時に返されたID） |
-| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `failed` |
+| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` |
 | `summary` | MAY | 更新後の要約 |
+| `result` | MAY | 成果の詳細（依存タスクへの自動注入等に使う長文） |
 
 #### タスク一覧の取得（CLI）
 
@@ -94,24 +95,24 @@ Bash: animaworks-tool task list                    # 全件
 Bash: animaworks-tool task list --status pending   # 未着手のみ
 Bash: animaworks-tool task list --status in_progress
 Bash: animaworks-tool task list --status done
-Bash: animaworks-tool task list --status failed
+Bash: animaworks-tool task list --status cancelled
 ```
 
 #### タスクキューの状態とマーカー
 
 | 状態 | 意味 |
 |------|------|
-| `pending` | 未着手 |
+| `pending` | 未着手（宣言なしでセッションが終わったタスクもここに戻る） |
 | `in_progress` | 作業中 |
 | `done` | 完了 |
 | `cancelled` | 取り消し |
-| `blocked` | ブロック中 |
-| `failed` | 失敗（TaskExec 等で実行に失敗した場合） |
 | `delegated` | 委譲済み（delegate_task で部下に委譲した追跡用） |
 
-Priming 表示では、人間由来タスク（source=human）に 🔴 HIGH マーカー、30分以上更新されていないタスクに ⚠️ STALE、期限超過タスクに 🔴 OVERDUE マーカーが付く。
+`blocked` と `failed` は廃止された。宣言なしにセッションが終わったタスクは自動で `pending` に戻り、催促や自動継続は行われない。進められない場合は依頼者に報告した上で `cancelled` にする（後述「進められない時」参照）。
 
-委譲タスク（`delegated`）は Priming の Channel E に専用セクションとして表示される。部下のタスクキューからライブステータス（⏳進行中/✅完了/❌失敗/🚫キャンセル等）を取得して最大5件まで表示する。また、Heartbeat 完了後に `sync_delegated` が自動実行され、部下のキューで完了・失敗したタスクを検出して上司側の追跡エントリを自動更新する（`done` / `failed`）。
+Priming 表示では、人間由来タスク（source=human）に 🔴 HIGH マーカー、30分以上更新されていないタスクに ⚠️ STALE マーカーが付く。
+
+委譲タスク（`delegated`）は Priming の Channel E に専用セクションとして表示される。部下のタスクキューからライブステータス（⏳進行中/✅完了/🚫キャンセル等）を取得して最大5件まで表示する。また、Heartbeat 完了後に `sync_delegated` が自動実行され、部下のキューで完了・キャンセルされたタスクを検出して上司側の追跡エントリを自動更新する（`done` / `cancelled`）。
 
 ## current_state.md の使い方
 
@@ -163,7 +164,7 @@ status: idle
 
 ```
 submit_tasks で登録 → update_task(status="in_progress") → 作業 → update_task(status="done")
-                                                                ↘ blocked → 報告 → 別タスクへ
+                                                                ↘ 進められない → 依頼者に報告 → 別タスクへ（タスクは pending のまま）
 ```
 
 ### 状態遷移の手順
@@ -177,10 +178,10 @@ submit_tasks で登録 → update_task(status="in_progress") → 作業 → upda
 2. `current_state.md` を `status: idle` に戻す
 3. タスクの依頼者に結果を報告する（assigned_by が他者の場合 MUST）
 
-**ブロック**:
-1. `current_state.md` の `status` を `blocked` にし、`blockers` に具体的な理由を記載する（MUST）
-2. ブロック解消のアクションを取る（後述のブロック対応フロー参照）
-3. ブロック解消に時間がかかる場合、`task_queue.jsonl` の別タスクに着手してよい（MAY）
+**進められない時**:
+1. 同じ操作を繰り返さず、依頼者に事実・試したこと・推奨を報告する（MUST）
+2. タスクを続けるならそのまま `pending`（宣言なしで終えれば自動的に戻る）、不要になったら `update_task(status="cancelled", summary="理由")` にする
+3. 別タスクに着手してよい（MAY）。「条件が揃うまで待つ」という状態はない
 
 ## 複数タスクの優先度管理
 
@@ -188,8 +189,7 @@ submit_tasks で登録 → update_task(status="in_progress") → 作業 → upda
 
 1. **人間由来タスクを最優先**: source=human 相当のタスクは最優先で処理する（MUST）
 2. **上司からのタスクを優先**: supervisor からの指示は同レベルの他タスクより優先する（SHOULD）
-3. **締め切り順**: deadline が近いものから着手する（SHOULD）
-4. **先入れ先出し**: 同優先度・同締め切りなら受信順に処理する（MAY）
+3. **先入れ先出し**: 同優先度なら受信順に処理する（MAY）
 
 ### タスク中断時の手順
 
@@ -198,38 +198,14 @@ submit_tasks で登録 → update_task(status="in_progress") → 作業 → upda
 1. 現在タスクを `update_task(status="pending")` でキューに戻す
 2. `current_state.md` の進捗をメモしてから、新しいタスクのコンテキストに切り替える
 
-## ブロックされたタスクの対応フロー
+## 進められない時
 
-タスクがブロックされた場合、以下の手順で対応する。
+「条件が揃うまで待つ」「ブロック中」という状態は存在しない。選べるのは進める・閉じる・相談するの3つだけ。
 
-### ステップ1: ブロック原因の特定と記録
-
-current_state.md の `blockers` に具体的な原因を記載する（MUST）。
-
-```markdown
-status: blocked
-task: AWS S3バケット設定
-blockers: |
-  AWS クレデンシャルが未設定。
-  config.json に aws credential が存在しない。
-  aoi に設定依頼が必要。
-```
-
-### ステップ2: 解消アクション
-
-ブロック原因に応じたアクションを取る:
-
-| 原因 | アクション |
-|------|-----------|
-| 情報不足 | 依頼者に質問メッセージを送る（SHOULD） |
-| 権限不足 | supervisor に権限追加を依頼する（SHOULD） |
-| 外部依存 | 待ちであることを依頼者に報告する（SHOULD） |
-| 技術的問題 | knowledge/ や procedures/ を検索し、解決策を探す。見つからなければ報告する |
-
-### ステップ3: 別タスクへの切り替え
-
-ブロック解消に時間がかかる場合、`task_queue.jsonl` の次のタスクに着手してよい（MAY）。
-ブロックされたタスクは `update_task(status="blocked")` で記録し、解消後に再着手する。
+1. 権限不足・情報不足・外部依存などで進められない場合、同じ操作を繰り返さない（MUST）
+2. 依頼者に事実・試したこと・推奨を報告する（MUST）。技術的な問題なら knowledge/ や procedures/ をまず検索する
+3. タスクは何もしなければ `pending` のまま残る。もう不要なら `update_task(status="cancelled", summary="理由")` にする（MAY）
+4. 待っている間、`task_queue.jsonl` の別タスクに着手してよい（MAY）
 
 ## タスクファイルのテンプレート
 
@@ -251,23 +227,9 @@ context: |
 blockers: なし
 ```
 
-### current_state.md — ブロック中
-
-```markdown
-status: blocked
-task: {タスク名}
-assigned_by: {依頼者名 or self}
-started: {YYYY-MM-DD HH:MM}
-context: |
-  {タスクの詳細・背景情報}
-blockers: |
-  {ブロック理由の具体的な説明}
-  {解消に向けて取ったアクション}
-```
-
 ## episodes/ へのタスクログ記録
 
-タスクの着手・完了・ブロック等の状態変化は episodes/ に記録する（SHOULD）。
+タスクの着手・完了・中断等の状態変化は episodes/ に記録する（SHOULD）。
 ファイル名は `YYYY-MM-DD.md`（日別ログ）。
 
 ```markdown
@@ -324,7 +286,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 4. TaskExec がバッチを検出し、トポロジカルソートで実行順を決定する
 5. 依存なしの `parallel: true` タスクはセマフォ上限内で同時実行される
 6. 先行タスクの結果は依存タスクのコンテキストに自動注入される
-7. 先行タスクが失敗した場合、依存タスクはスキップされる
+7. 先行タスクが未完了（異常終了・依存未達等）の場合、依存タスクは実行されず `pending` に戻る（「失敗」状態はない。自動リトライもしない）
 8. タスクは書き出しから24時間以内に実行されないとスキップされる（TTL）
 
 ### 並列実行の上限
@@ -334,7 +296,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 ### タスク結果の保存
 
 完了タスクの結果要約は `state/task_results/{task_id}.md` に保存される（最大2,000文字、7日TTL）。
-依存タスクはこの結果をコンテキストとして自動的に受け取る。先行タスクが失敗した場合、依存タスクはスキップされ `FAILED: {理由}` が記録される。
+依存タスクはこの結果をコンテキストとして自動的に受け取る。先行タスクが異常終了した場合、依存タスクは実行されず `pending` に戻る（自動リトライなし）。
 各タスク完了時、submit_tasks を実行した Anima に完了通知が DM で送られる。
 
 ### submit_tasks と delegate_task の使い分け
@@ -387,14 +349,13 @@ submit_tasks(batch_id="build-20260301", tasks=[
 ### 使い方
 
 ```
-delegate_task(name="dave", instruction="API テストを実施して結果を報告してください", deadline="2d", summary="API テスト")
+delegate_task(name="dave", instruction="API テストを実施して結果を報告してください", summary="API テスト")
 ```
 
 | パラメータ | 必須 | 説明 |
 |-----------|------|------|
 | `name` | MUST | 委譲先の直属部下Anima名 |
 | `instruction` | MUST | タスクの指示内容 |
-| `deadline` | MUST | 期限。相対形式 `30m` / `2h` / `1d` または ISO8601 |
 | `summary` | MAY | タスクの1行要約（省略時は instruction の先頭100文字） |
 | `workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアスを指定すると委譲先がそのディレクトリで作業する |
 
@@ -411,9 +372,9 @@ task_tracker(status="completed")   # 完了済みのみ
 
 | status | 意味 |
 |--------|------|
-| `active` | 進行中（done/cancelled/failed 以外）。デフォルト |
+| `active` | 進行中（done/cancelled 以外）。デフォルト |
 | `all` | 全件 |
-| `completed` | 完了済み（done/cancelled/failed）のみ |
+| `completed` | 完了済み（done/cancelled）のみ |
 
 ### 委譲を受けた側の対応
 

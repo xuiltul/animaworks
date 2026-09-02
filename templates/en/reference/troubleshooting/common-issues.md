@@ -66,7 +66,7 @@ If that does not resolve the issue, see `troubleshooting/escalation-flowchart.md
 
 4. **If send failed**
    - Record the error message
-   - Note the blocking reason in `state/current_state.md`
+   - Note the situation in `state/current_state.md`
    - Report to your supervisor
 
 ### Examples
@@ -91,7 +91,9 @@ send_message(
 
 ---
 
-## Task Blocked
+## Cannot Proceed With a Task
+
+There is no "waiting for conditions" or "blocked" state (`blocked` has been retired). You always have exactly three options: proceed, close, or ask.
 
 ### Symptoms
 
@@ -108,45 +110,38 @@ send_message(
 
 ### Steps
 
-1. **Clarify the blocker**
+1. **Do not repeat the same action**
    - Identify specifically what is missing
    - Organize: **whose** work, **what** work, and **by when** it is needed
 
-2. **Update `state/current_state.md`**
-   ```
-   write_memory_file(
-       path="state/current_state.md",
-       content="## Current Task\n\nXXX implementation\n\n### Blocked\n- Cause: Waiting for YYY to complete\n- Waiting on: ZZZ\n- Since: 2026-02-15 10:00",
-       mode="overwrite"
-   )
-   ```
-
-3. **Decide if you can resolve it yourself**
-   - Consider whether another approach can avoid the blocker
+2. **Decide if you can resolve it yourself**
+   - Consider whether another approach avoids the problem
    - Search memory for similar past issues:
      ```
-     search_memory(query="blocked", scope="episodes")
+     search_memory(query="the error or keyword", scope="episodes")
      search_memory(query="workaround", scope="knowledge")
      ```
 
-4. **Escalate if unresolved** (see `troubleshooting/escalation-flowchart.md`)
-   - Report to your supervisor. Include:
-     - What you tried to do
-     - What is blocking you
-     - Since when you have been blocked
-     - What you already tried
+3. **Report to the requester if unresolved** (see `troubleshooting/escalation-flowchart.md`). Include:
+   - What you tried to do
+   - What is missing or what you are waiting on
+   - What you already tried, and your recommendation
    ```
    send_message(
        to="supervisor_name",
-       content="[Blocked Report]\nTask: XXX implementation\nBlocked by: YYY API permission missing\nSince: 2026-02-15 10:00\nTried: Checked permissions.json; no matching setting\nRequest: Please add API permission",
+       content="[Progress Report]\nTask: XXX implementation\nFact: YYY API permission missing\nTried: Checked permissions.json; no matching setting\nRecommendation: Please add API permission",
        intent="report"
    )
    ```
 
-5. **Look for work you can still do while blocked**
+4. **Decide what to do with the task**
+   - If you may return to it, leave it alone (it stays `pending`; it also reverts there automatically if the session ends undeclared)
+   - If it's no longer needed, `update_task(status="cancelled", summary="reason")`
+
+5. **Look for work you can still do in the meantime**
    - Persistent task queue: if tools are available, use `list_tasks` or `Bash: animaworks-tool task list`
    - Check Heartbeat-emitted LLM tasks under `state/pending/*.json` for other work
-   - Start another task that is not blocked
+   - Start another task
 
 ---
 
@@ -322,7 +317,7 @@ send_message(
    - Record the error message accurately
    - For auth errors, report to your supervisor (credential setup is an admin responsibility)
    - For transient timeouts or rate limits, wait briefly and retry (retry count and spacing depend on the tool implementation and server settings)
-   - If it does not improve, report as a blocker
+   - If it does not improve, report the facts and what you tried to the requester
 
 See `operations/tool-usage-overview.md` for the full tool picture.
 

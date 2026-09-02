@@ -13,8 +13,7 @@ state/
 ├── task_queue.jsonl           # Task registry (append-only JSONL)
 ├── pending/                   # LLM task execution queue (JSON)
 │   ├── {task_id}.json         # Submitted tasks
-│   ├── processing/            # In progress (moved by PendingTaskExecutor)
-│   └── failed/                # Failed tasks
+│   └── processing/            # In progress (moved by PendingTaskExecutor)
 ├── task_results/              # TaskExec completion results
 │   └── {task_id}.md           # Result summary (max 2000 chars, 7-day TTL)
 ├── conversation.json          # Conversation state
@@ -112,9 +111,8 @@ Task registry. See `common_knowledge/anatomy/task-architecture.md` (Layer 2) for
 | `source` | `"human"` / `"anima"` | Task origin |
 | `original_instruction` | string | Original instruction text |
 | `assignee` | string | Assignee Anima name |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
+| `status` | string | `pending` / `in_progress` / `delegated` / `done` / `cancelled` (`blocked` / `failed` have been retired; a task whose session ends without a declaration reverts to `pending`) |
 | `summary` | string | One-line summary |
-| `deadline` | ISO8601 / null | Deadline |
 | `relay_chain` | array | Delegation chain |
 | `updated_at` | ISO8601 | Last update timestamp |
 | `meta` | object | `executor`, `batch_id`, `task_desc`, `origin`, etc. |
@@ -128,12 +126,12 @@ LLM task execution queue. See `common_knowledge/anatomy/task-architecture.md` (L
 ### Lifecycle
 
 ```
-pending/{task_id}.json → processing/{task_id}.json → Success: deleted / Failure: moved to failed/
+pending/{task_id}.json → processing/{task_id}.json → Success: deleted / Abnormal end: reverts to pending in task_queue.jsonl (there is no "failed" state, and nothing auto-retries)
 ```
 
 - TTL: 24 hours (`_LLM_TASK_TTL_HOURS`). Tasks exceeding this are skipped
 - Polling interval: 3 seconds (`_PENDING_WATCHER_POLL_INTERVAL`)
-- Tasks with `cancelled` in `task_queue.jsonl` are automatically skipped → moved to `failed/`
+- Tasks with `cancelled` in `task_queue.jsonl` are automatically skipped
 
 ### JSON Schema
 

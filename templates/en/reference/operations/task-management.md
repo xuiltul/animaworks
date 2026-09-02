@@ -32,7 +32,7 @@ In AnimaWorks, tasks are processed on three independent paths:
 
 **PendingTaskExecutor** (`core/supervisor/pending_executor.py`) watches both `state/pending/` (LLM) above and, on a **separate route**, `state/background_tasks/pending/` (`animaworks-tool submit`) in the **same watcher loop** (at most about every 3 seconds; `wake()` can also trigger immediately). The latter is handed off outside the conversation lock to **BackgroundTaskManager** (`core/background.py`), which runs only long-running external tools in the background. See `operations/background-tasks.md` for details.
 
-**Vocabulary (do not conflate)**: Status values in `task_queue.jsonl` (`pending` / `in_progress` / `done` / `failed`, etc.) are for **operational task tracking**. The `status` field in `state/background_tasks/{task_id}.json` (`running` / `completed` / `failed`) is for **BackgroundTaskManager** execution state and follows a **different** lifecycle.
+**Vocabulary (do not conflate)**: Status values in `task_queue.jsonl` (`pending` / `in_progress` / `delegated` / `done` / `cancelled`) are for **operational task tracking**. The `status` field in `state/background_tasks/{task_id}.json` (`running` / `completed` / `failed`) is for **BackgroundTaskManager** execution state and follows a **different** lifecycle — the two are unrelated despite the similar names (`failed` exists only in the latter).
 
 Heartbeat does **not** execute. When it finds work that must run, either delegate with `delegate_task` if you have subordinates, or enqueue with `submit_tasks` and hand off to the TaskExec path.
 
@@ -72,7 +72,7 @@ submit_tasks(batch_id="human-20260313", tasks=[
 
 #### update_task
 
-Updates task status. Use `done` when complete, `cancelled` when stopped, `failed` when execution fails.
+Updates task status. Use `done` when complete, `cancelled` when stopped.
 
 ```
 update_task(task_id="abc123def456", status="in_progress")
@@ -82,8 +82,9 @@ update_task(task_id="abc123def456", status="done", summary="Report completed")
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `task_id` | MUST | Task ID (returned when `submit_tasks` was called) |
-| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `failed` |
+| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` |
 | `summary` | MAY | Summary after the update |
+| `result` | MAY | Detailed outcome (longer text, e.g. auto-injected into dependent tasks) |
 
 #### Task List (CLI)
 
@@ -94,24 +95,24 @@ Bash: animaworks-tool task list                    # All
 Bash: animaworks-tool task list --status pending   # Not started
 Bash: animaworks-tool task list --status in_progress
 Bash: animaworks-tool task list --status done
-Bash: animaworks-tool task list --status failed
+Bash: animaworks-tool task list --status cancelled
 ```
 
 #### Task Queue States and Markers
 
 | State | Meaning |
 |-------|---------|
-| `pending` | Not started |
+| `pending` | Not started (a task whose session ended without a declaration also lands back here) |
 | `in_progress` | In progress |
 | `done` | Completed |
 | `cancelled` | Cancelled |
-| `blocked` | Blocked |
-| `failed` | Failed (e.g. TaskExec execution failed) |
 | `delegated` | Delegated (tracking entry after `delegate_task` to a subordinate) |
 
-In Priming, human-origin tasks (`source=human`) get a 🔴 HIGH marker, tasks not updated for 30+ minutes get a ⚠️ STALE marker, and overdue tasks get a 🔴 OVERDUE marker.
+`blocked` and `failed` have been retired. A task whose session ends without a declaration is returned to `pending` automatically; there is no nagging or auto-continuation. If you cannot proceed, report to the requester and set the task to `cancelled` (see "When You Cannot Proceed" below).
 
-Delegated tasks (`delegated`) appear in a dedicated section within Priming Channel E. Live status is fetched from the subordinate's task queue (⏳ in progress / ✅ done / ❌ failed / 🚫 cancelled, etc.) showing up to 5 items. Additionally, `sync_delegated` runs automatically after each Heartbeat, detecting completed or failed tasks in subordinates' queues and auto-updating the supervisor's tracking entries (`done` / `failed`).
+In Priming, human-origin tasks (`source=human`) get a 🔴 HIGH marker, and tasks not updated for 30+ minutes get a ⚠️ STALE marker.
+
+Delegated tasks (`delegated`) appear in a dedicated section within Priming Channel E. Live status is fetched from the subordinate's task queue (⏳ in progress / ✅ done / 🚫 cancelled, etc.) showing up to 5 items. Additionally, `sync_delegated` runs automatically after each Heartbeat, detecting completed or cancelled tasks in subordinates' queues and auto-updating the supervisor's tracking entries (`done` / `cancelled`).
 
 ## Using current_state.md
 
@@ -162,7 +163,7 @@ Track tasks in `task_queue.jsonl`; `current_state.md` holds the working context 
 
 ```
 register via submit_tasks → update_task(status="in_progress") → work → update_task(status="done")
-                                                                    ↘ blocked → report → other task
+                                                                    ↘ cannot proceed → report to requester → other task (task stays pending)
 ```
 
 ### Transition Steps
@@ -176,10 +177,10 @@ register via submit_tasks → update_task(status="in_progress") → work → upd
 2. Reset `current_state.md` to `status: idle`
 3. Report results to the requester (MUST if `assigned_by` is someone else)
 
-**Blocked**:
-1. Set `current_state.md` `status` to `blocked` and record the specific reason in `blockers` (MUST)
-2. Take steps to unblock (see blocked-task flow below)
-3. If unblocking will take a while, you MAY start another task from `task_queue.jsonl`
+**Cannot Proceed**:
+1. Do not repeat the same action; report facts, what you tried, and your recommendation to the requester (MUST)
+2. Keep the task as `pending` if you may return to it (it reverts there automatically if the session ends undeclared), or set `update_task(status="cancelled", summary="reason")` if it's no longer needed
+3. You MAY start another task (MAY). There is no "waiting for conditions" state
 
 ## Managing Multiple Tasks by Priority
 
@@ -187,46 +188,21 @@ When several tasks exist in `task_queue.jsonl`, use this order:
 
 1. **Human-origin first**: Tasks equivalent to `source=human` have highest priority (MUST)
 2. **Supervisor tasks next**: Instructions from your supervisor outrank peer tasks at the same level (SHOULD)
-3. **By deadline**: Start tasks with nearer deadlines first (SHOULD)
-4. **FIFO**: Same priority and deadline → process in receive order (MAY)
+3. **FIFO**: Same priority → process in receive order (MAY)
 
 ### When Interrupting a Task
 
 1. Return the current task to the queue with `update_task(status="pending")`
 2. Note progress in `current_state.md`, then switch to the new task’s context
 
-## Handling Blocked Tasks
+## When You Cannot Proceed
 
-When a task is blocked, follow these steps.
+There is no "waiting for conditions" or "blocked" state. You always have exactly three options: proceed, close, or ask.
 
-### Step 1: Identify and Record the Blocker
-
-Record the specific cause in `blockers` in `current_state.md` (MUST).
-
-```markdown
-status: blocked
-task: AWS S3 bucket configuration
-blockers: |
-  AWS credentials not configured.
-  No aws credential in config.json.
-  Need to ask aoi to set them up.
-```
-
-### Step 2: Take Action to Unblock
-
-Act according to the cause:
-
-| Cause | Action |
-|-------|--------|
-| Missing information | Message the requester with questions (SHOULD) |
-| Insufficient permissions | Ask your supervisor to grant access (SHOULD) |
-| External dependency | Tell the requester you are waiting (SHOULD) |
-| Technical issue | Search `knowledge/` and `procedures/`. If nothing fits, report |
-
-### Step 3: Switch to Another Task
-
-If unblocking will take time, you MAY start the next task in `task_queue.jsonl`.
-Mark the blocked task with `update_task(status="blocked")` and resume when unblocked.
+1. If missing permissions, information, or an external dependency stops you, do not repeat the same action (MUST)
+2. Report facts, what you tried, and your recommendation to the requester (MUST). For technical issues, search `knowledge/` and `procedures/` first
+3. The task stays `pending` if left alone. Set `update_task(status="cancelled", summary="reason")` once it is no longer needed (MAY)
+4. While waiting, you MAY start another task from `task_queue.jsonl` (MAY)
 
 ## Task File Templates
 
@@ -248,23 +224,9 @@ context: |
 blockers: none
 ```
 
-### current_state.md — Blocked
-
-```markdown
-status: blocked
-task: {task name}
-assigned_by: {requester or self}
-started: {YYYY-MM-DD HH:MM}
-context: |
-  {details and background}
-blockers: |
-  {specific block reason}
-  {actions taken toward resolution}
-```
-
 ## Recording Task Logs in episodes/
 
-Record task start, completion, blocks, and other state changes in `episodes/` (SHOULD).
+Record task start, completion, and other state changes in `episodes/` (SHOULD).
 Filenames: `YYYY-MM-DD.md` (daily log).
 
 ```markdown
@@ -321,7 +283,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 4. TaskExec picks up the batch and orders work via topological sort
 5. `parallel: true` tasks with no unmet dependencies run concurrently within the semaphore limit
 6. Predecessor outputs are auto-injected into dependent task context
-7. If a predecessor fails, dependents are skipped
+7. If a predecessor did not finish (crash, unmet dependency, etc.), dependents are not run and revert to `pending` (there is no "failed" state, and nothing auto-retries)
 8. Tasks not run within 24 hours of enqueue are skipped (TTL)
 
 ### Concurrency Limit
@@ -331,7 +293,7 @@ Max parallel runs are set by `config.json` `background_task.max_parallel_llm_tas
 ### Task Result Storage
 
 Completed summaries go to `state/task_results/{task_id}.md` (max 2,000 characters, 7-day TTL).
-Dependents receive those results automatically. If a predecessor fails, dependents are skipped and `FAILED: {reason}` is recorded.
+Dependents receive those results automatically. If a predecessor crashes, dependents are not run and revert to `pending` (no auto-retry).
 On each completion, the Anima that called `submit_tasks` gets a DM notification.
 
 ### When to Use submit_tasks vs delegate_task
@@ -384,14 +346,13 @@ Anima with subordinates (supervisors) can delegate with the `delegate_task` tool
 ### Usage
 
 ```
-delegate_task(name="dave", instruction="Run the API test and report the results", deadline="2d", summary="API test")
+delegate_task(name="dave", instruction="Run the API test and report the results", summary="API test")
 ```
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `name` | MUST | Direct subordinate Anima name |
 | `instruction` | MUST | Task instructions |
-| `deadline` | MUST | Deadline. Relative `30m` / `2h` / `1d` or ISO8601 |
 | `summary` | MAY | One-line summary (defaults to first 100 characters of `instruction`) |
 | `workspace` | MAY | Working directory. A workspace alias makes the delegate work in that directory |
 
@@ -408,9 +369,9 @@ task_tracker(status="completed")   # Completed only
 
 | status | Meaning |
 |--------|---------|
-| `active` | In progress (anything other than done/cancelled/failed). Default |
+| `active` | In progress (anything other than done/cancelled). Default |
 | `all` | Everything |
-| `completed` | Only done/cancelled/failed |
+| `completed` | Only done/cancelled |
 
 ### Receiving a Delegated Task
 

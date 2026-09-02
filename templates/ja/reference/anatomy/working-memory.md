@@ -13,8 +13,7 @@ state/
 ├── task_queue.jsonl           # タスクレジストリ（append-only JSONL）
 ├── pending/                   # LLMタスク実行キュー（JSON）
 │   ├── {task_id}.json         # 投入されたタスク
-│   ├── processing/            # 実行中（PendingTaskExecutorが移動）
-│   └── failed/                # 失敗タスク
+│   └── processing/            # 実行中（PendingTaskExecutorが移動）
 ├── task_results/              # TaskExec完了結果
 │   └── {task_id}.md           # 結果要約（最大2000文字、7日TTL）
 ├── conversation.json          # 会話状態
@@ -112,9 +111,8 @@ Anima のワーキングメモリ。「今まさに何をしているか」「�
 | `source` | `"human"` / `"anima"` | タスク元 |
 | `original_instruction` | string | 元の指示文 |
 | `assignee` | string | 担当Anima名 |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
+| `status` | string | `pending` / `in_progress` / `delegated` / `done` / `cancelled`（`blocked` / `failed` は廃止済み。宣言なしでセッションが終わったタスクは `pending` に戻る） |
 | `summary` | string | 1行要約 |
-| `deadline` | ISO8601 / null | 期限 |
 | `relay_chain` | array | 委譲チェーン |
 | `updated_at` | ISO8601 | 最終更新日時 |
 | `meta` | object | `executor`, `batch_id`, `task_desc`, `origin` 等 |
@@ -128,12 +126,12 @@ LLM タスクの実行キュー。詳細は `common_knowledge/anatomy/task-archi
 ### ライフサイクル
 
 ```
-pending/{task_id}.json → processing/{task_id}.json → 成功: 削除 / 失敗: failed/ に移動
+pending/{task_id}.json → processing/{task_id}.json → 成功: 削除 / 異常終了: task_queue.jsonl の pending に戻る（「失敗」状態はなく、自動リトライもしない）
 ```
 
 - TTL: 24時間（`_LLM_TASK_TTL_HOURS`）。超過したタスクはスキップされる
 - ポーリング間隔: 3秒（`_PENDING_WATCHER_POLL_INTERVAL`）
-- `task_queue.jsonl` で `cancelled` のタスクは自動スキップ → `failed/` に移動
+- `task_queue.jsonl` で `cancelled` のタスクは自動スキップされる
 
 ### JSON スキーマ
 
