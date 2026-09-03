@@ -186,7 +186,6 @@ class PendingTaskExecutor:
         self._batch_tasks: dict[str, list[dict[str, Any]]] = {}
         self._active_dispatch_tasks: set[asyncio.Task[None]] = set()
         self._active_task_ids: set[str] = set()
-        self._batch_dispatch_lock = asyncio.Lock()
         self._task_runner_supervisor = task_runner_supervisor
         process_config = resolve_process_model_config(anima_dir)
         if process_config.valid:
@@ -840,12 +839,16 @@ class PendingTaskExecutor:
         batch_id: str,
         tasks: list[dict[str, Any]],
     ) -> None:
-        """Dispatch one accepted batch while retaining its active task ids."""
+        """Dispatch one accepted batch while retaining its active task ids.
+
+        Batches are not serialized against each other: concurrency is already
+        bounded by ``_task_semaphore`` (parallel tasks) and ``_background_lock``
+        (serial tasks). Serializing whole batches made every later heartbeat
+        submission wait for the slowest task of the previous batch
+        (observed 2026-09-03: a 6-task batch sat behind one CI-polling task).
+        """
         try:
-            # Preserve the historical one-batch-at-a-time behavior while the
-            # watcher remains free to reject duplicate descriptors.
-            async with self._batch_dispatch_lock:
-                await self._dispatch_batch(batch_id, tasks)
+            await self._dispatch_batch(batch_id, tasks)
         finally:
             self._active_task_ids.difference_update(str(task.get("task_id") or "").strip() for task in tasks)
 

@@ -527,3 +527,41 @@ def test_active_worker_is_busy_and_drives_primary_status() -> None:
     assert anima._has_active_busy_lock() is False
     assert anima.primary_status == "idle"
     assert anima.primary_task == ""
+
+
+async def test_second_batch_dispatches_while_first_batch_is_still_running(tmp_path: Path) -> None:
+    """Batches must not be serialized behind each other (2026-09-03).
+
+    A heartbeat submits one batch per run; if batch N+1 waited for every task
+    of batch N, a single CI-polling task would stall all later submissions.
+    """
+    executor = _executor(tmp_path, pool_size=2)
+    pending_dir = executor._anima_dir / "state" / "pending"
+    pending_dir.mkdir(parents=True)
+    started: list[str] = []
+    release = asyncio.Event()
+
+    async def fake_dispatch(batch_id, tasks):
+        started.append(batch_id)
+        await release.wait()
+
+    executor._dispatch_batch = fake_dispatch  # type: ignore[method-assign]
+    (pending_dir / "a.json").write_text(
+        json.dumps({"task_type": "llm", "task_id": "t-a", "batch_id": "batch-a", "description": "a"}),
+        encoding="utf-8",
+    )
+    watcher = asyncio.create_task(executor.watcher_loop())
+    await _wait_until(lambda: started == ["batch-a"])
+
+    (pending_dir / "b.json").write_text(
+        json.dumps({"task_type": "llm", "task_id": "t-b", "batch_id": "batch-b", "description": "b"}),
+        encoding="utf-8",
+    )
+    executor.wake()
+    await _wait_until(lambda: started == ["batch-a", "batch-b"])
+
+    release.set()
+    await _wait_until(lambda: not executor._active_dispatch_tasks)
+    executor._shutdown_event.set()
+    executor.wake()
+    await asyncio.wait_for(watcher, timeout=1)
