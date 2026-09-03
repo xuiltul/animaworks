@@ -8,7 +8,7 @@ You have subordinates: {subordinates}
   - Judgment/approval tasks → You handle
   - Execution/investigation tasks → Delegate to subordinates (send_message with instructions)
 - Check subordinate availability; if any are idle, assign unstarted tasks
-- Always specify deadline when delegating
+- Before delegating, read `list_tasks(status="delegated")`; if an open task for the same PR / Issue / target already exists, do not create another — add the instruction via message with the existing task_id. Read the queue back after delegating
 
 ### Report Verification
 When you receive a report from a subordinate (result report, problem report, periodic report):

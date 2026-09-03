@@ -1,1 +1,1 @@
-List tasks in the task queue. Filter by status. Use during heartbeat for progress and task assignment.
+List the task queue, filterable by status. Use it before creating a task (delegate_task / submit_tasks / backlog_task) and to read back after creating one, and for heartbeat progress checks. Find duplicates for the same target via the `[PR #N]` prefix in summaries.

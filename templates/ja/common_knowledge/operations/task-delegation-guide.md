@@ -142,3 +142,10 @@ Heartbeat 完了後に自動実行される。部下のタスクキューで以�
 - アーカイブ済みタスクも検索対象（`task_queue_archive.jsonl`）
 
 手動で `task_tracker` を呼ぶ必要はないが、Heartbeat 間の即時確認には引き続き `task_tracker` が有用。
+
+## 投入前の照合と投入後の読み戻し（MUST）
+
+- **書く前に読む**: `delegate_task` / `submit_tasks` / `backlog_task` を呼ぶ直前に `list_tasks(status="delegated")` と `list_tasks(status="in_progress")`（自分宛なら pending も）を読み、同じ PR / Issue / 対象の未完タスクが無いか確認する。あれば新しいタスクを作らず、既存の task_id を添えて担当者へ `send_message` で追加指示する。
+- **書いた後に読む**: 返ってきた task_id を `list_tasks` で読み戻し、summary の先頭に `[PR #N]` / `[Issue #N]` / 対象名が付いて登録されていることを確認する。
+- **重複を見つけたら**: 新しい方を残し、古い方を `update_task(status="cancelled", summary="<新ID>に統合")` にする。担当者側も同じ規則で動く。
+- 委譲文には対象・URL・やってほしいこと・完了の目安だけを書く。台帳の状態語や手順条件で縛らない。

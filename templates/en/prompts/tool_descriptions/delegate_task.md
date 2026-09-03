@@ -1,0 +1,4 @@
+[IMPORTANT] Delegate a task to a direct subordinate Anima (their TaskExec runs it; you do not).
+[Read before write (MUST)] Before calling, read `list_tasks(status="delegated")` and `list_tasks(status="in_progress")` and check whether you already have an open task for the same PR / Issue / target. If so, do not create a new task: send the assignee a `send_message` with the existing task_id and the additional instruction.
+[Read after write (MUST)] Read the returned task_id back with `list_tasks` and confirm it is registered with the target in its summary (e.g. `[PR #5215]`). Always prefix the summary with `[PR #N]` / `[Issue #N]` / the target name.
+Make the instruction self-contained (TaskExec has no conversation history). Write only the PR number, URL, what to fix and the completion target; do not bind the assignee with procedural conditions or ledger state words.

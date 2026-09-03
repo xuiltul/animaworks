@@ -118,3 +118,10 @@ submit_tasks(batch_id="deploy-20260301", tasks=[
 
 완료된 작업의 결과는 `state/task_results/{task_id}.json`에 저장됩니다.
 의존 작업에는 선행 작업의 결과 요약이 컨텍스트로 자동 주입됩니다.
+
+## 쓰기 전에 읽고, 쓴 후에 읽기 (MUST)
+
+- **쓰기 전에 읽기**: `delegate_task` / `submit_tasks` / `backlog_task` 직전에 `list_tasks(status="delegated")`와 `list_tasks(status="in_progress")`(자기 태스크는 pending 포함)를 읽고 같은 PR / Issue / 대상의 미완료 태스크가 없는지 확인한다. 있으면 새로 만들지 말고 기존 task_id를 첨부해 담당자에게 `send_message`로 추가 지시한다.
+- **쓴 후에 읽기**: 반환된 task_id를 `list_tasks`로 다시 읽어 summary 앞에 `[PR #N]` / `[Issue #N]` / 대상명이 붙어 등록되었는지 확인한다.
+- **중복 발견 시**: 새 태스크를 남기고 오래된 쪽을 `update_task(status="cancelled", summary="<새 ID>로 통합")`으로 정리한다. 담당자도 같은 규칙으로 움직인다.
+- 위임문에는 대상·URL·해야 할 일·완료 기준만 쓴다. 장부 상태어나 절차 조건으로 묶지 않는다.

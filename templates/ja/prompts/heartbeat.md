@@ -10,7 +10,7 @@
 
 **【MUST】対応が必要な事項を発見したら、必ずタスクとして具体化すること。「認識したが何もしない」は禁止。**
 以下のいずれかの手段で必ずアクション化する:
-- 部下に任せる → `delegate_task`
+- 部下に任せる → `delegate_task`（**書く前に読む**: 直前に `list_tasks(status="delegated")` / `list_tasks(status="in_progress")` を読み、同じ PR / Issue / 対象の未完タスクがあれば新規作成せず、既存 task_id を添えて担当者へ `send_message` で追加指示する。**書いた後に読む**: 投入後に `list_tasks` で登録を読み戻す）
 - 自分で対応する → `state/current_state.md` に次アクションを記録し、通常Heartbeat内では実作業に入らない
 - 即座にフォローアップ → `send_message` / `call_human`
 

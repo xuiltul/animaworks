@@ -139,3 +139,10 @@ Runs automatically after each Heartbeat. Detects the following state changes in 
 - Archived tasks are also searched (`task_queue_archive.jsonl`)
 
 There is no need to manually call `task_tracker`, but it remains useful for immediate checks between Heartbeats.
+
+## Read before write, read after write (MUST)
+
+- **Read before write**: right before `delegate_task` / `submit_tasks` / `backlog_task`, read `list_tasks(status="delegated")` and `list_tasks(status="in_progress")` (plus pending for your own tasks) and check for an open task on the same PR / Issue / target. If one exists, do not create another: `send_message` the assignee with the existing task_id and the extra instruction.
+- **Read after write**: read the returned task_id back with `list_tasks` and confirm the summary is prefixed with `[PR #N]` / `[Issue #N]` / the target name.
+- **On duplicates**: keep the newer task and set the older one to `update_task(status="cancelled", summary="merged into <new id>")`. Assignees follow the same rule.
+- Write only the target, URL, what to do and the completion target in a delegation. Do not bind the assignee with ledger state words or procedural conditions.

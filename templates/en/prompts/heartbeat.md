@@ -10,7 +10,7 @@ Based on your observations, decide what to do next.
 
 **[MUST] If you identify anything that requires action, you MUST formalize it as a task. "Acknowledged but no action taken" is prohibited.**
 Use one of the following to create a concrete action:
-- Delegate to subordinates → `delegate_task`
+- Delegate to subordinates → `delegate_task` (**read before write**: first read `list_tasks(status="delegated")` / `list_tasks(status="in_progress")`; if an open task for the same PR / Issue / target exists, do not create a new one — `send_message` the assignee with the existing task_id and the extra instruction. **Read after write**: read the new task back with `list_tasks`)
 - Do it yourself → record the next action in `state/current_state.md`; do not start hands-on work during normal Heartbeat
 - Immediate follow-up → `send_message` / `call_human`
 
