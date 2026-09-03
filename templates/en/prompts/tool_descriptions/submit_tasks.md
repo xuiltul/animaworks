@@ -1,3 +1,4 @@
 [IMPORTANT] Tasks submitted with this tool run in your own TaskExec (not sent to subordinates). Use delegate_task for subordinates.
-[Read before write (MUST)] Before submitting, read `list_tasks` (pending / in_progress) and check that no task for the same PR / Issue / target already exists. If one exists, do not submit; continue the existing task.
+[Read before write (MUST)] Before submitting, read `list_tasks` (pending / in_progress) and check that no task for the same PR / Issue / target already exists. If one exists, do not mint a new task_id; submit with that existing task_id.
+[Re-submitting pending] To continue a pending task in your own ledger (including ones whose previous run ended without a completion declaration), submit it here with the same task_id, the original instruction, and the required workspace. This is the only path that re-executes it; changing status with update_task or writing current_state.md executes nothing.
 [Read after write (MUST)] After submitting, read it back with `list_tasks` and confirm registration and the summary (prefixed with the target, e.g. `[PR #N]`).

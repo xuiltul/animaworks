@@ -61,12 +61,17 @@ _COMPACT_COMM_TOOLS: frozenset[str] = frozenset(
     }
 )
 
-_SUBMIT_TASKS_ALLOWED_TRIGGERS: frozenset[str] = frozenset({"background", "submit_tasks"})
+_SUBMIT_TASKS_ALLOWED_TRIGGERS: frozenset[str] = frozenset({"background", "submit_tasks", "heartbeat"})
 _SUBMIT_TASKS_ALLOWED_PREFIXES: tuple[str, ...] = ("background:", "submit_tasks:")
 
 
 def submit_tasks_enabled_for_trigger(trigger: str | None) -> bool:
-    """Return True only for explicit background task-authoring sessions."""
+    """Return True for explicit background task-authoring sessions and heartbeat.
+
+    Heartbeat is included because the harness never re-executes a ledger
+    ``pending`` task on the anima's behalf: the anima re-submits its own
+    pending work via ``submit_tasks`` during heartbeat (2026-09-03).
+    """
     normalized = (trigger or "").strip()
     return normalized in _SUBMIT_TASKS_ALLOWED_TRIGGERS or normalized.startswith(_SUBMIT_TASKS_ALLOWED_PREFIXES)
 
@@ -227,7 +232,8 @@ def build_unified_tool_list(
                 tools.append(t)
 
     # AW-essential: task management. submit_tasks is withheld from normal
-    # chat/heartbeat/cron/task sessions to avoid duplicate self-execution.
+    # chat/cron/task sessions to avoid duplicate self-execution; heartbeat
+    # gets it so the anima can re-submit its own pending tasks.
     if not is_consolidation:
         if submit_tasks_enabled_for_trigger(trigger):
             tools.extend(_submit_tasks_tools())

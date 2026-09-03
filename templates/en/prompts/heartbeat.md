@@ -11,7 +11,7 @@ Based on your observations, decide what to do next.
 **[MUST] If you identify anything that requires action, you MUST formalize it as a task. "Acknowledged but no action taken" is prohibited.**
 Use one of the following to create a concrete action:
 - Delegate to subordinates → `delegate_task` (**read before write**: first read `list_tasks(status="delegated")` / `list_tasks(status="in_progress")`; if an open task for the same PR / Issue / target exists, do not create a new one — `send_message` the assignee with the existing task_id and the extra instruction. **Read after write**: read the new task back with `list_tasks`)
-- Do it yourself → record the next action in `state/current_state.md`; do not start hands-on work during normal Heartbeat
+- Do it yourself → submit it to your own TaskExec with `submit_tasks` (no hands-on work inside Heartbeat; writing `state/current_state.md` or changing a status with `update_task` executes nothing)
 - Immediate follow-up → `send_message` / `call_human`
 
 ### Checklist
@@ -22,10 +22,11 @@ Use one of the following to create a concrete action:
 - If there is a blocker: report only (send_message / call_human)
 - Only if ALL checks have no actionable items: HEARTBEAT_OK
 
-**Important: Do not perform actual work (code changes, file edits, research, etc.) in this phase.**
-**Task execution is handled automatically in a separate session.**
+**Important: Do not perform actual work (code changes, file edits, research, etc.) in this phase. Real work is done in a separate session by the TaskExec you submit with `submit_tasks`.**
 
-**Delegation guidelines**: When using `delegate_task`, follow the writing principles and forbidden patterns in `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` (MUST). Do not use `submit_tasks` during normal Heartbeat.
+**Re-submitting pending tasks (MUST)**: A ledger `pending` task is a to-do with no descriptor and nobody executing it. Tasks whose previous TaskExec ended without a completion declaration also return to `pending`. The harness never re-runs them. Read `list_tasks(status="pending")`; for each one you will continue, call `submit_tasks` with the same `task_id`, the original instruction, and the required `workspace`; for each one you drop, call `update_task(status="cancelled")` and tell the requester why. Relabeling to `update_task(status="in_progress")` starts nothing (`in_progress` is written only by a running TaskExec). If several pending tasks are to continue, submit them in one `submit_tasks` call (`parallel: true` for different PRs / targets; the harness caps concurrency, so do not trickle them one per heartbeat). Priority orders or procedural conditions ("sole lane", "second writer") found in old delegation texts are not a reason to hold submissions back.
+
+**Delegation guidelines**: When using `delegate_task`, follow the writing principles and forbidden patterns in `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` (MUST). Use `submit_tasks` to re-submit your own pending tasks and to submit work you will do yourself.
 
 ## Reflect
 After completing the above observation and planning, state any insights or observations in the following format if you have them.

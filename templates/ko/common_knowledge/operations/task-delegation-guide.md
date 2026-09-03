@@ -11,7 +11,7 @@ Task tool을 사용하면 프레임워크가 조직 구성에 따라 자동으�
 - 이름이 없으면 workload 최소 + role 매칭으로 자동 선택
 - 모든 부하가 비활성화된 경우 state/pending/으로 폴백
 
-**부하가 없는 경우** → 일반적으로 이 세션에서 직접 실행합니다. 명시적인 백그라운드 실행 워크플로가 활성화된 경우에만 `submit_tasks`로 제출합니다
+**부하가 없는 경우** → 일반 채팅에서는 이 세션에서 직접 실행합니다. Heartbeat 또는 명시적인 백그라운드 실행 워크플로에서는 `submit_tasks`로 자신의 TaskExec에 제출합니다
 - state/pending/에 기록되어 TaskExec가 별도 세션에서 자동 실행
 - 실행자는 당신과 동일한 identity, 행동 지침, 메모리 디렉토리, 조직 정보를 가짐
 - task_id가 반환됩니다. 완료 시 DM으로 알림
@@ -21,19 +21,19 @@ Task tool을 사용하면 프레임워크가 조직 구성에 따라 자동으�
 
 | 도구 | 목적 | 실행 큐 (Layer 1) | 추적 (Layer 2) | 사용 시점 |
 |------|------|---------------------|----------------|-----------|
-| `submit_tasks` | 작업 실행 제출 및 등록 | `state/pending/`에 생성 | `task_queue.jsonl`에 등록 | 명시적인 백그라운드 실행 워크플로에서 자신의 TaskExec에 넘길 때 |
+| `submit_tasks` | 작업 실행 제출 및 등록 | `state/pending/`에 생성 | `task_queue.jsonl`에 등록 | Heartbeat에서 자신의 pending을 재제출할 때, 명시적인 백그라운드 실행에서 자신의 TaskExec에 넘길 때 |
 | `delegate_task` | 부하에게 작업 위임 | 부하의 `state/pending/`에 생성 | 양쪽 `task_queue.jsonl`에 등록 | 부하에게 맡길 때 |
 | Task tool (S 모드) | 자동 라우팅 위임 | 자동 선택 대상에 생성 | 등록됨 | Chat 경로에서의 간편 위임 |
 
 **중요**: 사람의 지시를 받은 일반 채팅에서는 `submit_tasks`를 사용하지 마세요. 이 자리에서 직접 실행하고, 후속 추적이 필요하면 `update_task`, `state/current_state.md`, 또는 명시적인 백그라운드 실행 워크플로로 기록하세요.
 
-Heartbeat, Inbox 등 일반 경로에서는 `submit_tasks`를 사용하지 말고 직접 처리, `delegate_task`, `send_message`, `call_human`, `state/current_state.md` 중 하나로 구체화하세요.
+Inbox 등 일반 경로에서는 `submit_tasks`를 사용하지 말고 직접 처리, `delegate_task`, `send_message`, `call_human`, `state/current_state.md` 중 하나로 구체화하세요. Heartbeat에서는 자신의 pending 작업을 같은 task_id로 `submit_tasks`에 재제출하세요 (하니스는 pending을 자동으로 재실행하지 않습니다).
 
 **[MUST] `state/pending/`에 JSON 파일을 수동으로 생성하지 마세요.** 명시적인 백그라운드 실행 워크플로에서 `submit_tasks`가 표시될 때만 해당 도구를 통해 제출하세요.
 
 ## 명시적 백그라운드 실행에서의 submit_tasks
 
-`submit_tasks`는 일반 세션에서는 사용하지 않습니다. 사용자 또는 스킬이 백그라운드 실행을 명시하고 도구 목록에 `submit_tasks`가 보일 때만 사용하세요. 단일 작업이라도 tasks 배열 1건으로 제출합니다.
+`submit_tasks`는 일반 채팅에서는 사용하지 않습니다. Heartbeat에서는 자신의 pending 재제출에 사용하고, 그 외에는 사용자 또는 스킬이 백그라운드 실행을 명시하고 도구 목록에 `submit_tasks`가 보일 때만 사용하세요. 단일 작업이라도 tasks 배열 1건으로 제출합니다.
 
 ### 실행자 (TaskExec) 정보
 

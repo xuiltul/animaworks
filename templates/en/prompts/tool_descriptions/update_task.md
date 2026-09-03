@@ -1,3 +1,3 @@
-Update a task's status. Use status='done' on completion and status='cancelled' on withdrawal. Record interim progress with status='in_progress' and a summary.
+Update a task's status. Use status='done' on completion and status='cancelled' on withdrawal. Use status='in_progress' only from a running TaskExec to record interim progress in the summary. Relabeling a pending task to in_progress from Heartbeat starts nothing (only a descriptor in state/pending triggers execution). To continue a task, re-submit the same task_id with `submit_tasks`.
 [Read before write] Before updating, read the current status / summary with `list_tasks` (another worker may already have set done / cancelled). If two or more tasks exist for the same target, continue the newer one and cancel the older.
 [Read after write] After updating, confirm with `list_tasks`. Pushing the fix and replying is completion: write status='done' at that point.

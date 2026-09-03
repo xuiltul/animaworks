@@ -1,1 +1,1 @@
-태스크의 상태를 업데이트한다. 완료 시 status='done', 철회 시 status='cancelled'로 설정. 진행 중 경과는 status='in_progress'와 summary로 남길 것.
+태스크의 상태를 업데이트한다. 완료 시 status='done', 철회 시 status='cancelled'로 설정. status='in_progress'는 실행 중인 TaskExec가 경과를 summary에 쓸 때만 사용한다. Heartbeat에서 pending을 in_progress로 바꿔도 실행은 시작되지 않는다 (실행은 state/pending의 descriptor만 일으킨다). 계속하려면 같은 task_id를 `submit_tasks`로 재제출한다.
