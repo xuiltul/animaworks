@@ -4,7 +4,7 @@ Shared knowledge for all Animas is stored here: organizational operations, commu
 When researching or when uncertain about a decision, search common_knowledge in addition to personal memory.
 Actively write findings that would benefit other Animas to common_knowledge.
 
-- **Start here**: `read_memory_file(path="common_knowledge/anatomy/essentials.md")` — Overview of AnimaWorks in one page (execution paths, Heartbeat vs Cron, machine, team design, memory, cost optimization)
+- **Start here**: `read_memory_file(path="common_knowledge/anatomy/essentials.md")` — Overview of AnimaWorks in one page (execution paths, Heartbeat vs Cron, team design, memory, cost optimization)
 - Search: `search_memory(query="...", scope="common_knowledge")`
 - Read: `read_memory_file(path="common_knowledge/...")`
 - Write: `write_memory_file(path="common_knowledge/...", content="...")`

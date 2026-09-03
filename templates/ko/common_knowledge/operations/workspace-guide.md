@@ -27,16 +27,6 @@ Anima는 평소 "자신의 집"(`~/.animaworks/animas/{name}/`)에 있습니다.
 
 ## 도구에서의 사용
 
-### machine_run (Machine Tool)
-
-`working_directory`에 별칭, 전체 형식, 해시 또는 절대 경로를 지정할 수 있습니다.
-
-```bash
-animaworks-tool machine run "코드를 리팩터링해 줘" -d myproject
-animaworks-tool machine run "테스트를 실행해 줘" -d myproject#3af4be6e
-animaworks-tool machine run "빌드해 줘" -d /home/user/dev/myproject
-```
-
 ### submit_tasks
 
 각 태스크의 `workspace` 필드에 별칭을 지정하면,

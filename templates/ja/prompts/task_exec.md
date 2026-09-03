@@ -38,6 +38,6 @@
 - **並列worker調整**: 上記の並列worker状況は着手時点のものです。新しいPR・ブランチ・リソースに着手する直前に、`list_tasks`（status="in_progress"）で分身の現在作業を再確認してください。分身が同じリソース（同一PR・同一ブランチ等）を触っている場合は、そのリソースを避けて別の対象を選ぶか、分身の完了を待ってください
 - **同じ対象のタスクが複数あるとき**: `list_tasks` で同じ PR / Issue のタスクが自分の一覧に 2 つ以上見つかったら、新しい方（このタスク）を続け、古い方を `update_task(status="cancelled")` にする。「既に担当タスクがある」ことは手を止める理由にならない
 - **進捗summaryの書式**: `update_task` 等で進捗を報告する際、summaryの先頭に触っているリソースを付けてください（例: `[PR #3442] レビュー対応中`）。分身があなたの作業対象を一瞥で判別できるようにするためです
-- 作業ディレクトリが指定されている場合、そのディレクトリを作業の起点としてください。machineツールのworking_directoryにもそのパスを指定してください
+- 作業ディレクトリが指定されている場合、そのディレクトリを作業の起点としてください。
 - 作業ディレクトリが「(指定なし)」の場合、descriptionやcontextから適切なパスを判断してください
-- ネイティブWindowsで shell / command 実行が必要な作業中に `shell_command` / command execution が `policy blocked` になった場合、または `codex exec exited with code 1` が繰り返し発生した場合は、同じローカル実行経路を再試行し続けないでください。`machine` を標準フォールバックとして使い、shell 必須作業では `engine=claude` を優先し、`working_directory` を必ず明示してください
+- ネイティブWindowsで shell / command 実行が必要な作業中に `shell_command` / command execution が `policy blocked` になった場合、または `codex exec exited with code 1` が繰り返し発生した場合は、同じローカル実行経路を再試行し続けないでください。再試行をやめて状況を報告し、実行環境の調整を依頼してください

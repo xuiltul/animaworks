@@ -162,7 +162,6 @@ Side-effect actions marked `gated: True` in each tool's `EXECUTION_PROFILE` requ
 | chatwork | `chatwork_send` |
 | discord | `discord_send`, `discord_channel_post` |
 | github | `github_create-issue`, `github_create-pr` |
-| machine | `machine_run` |
 
 Enforcement: `core/tooling/permissions.is_action_gated` + dispatch-time check. Migration for live Animas: see `docs/specs/pi-fix2-gated-tools-migration.md` and `scripts/migrate_pi_fix2_gated_allows.py` (dry-run by default).
 

@@ -170,14 +170,6 @@ STRINGS: dict[str, dict[str, str]] = {
             "references"
         ),
     },
-    "builder.machine_hint": {
-        "ja": (
-            '\n\n**machine ツール**: コード変更・調査・分析など重い作業は `animaworks-tool machine run` で外部エージェントに委託できます。詳細は read_memory_file(path="common_skills/machine-tool/SKILL.md") で確認。'
-        ),
-        "en": (
-            '\n\n**machine tool**: For heavy tasks like code changes, investigation, or analysis, delegate to an external agent via `animaworks-tool machine run`. Use read_memory_file(path="common_skills/machine-tool/SKILL.md") for details.'
-        ),
-    },
     "builder.skill_catalog_header": {
         "ja": "## Available Skills",
         "en": "## Available Skills",

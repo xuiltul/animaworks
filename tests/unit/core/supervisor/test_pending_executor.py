@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.i18n import t
 from core.supervisor.pending_executor import PendingTaskExecutor
 
 
@@ -278,61 +277,6 @@ class TestWatcherLoop:
             await executor.watcher_loop()
 
         assert not (pending_dir / "bad.json").exists()
-
-
-class TestMachineDirectiveInjection:
-    """Test machine tool directive injection into TaskExec prompt."""
-
-    def test_directive_appended_when_machine_in_description(self):
-        """Prompt should have machine directive when description mentions machine."""
-        description = "machineツールで実装し、検証してpushする"
-        assert "machine" in description.lower()
-        directive = t("pending_executor.machine_directive")
-        assert "MUST" in directive
-
-    def test_directive_not_appended_without_machine(self):
-        """No directive when description does not mention machine."""
-        description = "git pushして結果を報告する"
-        assert "machine" not in description.lower()
-
-    def test_case_insensitive_detection(self):
-        """Detection should be case-insensitive."""
-        for desc in ["Machineで実装", "MACHINE RUN", "use machine tool"]:
-            assert "machine" in desc.lower()
-
-    def test_directive_i18n_ja(self):
-        directive = t("pending_executor.machine_directive", lang="ja")
-        assert "MUST" in directive
-        assert "animaworks-tool machine run" in directive
-
-    def test_directive_i18n_en(self):
-        directive = t("pending_executor.machine_directive", lang="en")
-        assert "MUST" in directive
-        assert "animaworks-tool machine run" in directive
-
-    def test_integration_prompt_with_machine(self):
-        """Simulate the prompt construction logic: machine → directive appended."""
-        base_prompt = "あなたはタスク実行エージェントです。\n## 作業内容\nmachineで実装し検証する"
-        description = "machineで実装し検証する"
-        directive = t("pending_executor.machine_directive")
-
-        prompt = base_prompt
-        if "machine" in description.lower():
-            prompt += "\n\n" + directive
-
-        assert prompt.endswith(directive)
-        assert "MUST" in prompt
-
-    def test_integration_prompt_without_machine(self):
-        """Prompt stays unchanged when no machine mention."""
-        base_prompt = "あなたはタスク実行エージェントです。\n## 作業内容\nCI結果を確認する"
-        description = "CI結果を確認してレポートを作成する"
-
-        prompt = base_prompt
-        if "machine" in description.lower():
-            prompt += "\n\n" + t("pending_executor.machine_directive")
-
-        assert prompt == base_prompt
 
 
 class TestStreamErrorSuppression:

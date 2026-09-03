@@ -158,26 +158,6 @@ def _load_permitted_categories(anima_dir: Path) -> set[str]:
     return get_permitted_tools(config)
 
 
-def _machine_tool_schemas() -> list[dict[str, Any]]:
-    """Machine tool schemas — empty when no engine CLI is installed.
-
-    Mode S/C animas run their shell inside a sandbox where
-    ``animaworks-tool machine run`` is rejected (EROFS probe in
-    ``machine._is_fs_sandboxed``), so native MCP exposure is their only
-    working path to the machine tool.
-    """
-    if os.environ.get("ANIMAWORKS_FILE_DENY_ACTIVE") == "1":
-        logger.info("machine tool disabled while file deny enforcement is active")
-        return []
-    try:
-        from core.tools.machine import get_tool_schemas
-
-        return get_tool_schemas()
-    except Exception:
-        logger.debug("machine tool schemas unavailable", exc_info=True)
-        return []
-
-
 def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
     """Convert canonical AnimaWorks schemas to MCP Tool objects.
 
@@ -227,14 +207,9 @@ def _build_mcp_tools() -> tuple[list[Tool], frozenset[str]]:
         *_check_permissions_tools(),
     ]
 
-    # Machine tool is exposed dynamically: schema exists only when an
-    # engine CLI (claude/codex/...) is found on PATH, mirroring Mode B.
-    machine_schemas = _machine_tool_schemas()
-    all_schemas.extend(machine_schemas)
-
     configured = os.environ.get("ANIMAWORKS_MCP_TOOLS")
     if configured is None:
-        exposed = _EXPOSED_TOOL_NAMES | {s["name"] for s in machine_schemas}
+        exposed = _EXPOSED_TOOL_NAMES
     else:
         requested = {name.strip() for name in configured.split(",") if name.strip()}
         exposed = _EXPOSED_TOOL_NAMES & requested

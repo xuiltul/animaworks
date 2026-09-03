@@ -3,7 +3,7 @@
 ## Implementation lane
 - Work in an isolated worktree so it does not conflict with other work.
 - Keep changes to existing code minimal; record out-of-scope changes as separate tasks.
-- For repeated work, write down procedures and follow the machine-based workflow conventions.
+- For repeated work, write down procedures and follow the established workflow conventions.
 
 ## Creating and explaining a PR
 - Create the PR with the goal, the changes made, and how they were verified.
@@ -19,4 +19,3 @@
 ## References
 - Repository-specific conventions are in the repository root's CLAUDE.md and config files.
 - Workspace placement: read_memory_file(path="common_knowledge/operations/workspace-guide.md")
-- Machine workflow for engineers: read_memory_file(path="common_knowledge/operations/machine/workflow-engineer.md")

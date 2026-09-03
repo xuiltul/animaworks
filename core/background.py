@@ -95,7 +95,6 @@ _DEFAULT_ELIGIBLE_TOOLS: dict[str, int] = {
     "generate_animations": 30,
     "local_llm": 60,
     "run_command": 60,
-    "machine_run": 600,
 }
 
 _DEFAULT_RESULT_MEMORY_RETENTION_MINUTES = 60

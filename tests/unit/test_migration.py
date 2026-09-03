@@ -451,6 +451,63 @@ class TestMigrationSteps:
         assert status_path.read_text(encoding="utf-8") == original
         assert not list(status_path.parent.glob("status.json.bak-*"))
 
+    def test_remove_machine_config_removes_key_and_is_idempotent(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"model": "x", "machine": {"engine_priority": ["claude"]}}),
+            encoding="utf-8",
+        )
+
+        result = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert result.error is None
+        assert result.changed == 1
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "machine" not in data
+        assert "model" in data  # other keys preserved
+        assert list(tmp_path.glob("config.json.bak-*"))
+
+        # idempotent: no-op on second run
+        second = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert second.error is None
+        assert second.changed == 0
+        assert second.skipped == 1
+
+    def test_remove_machine_config_noop_when_no_key(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+
+        result = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert result.error is None
+        assert result.changed == 0
+        assert "machine" not in json.loads(config_path.read_text(encoding="utf-8"))
+
+    def test_remove_machine_config_dry_run_does_not_modify(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        original = json.dumps({"machine": {"engine_priority": ["claude"]}})
+        config_path.write_text(original, encoding="utf-8")
+
+        result = step_remove_machine_config(tmp_path, dry_run=True, verbose=True)
+        assert result.error is None
+        assert result.changed == 1
+        assert config_path.read_text(encoding="utf-8") == original
+        assert not list(tmp_path.glob("config.json.bak-*"))
+
+    def test_remove_machine_config_step_registered_before_version(self, tmp_path: Path) -> None:
+        from core.migrations.steps import register_all_steps
+
+        runner = MigrationRunner(tmp_path)
+        register_all_steps(runner)
+        ids = [item["id"] for item in runner.list_steps()]
+
+        assert "remove_machine_config_20260903" in ids
+        assert ids.index("remove_machine_config_20260903") < ids.index("update_version")
+
     def test_v063_registered_after_v062(self, tmp_path: Path) -> None:
         from core.migrations.steps import register_all_steps
 

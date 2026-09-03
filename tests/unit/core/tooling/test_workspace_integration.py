@@ -7,7 +7,6 @@
 Validates that workspace resolution integrates correctly with:
 - submit_tasks (handler_skills)
 - delegate_task (handler_org)
-- machine_run (machine.py)
 - _intercept_task_to_pending (_sdk_hooks)
 - TaskExec prompt injection (pending_executor + task_exec.md templates)
 """
@@ -243,90 +242,6 @@ class TestDelegateTaskWorkspace:
         data = json.loads(result)
         assert "error" in data or "InvalidArguments" in result
         assert "Workspace" in result or "workspace" in result.lower()
-
-
-# ── TestMachineWorkspaceResolution ───────────────────────────────
-
-
-class TestMachineWorkspaceResolution:
-    """Workspace resolution in machine_run dispatch."""
-
-    def setup_method(self) -> None:
-        """Reset machine call counts before each test."""
-        from core.tools.machine import reset_call_counts
-
-        reset_call_counts()
-
-    def test_dispatch_resolves_workspace_alias(self, tmp_path: Path) -> None:
-        """machine_run with working_directory alias calls resolve_workspace."""
-        wd = tmp_path / "workspace"
-        wd.mkdir()
-        resolved_path = tmp_path / "myproject"
-        resolved_path.mkdir()
-
-        with (
-            patch("core.workspace.resolve_workspace", return_value=Path(resolved_path)) as mock_resolve,
-            patch("core.tools.machine._is_fs_sandboxed", return_value=False),
-            patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"),
-            patch(
-                "core.tools.machine.subprocess.Popen",
-                return_value=MagicMock(
-                    communicate=MagicMock(return_value=("ok", "")),
-                    returncode=0,
-                    pid=99999,
-                ),
-            ),
-        ):
-            from core.tools.machine import dispatch
-
-            result = dispatch(
-                "machine_run",
-                {
-                    "engine": "claude",
-                    "instruction": "test",
-                    "working_directory": "myproject",
-                    "anima_dir": str(tmp_path / "anima"),
-                },
-            )
-        mock_resolve.assert_called_once_with("myproject")
-        out = json.loads(result)
-        assert out.get("success") is True
-
-    def test_invalid_workspace_returns_json_error(self) -> None:
-        """Unknown workspace returns JSON with error key."""
-        with patch(
-            "core.workspace.resolve_workspace",
-            side_effect=ValueError("Workspace 'bad' not found"),
-        ):
-            from core.tools.machine import dispatch
-
-            result = dispatch(
-                "machine_run",
-                {
-                    "engine": "claude",
-                    "instruction": "test",
-                    "working_directory": "bad",
-                },
-            )
-        out = json.loads(result)
-        assert "error" in out
-        assert "bad" in out["error"] or "not found" in out["error"].lower()
-
-    def test_empty_working_directory_returns_error(self) -> None:
-        """Empty working_directory returns missing_working_directory error."""
-        from core.tools.machine import dispatch
-
-        result = dispatch(
-            "machine_run",
-            {
-                "engine": "claude",
-                "instruction": "test",
-                "working_directory": "",
-            },
-        )
-        out = json.loads(result)
-        assert "error" in out
-        assert "working_directory" in out["error"].lower()
 
 
 # ── TestInterceptWorkingDirectory ─────────────────────────────────

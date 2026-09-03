@@ -309,7 +309,7 @@ On each completion, the Anima that called `submit_tasks` gets a DM notification.
 
 ## Long-Running External Tools (BackgroundTaskManager / `core/background.py`)
 
-Tool-guide entries marked with ⚠ (image/3D generation, `local_llm`, `run_command`, `machine_run`, etc.) should be submitted with **`animaworks-tool submit …`** so they do not block the chat loop for a long time. This path is **unrelated** to **`submit_tasks` (LLM tasks)**.
+Tool-guide entries marked with ⚠ (image/3D generation, `local_llm`, `run_command`, etc.) should be submitted with **`animaworks-tool submit …`** so they do not block the chat loop for a long time. This path is **unrelated** to **`submit_tasks` (LLM tasks)**.
 
 | Item | Content |
 |------|---------|
@@ -322,7 +322,7 @@ Tool-guide entries marked with ⚠ (image/3D generation, `local_llm`, `run_comma
 | About `pending` | `TaskStatus` defines `pending`, but `submit` / `submit_async` do not use it (state is `running` immediately after enqueue). On disk you usually see only `running` → `completed` / `failed` |
 | Eligibility | `is_eligible(tool_name)` — **only whether the key exists in `_eligible_tools`**. Accepts both schema names (e.g. `generate_3d_model`) and `tool:subcommand` (e.g. `image_gen:3d`) |
 | Eligible tool set | **Three-layer merge (later wins)**: (1) `_DEFAULT_ELIGIBLE_TOOLS`, (2) `get_eligible_tools_from_profiles` — each tool’s `EXECUTION_PROFILE` entries with `background_eligible: true` (keys `tool:subcommand`, values `expected_seconds`, default 60 if omitted), (3) `config.json` `background_task.eligible_tools` — map of each entry’s **`threshold_s`** as integers. **Numeric values are not used inside `is_eligible`** (for docs / profile consistency) |
-| Layer-1 default keys | `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (all 30), `local_llm` / `run_command` (60), `machine_run` (600) |
+| Layer-1 default keys | `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (all 30), `local_llm` / `run_command` (60) |
 | Disable | `background_task.enabled: false` in `config.json` — no manager is created (the submit queue may still be ingested with warnings on the execution side) |
 | Cleanup | `cleanup_old_tasks(max_age_hours=24)` — deletes JSON whose `status` is `completed`/`failed` and `completed_at` is **older than 24 hours**. Also removes **`running`** files whose **`created_at` is over 48 hours** old (orphans after crash, etc.) |
 | Internal API | `get_task` (in-memory first, else disk), `list_tasks` (merge in-memory and `*.json`, sort by `created_at` desc, optional `status` filter), `active_count` (count of `running`) |

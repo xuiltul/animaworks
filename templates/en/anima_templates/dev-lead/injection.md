@@ -17,4 +17,3 @@
 - Delegation workflow: read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")
 - Report formats: read_memory_file(path="common_knowledge/operations/report-formats.md")
 - Workspace placement: read_memory_file(path="common_knowledge/operations/workspace-guide.md")
-- Machine workflow for PdM: read_memory_file(path="common_knowledge/operations/machine/workflow-pdm.md")

@@ -621,8 +621,6 @@ def _build_group4(
                     "Use read_memory_file to load skill content and look up CLI usage, "
                     f"then execute via Bash: `animaworks-tool <tool> <subcommand>`."
                 )
-            if "machine" in cats:
-                et += t("builder.machine_hint")
             _add(et, "external_tools", 2)
 
     if is_chat:

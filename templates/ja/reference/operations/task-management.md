@@ -312,7 +312,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 
 ## 長時間外部ツール（BackgroundTaskManager / `core/background.py`）
 
-ツールガイドに ⚠ が付く処理（画像・3D 生成、`local_llm`、`run_command`、`machine_run` 等）は、会話ループを長時間ブロックしないよう **`animaworks-tool submit …`** でバックグラウンド投入する。これは **`submit_tasks`（LLM タスク）とは無関係**な別経路である。
+ツールガイドに ⚠ が付く処理（画像・3D 生成、`local_llm`、`run_command` 等）は、会話ループを長時間ブロックしないよう **`animaworks-tool submit …`** でバックグラウンド投入する。これは **`submit_tasks`（LLM タスク）とは無関係**な別経路である。
 
 | 項目 | 内容 |
 |------|------|
@@ -325,7 +325,7 @@ submit_tasks(batch_id="build-20260301", tasks=[
 | `pending` について | `TaskStatus` に `pending` が定義されているが、`submit` / `submit_async` では未使用（投入直後から `running`）。通常、ディスク上は `running`→`completed`/`failed` のみ |
 | 資格チェック | `is_eligible(tool_name)` — **キーが `_eligible_tools` に含まれるかのみ**。スキーマ名（例: `generate_3d_model`）と `tool:subcommand`（例: `image_gen:3d`）の両形式を受理 |
 | 候補ツール集合 | **3 層マージ（後勝ち）**: (1) `_DEFAULT_ELIGIBLE_TOOLS`、(2) `get_eligible_tools_from_profiles` — 各ツール `EXECUTION_PROFILE` で `background_eligible: true` のエントリ（キー `tool:subcommand`、値は `expected_seconds`、未指定時 60）、(3) `config.json` `background_task.eligible_tools` の各エントリの **`threshold_s`** を整数化したマップ。各層の**数値は `is_eligible` では使われない**（ドキュメント・プロファイル整合用） |
-| 第1層の既定キー | `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（いずれも 30）、`local_llm` / `run_command`（60）、`machine_run`（600） |
+| 第1層の既定キー | `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（いずれも 30）、`local_llm` / `run_command`（60） |
 | 無効化 | `config.json` で `background_task.enabled: false` とするとマネージャが作られない（submit キューは取り込まれても実行側で警告になりうる） |
 | 掃除 | `cleanup_old_tasks(max_age_hours=24)` — `status` が `completed`/`failed` で `completed_at` が **24 時間より古い** JSON を削除。加えて `running` のまま **`created_at` から 48 時間超**のファイル（プロセスクラッシュ等の孤児）も削除 |
 | 内部 API | `get_task`（インメモリ優先、なければディスク）、`list_tasks`（インメモリと `*.json` をマージ、`created_at` 降順、任意で `status` フィルタ）、`active_count`（`running` 件数） |

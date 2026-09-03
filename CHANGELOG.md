@@ -7,6 +7,9 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+- machine ツール（`animaworks-tool machine run` / MCP `machine_run`）を撤去。`core/tools/machine.py`・`MachineConfig`・関連 i18n／プロンプト注記／gated action／テンプレート言及を削除し、config.json の `machine` キーを落とす migration step を追加
+
 ## [0.12.0] - 2026-08-25
 
 ### Added

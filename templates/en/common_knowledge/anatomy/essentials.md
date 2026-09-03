@@ -1,7 +1,7 @@
 # AnimaWorks Essential Guide
 
 [IMPORTANT] A single-page guide to understand the full picture of AnimaWorks.
-Covers Heartbeat / Cron / machine / team design / memory / cost optimization essentials.
+Covers Heartbeat / Cron / team design / memory / cost optimization essentials.
 Read this first when onboarding or when you need to organize how concepts relate.
 For details on each topic, follow the links at the end of each section.
 
@@ -115,44 +115,6 @@ command: /usr/local/bin/health-check.sh
 ```
 
 → Details: `operations/heartbeat-cron-guide.md`
-
----
-
-## What is machine?
-
-`machine` calls external agent CLIs (claude, cursor-agent, codex, gemini) to delegate
-heavy work (code implementation, investigation, review, testing, etc.).
-
-### Fundamental Difference Between Anima and machine
-
-| Attribute | Anima (Craftsperson) | machine (Machine Tool) |
-|-----------|---------------------|----------------------|
-| Memory | Accumulates | Reset every time |
-| Autonomy | Has it (Heartbeat, Cron) | None (only when called) |
-| Org seat | Has one | None |
-| Judgment | Decides what to do / not do | Only executes instructions |
-
-### The Four Rules
-
-```
-① Anima writes the plan (blueprint)      ← Always written by Anima
-② Pass the plan to machine for execution
-③ Treat machine output as a draft         ← Never pass to next phase unverified
-④ Anima verifies and approves or revises
-```
-
-### When to Use machine
-
-| Scenario | Use machine | Do directly |
-|----------|------------|-------------|
-| Large-scale code implementation | ○ | |
-| Refactoring dozens of files | ○ | |
-| Simple config changes | | ○ |
-| Memory organization, writing | | ○ |
-| Test execution and result analysis | ○ | |
-| Sending messages / reporting | | ○ (machine cannot communicate) |
-
-→ Details: `anatomy/machine-tool-philosophy.md`, `operations/machine/tool-usage.md`
 
 ---
 

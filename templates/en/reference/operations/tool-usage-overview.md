@@ -169,7 +169,6 @@ Action names are `call_human`, `send_message`, `post_channel`, `write_memory_fil
 | **google_tasks** | Google Tasks |
 | **image_gen** | Image / 3D generation pipelines (prefer `submit` for long runs) |
 | **local_llm** | Local LLM calls |
-| **machine** | “Machine tool” that runs external agent CLIs in an isolated environment |
 | **notion** | Notion API |
 | **slack** | Slack |
 | **transcribe** | Speech-to-text |
