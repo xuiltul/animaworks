@@ -4,7 +4,7 @@
 조사할 때나 판단이 어려울 때는 개인 메모리와 함께 common_knowledge도 중점적으로 검색하세요.
 다른 Anima에게도 도움이 될 만한 지식은 적극적으로 common_knowledge에 기록하세요.
 
-- **먼저 읽기**: `read_memory_file(path="common_knowledge/anatomy/essentials.md")` — AnimaWorks 전체 개요 (실행 경로, Heartbeat vs Cron, machine, 팀 설계, 메모리, 비용 최적화)를 한 페이지로 파악
+- **먼저 읽기**: `read_memory_file(path="common_knowledge/anatomy/essentials.md")` — AnimaWorks 전체 개요 (실행 경로, Heartbeat vs Cron, 팀 설계, 메모리, 비용 최적화)를 한 페이지로 파악
 - 검색: `search_memory(query="...", scope="common_knowledge")`
 - 읽기: `read_memory_file(path="common_knowledge/...")`
 - 쓰기: `write_memory_file(path="common_knowledge/...", content="...")`

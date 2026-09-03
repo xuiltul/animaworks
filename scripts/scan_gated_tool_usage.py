@@ -33,7 +33,6 @@ SCAN_NEEDLES: dict[str, tuple[str, ...]] = {
     "discord_send": ("discord_send", "discord send"),
     "github_create-issue": ("github create-issue", "github_create-issue"),
     "github_create-pr": ("github create-pr", "github_create-pr"),
-    "machine_run": ("machine_run", "machine run", "animaworks-tool machine"),
 }
 
 # Gated action keys that this pi-fix2 change introduces.
@@ -42,7 +41,6 @@ GATED_ACTIONS: tuple[str, ...] = (
     "discord_send",
     "github_create-issue",
     "github_create-pr",
-    "machine_run",
 )
 
 
@@ -123,13 +121,9 @@ def recommend_allows(scan: dict) -> dict[str, list[str]]:
         usage = row["usage"]
         for action in GATED_ACTIONS:
             tool = action.split("_", 1)[0]
-            # machine already denied at tool level → no allow
             if tool in deny or action in deny:
                 continue
             if action in allow:
-                continue
-            if action == "machine_run":
-                # Policy: do not recommend machine_run (tool-level deny is the ops default).
                 continue
             if _has_usage(usage, action):
                 rec[action].append(name)
@@ -167,11 +161,6 @@ def format_report(scan: dict, rec: dict[str, list[str]], elapsed_s: float) -> st
     lines.append("")
     lines.append("## Recommended allow additions (usage > 0 and not already allowed/denied)")
     lines.append("")
-    lines.append(
-        "Note: `machine_run` is intentionally never recommended "
-        "(live animas deny the `machine` tool)."
-    )
-    lines.append("")
     for action in GATED_ACTIONS:
         names = rec.get(action) or []
         lines.append(f"- **{action}**: {', '.join(names) if names else '(none)'}")
@@ -182,7 +171,6 @@ def format_report(scan: dict, rec: dict[str, list[str]], elapsed_s: float) -> st
         "- `chatwork_send`: animas with chatwork send usage "
         "(exclude sumire/ayame/yoru when usage is noise-only / PdM list)"
     )
-    lines.append("- `machine_run`: nobody")
     lines.append(
         "- `discord_send` / `github_create-*`: usage-based only "
         "(see recommended list above)"

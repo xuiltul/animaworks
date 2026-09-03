@@ -1,7 +1,7 @@
 """Regression tests for pi-fix2 gated side-effect tools.
 
-chatwork_send / discord_send / github_create-issue / github_create-pr /
-machine_run require explicit allow; allow_all alone is insufficient.
+chatwork_send / discord_send / github_create-issue / github_create-pr
+require explicit allow; allow_all alone is insufficient.
 """
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
@@ -49,11 +49,6 @@ class TestExecutionProfileGatedFlags:
 
         assert EXECUTION_PROFILE["create-pr"].get("gated") is True
 
-    def test_machine_run_gated(self) -> None:
-        from core.tools.machine import EXECUTION_PROFILE
-
-        assert EXECUTION_PROFILE["run"].get("gated") is True
-
 
 # ── is_action_gated: deny without allow ───────────────────────
 
@@ -65,7 +60,6 @@ class TestExecutionProfileGatedFlags:
         ("discord", "send", "discord_send"),
         ("github", "create-issue", "github_create-issue"),
         ("github", "create-pr", "github_create-pr"),
-        ("machine", "run", "machine_run"),
     ],
 )
 class TestGatedBlockedWithoutAllow:
@@ -98,7 +92,6 @@ class TestGatedBlockedWithoutAllow:
         ("discord", "send", "discord_send"),
         ("github", "create-issue", "github_create-issue"),
         ("github", "create-pr", "github_create-pr"),
-        ("machine", "run", "machine_run"),
     ],
 )
 class TestGatedAllowedWithExplicitAllow:
@@ -152,7 +145,7 @@ class TestReadActionsRemainOpen:
 class TestRepresentativeAnimaShapes:
     """mei-like (chatwork) and engineer-like (github) allow lists."""
 
-    def test_mei_shape_allows_chatwork_send_blocks_machine_run(self) -> None:
+    def test_mei_shape_allows_chatwork_send(self) -> None:
         config = PermissionsConfig(
             external_tools=ExternalToolsPermission(
                 allow_all=True,
@@ -162,9 +155,6 @@ class TestRepresentativeAnimaShapes:
         )
         permitted = get_permitted_tools(config)
         assert is_action_gated("chatwork", "send", permitted) is False
-        assert is_action_gated("machine", "run", permitted) is True
-        # machine tool itself is denied — gate still reports gated when key missing
-        assert "machine_run" not in permitted
 
     def test_engineer_shape_allows_github_writes(self) -> None:
         config = PermissionsConfig(
@@ -183,7 +173,6 @@ class TestRepresentativeAnimaShapes:
         assert is_action_gated("github", "create-issue", permitted) is False
         assert is_action_gated("github", "create-pr", permitted) is False
         assert is_action_gated("discord", "send", permitted) is False
-        assert is_action_gated("machine", "run", permitted) is True
 
 
 # ── Migration script dry-run unit (no live ~/.animaworks writes) ──
@@ -251,7 +240,6 @@ class TestMigrationScriptDryRun:
         assert "discord_send" in by_name["mei"]["adds"]
         assert "github_create-issue" in by_name["mei"]["adds"]
         assert "github_create-pr" in by_name["mei"]["adds"]
-        assert "machine_run" not in by_name["mei"]["adds"]
 
         assert by_name["yoru"]["status"] == "noop"
         assert by_name["yoru"]["adds"] == []

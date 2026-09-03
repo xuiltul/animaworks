@@ -67,7 +67,7 @@ Chat と Heartbeat（および cron / TaskExec などのバックグラウンド
 - **永続化**: 各タスクは `TaskStatus`（`running` / `completed` / `failed` など）と結果文字列を `state/background_tasks/{task_id}.json` に保存する。メモリ上のキャッシュとディスクの両方から `get_task` / `list_tasks` で参照できる。
 - **投入 API**: `submit` は `task_id` を即返し、`asyncio.create_task` でラップした `_run_task` が本体を走らせる。同期ツール実装は `run_in_executor` でスレッドプール上で実行される。非同期ツール向けに `submit_async` もある。完了時は任意の `on_complete` コールバックを `await` する（コールバック内の例外はログに落ち、タスク結果には影響しない）。
 - **対象ツールの決め方**（`BackgroundTaskManager.from_profiles`、**後から優先**）:
-  1. `_DEFAULT_ELIGIBLE_TOOLS`（コード既定・Mode A 向けスキーマ名。例: `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`, `local_llm`, `run_command`, `machine_run` など）
+  1. `_DEFAULT_ELIGIBLE_TOOLS`（コード既定・Mode A 向けスキーマ名。例: `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`, `local_llm`, `run_command` など）
   2. `load_execution_profiles(TOOL_MODULES)` で読み込んだ各モジュールの `EXECUTION_PROFILE` のうち `background_eligible: true` のエントリ。キーは **`tool:subcmd`** 形式となり、値は `expected_seconds`（未設定時は 60）
   3. `config.json` の `background_task.eligible_tools`（各ツールの `threshold_s` が同じマップの値として上書き）
   `is_eligible(name)` は **名前がマップに含まれるかだけ**を見る（値は目安秒数として保持され、閾値比較には使われない）。

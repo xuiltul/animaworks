@@ -14,14 +14,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "## 先行タスク [{dep_id}] の結果",
         "en": "## Preceding task [{dep_id}] result",
     },
-    "pending_executor.machine_directive": {
-        "ja": (
-            "🔴 MUST: machineツール使用が指定されたタスクです。\n5ステップ以上の重い処理は animaworks-tool machine run で外部エージェントに必ず委託し、\n出力を検証の上、不十分なら再度machineで修正してください。"
-        ),
-        "en": (
-            "🔴 MUST: This task specifies the use of the machine tool.\nDelegate heavy work (5+ steps) to an external agent via animaworks-tool machine run.\nVerify the output and re-run machine if the result is insufficient."
-        ),
-    },
     "pending_executor.none_value": {
         "ja": "(なし)",
         "en": "(none)",

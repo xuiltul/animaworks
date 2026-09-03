@@ -1538,9 +1538,6 @@ class PendingTaskExecutor:
         else:
             agent = self._anima._agent_for_lane("background") if callable(lane_getter) else self._anima.agent
 
-        if "machine" in description.lower():
-            prompt += "\n\n" + t("pending_executor.machine_directive")
-
         journal = StreamingJournal(self._anima_dir, session_type="task", thread_id=task_id)
         journal.open(trigger=trigger)
 

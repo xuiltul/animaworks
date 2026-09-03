@@ -12,11 +12,11 @@ then read it with `read_memory_file(path="common_knowledge/...")`.
 ## ⭐ Start Here
 
 If you are new to AnimaWorks or want to organize the big picture, read this one file first.
-It covers the essentials of Heartbeat / Cron / machine / team design / memory / cost optimization in a single page.
+It covers the essentials of Heartbeat / Cron / team design / memory / cost optimization in a single page.
 
 | File | Content |
 |------|---------|
-| **`anatomy/essentials.md`** | **AnimaWorks Essential Guide** — Overview of execution paths, Heartbeat vs Cron, machine usage, team design, task routing, memory system, and cost optimization in one page |
+| **`anatomy/essentials.md`** | **AnimaWorks Essential Guide** — Overview of execution paths, Heartbeat vs Cron, team design, task routing, memory system, and cost optimization in one page |
 
 After reading, use the index below to find details on each topic.
 
@@ -62,8 +62,6 @@ After reading, use the index below to find details on each topic.
 | Problem | Reference |
 |---------|-----------|
 | Don't know how to use or call tools | `reference/operations/tool-usage-overview.md` |
-| Don't know how to use the machine tool | `operations/machine/tool-usage.md` |
-| Want to know the machine workflow for my role | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
 | Don't know how to choose or change models | `reference/operations/model-guide.md` (→ reference) |
 | Want to change Mode S authentication method | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | Don't know how to set up or use voice chat | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -106,7 +104,7 @@ After reading, use the index below to find details on each topic.
 
 | File | Description |
 |------|-------------|
-| ⭐ `essentials.md` | **Essential Guide** — Overview of AnimaWorks in one page (execution paths, Heartbeat vs Cron, machine, team design, memory, cost optimization) |
+| ⭐ `essentials.md` | **Essential Guide** — Overview of AnimaWorks in one page (execution paths, Heartbeat vs Cron, team design, memory, cost optimization) |
 | `what-is-anima.md` | What is an Anima (concept, design philosophy, lifecycle, execution paths) |
 | `anima-anatomy.md` | → Moved to `reference/anatomy/anima-anatomy.md`. Complete file reference |
 | `memory-system.md` | Memory system guide (memory types, Priming, Consolidation, Forgetting, tool usage) |
@@ -147,16 +145,6 @@ After reading, use the index below to find details on each topic.
 | `model-guide.md` | → Moved to `reference/operations/model-guide.md`. Model selection and configuration |
 | `mode-s-auth-guide.md` | → Moved to `reference/operations/mode-s-auth-guide.md`. Mode S authentication guide |
 | `voice-chat-guide.md` | → Moved to `reference/operations/voice-chat-guide.md`. Voice chat guide |
-
-### operations/machine/ — Machine Tool Workflows
-
-| File | Description |
-|------|-------------|
-| `tool-usage.md` | Machine tool usage guide (common principles, meta-pattern, status management, rate limits) |
-| `workflow-pdm.md` | Machine workflow — PdM (investigation -> plan creation) |
-| `workflow-engineer.md` | Machine workflow — Engineer (concretization -> implementation -> verification) |
-| `workflow-reviewer.md` | Machine workflow — Reviewer (review -> meta-review) |
-| `workflow-tester.md` | Machine workflow — Tester (test design -> execution -> result verification) |
 
 ### security/ — Security
 
@@ -216,11 +204,6 @@ After reading, use the index below to find details on each topic.
 | execution mode, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `reference/operations/tool-usage-overview.md` |
 | background, submit, long-running tool | `operations/background-tasks.md` |
 | workspace, working_directory, project directory | `operations/workspace-guide.md` |
-| machine, machine run, external agent, plan document | `operations/machine/tool-usage.md` |
-| investigation, PdM, plan.md | `operations/machine/workflow-pdm.md` |
-| impl-plan, concretization, implementation plan | `operations/machine/workflow-engineer.md` |
-| review, meta-review, code review | `operations/machine/workflow-reviewer.md` |
-| test, E2E, tester, test cases | `operations/machine/workflow-tester.md` |
 | model, models.json, credential, set-model, context window | `reference/operations/model-guide.md` |
 | background_model, background model, cost optimization | `reference/operations/model-guide.md` |
 | Mode S, authentication, API direct, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |

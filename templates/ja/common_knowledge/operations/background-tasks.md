@@ -148,7 +148,7 @@ submit したらすぐに次の作業に移ること。
 - **`on_complete`**: コールバック内で例外が出てもタスクの完了/失敗状態は維持され、失敗はログに記録されるのみ。
 - **資格あるツール名**（`is_eligible`）は次の **3 層**をマージ（後勝ち）。キーはそのまま辞書照合（Mode A のスキーマ名 `generate_3d_model` と Mode S 提出用の `image_gen:3d` の**両方**があり得る）:
   1. コード内デフォルト `_DEFAULT_ELIGIBLE_TOOLS`（値は目安秒数。現状のキー）:
-     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）、`machine_run`（600）
+     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）
   2. `BackgroundTaskManager.from_profiles` 経由で、各モジュールの `EXECUTION_PROFILE` から `background_eligible: true` のサブコマンドを抽出（`core.tools._base.get_eligible_tools_from_profiles`）。キーは `"{tool_name}:{subcmd}"`、秒数は `expected_seconds`（未設定時 60）
   3. `config.json` の `background_task.eligible_tools` — 各キーに対し `threshold_s` を秒数として上書き
 - **無効化**: `config.json` で `background_task.enabled: false` にすると `BackgroundTaskManager` 自体が作られない（その場合、submit キューは取り込まれても実行側で警告になる）。

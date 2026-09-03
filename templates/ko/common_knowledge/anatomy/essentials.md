@@ -1,7 +1,7 @@
 # AnimaWorks 에센셜 가이드
 
 [IMPORTANT] AnimaWorks의 전체 그림을 한 페이지로 파악하기 위한 통합 가이드.
-Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심을 망라.
+Heartbeat / Cron / 팀 설계 / 메모리 / 비용 최적화의 핵심을 망라.
 처음 읽는 경우나 개념 간 관계를 정리하고 싶을 때 가장 먼저 참조하세요.
 각 주제의 상세 내용은 각 섹션 끝의 링크를 참조하세요.
 
@@ -115,44 +115,6 @@ command: /usr/local/bin/health-check.sh
 ```
 
 → 상세: `operations/heartbeat-cron-guide.md`
-
----
-
-## machine (공작기계)이란?
-
-`machine`은 외부 에이전트 CLI (claude, cursor-agent, codex, gemini)를 호출하여
-무거운 작업 (코드 구현·조사·리뷰·테스트 등)을 위탁하는 도구입니다.
-
-### Anima와 machine의 근본적인 차이
-
-| 속성 | Anima (장인) | machine (공작기계) |
-|------|-------------|-------------------|
-| 기억 | 축적함 | 매번 리셋 |
-| 자율성 | 있음 (Heartbeat, Cron) | 없음 (호출될 때만) |
-| 조직상의 자리 | 있음 | 없음 |
-| 판단 | 무엇을 할지/하지 않을지 결정 | 지시받은 것만 실행 |
-
-### 사용의 철칙
-
-```
-① Anima가 계획서(설계도)를 작성     ← 반드시 Anima가 작성
-② machine에 계획서를 넘겨 실행시킴
-③ machine의 출력은 드래프트로 취급   ← 검증 없이 다음 공정에 넘기지 않음
-④ Anima가 검증하고, 승인 or 수정
-```
-
-### 언제 machine을 사용하나
-
-| 상황 | machine 사용 | 직접 수행 |
-|------|------------|---------|
-| 대규모 코드 구현 | ○ | |
-| 수십 개 파일 리팩터 | ○ | |
-| 간단한 설정 변경 | | ○ |
-| 기억 정리·문서 작성 | | ○ |
-| 테스트 실행과 결과 분석 | ○ | |
-| 메시지 전송·보고 | | ○ (machine은 통신 불가) |
-
-→ 상세: `anatomy/machine-tool-philosophy.md`, `operations/machine/tool-usage.md`
 
 ---
 

@@ -29,7 +29,7 @@ cron の**パース**は `core/schedule_parser.py`（`parse_cron_md` / `parse_sc
   2. 各ツールモジュールの `EXECUTION_PROFILE` から `background_eligible: true` のエントリ（`core.tools._base.get_eligible_tools_from_profiles`）。キーは `"{tool}:{subcommand}"` 形式（Mode S の `submit` と整合）
   3. `config.json` 等から渡る `config_eligible`（明示上書き）
 - **`is_eligible(tool_name)`**: 次のどちらの名前でも照合可能 — スキーマ名（例: `generate_3d_model`）、プロファイルキー（例: `image_gen:3d`）。
-- **デフォルトで `_DEFAULT_ELIGIBLE_TOOLS` に含まれる例**（値は目安秒）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）、`machine_run`（600）。
+- **デフォルトで `_DEFAULT_ELIGIBLE_TOOLS` に含まれる例**（値は目安秒）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）。
 - **完了フック**: `on_complete` に `Callable[[BackgroundTask], Awaitable[None]]` を設定可能。アプリ側でここから `state/background_notifications/` への Markdown 通知などを書く（`background.py` 自体は通知ディレクトリを触らない）。
 
 **`rotate_dm_logs`**

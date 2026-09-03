@@ -170,7 +170,6 @@ Mode A/B の統合スキーマでは **PascalCase 名**です。`ToolHandler` �
 | **google_tasks** | Google タスク |
 | **image_gen** | 画像・3D 等の生成パイプライン（長時間は `submit` 推奨） |
 | **local_llm** | ローカル LLM 呼び出し |
-| **machine** | 外部エージェント CLI を隔離環境で実行する「工作機械」ツール |
 | **notion** | Notion API |
 | **slack** | Slack |
 | **transcribe** | 音声文字起こし |

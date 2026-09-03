@@ -735,6 +735,56 @@ def step_channel_company_defaults(data_dir: Path, dry_run: bool, verbose: bool) 
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+def step_remove_machine_config(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Remove the retired ``machine`` key from config.json root.
+
+    ``AppConfig`` uses ``extra="forbid"``, so a leftover ``machine`` key in an
+    existing config.json would crash startup.  This step drops it (idempotent).
+    """
+    del verbose
+    config_path = data_dir / "config.json"
+    if not config_path.is_file():
+        return StepResult(changed=0, skipped=1, details=["config.json not found"])
+    try:
+        config_data = json.loads(config_path.read_text(encoding="utf-8") or "{}")
+        if not isinstance(config_data, dict) or "machine" not in config_data:
+            return StepResult(
+                changed=0,
+                skipped=1,
+                details=["No retired machine key in config.json"],
+            )
+        if dry_run:
+            return StepResult(
+                changed=1,
+                skipped=0,
+                details=["Would remove the retired machine key from config.json"],
+            )
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        backup_path = config_path.with_name(f"{config_path.name}.bak-{timestamp}")
+        shutil.copy2(config_path, backup_path)
+        config_data.pop("machine", None)
+        config_path.write_text(
+            json.dumps(config_data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            from core.config import invalidate_cache
+
+            invalidate_cache()
+        except Exception:
+            logger.debug("Failed to invalidate config cache after machine-key migration", exc_info=True)
+        return StepResult(
+            changed=1,
+            skipped=0,
+            details=[
+                f"Backed up and removed machine key from {config_path.name} ({backup_path.name})"
+            ],
+        )
+    except Exception as exc:
+        logger.exception("step_remove_machine_config failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
 def step_legacy_flat_skill_migration(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Convert legacy flat local skill files to trusted SKILL.md bundles."""
     from core.migrations.legacy_flat_skills import migrate_legacy_flat_skills
@@ -1765,6 +1815,12 @@ def register_all_steps(runner: Any) -> None:
             "Apply channel_company_defaults to open channels",
             "structural",
             step_channel_company_defaults,
+        ),
+        MigrationStep(
+            "remove_machine_config_20260903",
+            "Remove retired machine key from config.json",
+            "structural",
+            step_remove_machine_config,
         ),
         MigrationStep(
             "tool_prompts_db_to_md",

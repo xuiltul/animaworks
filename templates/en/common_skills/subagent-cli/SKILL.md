@@ -24,7 +24,7 @@ This skill applies **only when the Bash tool is available**.
 
 **Important**: For Mode C (`codex/*`), Mode D (`cursor/*`), and Mode G (`gemini/*`), the framework runs each engine directly. You do not need to call `codex exec` (Mode C), `cursor-agent -p` (Mode D), or the Gemini CLI (Mode G) from Bash yourself. Refer to the relevant sections only when you explicitly want a different CLI (cursor-agent, claude -p, codex exec, etc.).
 
-**Windows exception**: On native Windows, if shell execution becomes `policy blocked`, or `codex exec exited with code 1` keeps recurring, stop retrying local `codex exec`. For shell-required tasks, use `machine` as the standard fallback with `engine=claude` and an explicit `working_directory`.
+**Windows exception**: On native Windows, if shell execution becomes `policy blocked`, or `codex exec exited with code 1` keeps recurring, stop retrying local `codex exec`. For shell-required tasks, fall back to another installed CLI (cursor-agent / claude -p) with an explicit working directory.
 
 ## Tool Selection Priority
 
@@ -36,7 +36,7 @@ This skill applies **only when the Bash tool is available**.
 | 2 | `cursor-agent -p` | Low (Cursor) | Code generation, editing, multi-file |
 | 3 | `claude -p` | High (Claude API) | Last resort. Only when the above two fail |
 
-**Rule**: In non-Windows or otherwise healthy shell environments, try `codex exec` first. On native Windows when shell execution is blocked or unstable, skip local `codex exec` and use `machine` (`engine=claude`) as the standard path. For other failures or unsuitable tasks, fall back to cursor-agent → claude.
+**Rule**: In non-Windows or otherwise healthy shell environments, try `codex exec` first. On native Windows when shell execution is blocked or unstable, skip local `codex exec` and fall back to another installed CLI as the standard path. For other failures or unsuitable tasks, fall back to cursor-agent → claude.
 
 ## When to Use
 

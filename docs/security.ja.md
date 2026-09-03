@@ -162,7 +162,6 @@ ToolHandler でも Mode S でも、`permissions.global.json` の `commands.deny`
 | chatwork | `chatwork_send` |
 | discord | `discord_send`, `discord_channel_post` |
 | github | `github_create-issue`, `github_create-pr` |
-| machine | `machine_run` |
 
 判定: `core/tooling/permissions.is_action_gated` と dispatch 時チェック。稼働中 Anima 向け移行は `docs/specs/pi-fix2-gated-tools-migration.md` と `scripts/migrate_pi_fix2_gated_allows.py`（既定 dry-run）を参照。
 

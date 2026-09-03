@@ -8,13 +8,12 @@ from __future__ import annotations
 """Idempotent migration: add explicit allow entries for newly gated actions.
 
 pi-fix2 gates chatwork_send / discord_send / github_create-issue /
-github_create-pr / machine_run. Live Animas that already use these actions
+github_create-pr. Live Animas that already use these actions
 need action-level allows so day-to-day work is not blocked.
 
 Default is **dry-run** (print planned changes only). Pass ``--apply`` to write.
 
 Does **not** modify permissions.py semantics, EXECUTION_PROFILE, or templates.
-Does **not** grant ``machine_run`` (machine remains denied at tool level).
 
 Usage::
 
@@ -35,7 +34,6 @@ from typing import Any
 #   sumire/ayame/yoru).
 # discord_send: animas with discord send usage signals.
 # github_create-issue / github_create-pr: animas with github create usage.
-# machine_run: intentionally empty (all live animas deny "machine").
 
 DEFAULT_ALLOWS: dict[str, list[str]] = {
     "chatwork_send": [
@@ -87,7 +85,6 @@ DEFAULT_ALLOWS: dict[str, list[str]] = {
         "sora",
         "sumire",
     ],
-    # machine_run: nobody
 }
 
 

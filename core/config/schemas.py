@@ -855,23 +855,6 @@ class LoggingConfig(BaseModel):
     redaction_enabled: bool = True  # Mask secrets in log output; disable for raw-log debugging.
 
 
-class MachineConfig(BaseModel):
-    """Configuration for machine tool (external agent CLI)."""
-
-    engine_priority: list[str] = Field(
-        default_factory=list,
-        description="Engine priority order. First = recommended. Empty = use default.",
-    )
-    default_models: dict[str, str] = Field(
-        default_factory=dict,
-        description=(
-            "Per-engine default model override. When machine_run is called without "
-            "an explicit model, this value is used instead of the engine's own default. "
-            "e.g. {'cursor-agent': 'claude-4.6-opus-high-thinking'}"
-        ),
-    )
-
-
 class HousekeepingConfig(BaseModel):
     """Configuration for periodic disk cleanup."""
 
@@ -1385,7 +1368,6 @@ class AnimaWorksConfig(BaseModel):
     voice: VoiceConfig = VoiceConfig()
     housekeeping: HousekeepingConfig = HousekeepingConfig()
     inbox: InboxConfig = InboxConfig()
-    machine: MachineConfig = MachineConfig()
     local_llm: LocalLLMConfig = LocalLLMConfig()
     workspaces: dict[str, str] = {}  # alias → absolute path
     # company slug → GitHub account name (e.g. {"fs": "animaworks-dev-team"})
@@ -1445,7 +1427,6 @@ __all__ = [
     "LlmRateGuardConfig",
     "LocalLLMConfig",
     "LoggingConfig",
-    "MachineConfig",
     "MediaProxyConfig",
     "MemoryConfig",
     "Neo4jConfig",

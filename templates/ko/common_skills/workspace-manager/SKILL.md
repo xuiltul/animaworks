@@ -71,7 +71,6 @@ Anima는 평소 "자신의 집" (~/.animaworks/animas/{name}/)에 있습니다.
 
 ## 도구에서의 사용
 
-- **machine_run**: `working_directory`에 에일리어스 또는 완전 형태를 지정
 - **submit_tasks**: 각 태스크의 `workspace` 필드에 에일리어스를 지정
 - **delegate_task**: `workspace` 필드에 에일리어스를 지정
 

@@ -99,7 +99,7 @@ Bash: animaworks-tool <도구> <서브커맨드> [인수]
 | 백그라운드 | `animaworks-tool bg check <task_id>`, `animaworks-tool bg list` |
 | 외부 도구 | `animaworks-tool slack send ...`, `animaworks-tool chatwork send ...` |
 
-CLI 상세 사용법은 `read_memory_file(path="common_skills/machine-tool/SKILL.md")` 등으로 해당 스킬 파일을 읽어 확인할 수 있습니다.
+CLI 상세 사용법은 해당 스킬 파일을 `read_memory_file`로 읽어 확인할 수 있습니다.
 
 ## 신뢰 수준
 

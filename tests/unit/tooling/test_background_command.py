@@ -58,8 +58,8 @@ class TestCommandRunnerIdGeneration:
         assert CommandRunner._next_id() == "cmd_3"
 
     def test_custom_prefix(self):
-        assert CommandRunner._next_id("machine") == "machine_1"
-        assert CommandRunner._next_id("machine") == "machine_2"
+        assert CommandRunner._next_id("batch") == "batch_1"
+        assert CommandRunner._next_id("batch") == "batch_2"
 
 
 class TestCommandRunnerStart:

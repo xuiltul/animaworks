@@ -123,42 +123,6 @@ class TestBuildMcpTools:
         assert "report_procedure_outcome" in actual_names
         assert "report_knowledge_outcome" in actual_names
 
-    def test_machine_run_exposed_when_engine_available(self) -> None:
-        """machine_run must be reachable natively: sandboxed Mode S/C shells
-        cannot run the `animaworks-tool machine run` CLI (EROFS guard)."""
-        from core.mcp.server import _build_mcp_tools
-
-        with patch(
-            "core.tools.machine._get_available_engines",
-            return_value=["codex"],
-        ):
-            tools, exposed = _build_mcp_tools()
-        assert "machine_run" in {t.name for t in tools}
-        assert "machine_run" in exposed
-
-    def test_machine_run_hidden_when_no_engines(self) -> None:
-        from core.mcp.server import _build_mcp_tools
-
-        with patch(
-            "core.tools.machine._get_available_engines",
-            return_value=[],
-        ):
-            tools, exposed = _build_mcp_tools()
-        assert "machine_run" not in {t.name for t in tools}
-        assert "machine_run" not in exposed
-
-    def test_machine_run_hidden_when_file_deny_is_active(self) -> None:
-        from core.mcp.server import _build_mcp_tools
-
-        with (
-            patch.dict("os.environ", {"ANIMAWORKS_FILE_DENY_ACTIVE": "1"}),
-            patch("core.tools.machine._get_available_engines", return_value=["codex"]),
-        ):
-            tools, exposed = _build_mcp_tools()
-
-        assert "machine_run" not in {t.name for t in tools}
-        assert "machine_run" not in exposed
-
 
 # ── TestListToolsHandler ─────────────────────────────────────────────
 

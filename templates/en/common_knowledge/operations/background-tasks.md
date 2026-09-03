@@ -23,7 +23,7 @@ Subcommands marked with ⚠ in the tool guide (system prompt):
 - `image_gen pipeline` / `fullbody` / `bustup` / `icon` / `chibi` / `3d` / `rigging` / `animations`
 - `local_llm generate` / `chat`
 - `transcribe audio` (subcommand name is `audio`)
-- Potentially long-running `machine run` and similar (follow the ⚠ marks in the tool guide)
+- Potentially long-running commands (follow the ⚠ marks in the tool guide)
 
 Tools with `background_eligible: true` in each tool’s `EXECUTION_PROFILE` are registered as background-eligible
 via the profile (e.g. `chatwork sync` / `download`).
@@ -149,7 +149,7 @@ Results are ingested via heartbeat-oriented notification files, so polling or bl
 - **`on_complete`**: Even if the callback raises, the task’s completed/failed state is preserved; the failure is logged only.
 - **Eligible tool names** (`is_eligible`) merge these **three layers** (later wins). Keys are matched as dictionary keys (you may have both Mode A schema names like `generate_3d_model` and Mode S submit-style `image_gen:3d`):
   1. In-code default `_DEFAULT_ELIGIBLE_TOOLS` (values are guideline seconds; current keys):
-     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (30 each), `local_llm` / `run_command` (60 each), `machine_run` (600)
+     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (30 each), `local_llm` / `run_command` (60 each)
   2. Via `BackgroundTaskManager.from_profiles`, subcommands with `background_eligible: true` from each module’s `EXECUTION_PROFILE` (`core.tools._base.get_eligible_tools_from_profiles`). Keys are `"{tool_name}:{subcmd}"`; seconds come from `expected_seconds` (default 60 if unset).
   3. `config.json` `background_task.eligible_tools` — each key’s `threshold_s` overrides the duration in seconds.
 - **Disable**: `background_task.enabled: false` in `config.json` prevents creating `BackgroundTaskManager` at all (in that case, the submit queue may still be picked up but the executor side logs a warning).
