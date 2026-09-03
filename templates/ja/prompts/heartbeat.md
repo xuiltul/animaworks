@@ -11,7 +11,7 @@
 **【MUST】対応が必要な事項を発見したら、必ずタスクとして具体化すること。「認識したが何もしない」は禁止。**
 以下のいずれかの手段で必ずアクション化する:
 - 部下に任せる → `delegate_task`（**書く前に読む**: 直前に `list_tasks(status="delegated")` / `list_tasks(status="in_progress")` を読み、同じ PR / Issue / 対象の未完タスクがあれば新規作成せず、既存 task_id を添えて担当者へ `send_message` で追加指示する。**書いた後に読む**: 投入後に `list_tasks` で登録を読み戻す）
-- 自分で対応する → `submit_tasks` で自分の TaskExec に投入する（Heartbeat 内で実作業はしない。`state/current_state.md` への記録や `update_task` の status 変更だけでは何も実行されない）
+- 自分で対応する → `submit_tasks` で自分の TaskExec に投入する
 - 即座にフォローアップ → `send_message` / `call_human`
 
 ### チェック項目
@@ -22,9 +22,9 @@
 - ブロッカーがある場合: 報告のみ行う（send_message / call_human）
 - 上記すべてで対応事項がない場合のみ: HEARTBEAT_OK
 
-**重要: このフェーズで実際の作業（コード変更、ファイル編集、調査等）を行わないでください。実作業は `submit_tasks` で投入した TaskExec が別セッションで行います。**
+**このフェーズは観察・計画・投入に使います。実作業は `submit_tasks` で投入した TaskExec が別セッションで行います。**
 
-**pending タスクの再投入（MUST）**: 台帳の `pending` は「descriptor が無く、誰も実行していない to-do」です。前回の TaskExec が完了宣言なしで終わったタスクも `pending` に戻ります。ハーネスは再実行しません。`list_tasks(status="pending")` を読み、続けるものは同じ `task_id`・元の指示（original_instruction）・必要な `workspace` で `submit_tasks` に投入し、やめるものは `update_task(status="cancelled")` にして依頼者へ理由を送ります。`update_task(status="in_progress")` に付け替えても実行は始まりません（`in_progress` は実行中の TaskExec だけが書きます）。続ける pending が複数あれば、1 回の `submit_tasks` にまとめて投入します（別の PR / 対象は `parallel: true`。同時実行数はハーネスの上限で制御されるので、1 件ずつ小出しにしない）。過去の委譲文にある優先順・「sole lane」「第二 writer」などの手順条件は投入を絞る理由になりません。
+**pending タスクの再投入（MUST）**: 台帳の `pending` は、あなたが `submit_tasks` で投入したときに動きます。`list_tasks(status="pending")` を読み、続けるものは同じ `task_id`・元の指示（original_instruction）・必要な `workspace` で `submit_tasks` に投入します。複数あれば 1 回の `submit_tasks` にまとめ、別の PR / 対象は `parallel: true` にします。やめるものは `update_task(status="cancelled")` にして依頼者へ理由を送ります。`in_progress` は実行中の TaskExec が書きます。
 
 **委譲ガイドライン**: `delegate_task` 使用時は `read_memory_file(path="common_knowledge/operations/task-delegation-guide.md")` の記述原則・禁止パターンに従うこと（MUST）。`submit_tasks` は自分の pending の再投入と、自分でやる作業の投入に使う。
 

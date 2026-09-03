@@ -30,7 +30,7 @@
 
 ## 明示的バックグラウンド実行での submit_tasks
 
-`submit_tasks` は通常チャットでは使わない。Heartbeat では自分の pending（前回の TaskExec が完了宣言なしで終わったものを含む）を同じ task_id で再投入するために使う。ハーネスは pending を自動で再実行しない。その他は、ユーザーまたはスキルが「バックグラウンドで」と明示し、ツール一覧に `submit_tasks` が表示されている場合だけ使う。単一タスクでも tasks 配列1件で投入する。
+`submit_tasks` は通常チャットでは使わない。Heartbeat では自分の pending（前回の TaskExec が完了宣言なしで終わったものを含む）を同じ task_id で再投入するために使う。pending は Heartbeat で自分が投入したときに動く。その他は、ユーザーまたはスキルが「バックグラウンドで」と明示し、ツール一覧に `submit_tasks` が表示されている場合だけ使う。単一タスクでも tasks 配列1件で投入する。
 
 ### 実行者（TaskExec）について
 

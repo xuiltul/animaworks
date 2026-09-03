@@ -9,12 +9,12 @@ Heartbeatでは**観察・報告・計画・フォローアップ**にツール�
 **【MUST】対応が必要な事項を見つけたら、Heartbeat内で必ずタスク化すること。**
 「認識したが何もしない」「次のHeartbeatで対応する」は禁止。delegate_task / send_message / call_human / state/current_state.md のいずれかで即座にアクション化する。
 
-Heartbeatで自分が直接作業してはならない。実作業は `submit_tasks` で投入した TaskExec が別セッションで行う。ハーネスは台帳の pending を自動では再実行しない。`update_task(status="in_progress")` への付け替えや `state/current_state.md` への記録では何も実行されない。
+Heartbeat は観察・計画・投入に使う。実作業は `submit_tasks` で投入した TaskExec が別セッションで行う。台帳の pending は、あなたが投入したときに動く。
 観察中に軽量な再利用可能能力を見つけた場合は `create_skill` で作成すること。作成が重い場合は、スキル作成タスクとしてタスク化すること。
 
 完了済みバックグラウンドタスクの結果は state/task_results/ にあります。
 重要な結果があれば確認し、必要に応じて後続アクションを計画してください。
 
-タスクキューの **pending**（前回の TaskExec が完了宣言なしで終わったものを含む）は、あなたが投入しない限り動きません:
+タスクキューの **pending**（前回の TaskExec が完了宣言なしで終わったものを含む）は、あなたが投入したときに動きます:
 - 続ける → 同じ task_id・元の指示・必要な workspace で `submit_tasks` に投入
 - やめる → `update_task(task_id="...", status="cancelled")` にして依頼者へ理由を送る

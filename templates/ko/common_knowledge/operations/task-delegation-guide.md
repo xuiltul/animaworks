@@ -27,7 +27,7 @@ Task tool을 사용하면 프레임워크가 조직 구성에 따라 자동으�
 
 **중요**: 사람의 지시를 받은 일반 채팅에서는 `submit_tasks`를 사용하지 마세요. 이 자리에서 직접 실행하고, 후속 추적이 필요하면 `update_task`, `state/current_state.md`, 또는 명시적인 백그라운드 실행 워크플로로 기록하세요.
 
-Inbox 등 일반 경로에서는 `submit_tasks`를 사용하지 말고 직접 처리, `delegate_task`, `send_message`, `call_human`, `state/current_state.md` 중 하나로 구체화하세요. Heartbeat에서는 자신의 pending 작업을 같은 task_id로 `submit_tasks`에 재제출하세요 (하니스는 pending을 자동으로 재실행하지 않습니다).
+Inbox 등 일반 경로에서는 `submit_tasks`를 사용하지 말고 직접 처리, `delegate_task`, `send_message`, `call_human`, `state/current_state.md` 중 하나로 구체화하세요. Heartbeat에서는 자신의 pending 작업을 같은 task_id로 `submit_tasks`에 재제출하세요 (pending은 직접 제출했을 때 실행됩니다).
 
 **[MUST] `state/pending/`에 JSON 파일을 수동으로 생성하지 마세요.** 명시적인 백그라운드 실행 워크플로에서 `submit_tasks`가 표시될 때만 해당 도구를 통해 제출하세요.
 

@@ -27,7 +27,7 @@
 
 ## submit_tasks in Explicit Background Execution
 
-Do not use `submit_tasks` in normal chat. In Heartbeat, use it to re-submit your own pending tasks (including ones whose previous TaskExec ended without a completion declaration) with the same task_id; the harness never re-runs pending tasks by itself. Otherwise use it only when the user or a skill explicitly requests background execution and `submit_tasks` is visible in the tool list. Even for one task, submit a tasks array with one item.
+Do not use `submit_tasks` in normal chat. In Heartbeat, use it to re-submit your own pending tasks (including ones whose previous TaskExec ended without a completion declaration) with the same task_id; a pending task runs when you submit it. Otherwise use it only when the user or a skill explicitly requests background execution and `submit_tasks` is visible in the tool list. Even for one task, submit a tasks array with one item.
 
 ### About the Executor (TaskExec)
 

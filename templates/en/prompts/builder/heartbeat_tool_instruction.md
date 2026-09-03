@@ -9,12 +9,12 @@ Complete observation → planning → task file creation / follow-ups within 20 
 **[MUST] If you find anything that requires action, you MUST create a task within this Heartbeat.**
 "Acknowledged but no action taken" or "will handle in next Heartbeat" is prohibited. Use delegate_task / send_message / call_human / state/current_state.md to take immediate action.
 
-Do not perform actual work yourself during Heartbeat. Real work is done in a separate session by the TaskExec you submit with `submit_tasks`. The harness never re-runs a ledger pending task on its own; relabeling with `update_task(status="in_progress")` or writing `state/current_state.md` executes nothing.
+Heartbeat is for observation, planning, and submission. Real work is done in a separate session by the TaskExec you submit with `submit_tasks`. A ledger pending task runs when you submit it.
 If observation reveals a lightweight reusable capability, create it with `create_skill`; if authoring would be heavy, create a task for skill authoring instead.
 
 Completed background task results are in state/task_results/.
 Check for important results and plan follow-up actions as needed.
 
-**pending** tasks in the queue (including ones whose previous TaskExec ended without a completion declaration) do not run until you submit them:
+**pending** tasks in the queue (including ones whose previous TaskExec ended without a completion declaration) run when you submit them:
 - Continue → `submit_tasks` with the same task_id, the original instruction, and the required workspace
 - Drop → `update_task(task_id="...", status="cancelled")` and tell the requester why
