@@ -108,7 +108,8 @@ async def test_normal_stop_without_declaration_returns_to_pending(tmp_path: Path
     entry = manager.get_task_by_id("undeclared")
     assert entry is not None
     assert entry.status == "pending"
-    assert entry.summary == "run ended without a completion declaration"
+    assert entry.summary == "stop kind test"
+    assert entry.meta["last_run_note"] == "run ended without a completion declaration"
     assert entry.meta["last_run_stop_kind"] == "normal"
     assert entry.meta["last_run_ended_at"]
     # No descriptor is regenerated: nothing re-runs it on the anima's behalf.

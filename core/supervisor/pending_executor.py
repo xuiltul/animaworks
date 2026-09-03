@@ -527,6 +527,11 @@ class PendingTaskExecutor:
 
         Silently skips if the task is not registered in task_queue
         (e.g., legacy tasks created before this sync was implemented).
+
+        A ``pending`` sync (undeclared end, budget skip) keeps the task's
+        summary -- its title -- untouched and files the reason under
+        ``meta.last_run_note`` instead, so the owner's pending list stays
+        readable.
         """
         try:
             from core.memory.task_queue import TaskQueueManager
@@ -537,6 +542,11 @@ class PendingTaskExecutor:
                 # done / cancelled are the anima's own declarations and
                 # delegated hands ownership to a subordinate; a runner-side
                 # sync must not walk any of them back.
+                return
+            if status == "pending":
+                if summary:
+                    manager.update_meta(task_id, {"last_run_note": summary[:300]})
+                manager.update_status(task_id, status)
                 return
             manager.update_status(task_id, status, summary=summary)
         except Exception:
