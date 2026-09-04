@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec
 
+from core.platform.locks import file_lock
 from core.tools._base import logger
 from core.tools._image_clients import (
     _CHAT_ICON_PROMPT,
@@ -76,6 +78,26 @@ class PipelineResult:
 
 
 # ── ImageGenPipeline ───────────────────────────────────────
+
+_P = ParamSpec("_P")
+
+
+def _serialize_generation(
+    generate: Callable[Concatenate[ImageGenPipeline, _P], PipelineResult],
+) -> Callable[Concatenate[ImageGenPipeline, _P], PipelineResult]:
+    """Share one pipeline lock across CLI, background workers and reconciliation."""
+
+    @wraps(generate)
+    def wrapped(self: ImageGenPipeline, *args: _P.args, **kwargs: _P.kwargs) -> PipelineResult:
+        self._assets_dir.mkdir(parents=True, exist_ok=True)
+        with (
+            (self._assets_dir / ".generation.lock").open("a+", encoding="utf-8") as handle,
+            file_lock(handle, exclusive=True),
+        ):
+            # Existing outputs must be checked after acquiring the lock.
+            return generate(self, *args, **kwargs)
+
+    return wrapped
 
 
 class ImageGenPipeline:
@@ -293,6 +315,7 @@ class ImageGenPipeline:
         logger.info("Generated expression '%s' (guidance=%.1f): %s", expression, guidance, output_path)
         return output_path
 
+    @_serialize_generation
     def generate_all(
         self,
         prompt: str,

@@ -862,7 +862,7 @@ class PendingTaskExecutor:
         ``reap_orphan_tasks``) and any unexpected error here is contained to a
         warning so the watcher loop keeps running.
         """
-        from core.supervisor.orphan_reaper import reap_orphan_tasks, notify_reaped
+        from core.supervisor.orphan_reaper import notify_reaped, reap_orphan_tasks
 
         try:
             reaped = reap_orphan_tasks(
@@ -1848,7 +1848,28 @@ class PendingTaskExecutor:
 
         # Isolated background command path: run tool inside a task-runner child.
         if self._background_isolated and self._task_runner_supervisor is not None:
-            await self._execute_command_task_isolated(task_desc, processing_path=processing_path)
+            lane_getter = getattr(type(self._anima), "_agent_for_lane", None)
+            agent = self._anima._agent_for_lane("background") if callable(lane_getter) else self._anima.agent
+            bg_mgr = agent.background_manager
+            if bg_mgr is None:
+                raise RuntimeError("BackgroundTaskManager not available for isolated command")
+
+            async def dispatch_isolated(_name: str, _args: dict[str, Any]) -> str:
+                result = await self._execute_command_task_isolated(task_desc, processing_path=processing_path)
+                return str(result.get("result", ""))
+
+            tool_name = task_desc.get("tool_name", "")
+            subcommand = task_desc.get("subcommand", "")
+            composite_name = f"{tool_name}:{subcommand}" if subcommand else tool_name
+            task_id = await bg_mgr.submit_async(
+                composite_name,
+                task_desc,
+                dispatch_isolated,
+                task_id=task_desc.get("task_id") or None,
+            )
+            # Keep the processing lease until the child has finished and its
+            # result and completion notification have been persisted.
+            await bg_mgr._async_tasks[task_id]
             return None
 
         lane_getter = getattr(type(self._anima), "_agent_for_lane", None)
@@ -1932,7 +1953,7 @@ class PendingTaskExecutor:
         task_desc: dict[str, Any],
         *,
         processing_path: Path | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         """Run a command-type pending task inside a background-lane child."""
         from core.supervisor.task_runner_supervisor import TaskRunnerError
 
@@ -1956,7 +1977,7 @@ class PendingTaskExecutor:
                 )
 
         try:
-            await self._task_runner_supervisor.run_background(
+            return await self._task_runner_supervisor.run_background(
                 kind="command",
                 payload=payload,
                 attempt=attempt,

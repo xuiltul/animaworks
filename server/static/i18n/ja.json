@@ -295,6 +295,7 @@
   "chat.memory_procedures": "手順書",
   "chat.message_to": "{name} にメッセージ...",
   "chat.messages_count": "{count}メッセージ",
+  "chat.bootstrap_welcome": "{name} は、あなたとの会話からプロフィールを作ります。「明るい相談相手になって」など、性格や雰囲気の希望を送ってみましょう。",
   "chat.messages_empty": "メッセージはまだありません",
   "chat.human_notify_approve": "承認",
   "chat.human_notify_comment": "コメント",

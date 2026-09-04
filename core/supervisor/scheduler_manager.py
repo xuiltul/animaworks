@@ -898,9 +898,18 @@ class SchedulerManager:
 
     # ── Tick Handlers ────────────────────────────────────────────
 
+    def _awaiting_initial_setup(self) -> bool:
+        """Keep periodic work out of the user's initial profile conversation."""
+        from core.bootstrap_state import get_bootstrap_status
+
+        return bool(get_bootstrap_status(self._anima_dir).get("needs_bootstrap"))
+
     async def heartbeat_tick(self) -> None:
         """Execute a scheduled heartbeat."""
         if not self._anima:
+            return
+        if self._awaiting_initial_setup():
+            logger.debug("Scheduled heartbeat deferred until setup completes: %s", self._anima_name)
             return
         # Detect schedule file changes (Mode S Write/Edit bypass)
         self._check_schedule_freshness()
@@ -945,6 +954,9 @@ class SchedulerManager:
     async def cron_tick(self, task: CronTask) -> None:
         """Execute a scheduled cron task."""
         if not self._anima:
+            return
+        if self._awaiting_initial_setup():
+            logger.debug("Scheduled cron deferred until setup completes: %s", self._anima_name)
             return
 
         # Detect schedule file changes and skip stale tasks

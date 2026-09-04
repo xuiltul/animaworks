@@ -253,6 +253,7 @@
   "chat.memory_procedures": "절차서",
   "chat.message_to": "{name}에게 메시지...",
   "chat.messages_count": "{count}개 메시지",
+  "chat.bootstrap_welcome": "{name}의 프로필을 대화로 만들어 보세요. “밝고 차분한 상담 상대가 되어 줘”처럼 원하는 성격이나 분위기를 보내 주세요.",
   "chat.messages_empty": "아직 메시지가 없습니다",
   "chat.human_notify_approve": "승인",
   "chat.human_notify_comment": "코멘트",

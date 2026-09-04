@@ -295,6 +295,7 @@
   "chat.memory_procedures": "Procedures",
   "chat.message_to": "Message to {name}...",
   "chat.messages_count": "{count} messages",
+  "chat.bootstrap_welcome": "Help {name} create their profile through conversation. Try sending a preference such as “Be a friendly, thoughtful partner.”",
   "chat.messages_empty": "No messages yet",
   "chat.human_notify_approve": "Approve",
   "chat.human_notify_comment": "Comment",

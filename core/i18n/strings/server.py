@@ -204,6 +204,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "ワークスペースの解決に失敗しました: {error}",
         "en": "Failed to resolve workspace: {error}",
     },
+    "setup.codex_models_unavailable": {
+        "ja": "Codexの利用可能なモデルを確認できませんでした。ログイン状態と接続を確認して、もう一度お試しください。",
+        "en": "Could not load available Codex models. Check your login and connection, then try again.",
+    },
     "setup.cli_tools_auth": {
         "ja": "CLIツール認証状態",
         "en": "CLI Tools Auth Status",

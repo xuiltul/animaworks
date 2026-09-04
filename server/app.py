@@ -671,7 +671,7 @@ async def _prepare_startup_vector_worker(app: FastAPI) -> None:
         logger.info("Server RAG vector access routed through vector worker: %s", vector_worker_url)
 
     _embed_config = load_config()
-    _server_port = getattr(_embed_config.server, "port", 18500)
+    _server_port = getattr(app.state, "listen_port", getattr(_embed_config.server, "port", 18500))
     app.state.child_env_urls = {
         "ANIMAWORKS_EMBED_URL": f"http://127.0.0.1:{_server_port}/api/internal/embed",
         "ANIMAWORKS_VECTOR_URL": f"http://127.0.0.1:{_server_port}/api/internal/vector",
@@ -789,209 +789,214 @@ async def _warm_voice_greets(app: FastAPI) -> None:
             logger.info("Voice greet warmup skipped (%s): %s", name, e)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Only start anima processes when setup is complete
-    if app.state.setup_complete:
-        startup_progress.begin_startup(t("startup.detail_starting"))
-        # ── Global permissions cache ────────────────────────
-        from core.config.global_permissions import GlobalPermissionsCache
-        from core.paths import get_global_permissions_path
+async def _activate_runtime_services(app: FastAPI) -> None:
+    """Start the runtime both at boot and when the setup wizard finishes."""
+    startup_progress.begin_startup(t("startup.detail_starting"))
+    # ── Global permissions cache ────────────────────────
+    from core.config.global_permissions import GlobalPermissionsCache
+    from core.paths import get_global_permissions_path
 
-        gp_cache = GlobalPermissionsCache.get()
-        gp_path = get_global_permissions_path()
+    gp_cache = GlobalPermissionsCache.get()
+    gp_path = get_global_permissions_path()
+    try:
+        gp_cache.load(gp_path)
+    except SystemExit:
+        raise
+    except FileNotFoundError:
+        logger.critical(
+            "permissions.global.json not found at %s — "
+            "server cannot start without global command security. "
+            "Run 'animaworks init' to generate defaults.",
+            gp_path,
+        )
+        raise SystemExit(
+            f"Fatal: permissions.global.json not found at {gp_path}. Run 'animaworks init' to generate it."
+        ) from None
+    except Exception:
+        logger.critical("Failed to load permissions.global.json — server cannot start")
+        raise
+
+    # ── WebSocket heartbeat (start first so dashboard is responsive) ──
+    await app.state.ws_manager.start_heartbeat()
+
+    # ── Stream Registry cleanup ────────────────────────
+    await app.state.stream_registry.start_cleanup_loop()
+
+    # ── Periodic schedulers (don't depend on running animas) ──
+    shared_dir = app.state.shared_dir
+
+    from core.time_utils import get_app_timezone
+
+    msg_log_scheduler = AsyncIOScheduler(timezone=get_app_timezone())
+
+    # ── Orphan anima detection ───────────────────────
+    from core.org_sync import detect_orphan_animas
+
+    def _detect_orphans_task() -> None:
         try:
-            gp_cache.load(gp_path)
-        except SystemExit:
-            raise
-        except FileNotFoundError:
-            logger.critical(
-                "permissions.global.json not found at %s — "
-                "server cannot start without global command security. "
-                "Run 'animaworks init' to generate defaults.",
-                gp_path,
-            )
-            raise SystemExit(
-                f"Fatal: permissions.global.json not found at {gp_path}. Run 'animaworks init' to generate it."
-            ) from None
+            detect_orphan_animas(app.state.animas_dir, shared_dir)
         except Exception:
-            logger.critical("Failed to load permissions.global.json — server cannot start")
-            raise
+            logger.exception("Orphan detection failed")
 
-        # ── WebSocket heartbeat (start first so dashboard is responsive) ──
-        await app.state.ws_manager.start_heartbeat()
+    msg_log_scheduler.add_job(
+        _detect_orphans_task,
+        IntervalTrigger(minutes=10),
+        id="orphan_anima_detection",
+        name="System: Orphan Anima Detection",
+        replace_existing=True,
+    )
 
-        # ── Stream Registry cleanup ────────────────────────
-        await app.state.stream_registry.start_cleanup_loop()
+    # ── Asset reconciliation (periodic) ───────────────
+    from core.asset_reconciler import reconcile_all_assets
 
-        # ── Periodic schedulers (don't depend on running animas) ──
-        shared_dir = app.state.shared_dir
-
-        from core.time_utils import get_app_timezone
-
-        msg_log_scheduler = AsyncIOScheduler(timezone=get_app_timezone())
-
-        # ── Orphan anima detection ───────────────────────
-        from core.org_sync import detect_orphan_animas
-
-        def _detect_orphans_task() -> None:
+    async def _reconcile_assets_periodic() -> None:
+        try:
+            enable_3d = True
+            image_style = "realistic"
             try:
-                detect_orphan_animas(app.state.animas_dir, shared_dir)
+                from core.config.models import load_config
+
+                _cfg = load_config()
+                enable_3d = _cfg.image_gen.enable_3d
+                image_style = _cfg.image_gen.image_style or "realistic"
             except Exception:
-                logger.exception("Orphan detection failed")
+                pass
+            await reconcile_all_assets(
+                app.state.animas_dir,
+                enable_3d=enable_3d,
+                image_style=image_style,
+            )
+        except asyncio.CancelledError:
+            logger.debug("Asset reconciliation cancelled (shutdown)")
+        except Exception:
+            logger.exception("Periodic asset reconciliation failed")
 
-        msg_log_scheduler.add_job(
-            _detect_orphans_task,
-            IntervalTrigger(minutes=10),
-            id="orphan_anima_detection",
-            name="System: Orphan Anima Detection",
-            replace_existing=True,
-        )
+    msg_log_scheduler.add_job(
+        _reconcile_assets_periodic,
+        IntervalTrigger(minutes=5),
+        id="asset_reconciliation",
+        name="System: Asset Reconciliation",
+        replace_existing=True,
+    )
 
-        # ── Asset reconciliation (periodic) ───────────────
-        from core.asset_reconciler import reconcile_all_assets
+    # ── Claude CLI / SDK auto-update ─────────────────
+    from core.auto_updater import run_update_check
 
-        async def _reconcile_assets_periodic() -> None:
+    async def _auto_update_claude() -> None:
+        try:
+            result = await run_update_check(
+                supervisor=app.state.supervisor,
+                animas_dir=app.state.animas_dir,
+            )
+            sdk_info = result.get("sdk", "")
+            cli_info = result.get("cli", "")
+            if "→" in sdk_info or "→" in cli_info:
+                logger.info("Auto-update completed: sdk=%s cli=%s", sdk_info, cli_info)
+        except asyncio.CancelledError:
+            logger.debug("Auto-update cancelled (shutdown)")
+        except Exception:
+            logger.exception("Auto-update check failed")
+
+    msg_log_scheduler.add_job(
+        _auto_update_claude,
+        IntervalTrigger(hours=4),
+        id="claude_auto_update",
+        name="System: Claude CLI/SDK Auto-Update",
+        replace_existing=True,
+    )
+
+    msg_log_scheduler.add_job(
+        gp_cache.check_integrity,
+        IntervalTrigger(minutes=5),
+        id="global_permissions_integrity",
+        name="System: Global Permissions Integrity Check",
+        replace_existing=True,
+    )
+
+    # ── Slack channel → board periodic resync ─────────
+    async def _slack_channel_resync() -> None:
+        try:
+            sync = getattr(app.state, "slack_channel_sync", None)
+            mgr = getattr(app.state, "slack_socket_manager", None)
+            if sync is not None and mgr is not None:
+                await sync.sync(mgr)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.debug("Periodic Slack channel sync failed", exc_info=True)
+
+    msg_log_scheduler.add_job(
+        _slack_channel_resync,
+        IntervalTrigger(minutes=5),
+        id="slack_channel_sync",
+        name="System: Slack Channel → Board Sync",
+        replace_existing=True,
+    )
+
+    # ── External tasks collection (optional) ──────
+    try:
+        from core.config.models import load_config as _load_cfg_ext_tasks
+
+        _ext_tasks_cfg = _load_cfg_ext_tasks().external_tasks
+    except Exception:
+        _ext_tasks_cfg = None
+        logger.debug("Failed to load external_tasks config; collection disabled", exc_info=True)
+
+    if _ext_tasks_cfg is not None and _ext_tasks_cfg.enabled:
+        _ext_interval = max(1, int(_ext_tasks_cfg.interval_minutes))
+
+        def _run_external_tasks_collection() -> None:
+            from datetime import UTC, datetime
+
+            from core.config.models import load_config as _lc
+            from core.external_tasks.collector import collect_all
+            from core.external_tasks.store import ExternalTaskStore
+            from core.paths import get_external_tasks_store_path
+
+            store = ExternalTaskStore(get_external_tasks_store_path())
+            previous = store.load()
+            cfg = _lc().external_tasks
+            snapshot = collect_all(cfg, previous, datetime.now(UTC))
+            store.save(snapshot)
+
+        async def _external_tasks_collection() -> None:
             try:
-                enable_3d = True
-                image_style = "realistic"
-                try:
-                    from core.config.models import load_config
-
-                    _cfg = load_config()
-                    enable_3d = _cfg.image_gen.enable_3d
-                    image_style = _cfg.image_gen.image_style or "realistic"
-                except Exception:
-                    pass
-                await reconcile_all_assets(
-                    app.state.animas_dir,
-                    enable_3d=enable_3d,
-                    image_style=image_style,
-                )
-            except asyncio.CancelledError:
-                logger.debug("Asset reconciliation cancelled (shutdown)")
-            except Exception:
-                logger.exception("Periodic asset reconciliation failed")
-
-        msg_log_scheduler.add_job(
-            _reconcile_assets_periodic,
-            IntervalTrigger(minutes=5),
-            id="asset_reconciliation",
-            name="System: Asset Reconciliation",
-            replace_existing=True,
-        )
-
-        # ── Claude CLI / SDK auto-update ─────────────────
-        from core.auto_updater import run_update_check
-
-        async def _auto_update_claude() -> None:
-            try:
-                result = await run_update_check(
-                    supervisor=app.state.supervisor,
-                    animas_dir=app.state.animas_dir,
-                )
-                sdk_info = result.get("sdk", "")
-                cli_info = result.get("cli", "")
-                if "→" in sdk_info or "→" in cli_info:
-                    logger.info("Auto-update completed: sdk=%s cli=%s", sdk_info, cli_info)
-            except asyncio.CancelledError:
-                logger.debug("Auto-update cancelled (shutdown)")
-            except Exception:
-                logger.exception("Auto-update check failed")
-
-        msg_log_scheduler.add_job(
-            _auto_update_claude,
-            IntervalTrigger(hours=4),
-            id="claude_auto_update",
-            name="System: Claude CLI/SDK Auto-Update",
-            replace_existing=True,
-        )
-
-        msg_log_scheduler.add_job(
-            gp_cache.check_integrity,
-            IntervalTrigger(minutes=5),
-            id="global_permissions_integrity",
-            name="System: Global Permissions Integrity Check",
-            replace_existing=True,
-        )
-
-        # ── Slack channel → board periodic resync ─────────
-        async def _slack_channel_resync() -> None:
-            try:
-                sync = getattr(app.state, "slack_channel_sync", None)
-                mgr = getattr(app.state, "slack_socket_manager", None)
-                if sync is not None and mgr is not None:
-                    await sync.sync(mgr)
+                await asyncio.to_thread(_run_external_tasks_collection)
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.debug("Periodic Slack channel sync failed", exc_info=True)
+                logger.exception("External tasks collection failed")
 
         msg_log_scheduler.add_job(
-            _slack_channel_resync,
-            IntervalTrigger(minutes=5),
-            id="slack_channel_sync",
-            name="System: Slack Channel → Board Sync",
+            _external_tasks_collection,
+            IntervalTrigger(minutes=_ext_interval),
+            id="external_tasks_collection",
+            name="System: External Tasks Collection",
             replace_existing=True,
         )
+        # Immediate non-blocking run on startup
+        asyncio.create_task(_external_tasks_collection())
 
-        # ── External tasks collection (optional) ──────
-        try:
-            from core.config.models import load_config as _load_cfg_ext_tasks
+    msg_log_scheduler.start()
+    app.state.msg_log_scheduler = msg_log_scheduler
 
-            _ext_tasks_cfg = _load_cfg_ext_tasks().external_tasks
-        except Exception:
-            _ext_tasks_cfg = None
-            logger.debug("Failed to load external_tasks config; collection disabled", exc_info=True)
+    # ── Startup initialization ─────────────────────────
+    # Heavy RAG preflight/reindex and anima spawning run after lifespan
+    # yields so uvicorn can bind and serve the progress page immediately.
+    app.state._anima_startup_task = asyncio.create_task(
+        _run_startup_initialization(app),
+    )
+    app.state._model_warmup_task = asyncio.create_task(_run_model_warmup())
+    app.state._voice_greet_warmup_task = asyncio.create_task(_warm_voice_greets(app))
 
-        if _ext_tasks_cfg is not None and _ext_tasks_cfg.enabled:
-            _ext_interval = max(1, int(_ext_tasks_cfg.interval_minutes))
+    logger.info("Server started (startup initialization running in background)")
 
-            def _run_external_tasks_collection() -> None:
-                from datetime import UTC, datetime
 
-                from core.config.models import load_config as _lc
-                from core.external_tasks.collector import collect_all
-                from core.external_tasks.store import ExternalTaskStore
-                from core.paths import get_external_tasks_store_path
-
-                store = ExternalTaskStore(get_external_tasks_store_path())
-                previous = store.load()
-                cfg = _lc().external_tasks
-                snapshot = collect_all(cfg, previous, datetime.now(UTC))
-                store.save(snapshot)
-
-            async def _external_tasks_collection() -> None:
-                try:
-                    await asyncio.to_thread(_run_external_tasks_collection)
-                except asyncio.CancelledError:
-                    pass
-                except Exception:
-                    logger.exception("External tasks collection failed")
-
-            msg_log_scheduler.add_job(
-                _external_tasks_collection,
-                IntervalTrigger(minutes=_ext_interval),
-                id="external_tasks_collection",
-                name="System: External Tasks Collection",
-                replace_existing=True,
-            )
-            # Immediate non-blocking run on startup
-            asyncio.create_task(_external_tasks_collection())
-
-        msg_log_scheduler.start()
-        app.state.msg_log_scheduler = msg_log_scheduler
-
-        # ── Startup initialization ─────────────────────────
-        # Heavy RAG preflight/reindex and anima spawning run after lifespan
-        # yields so uvicorn can bind and serve the progress page immediately.
-        app.state._anima_startup_task = asyncio.create_task(
-            _run_startup_initialization(app),
-        )
-        app.state._model_warmup_task = asyncio.create_task(_run_model_warmup())
-        app.state._voice_greet_warmup_task = asyncio.create_task(_warm_voice_greets(app))
-
-        logger.info("Server started (startup initialization running in background)")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.activate_runtime = lambda: _activate_runtime_services(app)
+    if app.state.setup_complete:
+        await app.state.activate_runtime()
     else:
         startup_progress.set_phase("ready", detail=t("startup.detail_setup_mode"), reset_counts=True)
         logger.info("Server started in setup mode (setup not yet complete)")

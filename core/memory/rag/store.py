@@ -531,10 +531,18 @@ class ChromaVectorStore(VectorStore):
             reset_lock.release()
 
     def _create_collection_once(self, name: str) -> bool:
-        self.client.create_collection(
-            name=name,
-            metadata={"hnsw:space": "cosine"},
-        )
+        try:
+            self.client.create_collection(
+                name=name,
+                metadata={"hnsw:space": "cosine"},
+            )
+        except Exception as exc:
+            # Root memory service calls this method directly to keep repair
+            # ownership centralized. Repeated initialization is still valid.
+            if "already exists" in str(exc).lower():
+                logger.debug("Collection '%s' already exists", name)
+                return True
+            raise
         logger.info("Created collection '%s' (space=cosine)", name)
         return True
 
@@ -827,7 +835,15 @@ class ChromaVectorStore(VectorStore):
         where: dict[str, str | int | float],
         limit: int = 20,
     ) -> list[SearchResult]:
-        coll = self.client.get_collection(name=collection)
+        try:
+            coll = self.client.get_collection(name=collection)
+        except Exception as exc:
+            # A fresh runtime can recall shared memories before their first
+            # indexing pass. The root memory service calls this method directly.
+            if _is_missing_collection_error(exc):
+                logger.debug("Metadata recall before collection '%s' is initialized", collection)
+                return []
+            raise
 
         # ChromaDB: empty dict means no filter; pass None for "return all"
         where_arg: Any = where if where else None

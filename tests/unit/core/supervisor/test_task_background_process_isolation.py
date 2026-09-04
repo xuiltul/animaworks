@@ -328,7 +328,12 @@ async def test_background_flag_false_uses_legacy_command_path(tmp_path: Path) ->
 
 @pytest.mark.asyncio
 async def test_background_flag_true_spawns_child(tmp_path: Path) -> None:
-    executor, _, _ = _executor(tmp_path, background_isolated=True)
+    from core.background import BackgroundTaskManager, TaskStatus
+
+    executor, anima, anima_dir = _executor(tmp_path, background_isolated=True)
+    manager = BackgroundTaskManager(anima_dir)
+    manager.on_complete = AsyncMock()
+    anima.agent.background_manager = manager
     assert executor._background_isolated is True
     assert executor._task_runner_supervisor is not None
     executor._task_runner_supervisor.run_background = AsyncMock(
@@ -353,6 +358,31 @@ async def test_background_flag_true_spawns_child(tmp_path: Path) -> None:
     )
     # Prefer kwargs form
     assert executor._task_runner_supervisor.run_background.await_args.kwargs["kind"] == "command"
+    task = manager.get_task("cmd-iso")
+    assert task is not None
+    assert task.status == TaskStatus.COMPLETED
+    assert task.result == "ok"
+    assert json.loads((anima_dir / "state/background_tasks/cmd-iso.json").read_text())["result"] == "ok"
+    manager.on_complete.assert_awaited_once_with(task)
+
+
+@pytest.mark.asyncio
+async def test_isolated_command_failure_is_saved_and_notified(tmp_path: Path) -> None:
+    from core.background import BackgroundTaskManager, TaskStatus
+
+    executor, anima, anima_dir = _executor(tmp_path, background_isolated=True)
+    manager = BackgroundTaskManager(anima_dir)
+    manager.on_complete = AsyncMock()
+    anima.agent.background_manager = manager
+    executor._task_runner_supervisor.run_background = AsyncMock(
+        side_effect=TaskRunnerError("image service unavailable")
+    )
+    await executor.execute_pending_task({"task_id": "failed-image", "tool_name": "image_gen"})
+    task = manager.get_task("failed-image")
+    assert task is not None
+    assert task.status == TaskStatus.FAILED
+    assert "image service unavailable" in task.error
+    manager.on_complete.assert_awaited_once_with(task)
 
 
 @pytest.mark.asyncio

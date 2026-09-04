@@ -16,6 +16,7 @@ import { createMeetingController } from "./meeting-controller.js";
 import { createWorkIndicatorController } from "./work-indicator-controller.js";
 import { initSplitter } from "./splitter.js";
 import { onEvent } from "../../modules/websocket.js";
+import { invalidateAvatarCache } from "../../modules/avatar-resolver.js";
 
 const LAYOUT_KEY = "aw-chat-pane-layout";
 
@@ -200,6 +201,9 @@ export function createPaneHost(rootContainer) {
       if (!anima) return;
 
       if (bsStatus === "started") {
+        // Interactive setup is a conversation: keep its messages and input
+        // visible while the Anima asks questions or writes its profile.
+        if (anima.bootstrap_state?.mode === "interactive") return;
         anima.status = "bootstrapping";
         anima.bootstrapping = true;
         anima._bootstrapStartedAt = Date.now();
@@ -238,6 +242,28 @@ export function createPaneHost(rootContainer) {
       ctx.controllers.anima.renderAnimaTabs();
     });
     pane.intervals.push(unsubBootstrap);
+
+    const refreshAvatar = async (name) => {
+      if (!name || !ctx.state.animas.some(a => a.name === name)) return;
+      await invalidateAvatarCache(name);
+      delete ctx.state.animaTabAvatarUrls[name];
+      ctx.controllers.anima.renderAnimaTabs();
+      if (name === ctx.state.selectedAnima) {
+        await ctx.controllers.avatar.updateAvatar();
+        ctx.controllers.renderer.renderChat(false);
+      }
+    };
+    pane.intervals.push(onEvent("anima.assets_updated", ({ name }) => {
+      refreshAvatar(name).catch(() => {});
+    }));
+    // CLI/background generation may produce the first portrait before its
+    // completion event. Retry an absent avatar without reloading the page.
+    pane.intervals.push(setInterval(() => {
+      const name = ctx.state.selectedAnima;
+      if (name && !ctx.state.animaTabAvatarUrls[name] && !ctx.state.animaTabAvatarLoading[name]) {
+        refreshAvatar(name).catch(() => {});
+      }
+    }, 30000));
 
     if (panes.length === 1) {
       focusedIdx = 0;

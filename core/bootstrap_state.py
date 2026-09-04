@@ -227,6 +227,17 @@ def get_bootstrap_status(anima_dir: Path) -> dict[str, Any]:
                 retry_count=retry_count,
             )
             return _apply_flags(anima_dir, payload)
+        # Interactive setup writes identity, role and assets over several
+        # tool calls (and sometimes several chat turns). Keep it resumable
+        # until its bootstrap file is removed or explicit validation runs.
+        if persisted_state == STATE_PENDING_USER_INPUT and persisted.get("mode") == "interactive":
+            payload = _base_state(
+                STATE_PENDING_USER_INPUT,
+                mode="interactive",
+                reason="interactive_bootstrap_in_progress",
+                retry_count=retry_count,
+            )
+            return _apply_flags(anima_dir, payload)
         if _identity_is_undefined(anima_dir):
             payload = _base_state(
                 STATE_PENDING_USER_INPUT,

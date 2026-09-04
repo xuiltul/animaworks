@@ -276,7 +276,10 @@ export function createChatRenderer(ctx) {
         messagesEl.innerHTML = renderDemoSuggestedCards(state.selectedAnima);
         return;
       }
-      messagesEl.innerHTML = `<div class="chat-empty">${t("chat.messages_empty")}</div>`;
+      const emptyMessage = currentAnima?.needs_user_input
+        ? t("chat.bootstrap_welcome", { name: currentAnima.name })
+        : t("chat.messages_empty");
+      messagesEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyMessage)}</div>`;
       return;
     }
 

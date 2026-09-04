@@ -194,9 +194,7 @@ def test_repair_bootstrap_status_command_is_read_only(tmp_path: Path, monkeypatc
 
     from cli.commands.anima_mgmt import cmd_anima_repair_bootstrap
 
-    cmd_anima_repair_bootstrap(
-        Namespace(anima="midori", status=True, retry=False, fresh=False, gateway_url=None)
-    )
+    cmd_anima_repair_bootstrap(Namespace(anima="midori", status=True, retry=False, fresh=False, gateway_url=None))
 
     out = capsys.readouterr().out
     assert "State: pending_user_input" in out
@@ -210,9 +208,7 @@ def test_repair_bootstrap_retry_command_restores_failed_artifact(tmp_path: Path,
 
     from cli.commands.anima_mgmt import cmd_anima_repair_bootstrap
 
-    cmd_anima_repair_bootstrap(
-        Namespace(anima="midori", status=False, retry=True, fresh=False, gateway_url=None)
-    )
+    cmd_anima_repair_bootstrap(Namespace(anima="midori", status=False, retry=True, fresh=False, gateway_url=None))
 
     out = capsys.readouterr().out
     assert "Prepared bootstrap retry" in out
@@ -237,3 +233,22 @@ def test_repair_bootstrap_complete_command_finishes_defined_runtime(tmp_path: Pa
     assert "Completed bootstrap repair" in out
     assert "State: completed" in out
     assert not (anima_dir / "bootstrap.md.failed").exists()
+
+
+def test_interactive_profile_remains_resumable_during_incremental_writes(tmp_path: Path) -> None:
+    from core.bootstrap_state import initialize_bootstrap_state
+
+    anima_dir = _make_anima_dir(tmp_path)
+    initialize_bootstrap_state(anima_dir)
+    (anima_dir / "identity.md").write_text("# Identity\nA calm manager.", encoding="utf-8")
+    status = get_bootstrap_status(anima_dir)
+    assert status["state"] == STATE_PENDING_USER_INPUT
+    assert not status["needs_repair"]
+    (anima_dir / "injection.md").write_text("# Role\nCoordinate work.", encoding="utf-8")
+    # Graphics may still be running, or the Anima may ask a follow-up question.
+    status = get_bootstrap_status(anima_dir)
+    assert status["mode"] == "interactive"
+    assert status["needs_user_input"]
+    assert not status["needs_repair"]
+    (anima_dir / "bootstrap.md").unlink()
+    assert get_bootstrap_status(anima_dir)["state"] == STATE_COMPLETED

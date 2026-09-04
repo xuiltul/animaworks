@@ -739,6 +739,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
 
     try:
         app = create_app(get_animas_dir(), get_shared_dir())
+        app.state.listen_port = args.port
         uvicorn.run(
             app,
             host=args.host,

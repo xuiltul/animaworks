@@ -221,6 +221,13 @@ async def reconcile_anima_assets(
         Dict with generation results or skip reason.
     """
     anima_name = anima_dir.name
+    # A blank first-run Anima has no appearance yet. This is waiting for
+    # user input, not an image-generation failure worth an hour-long cooldown.
+    if prompt is None:
+        from core.bootstrap_state import get_bootstrap_status
+
+        if get_bootstrap_status(anima_dir).get("needs_user_input"):
+            return {"anima": anima_name, "skipped": True, "reason": "awaiting_profile"}
     lock = _get_lock(anima_name)
 
     # Check failure cooldown before acquiring lock
@@ -625,18 +632,22 @@ def _resolve_prompt_synthesis_model(anima_dir: Path) -> tuple[str | None, str]:
     """
     try:
         from core.config.models import load_config, load_model_config
+        from core.config.schemas import DEFAULT_LOCAL_LLM_BASE_URL
 
         cfg = load_config()
         local_llm = getattr(cfg, "local_llm", None)
         local_model = getattr(local_llm, "default_model", "") or ""
         local_base = getattr(local_llm, "base_url", "") or ""
         local_cred = getattr(local_llm, "credential", "") or ""
-        if local_model and (local_base or local_cred or os.environ.get("OLLAMA_SERVERS")):
+        local_selected = getattr(cfg.anima_defaults, "credential", "") == "ollama"
+        custom_endpoint = bool(local_base and local_base.rstrip("/") != DEFAULT_LOCAL_LLM_BASE_URL.rstrip("/"))
+        if local_model and (local_selected or custom_endpoint or local_cred or os.environ.get("OLLAMA_SERVERS")):
             return local_model, local_cred
 
         model_config = load_model_config(anima_dir)
         if getattr(model_config, "model", ""):
-            return str(model_config.model), ""
+            credential = getattr(model_config, "credential", "")
+            return str(model_config.model), credential if isinstance(credential, str) else ""
     except Exception:
         logger.debug("Prompt synthesis model resolution failed for %s", anima_dir.name, exc_info=True)
     return None, ""

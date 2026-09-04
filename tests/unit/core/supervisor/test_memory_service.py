@@ -590,3 +590,37 @@ async def test_root_open_failure_marks_background_repair_without_failing_startup
     assert state["reason"] == "store_init_failed"
     assert state["source"] == "phase3_root_startup"
     await service.close()
+
+
+async def test_repeated_collection_initialization_is_idempotent_through_root(tmp_path: Path) -> None:
+    from core.memory.rag.store import ChromaVectorStore
+
+    store = ChromaVectorStore.__new__(ChromaVectorStore)
+    store.client = MagicMock()
+    store.client.create_collection.side_effect = RuntimeError("Collection [sakura_knowledge] already exists")
+    service = MemoryService("sakura", tmp_path / "sakura", opener=lambda: store)
+    try:
+        assert await service.handle("memory.create_collection", {"collection": "sakura_knowledge"}) == {"ok": True}
+        # Genuine failures still surface; only the already-existing case is benign.
+        store.client.create_collection.side_effect = RuntimeError("disk unavailable")
+        with pytest.raises(MemoryServiceUnavailable, match="disk unavailable"):
+            await service.handle("memory.create_collection", {"collection": "sakura_knowledge"})
+    finally:
+        await service.close()
+
+
+async def test_metadata_recall_before_initial_indexing_is_empty_through_root(tmp_path: Path) -> None:
+    from core.memory.rag.store import ChromaVectorStore
+
+    store = ChromaVectorStore.__new__(ChromaVectorStore)
+    store.client = MagicMock()
+    store.client.get_collection.side_effect = RuntimeError("Collection [shared_common_knowledge] does not exist")
+    service = MemoryService("sakura", tmp_path / "sakura", opener=lambda: store)
+    params = {"collection": "shared_common_knowledge", "where": {}}
+    try:
+        assert await service.handle("memory.get_by_metadata", params) == {"results": []}
+        store.client.get_collection.side_effect = RuntimeError("disk unavailable")
+        with pytest.raises(MemoryServiceUnavailable, match="disk unavailable"):
+            await service.handle("memory.get_by_metadata", params)
+    finally:
+        await service.close()
