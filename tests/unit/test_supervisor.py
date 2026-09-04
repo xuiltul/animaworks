@@ -298,11 +298,13 @@ async def test_reconcile_recovery_loop_stops_at_shutdown(supervisor):
     supervisor._failed_log_times["test_anima"] = 0.0
     supervisor._shutdown = True
     supervisor.start_anima = AsyncMock()
+    supervisor._reconcile_assets = AsyncMock()
 
     await supervisor._reconcile()
 
     assert "test_anima" in supervisor._permanently_failed
     supervisor.start_anima.assert_not_awaited()
+    supervisor._reconcile_assets.assert_not_awaited()
 
 
 # Note: Full integration tests with actual process spawning

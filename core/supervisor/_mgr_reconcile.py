@@ -36,6 +36,8 @@ class ReconcileMixin:
 
     async def _reconcile(self) -> None:
         """Scan animas_dir and sync desired state with actual process state."""
+        if self._shutdown:
+            return
         self._check_config_freshness()
 
         if not self.animas_dir.exists():
@@ -252,7 +254,8 @@ class ReconcileMixin:
                     )
 
         # Check for missing anima assets (fallback generation)
-        await self._reconcile_assets()
+        if not self._shutdown:
+            await self._reconcile_assets()
 
     async def _reconcile_assets(self) -> None:
         """Check for and generate missing anima assets during reconciliation."""
