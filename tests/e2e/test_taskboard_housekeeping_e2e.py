@@ -90,7 +90,7 @@ async def test_taskboard_housekeeping_remediates_stale_runtime_artifacts_end_to_
     assert (anima_dir / "state" / "pending" / "wake-task.json").exists()
     assert not (anima_dir / "state" / "pending" / "suppressed" / "old-hidden.json").exists()
     assert not (anima_dir / "state" / "background_tasks" / "stale-running.json").exists()
-    assert queue.get_task_by_id("recover-task").status == "failed"
+    assert queue.get_task_by_id("recover-task").status == "pending"
     assert state_path.read_text(encoding="utf-8") == "status: idle\n"
     assert "stale idle notes" in next((idle_anima_dir / "episodes").glob("*.md")).read_text(encoding="utf-8")
 

@@ -358,13 +358,17 @@ async def test_root_sigkill_respawn_preserves_db_and_recovers_lease(
         )
 
         await root.start()
-        await _wait_for(lambda: (failed / descriptor.name).exists())
+        await _wait_for(lambda: not descriptor.exists())
+        assert not (failed / descriptor.name).exists()
         assert _db_snapshot(anima_dir) == before
         query = await _query_ready(root)
         assert query.error is None
         assert query.result["results"][0]["document"]["content"] == "sigkill durable sentinel"
         recovered = queue.get_task_by_id(entry.task_id)
-        assert recovered.status == "failed" and "INTERRUPTED" in recovered.summary
+        assert recovered.status == "pending"
+        assert recovered.summary == "interrupted phase3 task"
+        assert "INTERRUPTED" in recovered.meta["last_run_note"]
+        assert recovered.meta["last_run_stop_kind"] == "crash"
     finally:
         await root.stop(drain_streams=False)
 

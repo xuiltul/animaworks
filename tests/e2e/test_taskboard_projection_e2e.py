@@ -38,7 +38,6 @@ def test_taskboard_projection_uses_jsonl_queue_and_sqlite_metadata(tmp_path: Pat
         summary="review rollout",
         task_id="task-review",
     )
-    hinata_queue.update_status(hinata_task.task_id, "blocked")
     store.upsert_metadata(
         anima_name="sakura",
         task_id=sakura_task.task_id,
@@ -74,7 +73,7 @@ def test_taskboard_projection_uses_jsonl_queue_and_sqlite_metadata(tmp_path: Pat
 
     assert by_key[("sakura", "task-rollout")].column == BoardColumn.WAITING
     assert by_key[("sakura", "task-rollout")].surface_count == 1
-    assert by_key[("hinata", "task-review")].queue_status == "blocked"
+    assert by_key[("hinata", "task-review")].queue_status == "pending"
     assert by_key[("hinata", "task-review")].visibility == AttentionVisibility.SNOOZED
     assert by_key[("sakura", "missing-task")].queue_missing is True
     assert by_key[("sakura", "missing-task")].tombstone_reason == "queue compaction removed it"

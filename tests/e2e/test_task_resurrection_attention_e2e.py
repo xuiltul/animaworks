@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,21 +10,11 @@ from core._anima_inbox import _rescue_regenerate_pending
 from core.memory.task_queue import TaskQueueManager
 from core.taskboard.models import AttentionVisibility
 from core.taskboard.store import TaskBoardStore
-from core.tooling.handler_skills import SkillsToolsMixin
 
 pytestmark = pytest.mark.e2e
 
 
-def _make_handler(anima_dir: Path) -> SkillsToolsMixin:
-    handler = object.__new__(SkillsToolsMixin)
-    handler._anima_dir = anima_dir
-    handler._anima_name = anima_dir.name
-    handler._activity = MagicMock()
-    handler._pending_executor_wake = None
-    return handler
-
-
-def test_taskboard_blocks_retry_and_delegation_rescue_resurrection(tmp_path: Path) -> None:
+def test_taskboard_blocks_archived_delegation_rescue_resurrection(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     (anima_dir / "state").mkdir(parents=True, exist_ok=True)
@@ -40,7 +28,7 @@ def test_taskboard_blocks_retry_and_delegation_rescue_resurrection(tmp_path: Pat
         task_id="archived1234",
         meta={"task_desc": {"title": "do not resurrect this task"}},
     )
-    queue.update_status(entry.task_id, "failed", summary="FAILED: old failure")
+    queue.update_meta(entry.task_id, {"last_run_stop_kind": "crash"})
 
     store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
     store.upsert_metadata(
@@ -49,22 +37,20 @@ def test_taskboard_blocks_retry_and_delegation_rescue_resurrection(tmp_path: Pat
         visibility=AttentionVisibility.ARCHIVED,
     )
 
-    retry_result = json.loads(
-        _make_handler(anima_dir)._handle_update_task({"task_id": entry.task_id, "status": "pending"})
-    )
+    # Simulate a lost descriptor; rescue must respect the archived card.
+    (anima_dir / "state" / "pending" / f"{entry.task_id}.json").unlink(missing_ok=True)
     _rescue_regenerate_pending(
         anima_dir,
         entry.task_id,
         SimpleNamespace(content="delegated work", from_person="manager"),
     )
 
-    assert retry_result["error_type"] == "TaskSuppressed"
     assert not (anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
     assert not (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()
-    assert TaskQueueManager(anima_dir).get_task_by_id(entry.task_id).status == "failed"
+    assert TaskQueueManager(anima_dir).get_task_by_id(entry.task_id).status == "cancelled"
 
 
-def test_delegation_rescue_recreates_future_snoozed_task_only_in_deferred(tmp_path: Path) -> None:
+def test_delegation_rescue_keeps_snoozed_task_in_executable_pending(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     (anima_dir / "state").mkdir(parents=True, exist_ok=True)
@@ -90,5 +76,5 @@ def test_delegation_rescue_recreates_future_snoozed_task_only_in_deferred(tmp_pa
         SimpleNamespace(content="delegated work", from_person="manager"),
     )
 
-    assert not (anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
-    assert (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()
+    assert (anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
+    assert not (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()
