@@ -93,6 +93,8 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/prompt/org_context.py": 3,
     "core/response_normalize.py": 15,
     "core/supervisor/scheduler_manager.py": 1,
+    # orphan reaper — Japanese notification body sent to the owning anima (plan-specified wording)
+    "core/supervisor/orphan_reaper.py": 3,
     # label "個人ツール"
     "core/tooling/handler_memory.py": 1,
     # tool descriptions — already have ja/en dict structure

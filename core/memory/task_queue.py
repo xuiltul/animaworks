@@ -95,6 +95,62 @@ def _compat_status(status: str, task_id: str) -> str:
     return status
 
 
+def _descriptor_ids(anima_dir: Path) -> set[str]:
+    """Return the set of task_ids that have a pending descriptor file.
+
+    Performs a single recursive scan of ``state/pending/`` so callers can do
+    O(1) membership checks without re-walking the tree per task. Returns an
+    empty set when the directory does not exist.
+    """
+    pending_dir = anima_dir / "state" / "pending"
+    if not pending_dir.is_dir():
+        return set()
+    return {p.stem for p in pending_dir.rglob("*.json")}
+
+
+def descriptor_exists(anima_dir: Path, task_id: str) -> bool:
+    """Return True when a pending descriptor file exists for ``task_id``.
+
+    The descriptor is the executable file under ``state/pending/`` that
+    PendingTaskExecutor actually runs. A task that is only present in the
+    JSONL ledger (no descriptor) will never execute. Search is recursive so
+    that descriptors living in ``pending/processing/``, ``pending/deferred/``,
+    ``pending/suppressed/``, or ``pending/failed/`` still count as present.
+    Only ``pending`` and ``in_progress`` tasks are expected to carry a
+    descriptor; ``delegated`` tracking rows legitimately have none.
+    """
+    return task_id in _descriptor_ids(anima_dir)
+
+
+_NOT_EXECUTABLE_NOTE = (
+    "No pending descriptor exists for this task, so it will never run. "
+    "Re-submit it with submit_tasks (same task_id) if you still need it."
+)
+
+
+def mark_executability(items: list[dict[str, Any]], anima_dir: Path) -> None:
+    """Mark each pending/in_progress task dict with its descriptor executability.
+
+    Adds ``executable`` (and ``executable_note`` when False) to ``pending`` /
+    ``in_progress`` rows, which are the only statuses expected to carry a
+    descriptor. ``delegated`` tracking rows legitimately have no descriptor,
+    so they are left untouched along with ``done`` / ``cancelled``.
+
+    The pending directory is scanned exactly once (via ``_descriptor_ids``);
+    each row is then an O(1) set membership check, not a fresh tree walk.
+    """
+    descriptor_set = _descriptor_ids(anima_dir)
+    for item in items:
+        if item.get("status") not in ("pending", "in_progress"):
+            continue
+        tid = item.get("task_id", "")
+        if tid in descriptor_set:
+            item["executable"] = True
+        else:
+            item["executable"] = False
+            item["executable_note"] = _NOT_EXECUTABLE_NOTE
+
+
 def _metadata_expired(expires_at: str | None) -> bool:
     """Return True when a TaskBoard metadata expiry timestamp is in the past."""
     if not expires_at:
