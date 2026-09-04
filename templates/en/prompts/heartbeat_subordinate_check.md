@@ -3,7 +3,7 @@
 You have subordinates: {subordinates}
 
 ### Delegation Decisions
-- Check Active Task Queue for ⚠️ STALE or 🔴 OVERDUE tasks
+- Check Active Task Queue for ⚠️ STALE tasks
 - Decide whether such tasks can be delegated to subordinates rather than done by you
   - Judgment/approval tasks → You handle
   - Execution/investigation tasks → Delegate to subordinates (send_message with instructions)

@@ -776,9 +776,7 @@ def step_remove_machine_config(data_dir: Path, dry_run: bool, verbose: bool) -> 
         return StepResult(
             changed=1,
             skipped=0,
-            details=[
-                f"Backed up and removed machine key from {config_path.name} ({backup_path.name})"
-            ],
+            details=[f"Backed up and removed machine key from {config_path.name} ({backup_path.name})"],
         )
     except Exception as exc:
         logger.exception("step_remove_machine_config failed")

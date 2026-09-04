@@ -191,9 +191,7 @@ def register_task_command(subparsers) -> None:
     # task update
     p_update = task_sub.add_parser("update", help="Update task status")
     p_update.add_argument("--task-id", required=True, help="Task ID")
-    p_update.add_argument(
-        "--status", required=True, choices=["pending", "delegated", "done", "cancelled"]
-    )
+    p_update.add_argument("--status", required=True, choices=["pending", "delegated", "done", "cancelled"])
     p_update.add_argument("--summary", default=None, help="Updated summary")
 
     # task list

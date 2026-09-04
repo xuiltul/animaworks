@@ -431,9 +431,7 @@ class PermissionsMixin:
         # (2026-09-01 storm); non-codex engines bypass the hook, so enforce here.
         from core.tooling.codex_command_hook import check_recursive_search
 
-        search_reason = check_recursive_search(
-            command, self._anima_dir, self._anima_dir.resolve().parent.parent
-        )
+        search_reason = check_recursive_search(command, self._anima_dir, self._anima_dir.resolve().parent.parent)
         if search_reason:
             logger.warning(
                 "permission_denied anima=%s command=%s reason=broad_recursive_search",

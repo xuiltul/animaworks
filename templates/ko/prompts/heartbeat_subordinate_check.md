@@ -3,7 +3,7 @@
 당신에게는 부하가 있습니다: {subordinates}
 
 ### 위임 판단
-- Active Task Queue에 ⚠️ STALE 또는 🔴 OVERDUE 작업이 있는지 확인
+- Active Task Queue에 ⚠️ STALE 작업이 있는지 확인
 - 해당 작업을 직접 처리하지 않고 부하에게 위임할 수 있는지 판단
   - 판단/승인 관련 → 직접 처리
   - 실행/조사 관련 → 부하에게 위임 (send_message로 지시)

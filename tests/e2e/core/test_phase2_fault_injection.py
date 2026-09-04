@@ -239,16 +239,17 @@ async def test_root_restart_recovers_background_lease_once(
 
     new_root = TaskRunnerSupervisor(_ANIMA, anima_dir, shared_dir)
     try:
-        PendingTaskExecutor._recover_processing(processing_dir, failed_dir, anima_dir)
+        PendingTaskExecutor._recover_processing(processing_dir, anima_dir)
         failed = failed_dir / descriptor.name
         failed_lease = read_processing_lease(failed)
 
         assert not descriptor.exists()
-        assert failed.exists()
-        assert failed_lease and failed_lease["attempt"] == 1
+        assert not failed.exists()
+        assert failed_lease is None
         recovered = queue.get_task_by_id(entry.task_id)
-        assert recovered.status == "failed"
-        assert "INTERRUPTED" in recovered.summary and "re-delegating" in recovered.summary
+        assert recovered.status == "pending"
+        assert recovered.meta["last_run_stop_kind"] == "crash"
+        assert "INTERRUPTED" in recovered.summary and "PARTIALLY EXECUTED" in recovered.summary
         assert len(captured) == 1
         assert new_root.root_epoch != old_root.root_epoch
         assert not new_root.jobs

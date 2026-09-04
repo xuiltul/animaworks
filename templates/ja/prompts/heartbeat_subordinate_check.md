@@ -3,7 +3,7 @@
 あなたには部下がいます: {subordinates}
 
 ### 委任判断
-- Active Task Queue に ⚠️ STALE または 🔴 OVERDUE のタスクがないか
+- Active Task Queue に ⚠️ STALE のタスクがないか
 - そのタスクが自分でなく部下に委任可能なものか判断する
   - 判断・承認系 → 自分が対応
   - 実行・調査系 → 部下に委任（send_message で指示）

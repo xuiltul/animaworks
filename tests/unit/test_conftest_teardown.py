@@ -38,3 +38,25 @@ class TestKillOrphanRunners:
         with patch("tests.conftest.os.kill") as mock_kill:
             _kill_orphan_runners(str(tmp_path / "unique-test-dir-12345"))
             mock_kill.assert_not_called()
+
+    def test_does_not_kill_process_without_readable_cmdline(self, tmp_path: Path):
+        from tests.conftest import _kill_orphan_runners
+
+        with (
+            patch("tests.conftest.subprocess.run", return_value=MagicMock(stdout="99999")),
+            patch.object(Path, "read_text", side_effect=FileNotFoundError),
+            patch("tests.conftest.os.kill") as kill,
+        ):
+            _kill_orphan_runners(str(tmp_path))
+        kill.assert_not_called()
+
+    def test_process_exiting_after_verification_is_harmless(self, tmp_path: Path):
+        from tests.conftest import _kill_orphan_runners
+
+        with (
+            patch("tests.conftest.subprocess.run", return_value=MagicMock(stdout="99999")),
+            patch.object(Path, "read_text", return_value=f"core.supervisor.runner {tmp_path}"),
+            patch("tests.conftest.os.kill", side_effect=ProcessLookupError) as kill,
+        ):
+            _kill_orphan_runners(str(tmp_path))
+        kill.assert_called_once_with(99999, signal.SIGTERM)

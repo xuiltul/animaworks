@@ -274,14 +274,17 @@ def _kill_orphan_runners_pgrep(data_dir_str: str) -> None:
             # Verify cmdline contains our data_dir before killing
             try:
                 cmdline_path = Path(f"/proc/{pid}/cmdline")
-                if cmdline_path.exists():
-                    cmdline = cmdline_path.read_text().replace("\x00", " ")
-                    if data_dir_str not in cmdline:
-                        continue
+                cmdline = cmdline_path.read_text().replace("\x00", " ")
+                if data_dir_str not in cmdline:
+                    continue
             except OSError:
                 continue
             logger.info("Killing orphan runner process PID=%s", pid)
-            os.kill(pid, signal.SIGTERM)
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                # A runner can exit after its command line was verified.
+                continue
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
 
