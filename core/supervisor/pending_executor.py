@@ -187,6 +187,7 @@ class PendingTaskExecutor:
         self._active_dispatch_tasks: set[asyncio.Task[None]] = set()
         self._active_task_ids: set[str] = set()
         self._task_runner_supervisor = task_runner_supervisor
+        self._last_orphan_sweep: float = 0.0
         process_config = resolve_process_model_config(anima_dir)
         if process_config.valid:
             self._task_isolated = bool(process_config.task_process_isolation.task)
@@ -852,6 +853,52 @@ class PendingTaskExecutor:
         finally:
             self._active_task_ids.difference_update(str(task.get("task_id") or "").strip() for task in tasks)
 
+    def _run_orphan_sweep(self) -> int:
+        """Reap orphan tasks and notify; returns the number reaped.
+
+        File I/O and messaging are synchronous, so this is always invoked
+        inside ``asyncio.to_thread`` to keep the watcher's loop responsive.
+        A single task failing must not abort the sweep (handled in
+        ``reap_orphan_tasks``) and any unexpected error here is contained to a
+        warning so the watcher loop keeps running.
+        """
+        from core.supervisor.orphan_reaper import reap_orphan_tasks, notify_reaped
+
+        try:
+            reaped = reap_orphan_tasks(
+                self._anima_dir,
+                active_task_ids=set(self._active_task_ids),
+            )
+        except Exception:
+            logger.warning(
+                "[%s] Orphan sweep failed",
+                self._anima_name,
+                exc_info=True,
+            )
+            return 0
+        if not reaped:
+            return 0
+        try:
+            notify_reaped(self._anima_name, reaped)
+        except Exception:
+            logger.warning(
+                "[%s] Orphan reaped-notification failed for %d task(s)",
+                self._anima_name,
+                len(reaped),
+                exc_info=True,
+            )
+        logger.info("Orphan sweep: anima=%s reaped=%d", self._anima_name, len(reaped))
+        return len(reaped)
+
+    async def _maybe_run_orphan_sweep(self) -> None:
+        """Run a throttled orphan sweep, at most once per interval."""
+        from core.supervisor.orphan_reaper import _ORPHAN_SWEEP_INTERVAL_SECONDS
+
+        if time.monotonic() - self._last_orphan_sweep < _ORPHAN_SWEEP_INTERVAL_SECONDS:
+            return
+        self._last_orphan_sweep = time.monotonic()
+        await asyncio.to_thread(self._run_orphan_sweep)
+
     async def watcher_loop(self) -> None:
         """Watch state/background_tasks/pending/ for submitted tasks.
 
@@ -1040,6 +1087,9 @@ class PendingTaskExecutor:
                         name=f"taskexec-batch-{self._anima_name}-{batch_id}",
                     )
                     self._track_dispatch_task(dispatch)
+
+                # Throttled orphan sweep (ledger rows with no descriptor).
+                await self._maybe_run_orphan_sweep()
 
                 try:
                     await asyncio.wait_for(

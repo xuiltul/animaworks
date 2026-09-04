@@ -763,6 +763,15 @@ def create_internal_router() -> APIRouter:
 
         if validate_anima_name(body.anima_name):
             return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
+        if body.status == "in_progress":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": "status 'in_progress' is written only by the running TaskExec. "
+                    "To (re)start a task, submit it with the submit_tasks tool. "
+                    "To close it, use status done or cancelled."
+                },
+            )
         anima_dir = get_animas_dir() / body.anima_name
         if not anima_dir.is_dir():
             return JSONResponse(

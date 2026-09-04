@@ -615,6 +615,13 @@ class SkillsToolsMixin:
                 "InvalidArguments",
                 f"status={status!r} was retired. Use status='cancelled' and message the requester with the reason.",
             )
+        if status == "in_progress":
+            return _error_result(
+                "InvalidArguments",
+                "status 'in_progress' is written only by the running TaskExec. "
+                "To (re)start a task, submit it with the submit_tasks tool. "
+                "To close it, use --status done or cancelled.",
+            )
         if result is not None and not isinstance(result, str):
             return _error_result("InvalidArguments", "result must be a string")
         if result is not None:
@@ -677,7 +684,7 @@ class SkillsToolsMixin:
         return _json.dumps(entry.model_dump(), ensure_ascii=False, indent=2)
 
     def _handle_list_tasks(self, args: dict[str, Any]) -> str:
-        from core.memory.task_queue import TaskQueueManager
+        from core.memory.task_queue import TaskQueueManager, mark_executability
 
         manager = TaskQueueManager(self._anima_dir)
         status_filter = args.get("status")
@@ -689,6 +696,7 @@ class SkillsToolsMixin:
                 instr = item.get("original_instruction", "")
                 if len(instr) > _INSTRUCTION_TRUNCATE_LEN:
                     item["original_instruction"] = instr[:_INSTRUCTION_TRUNCATE_LEN] + "..."
+        mark_executability(result, self._anima_dir)
         return _json.dumps(result, ensure_ascii=False)
 
     # ── submit_tasks handler (DAG batch submission) ────────────

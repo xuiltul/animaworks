@@ -118,16 +118,17 @@ class TestTaskToolHandler:
         )
         task_id = add_result["task_id"]
 
-        # Update it
+        # Update it to an externally-writable status ('in_progress' is written
+        # only by the running TaskExec, so it is rejected from here).
         result = handler.handle(
             "update_task",
             {
                 "task_id": task_id,
-                "status": "in_progress",
+                "status": "done",
             },
         )
         data = json.loads(result)
-        assert data["status"] == "in_progress"
+        assert data["status"] == "done"
 
     @pytest.mark.parametrize("status", ["blocked", "failed"])
     def test_handle_update_task_retired_status_rejected(self, handler, status):
