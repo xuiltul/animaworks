@@ -7,8 +7,44 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-05
+
+### Added
+
+- Codex command hooks enforce command deny lists, including regular-expression entries, and guard recursive searches across newline and command-substitution boundaries.
+- Development-team Anima templates for lead, engineer, and researcher roles.
+- Configurable heartbeat outbound limits via `heartbeat.outbound_limit_enabled`.
+
+### Changed
+
+- Task states are now `pending`, `in_progress`, `delegated`, `done`, and `cancelled`. Legacy `blocked`/`failed` rows load as `pending`; only the running task executor may set `in_progress` through the execution path.
+- Task creation through `animaworks-tool task add` writes an executable descriptor, supports `--workspace`, and rejects a foreign assignee. Task listings identify missing descriptors, and orphan cleanup prevents ledger-only tasks from indefinitely blocking work.
+- Task batches dispatch concurrently. Heartbeat prompts guide Animas to resubmit their own pending work through `submit_tasks`.
+- GitHub webhook handling is reduced to one notification per event. Multi-pass review passes run concurrently and superseded reviews are cancelled.
+
 ### Removed
-- machine ツール（`animaworks-tool machine run` / MCP `machine_run`）を撤去。`core/tools/machine.py`・`MachineConfig`・関連 i18n／プロンプト注記／gated action／テンプレート言及を削除し、config.json の `machine` キーを落とす migration step を追加
+
+- The `machine` tool (`animaworks-tool machine run` / MCP `machine_run`), its configuration model, and associated prompts/templates. A migration step removes the retired `machine` key from `config.json`.
+- Task `deadline`, `exclusive_key`, and `unblock_check` fields, plus harness-side blocked recovery, automatic continuation, exclusion, preemption, and attention gates. The internal task API still accepts and ignores the retired deadline/exclusive-key fields for compatibility.
+
+### Fixed
+
+- First-Anima setup now applies the selected provider and credentials. Codex login discovers an account-visible recommended model instead of assuming a fixed model is available.
+- Completing setup starts the normal runtime services; child processes use the actual server port. Bootstrap stays resumable until the profile is complete, and heartbeat/cron wait for initial setup.
+- Avatar generation runs in the background while chat remains available, respects the chosen realistic/anime style and tool permissions, and updates the visible portrait without a page reload.
+- Cross-process image-generation locking prevents duplicate output. Isolated background commands persist their results and completion notifications under the original task ID.
+- Missing initial memory collections return empty results, and duplicate collection initialization is idempotent without masking storage failures.
+- Task-runner startup, result delivery under IPC backpressure, process cleanup, cancellation, and crash recovery preserve task visibility and titles. Invalid pending-task payloads no longer crash the watcher.
+- Chat streams finish cleanup in the producer context before terminal responses. Shutdown no longer starts asset reconciliation.
+- Command-injection checks honor the configured enforcement mode, sandboxed Codex SSH avoids unreadable system drop-ins, and fallback error classification bounds the inspected text.
+- Unit and E2E fixtures match the current task contracts, tolerate process-exit races, and serve browser assets with production-style URL substitutions. Process-monitor tests isolate unrelated image generation.
+
+### Upgrade notes
+
+- Update task integrations to the current state vocabulary and remove retired task fields. Existing `blocked`/`failed` ledger rows remain readable as `pending`; use cancellation with an explanation when work cannot proceed.
+- Replace `machine` tool usage in custom skills and prompts. Use the supported execution modes and task-delegation tools appropriate to the workflow.
+- Keep external skills in their configured host-side roots; do not place symlinks under `common_skills/` or an Anima's `skills/` directory.
+- Legacy memory remains the default; Neo4j remains optional.
 
 ## [0.12.0] - 2026-08-25
 
@@ -1890,7 +1926,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/xuiltul/animaworks/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/xuiltul/animaworks/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/xuiltul/animaworks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/xuiltul/animaworks/compare/v0.9.2...v0.10.0
