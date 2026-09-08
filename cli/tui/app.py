@@ -1701,9 +1701,7 @@ class AnimaChatApp(App):
         self._restore_input_focus()
         # Kept short: the hint sits at the right edge and is clipped there.
         lines = text.count("\n") + 1
-        self.status_bar.flash(
-            f"Copied {len(text)} chars" if lines == 1 else f"Copied {lines} lines"
-        )
+        self.status_bar.flash(f"Copied {len(text)} chars" if lines == 1 else f"Copied {lines} lines")
 
     def _restore_input_focus(self) -> None:
         """Put focus back in the input box after a click in the transcript.
