@@ -87,7 +87,7 @@ class TestListChannels:
         shared_dir.mkdir()
         _write_channel(shared_dir, "general", [
             {"ts": "2026-02-17T10:00:00", "from": "sakura", "text": "Hello", "source": "anima"},
-            {"ts": "2026-02-17T11:00:00", "from": "taka", "text": "Hi", "source": "human"},
+            {"ts": "2026-02-17T11:00:00", "from": "owner", "text": "Hi", "source": "human"},
         ])
         _write_channel(shared_dir, "ops", [
             {"ts": "2026-02-17T09:00:00", "from": "mio", "text": "Server OK", "source": "anima"},
@@ -348,7 +348,7 @@ class TestPostToChannel:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/api/channels/general",
-                json={"text": "Hello from human", "from_name": "taka"},
+                json={"text": "Hello from human", "from_name": "owner"},
             )
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
@@ -481,7 +481,7 @@ class TestGetChannelMentions:
         _write_channel(shared_dir, "general", [
             {"ts": "2026-02-17T10:00:00", "from": "mio", "text": "@sakura check this", "source": "anima"},
             {"ts": "2026-02-17T11:00:00", "from": "kotoha", "text": "No mention here", "source": "anima"},
-            {"ts": "2026-02-17T12:00:00", "from": "taka", "text": "@sakura urgent", "source": "human"},
+            {"ts": "2026-02-17T12:00:00", "from": "owner", "text": "@sakura urgent", "source": "human"},
         ])
 
         app = _make_test_app(shared_dir)

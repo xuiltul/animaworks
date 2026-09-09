@@ -20,7 +20,9 @@ Provides:
 from __future__ import annotations
 
 import logging
+import os
 import re
+import uuid
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -201,6 +203,28 @@ def attach_standard_log_filters(handler: logging.Handler, *, redaction_enabled: 
         handler.addFilter(SecretRedactionFilter())
 
 
+def _replace_current_link(current_link: Path, target_name: str) -> None:
+    """Atomically point ``current.log`` at ``target_name``.
+
+    unlink()+symlink_to() has a race window: concurrent task-runner startups
+    crashed with FileNotFoundError/FileExistsError. Build the symlink under a
+    unique temp name and os.replace() it into place instead.
+    """
+    tmp = current_link.with_name(f".{current_link.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
+    try:
+        tmp.unlink(missing_ok=True)
+        tmp.symlink_to(target_name)
+        os.replace(tmp, current_link)
+    except OSError:
+        # Windows without symlink privilege, or exotic filesystems:
+        # fall back to a text-file reference (best effort, ignore races).
+        try:
+            tmp.unlink(missing_ok=True)
+            current_link.write_text(str(target_name), encoding="utf-8")
+        except OSError:
+            pass
+
+
 class _AnimaDailyFileHandler(logging.FileHandler):
     """Write each local day to ``YYYYMMDD.log`` without renaming old files."""
 
@@ -210,13 +234,7 @@ class _AnimaDailyFileHandler(logging.FileHandler):
         super().__init__(self.log_dir / f"{self.current_day}.log", encoding=encoding)
 
     def _update_current_link(self) -> None:
-        current_link = self.log_dir / "current.log"
-        if current_link.exists() or current_link.is_symlink():
-            current_link.unlink()
-        try:
-            current_link.symlink_to(f"{self.current_day}.log")
-        except OSError:
-            current_link.write_text(f"{self.current_day}.log", encoding="utf-8")
+        _replace_current_link(self.log_dir / "current.log", f"{self.current_day}.log")
 
     def doRollover(self) -> None:  # noqa: N802 - stdlib handler API
         new_day = now_local().strftime("%Y%m%d")
@@ -487,16 +505,8 @@ def setup_anima_logging(
     _attach_filters(errors_handler)
     root.addHandler(errors_handler)
 
-    # Create/update current.log symlink
-    current_link = anima_log_dir / "current.log"
-    if current_link.exists() or current_link.is_symlink():
-        current_link.unlink()
-    try:
-        current_link.symlink_to(log_file.name)
-    except OSError:
-        # On Windows, symlinks may require admin privileges
-        # Fall back to copying the path as a text file reference
-        current_link.write_text(str(log_file.name))
+    # Create/update current.log symlink (atomic; concurrent startups race here)
+    _replace_current_link(anima_log_dir / "current.log", log_file.name)
 
     # Optional console handler
     if also_to_console:

@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.config.schemas import command_deny_matches
 from core.paths import get_data_dir
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
@@ -214,7 +215,7 @@ def _check_a1_bash_command(
                 continue
             seg_cmd_base = seg_argv[0]
             for denied in config.commands.deny:
-                if denied in seg_cmd_base or denied in segment:
+                if command_deny_matches(denied, segment, seg_cmd_base):
                     logger.warning(
                         "Bash command denied by per-anima config: %s (command: %s)",
                         denied,

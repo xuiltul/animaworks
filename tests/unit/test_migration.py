@@ -451,6 +451,63 @@ class TestMigrationSteps:
         assert status_path.read_text(encoding="utf-8") == original
         assert not list(status_path.parent.glob("status.json.bak-*"))
 
+    def test_remove_machine_config_removes_key_and_is_idempotent(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"model": "x", "machine": {"engine_priority": ["claude"]}}),
+            encoding="utf-8",
+        )
+
+        result = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert result.error is None
+        assert result.changed == 1
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        assert "machine" not in data
+        assert "model" in data  # other keys preserved
+        assert list(tmp_path.glob("config.json.bak-*"))
+
+        # idempotent: no-op on second run
+        second = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert second.error is None
+        assert second.changed == 0
+        assert second.skipped == 1
+
+    def test_remove_machine_config_noop_when_no_key(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"model": "x"}), encoding="utf-8")
+
+        result = step_remove_machine_config(tmp_path, dry_run=False, verbose=True)
+        assert result.error is None
+        assert result.changed == 0
+        assert "machine" not in json.loads(config_path.read_text(encoding="utf-8"))
+
+    def test_remove_machine_config_dry_run_does_not_modify(self, tmp_path: Path) -> None:
+        from core.migrations.steps import step_remove_machine_config
+
+        config_path = tmp_path / "config.json"
+        original = json.dumps({"machine": {"engine_priority": ["claude"]}})
+        config_path.write_text(original, encoding="utf-8")
+
+        result = step_remove_machine_config(tmp_path, dry_run=True, verbose=True)
+        assert result.error is None
+        assert result.changed == 1
+        assert config_path.read_text(encoding="utf-8") == original
+        assert not list(tmp_path.glob("config.json.bak-*"))
+
+    def test_remove_machine_config_step_registered_before_version(self, tmp_path: Path) -> None:
+        from core.migrations.steps import register_all_steps
+
+        runner = MigrationRunner(tmp_path)
+        register_all_steps(runner)
+        ids = [item["id"] for item in runner.list_steps()]
+
+        assert "remove_machine_config_20260903" in ids
+        assert ids.index("remove_machine_config_20260903") < ids.index("update_version")
+
     def test_v063_registered_after_v062(self, tmp_path: Path) -> None:
         from core.migrations.steps import register_all_steps
 
@@ -491,8 +548,11 @@ class TestMigrationSteps:
             encoding="utf-8"
         )
         skill_creator = (data_dir / "common_skills" / "skill-creator" / "SKILL.md").read_text(encoding="utf-8")
-        assert "[ACTION-RULE]" in behavior_rules
-        assert "common_skills/skill-creator/SKILL.md" in behavior_rules
+        # The resynced template is the trimmed L1 version: the stale submit_tasks
+        # rule is gone, the skill-creator pointer now lives only in the skill catalog.
+        assert "stale:" not in behavior_rules
+        assert "[IMPORTANT]" in behavior_rules
+        assert "common_skills/skill-creator/SKILL.md" not in behavior_rules
         assert "gmail_draft" in action_guide
         assert "slack_post" not in action_guide
         assert "trust_level" in skill_creator
@@ -526,6 +586,54 @@ class TestMigrationSteps:
 
         result = step_task_delegation_to_common_knowledge(data_dir, dry_run=False, verbose=True)
         assert result.changed >= 0
+
+    def test_step_v0120_resyncs_prompts_and_removes_stale(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_v0120_prompt_deadline_engine_neutral_resync
+
+        prompts_dir = data_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        (prompts_dir / "behavior_rules.md").write_text("stale: find files with `Glob` before reading", encoding="utf-8")
+        (prompts_dir / "task_delegation_rules.md").write_text("old content", encoding="utf-8")
+
+        result = step_v0120_prompt_deadline_engine_neutral_resync(data_dir, dry_run=False, verbose=True)
+
+        assert result.error is None
+        behavior_rules = (prompts_dir / "behavior_rules.md").read_text(encoding="utf-8")
+        environment = (prompts_dir / "environment.md").read_text(encoding="utf-8")
+        assert "Glob" not in behavior_rules
+        assert "検索ツール" in behavior_rules
+        # Task deadlines were torn out of environment.md (A1 task-model teardown);
+        # resync should propagate the current template, not the retired section.
+        assert "タスク期限" not in environment
+        assert "行動の基本原則" in environment
+        assert "AI-speed" not in environment
+        assert not (prompts_dir / "task_delegation_rules.md").exists(), (
+            "stale prompts/task_delegation_rules.md should be removed"
+        )
+
+    def test_step_v0120_dry_run_keeps_files(self, data_dir: Path) -> None:
+        from core.migrations.steps import step_v0120_prompt_deadline_engine_neutral_resync
+
+        prompts_dir = data_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        (prompts_dir / "behavior_rules.md").write_text(b"stale: `Glob`".decode("utf-8"), encoding="utf-8")
+        (prompts_dir / "task_delegation_rules.md").write_text("old content", encoding="utf-8")
+
+        result = step_v0120_prompt_deadline_engine_neutral_resync(data_dir, dry_run=True, verbose=True)
+
+        assert (prompts_dir / "behavior_rules.md").exists()
+        assert (prompts_dir / "task_delegation_rules.md").exists()
+        assert any("Would remove stale prompts/task_delegation_rules.md" in d for d in result.details)
+
+    def test_step_v0120_registered_before_update_version(self, tmp_path: Path) -> None:
+        from core.migrations.steps import register_all_steps
+
+        runner = MigrationRunner(tmp_path)
+        register_all_steps(runner)
+        ids = [item["id"] for item in runner.list_steps()]
+
+        assert "v0120_prompt_deadline_engine_neutral_resync" in ids
+        assert ids.index("v0120_prompt_deadline_engine_neutral_resync") < ids.index("update_version")
 
     def test_step_common_knowledge_team_design_removes_stale_machine_docs(self, data_dir: Path) -> None:
         from core.migrations.registry import StepResult

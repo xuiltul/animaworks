@@ -1,1 +1,1 @@
-Update task status. Use status='done' when complete and status='cancelled' when aborted. When declaring blocked, include an unblock_check command that exits 0 once resolved whenever possible.
+Declare a task outcome: status='done' after verification, 'pending' with a waiting reason, or 'cancelled' when stopped. The host owns in_progress; do not set it. To deliberately resume an interrupted nonterminal task, use submit_tasks with its existing task_id and resume=true; stored inputs and history are preserved.

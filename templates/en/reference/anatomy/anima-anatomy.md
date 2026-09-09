@@ -18,8 +18,6 @@ Refer to this when you need to know "what is this file for?" or "can I modify it
 ├── cron.md              # Scheduled task definitions
 ├── state/               # Work state
 │   ├── current_state.md
-│   ├── task_queue.jsonl
-│   ├── pending/         # Execution queue
 │   └── task_results/   # Task execution results
 ├── episodes/            # Episodic memory
 ├── knowledge/           # Semantic memory
@@ -252,22 +250,15 @@ command: /usr/local/bin/backup.sh
 The task or situation you are currently working on (one at a time). Records the goal, progress, and blockers.
 Preserved across normal heartbeat, cron, and conversation boundaries. Prompt injection is capped at 3000 characters; disk trimming runs at 8000 characters by default (`heartbeat.current_state_max_chars`, 0 = disabled).
 
-> **About legacy `pending.md`**: The former `state/pending.md` (backlog) has been deprecated. Its contents were merged into `current_state.md` and the file was removed (automatic migration). Task backlog management is now unified in `task_queue.jsonl` (Layer 2).
+> **Legacy task storage**: `state/task_queue.jsonl` and `state/pending/` are migration/export evidence only. Do not use them as live queues or edit them; use the canonical task tools.
 
-### state/task_queue.jsonl — Task Queue
+### Canonical tasks
 
-Structured task tracking. Operated via `submit_tasks` / `update_task`. List via `animaworks-tool task list` (CLI).
-Tasks with `source: human` MUST be processed with highest priority.
-
-### state/pending/ — Execution Queue
-
-Execution queue for tasks submitted via `submit_tasks` / `delegate_task` tools.
-TaskExec polls every 3 seconds, automatically picking up and executing them. Do not manually create JSON files here.
+Use `list_tasks` / `submit_tasks` / `update_task`; the host stores instructions, dependencies, attempts, and delegation aliases in one TaskStore. Human-origin tasks have highest priority. Only the host sets `in_progress`; declare outcomes with `done`, `pending`, or `cancelled`. Explicit resume uses the same task ID with `resume: true`, preserving input and history.
 
 ### state/task_results/ — Task Execution Results
 
-Directory where TaskExec stores result summaries for completed tasks (`{task_id}.md`, max 2000 characters).
-Dependent tasks automatically receive these results as context. Automatically deleted after 7 days (TTL).
+TaskExec stores accepted summaries under `{task_id}/{attempt_token}.md` (up to 2,000 characters). Dependents receive the host-selected accepted result; file presence alone does not prove completion.
 
 | Property | Value |
 |----------|-------|

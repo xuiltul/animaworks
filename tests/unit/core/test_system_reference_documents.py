@@ -831,6 +831,7 @@ _EXPECTED_FILES = [
     "communication/call-human-guide.md",
     "communication/message-quality-protocol.md",
     "communication/sending-limits.md",
+    "operations/action-rule-memory-write-destination.md",
     "operations/action-rules-guide.md",
     "operations/background-tasks.md",
     "operations/report-formats.md",
@@ -845,6 +846,8 @@ _TEMPLATES_REF_DIR = Path(__file__).resolve().parent.parent.parent.parent / "tem
 
 # All expected markdown files in templates/ja/reference
 _EXPECTED_REFERENCE_FILES = [
+    "anatomy/environment-layout.md",
+    "operations/memory-writing-guide.md",
     "00_index.md",
     "anatomy/anima-anatomy.md",
     "anatomy/memory-system.md",

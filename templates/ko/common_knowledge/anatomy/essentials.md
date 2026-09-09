@@ -1,7 +1,7 @@
 # AnimaWorks 에센셜 가이드
 
 [IMPORTANT] AnimaWorks의 전체 그림을 한 페이지로 파악하기 위한 통합 가이드.
-Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심을 망라.
+Heartbeat / Cron / 팀 설계 / 메모리 / 비용 최적화의 핵심을 망라.
 처음 읽는 경우나 개념 간 관계를 정리하고 싶을 때 가장 먼저 참조하세요.
 각 주제의 상세 내용은 각 섹션 끝의 링크를 참조하세요.
 
@@ -28,7 +28,7 @@ Anima는 다음 5가지 경로로 가동됩니다. Chat 이외는 모두 자동�
 | **Inbox** | 다른 Anima로부터 DM이 왔을 때 | 조직 내 메시지에 즉시 응답 | Anima → Anima |
 | **Heartbeat** | 정기 자동 시작 (기본 30분) | 관찰 → 계획 → 회고. **실행하지 않음** | 자동 |
 | **Cron** | cron.md 스케줄 (예: 매일 9:00) | 정해진 시간에 확정된 태스크 실행 | 자동 |
-| **TaskExec** | `state/pending/`에 태스크가 나타났을 때 | LLM 세션으로 실제 작업 실행 | 자동 (Heartbeat 또는 submit_tasks에서 투입) |
+| **TaskExec** | 정규 태스크가 실행 가능하고 의존 태스크가 완료되었을 때 | 저장된 입력을 획득한 LLM 시도로 실행 | submit_tasks 또는 delegate_task로 등록 |
 
 Chat과 Heartbeat는 **별도 잠금**으로 동작하므로, 순찰 중에도 사람의 대화에 즉시 응답 가능.
 
@@ -118,44 +118,6 @@ command: /usr/local/bin/health-check.sh
 
 ---
 
-## machine (공작기계)이란?
-
-`machine`은 외부 에이전트 CLI (claude, cursor-agent, codex, gemini)를 호출하여
-무거운 작업 (코드 구현·조사·리뷰·테스트 등)을 위탁하는 도구입니다.
-
-### Anima와 machine의 근본적인 차이
-
-| 속성 | Anima (장인) | machine (공작기계) |
-|------|-------------|-------------------|
-| 기억 | 축적함 | 매번 리셋 |
-| 자율성 | 있음 (Heartbeat, Cron) | 없음 (호출될 때만) |
-| 조직상의 자리 | 있음 | 없음 |
-| 판단 | 무엇을 할지/하지 않을지 결정 | 지시받은 것만 실행 |
-
-### 사용의 철칙
-
-```
-① Anima가 계획서(설계도)를 작성     ← 반드시 Anima가 작성
-② machine에 계획서를 넘겨 실행시킴
-③ machine의 출력은 드래프트로 취급   ← 검증 없이 다음 공정에 넘기지 않음
-④ Anima가 검증하고, 승인 or 수정
-```
-
-### 언제 machine을 사용하나
-
-| 상황 | machine 사용 | 직접 수행 |
-|------|------------|---------|
-| 대규모 코드 구현 | ○ | |
-| 수십 개 파일 리팩터 | ○ | |
-| 간단한 설정 변경 | | ○ |
-| 기억 정리·문서 작성 | | ○ |
-| 테스트 실행과 결과 분석 | ○ | |
-| 메시지 전송·보고 | | ○ (machine은 통신 불가) |
-
-→ 상세: `anatomy/machine-tool-philosophy.md`, `operations/machine/tool-usage.md`
-
----
-
 ## 태스크 라우팅 — submit_tasks vs delegate_task
 
 태스크를 실행으로 옮기는 방법은 2가지입니다.
@@ -165,7 +127,7 @@ command: /usr/local/bin/health-check.sh
 | **누가 실행하나** | **자기 자신**의 TaskExec 경로 | **직속 부하** |
 | **사용 장면** | 자신이 할 태스크를 비동기 실행하고 싶을 때 | 부하에게 위임하고 싶을 때 |
 | **DAG/병렬** | `parallel: true`로 병렬, `depends_on`으로 의존 | 1건씩 위임 |
-| **진척 추적** | task_queue.jsonl + Priming 표시 | `task_tracker`로 추적 |
+| **진척 추적** | 정규 태스크 저장소를 참조하는 `list_tasks` / TaskBoard | `task_tracker`로 추적 |
 | **전형적 예** | Heartbeat에서 발견한 태스크를 자신이 실행 | 상사가 부하에게 작업 위임 |
 
 **판단 흐름:**
@@ -220,7 +182,7 @@ command: /usr/local/bin/health-check.sh
 
 **Priming (자동 회상)**이 대화나 순찰 때마다 관련 기억을 자동으로 회상하여 시스템 프롬프트에 주입합니다. `search_memory`로 능동적 검색도 가능합니다.
 
-**Consolidation (기억 통합)**이 일간으로 activity_log에서 에피소드를 추출하여 지식으로 승화합니다. 사용하지 않는 기억은 **Forgetting (능동적 망각)**으로 자동 정리됩니다.
+**Consolidation (기억 통합)**은 새로운 활동 청크만 에피소드로 기록하며 변화 없는 재실행에서는 생성하지 않습니다. 지식 자동 변경, 주간·월간 정리, 스킬 자동 학습은 기본적으로 비활성화됩니다. 기억 저장과 필요시 검색은 유지됩니다.
 
 → 상세: `anatomy/memory-system.md`
 
@@ -230,12 +192,12 @@ command: /usr/local/bin/health-check.sh
 
 ### background_model
 
-Heartbeat / Inbox / Cron은 메인 모델과 별도의 경량 모델로 실행할 수 있습니다.
+Heartbeat / Cron은 명시적으로 설정한 background_model을 사용할 수 있습니다. Inbox는 메인 모델을 사용하며 개별 태스크의 명시적 모델 지정은 해당 태스크에서 우선합니다. 저렴하다는 이유만으로 모델을 자동 선택하지 않습니다.
 
 | 구분 | 사용 모델 | 대상 |
 |------|----------|------|
-| foreground | 메인 모델 (예: claude-opus-4-6) | Chat (사람과의 대화), TaskExec |
-| background | background_model (예: claude-sonnet-4-6) | Heartbeat, Inbox, Cron |
+| foreground | 메인 모델 또는 명시적 태스크 모델 | Chat, Inbox, TaskExec |
+| background | 명시적 background_model, 미설정이면 메인 모델 | Heartbeat, Cron |
 
 설정: `animaworks anima set-background-model {이름} claude-sonnet-4-6`
 
@@ -279,7 +241,7 @@ Anima는 `status.json`의 `supervisor` 필드로 계층이 결정됩니다.
 | 조작 방법을 모르겠다 | `search_memory(query="키워드", scope="common_knowledge")` |
 | 태스크가 블로킹되었다 | `troubleshooting/escalation-flowchart.md` 참조 |
 | 도구가 동작하지 않는다 | `troubleshooting/common-issues.md` 참조 |
-| 무엇을 해야 할지 모르겠다 | Heartbeat 체크리스트 실행. current_state.md와 task_queue 확인 |
+| 무엇을 해야 할지 모르겠다 | current_state.md와 `list_tasks`를 확인하고 필요하면 설정된 Heartbeat 체크리스트 참조 |
 | 판단이 어렵다 | 상사에게 `send_message(intent="question")`으로 상담 |
 
 → 전체 문서 목차: `common_knowledge/00_index.md`

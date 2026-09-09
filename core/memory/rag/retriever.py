@@ -468,7 +468,7 @@ class MemoryRetriever:
         top_k: int = 3,
         min_score: float = 0.80,
     ) -> list[RetrievalResult]:
-        """Search for action rules relevant to the given tool and query.
+        """Search personal and shared action rules relevant to the tool and query.
 
         Args:
             tool_name: The tool about to be executed (e.g. ``call_human``).
@@ -481,18 +481,24 @@ class MemoryRetriever:
             List of matching action rule chunks, filtered by ``trigger_tools``
             and sorted by score descending.
         """
-        collection_name = f"{anima_name}_knowledge"
         filter_metadata: dict[str, str | int | float] = {"type": "action_rule"}
-        vector_rows = self._vector_search_collection(
-            query,
-            collection_name,
-            top_k * 2,
-            filter_metadata=filter_metadata,
-        )
+        vector_rows: list[tuple[str, str, float, dict]] = []
+        for collection_name in (f"{anima_name}_knowledge", "shared_common_knowledge"):
+            vector_rows.extend(
+                self._vector_search_collection(
+                    query,
+                    collection_name,
+                    top_k * 2,
+                    filter_metadata=filter_metadata,
+                )
+            )
 
         tool_lower = tool_name.lower()
         results: list[RetrievalResult] = []
+        seen_ids: set[str] = set()
         for doc_id, content, score, metadata in vector_rows:
+            if doc_id in seen_ids:
+                continue
             raw_triggers = metadata.get("trigger_tools")
             if raw_triggers is None:
                 continue
@@ -501,6 +507,7 @@ class MemoryRetriever:
                 continue
             if score < min_score:
                 continue
+            seen_ids.add(doc_id)
             results.append(
                 RetrievalResult(
                     doc_id=doc_id,
@@ -991,9 +998,11 @@ class MemoryRetriever:
     ) -> list[RetrievalResult]:
         """Apply spreading activation to expand search results.
 
-        Builds a graph from all configured memory types (knowledge +
-        episodes by default).  Tries loading from cache first, then
-        falls back to a full build.
+        Uses an already-built, schema-compatible graph cache. A cache miss
+        retains the retrieved seeds: full graph construction embeds and queries
+        every source file and belongs to explicit/background maintenance, never
+        a latency-bounded search (whose cancelled worker thread would keep
+        building the graph after its caller has timed out).
 
         Args:
             initial_results: Initial search results
@@ -1020,48 +1029,32 @@ class MemoryRetriever:
                 try:
                     from core.memory.rag.graph import GRAPH_SCHEMA_VERSION, KnowledgeGraph
 
-                    self._knowledge_graph = KnowledgeGraph(
+                    graph = KnowledgeGraph(
                         self.vector_store,
                         self.indexer,
                     )
 
                     cache_dir = self.knowledge_dir.parent / "vectordb"
-                    threshold = (
-                        getattr(
-                            _cfg.rag,
-                            "implicit_link_threshold",
-                            0.75,
-                        )
-                        if _cfg
-                        else 0.75
-                    )
                     cache_enabled = bool(getattr(_cfg.rag, "graph_cache_enabled", True)) if _cfg else True
                     loaded = False
                     if cache_enabled:
-                        loaded = self._knowledge_graph.load_graph(
+                        loaded = graph.load_graph(
                             cache_dir,
                             expected_schema_version=GRAPH_SCHEMA_VERSION,
                             entity_aware_graph_enabled=bool(graph_settings["enabled"]),
                         )
                     if not loaded:
-                        memory_dirs = self._collect_spreading_dirs()
-                        self._knowledge_graph.build_graph(
+                        logger.info(
+                            "Graph expansion skipped: no usable prebuilt cache for %s; retaining retrieval seeds",
                             anima_name,
-                            self.knowledge_dir,
-                            memory_dirs=memory_dirs,
-                            implicit_link_threshold=threshold,
-                            entity_aware_graph_enabled=bool(graph_settings["enabled"]),
-                            graph_entity_edge_cap=int(graph_settings["edge_cap"]),
-                            graph_inverse_fan_enabled=bool(graph_settings["inverse_fan"]),
-                            graph_recency_weight_enabled=bool(graph_settings["recency_weight"]),
                         )
-                        if cache_enabled:
-                            cache_dir.mkdir(parents=True, exist_ok=True)
-                            self._knowledge_graph.save_graph(cache_dir)
+                        return initial_results
+                    self._knowledge_graph = graph
                     self._knowledge_graph_signature = graph_signature
 
                 except Exception as e:
                     logger.warning("Failed to initialize knowledge graph: %s", e)
+                    self._knowledge_graph = None
                     self._knowledge_graph_signature = None
                     return initial_results
 

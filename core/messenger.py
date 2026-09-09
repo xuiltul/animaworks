@@ -20,6 +20,7 @@ from core.exceptions import (
     ChannelAccessDeniedError,
     ChannelNotFoundError,
     DeliveryError,
+    MemoryWriteError,
     RecipientNotFoundError,
 )  # noqa: F401
 from core.i18n import t
@@ -194,7 +195,17 @@ class Messenger:
         origin_chain: list[str] | None = None,
         meta: dict[str, Any] | None = None,
         source: str = "anima",
+        delivery_id: str = "",
     ) -> Message:
+        if delivery_id:
+            import re
+
+            if not re.fullmatch(r"[a-zA-Z0-9_-]{1,160}", delivery_id):
+                raise ValueError("Invalid durable delivery ID")
+            target = self.shared_dir / "inbox" / to
+            for previous in (target / f"{delivery_id}.json", target / "processed" / f"{delivery_id}.json"):
+                if previous.exists():
+                    return Message.model_validate_json(previous.read_text(encoding="utf-8"))
         # ── Conversation depth check (internal Anima only) ──
         # Human-sourced messages bypass the cascade limiter: they originate
         # outside the anima conversation graph, like the chat API path.
@@ -243,6 +254,8 @@ class Messenger:
             meta=meta or {},
             source=source,
         )
+        if delivery_id:
+            msg.id = delivery_id
         # New thread: use message id as thread_id
         if not msg.thread_id:
             msg.thread_id = msg.id
@@ -250,12 +263,14 @@ class Messenger:
         filepath = target_dir / f"{msg.id}.json"
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
-            filepath.write_text(msg.model_dump_json(indent=2), encoding="utf-8")
+            from core.memory._io import atomic_write_text
+
+            atomic_write_text(filepath, msg.model_dump_json(indent=2))
             if not filepath.exists():
                 raise DeliveryError(
                     f"Message delivery failed: file not created at {filepath} ({self.anima_name} -> {to})"
                 )
-        except OSError as exc:
+        except (OSError, MemoryWriteError) as exc:
             # Sandboxed processes cannot write shared/inbox (write-access
             # charter: only company shared + work dirs are writable).
             # Deliver via the host server instead, like delegate_task.

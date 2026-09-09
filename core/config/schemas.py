@@ -341,7 +341,7 @@ class RAGConfig(BaseModel):
     rrf_confidence_threshold: float = 0.02
     iterative_retrieval_enabled: bool = True
     iterative_min_results: int = 2
-    facts_extraction_enabled: bool = True
+    facts_extraction_enabled: bool = False
     fact_extraction_timeout_seconds: int = Field(
         default=120,
         ge=1,
@@ -456,6 +456,8 @@ class PromptConfig(BaseModel):
     """Configuration for system prompt building."""
 
     injection_size_warning_chars: int = 2000
+    system_prompt_target_tokens: int = Field(default=6000, ge=2000)
+    system_prompt_ceiling_pct: float = Field(default=0.35, gt=0.0, le=1.0)
     skill_catalog_router_enabled: bool = True
     skill_catalog_router_top_k: int = Field(default=5, ge=1)
     skill_catalog_router_min_score: float = Field(default=1.15, ge=0.0)
@@ -467,19 +469,26 @@ class PromptConfig(BaseModel):
 class PrimingConfig(BaseModel):
     """Configuration for priming layer (automatic memory retrieval)."""
 
+    profile: Literal["compact", "full"] = "compact"
+    max_tokens: int = Field(default=2000, ge=200)
     dynamic_budget: bool = True
     channel_timeout_seconds: float = Field(default=60.0, ge=0.1)
     budget_greeting: int = 500
     budget_question: int = 2000
     budget_request: int = 3000
     budget_heartbeat: int = 200  # fallback when context_window is unknown
-    heartbeat_context_pct: float = 0.05  # fraction of context_window for HB budget
+    heartbeat_context_pct: float = 0.0  # opt-in proportional HB budget; max_tokens still applies
 
 
 class ConsolidationConfig(BaseModel):
     """Configuration for memory consolidation processes."""
 
     daily_enabled: bool = True
+    knowledge_mutation_enabled: bool = False
+    weekly_distillation_enabled: bool = False
+    synaptic_downscaling_enabled: bool = False
+    skill_autolearn_enabled: bool = False
+    curator_auto_apply_enabled: bool = False
     daily_time: str = "02:00"  # Format: HH:MM
     min_episodes_threshold: int = 1
     llm_model: str = DEFAULT_CONSOLIDATION_MODEL
@@ -490,14 +499,14 @@ class ConsolidationConfig(BaseModel):
     ipc_timeout_per_carryover_item_seconds: float = Field(default=600.0, ge=0.0)
     ipc_timeout_max_seconds: int = Field(default=7200, ge=60)
     weekly_ipc_timeout_seconds: int = Field(default=3600, ge=60)
-    weekly_enabled: bool = True  # Phase 3 implementation
+    weekly_enabled: bool = False
     weekly_time: str = "sun:03:00"  # Format: day:HH:MM
     duplicate_threshold: float = 0.85  # Similarity threshold for duplicate detection
-    monthly_enabled: bool = True  # Monthly forgetting toggle
+    monthly_enabled: bool = False
     monthly_time: str = "1:04:00"  # Format: day:HH:MM (day of month)
     indexing_enabled: bool = True  # Daily RAG indexing toggle
     indexing_time: str = "04:00"  # Format: HH:MM
-    knowledge_self_correction_enabled: bool = True
+    knowledge_self_correction_enabled: bool = False
     knowledge_self_correction_max_reconsolidation_files: int = Field(default=5, ge=0)
     knowledge_self_correction_timeout_seconds: int = Field(default=300, ge=1)
     post_processing_cooldown_seconds: int = Field(default=30, ge=0)
@@ -618,24 +627,24 @@ class ZoomRTMSConfig(BaseModel):
 
 
 class GitHubWebhookConfig(BaseModel):
-    """Configuration for GitHub webhook-driven PR dispatch."""
+    """Configuration for GitHub webhook-driven PR dispatch.
+
+    2026-09 teardown: the gateway only sends one notification per PR event to
+    ``dispatcher_anima`` and no longer creates tasks or posts to GitHub.  The
+    old reviewer/implementer routing and multi-model review-pass fields were
+    dropped from this model; this class has no ``extra="forbid"``, so an
+    existing ``config.json`` still carrying those keys loads fine (pydantic
+    silently ignores unknown keys by default).
+    """
 
     enabled: bool = False
     repos: list[str] = Field(default_factory=list)
-    reviewer_anima: str = "sumire"
     dispatcher_anima: str = "rin"
-    implementer_anima: str = "natsume"
     bot_login: str = ""
     # Dedicated review-bot GitHub login (e.g. animaworks-reviewer).
-    # Treated like bot_login for comment exclusion and FRC review dispatch.
+    # Treated like bot_login for comment exclusion.
     reviewer_login: str = ""
     quiet_seconds: float = Field(default=180, ge=0)
-    # Multi-pass FRC review: "mode:model" entries, one review pass each.  Empty
-    # preserves the historic single (model-less) dispatch.  Squares with the
-    # cron fallback env override PR_DISPATCH_REVIEW_MODELS.
-    review_multipass_models: list[str] = Field(default_factory=list)
-    # Model used for the final synthesis pass; None uses the reviewer default.
-    review_synth_model: str | None = None
 
 
 class EventExportConfig(BaseModel):
@@ -767,7 +776,6 @@ class BackgroundTaskConfig(BaseModel):
     """Configuration for background tool execution."""
 
     enabled: bool = True
-    completion_declaration_required: bool = True
     shutdown_drain_seconds: float = Field(default=600.0, ge=0)
     eligible_tools: dict[str, BackgroundToolConfig] = {
         "generate_character_assets": BackgroundToolConfig(threshold_s=30),
@@ -786,15 +794,9 @@ class BackgroundTaskConfig(BaseModel):
     max_completed_tasks_in_memory: int = Field(default=200, ge=0)
     max_parallel_llm_tasks: int = Field(default=3, ge=1, le=10)
     worker_pool_size: int = Field(default=1, ge=1, le=10)
-    blocked_recovery_enabled: bool = True
-    blocked_reprobe_after_hours: float = Field(default=6.0, ge=0)
-    blocked_reprobe_batch_limit: int = Field(default=3, ge=1)
-    blocked_recovery_scan_minutes: float = Field(default=15.0, ge=1)
-    blocked_max_reprobes: int = Field(default=4, ge=0)
-    blocked_check_timeout_seconds: int = Field(default=60, ge=1)
-    # False (default) = fail closed: checkless blocked tasks are never auto-reprobed.
-    # True restores the pre-fail-closed time-based pending requeue behavior.
-    blocked_checkless_reprobe_enabled: bool = False
+    # The task-control keys retired with the teardown are deliberately absent.
+    # This model ignores unknown keys, so an older config.json that still
+    # carries them loads without error.
 
 
 def resolve_background_worker_pool_size(
@@ -862,23 +864,6 @@ class LoggingConfig(BaseModel):
     redaction_enabled: bool = True  # Mask secrets in log output; disable for raw-log debugging.
 
 
-class MachineConfig(BaseModel):
-    """Configuration for machine tool (external agent CLI)."""
-
-    engine_priority: list[str] = Field(
-        default_factory=list,
-        description="Engine priority order. First = recommended. Empty = use default.",
-    )
-    default_models: dict[str, str] = Field(
-        default_factory=dict,
-        description=(
-            "Per-engine default model override. When machine_run is called without "
-            "an explicit model, this value is used instead of the engine's own default. "
-            "e.g. {'cursor-agent': 'claude-4.6-opus-high-thinking'}"
-        ),
-    )
-
-
 class HousekeepingConfig(BaseModel):
     """Configuration for periodic disk cleanup."""
 
@@ -932,6 +917,22 @@ class HeartbeatConfig(BaseModel):
     interval_minutes: int = Field(
         default=30, ge=1, le=1440
     )  # heartbeat interval (config-driven, not parsed from heartbeat.md)
+    # Orphan reaper: grace period before a descriptor-less pending row is
+    # cancelled. Must always be longer than this anima's heartbeat so a run
+    # that ended without a completion declaration can be re-submitted by the
+    # anima's own heartbeat before it gets reaped. grace = heartbeat interval
+    # (minutes) * orphan_grace_multiplier, floored at orphan_grace_min_seconds.
+    orphan_grace_multiplier: float = Field(
+        default=3.0,
+        ge=1.0,
+        le=24.0,
+        description="Orphan reaper grace = heartbeat interval (min) * this multiplier",
+    )
+    orphan_grace_min_seconds: int = Field(
+        default=1800,
+        ge=60,
+        description="Lower bound for the orphan reaper grace, in seconds",
+    )
     current_state_max_chars: int = Field(
         default=8000,
         ge=0,
@@ -970,6 +971,14 @@ class HeartbeatConfig(BaseModel):
         False  # Send read-receipt ACK to message senders (disabled by default to prevent gratitude loops)
     )
     channel_post_cooldown_s: int = 300  # Min seconds between board posts per Anima (0 = no limit)
+    delegation_dm_enabled: bool = Field(
+        default=True,
+        description=(
+            "delegate_task already writes the pending descriptor for the target; "
+            "the DM only wakes an extra inbox run. Set false to skip it."
+        ),
+    )
+    outbound_limit_enabled: bool = True  # False disables the global hourly/daily outbound message caps
     max_messages_per_hour: int = 30  # Deprecated: use ROLE_OUTBOUND_DEFAULTS + status.json override
     max_messages_per_day: int = 100  # Deprecated: use ROLE_OUTBOUND_DEFAULTS + status.json override
     idle_compaction_minutes: float = Field(
@@ -1040,8 +1049,11 @@ class VoiceConfig(BaseModel):
     """OpenAI-compatible base URL for the voice front lane. None = legacy path."""
     proactive_enabled: bool = True
     """Proactively speak up after sustained silence (requires front lane). Opt-out."""
-    proactive_initial_delay_sec: float = 50.0
-    """Silence seconds before the first proactive speech; doubles per utterance."""
+    proactive_initial_delay_sec: float = 10.0
+    """Silence seconds between proactive utterances."""
+    proactive_lead_sec: float = 5.0
+    """Start the next monologue this many seconds before the current playback ends
+    (so speech is continuous but never more than one utterance is queued)."""
     voicevox: VoicevoxConfig = VoicevoxConfig()
     elevenlabs: ElevenLabsVoiceConfig = ElevenLabsVoiceConfig()
     style_bert_vits2: StyleBertVits2Config = StyleBertVits2Config()
@@ -1117,6 +1129,23 @@ class GlobalPermissionsConfig(BaseModel):
 
 
 # ── Per-Anima Permissions Config ──────────────────────────────────────────────
+
+
+def command_deny_matches(denied: str, segment: str, cmd_base: str) -> bool:
+    """Match one per-anima ``commands.deny`` entry against a command segment.
+
+    Plain entries are substrings (``"gh pr merge"``).  An entry prefixed with
+    ``re:`` is a regex, so a rule can cover every spelling of a flag
+    (``re:\\brm\\s+(-\\w*[rR]|--recursive)`` catches ``rm -r``/``-fr``/``-R``,
+    where the substring ``"rm -rf"`` was bypassed by ``rm -r``).
+    """
+    if denied.startswith("re:"):
+        try:
+            return re.search(denied[3:], segment) is not None
+        except re.error:
+            logger.warning("Invalid regex in commands.deny: %r", denied)
+            return False
+    return denied in cmd_base or denied in segment
 
 
 class CommandsPermission(BaseModel):
@@ -1371,7 +1400,6 @@ class AnimaWorksConfig(BaseModel):
     voice: VoiceConfig = VoiceConfig()
     housekeeping: HousekeepingConfig = HousekeepingConfig()
     inbox: InboxConfig = InboxConfig()
-    machine: MachineConfig = MachineConfig()
     local_llm: LocalLLMConfig = LocalLLMConfig()
     workspaces: dict[str, str] = {}  # alias → absolute path
     # company slug → GitHub account name (e.g. {"fs": "animaworks-dev-team"})
@@ -1431,7 +1459,6 @@ __all__ = [
     "LlmRateGuardConfig",
     "LocalLLMConfig",
     "LoggingConfig",
-    "MachineConfig",
     "MediaProxyConfig",
     "MemoryConfig",
     "Neo4jConfig",

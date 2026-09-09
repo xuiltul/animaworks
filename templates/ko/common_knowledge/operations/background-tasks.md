@@ -85,7 +85,7 @@ submit은 즉시 다음 JSON을 반환하고 종료합니다:
   3. 수정 후 다시 submit합니다
   4. 해결할 수 없으면 상사에게 보고합니다
 
-- 실행 도중 프로세스가 크래시한 경우, `state/background_tasks/pending/processing/` 또는 `state/pending/processing/`에 남은 태스크는 다음 기동 시 `pending/failed/`로 자동 이동되어 복구됩니다
+- 커맨드형 도구의 크래시 회수는 `state/background_tasks/pending/processing/` 파일 경로를 사용합니다. LLM 작업은 정규 태스크와 시도로 관리하며, 미완료 시 pending과 영속적인 확인 요청 알림을 남깁니다. 실제 부작용을 확인한 후 명시적으로 재개하세요. 기존 LLM 파일을 이동하거나 재생성하지 마세요.
 
 ## 자주 하는 실수
 
@@ -121,19 +121,15 @@ PendingTaskExecutor는 2종류의 태스크를 감시하고 실행합니다.
 6. 완료 시 `_on_background_task_complete` 콜백이 `state/background_notifications/{task_id}.md`에 통지를 기록합니다
 7. 다음 heartbeat에서 `drain_background_notifications()`가 통지를 읽어 컨텍스트에 주입합니다
 
-### LLM형 태스크 (state/pending/)
+### LLM형 태스크 (정규 태스크 저장소)
 
-Heartbeat이나 `submit_tasks` 도구가 기록하는 LLM 태스크는 **별도 디렉토리** `state/pending/`에 투입됩니다.
+1. `submit_tasks` / `delegate_task`가 완전한 지시, 문맥, 완료 조건, 제약, 모델, 의존 관계를 원자적으로 등록합니다.
+2. watcher는 의존 관계와 설정된 워커 용량을 확인하고, 실행 가능한 태스크 획득과 시도 생성을 같은 트랜잭션으로 수행합니다. 비병렬 제한은 같은 배치 내에서만 적용됩니다.
+3. `done` / `cancelled` 선언 없이 시도가 끝나면 pending으로 남지만 자동 재실행하지 않습니다. 부작용을 확인한 후 필요하면 `submit_tasks(batch_id="resume", tasks=[{"task_id":"ID","resume":true}])`로 명시적으로 재개하세요.
+4. `state/task_results/{task_id}.md`는 결과 참조일 뿐이며 상태, 입력, 시도는 정규 저장소가 정본입니다. 완료는 `update_task`로 선언하고 LLM 응답이나 파일 존재로 추측하지 마세요.
+5. 확인 요청·완료 알림은 영속화되며 주기적 heartbeat에 의존하지 않습니다. DM으로 실행 입력을 재구성하지 마세요.
 
-1. `submit_tasks`가 `state/pending/{task_id}.json`에 태스크 기술자를 기록합니다 (`task_type: "llm"`, `batch_id` 등)
-2. watcher가 `state/pending/`을 동일하게 3초 간격으로 감시합니다
-3. `batch_id`가 있는 태스크는 배치에 축적되어 `_dispatch_batch`에서 DAG 기반으로 실행됩니다
-4. `parallel: true` 태스크는 세마포어 (`config.json`의 `background_task.max_parallel_llm_tasks`, 기본값 3)로 병렬 실행됩니다
-5. `depends_on`으로 의존 관계를 지정한 태스크는 의존 완료 후에 실행됩니다
-6. 결과는 `state/task_results/{task_id}.md`에 저장됩니다. `reply_to`에 DM으로 완료/실패 통지가 전송됩니다
-7. 24시간 경과한 태스크 (TTL)는 건너뜁니다
-
-본 가이드의 `animaworks-tool submit`과는 진입점과 디렉토리가 다릅니다.
+SQLite나 기존 태스크 파일을 직접 편집하지 말고 태스크 도구를 사용하세요. 위의 커맨드형 파이프라인과는 별개입니다.
 
 ### 파일 라이프사이클
 
@@ -145,12 +141,12 @@ state/background_tasks/pending/*.json
   → 성공: 삭제 | 실패: pending/failed/*.json
 ```
 
-**LLM형** (submit_tasks / Heartbeat):
+**LLM형** (submit_tasks / delegate_task):
 
 ```
-state/pending/*.json
-  → pending/processing/*.json
-  → 성공: 삭제 | 실패: pending/failed/*.json
+저장된 입력 → 실행 가능 pending → 획득한 시도 (in_progress)
+  → done/cancelled 선언 또는 pending + 영속적인 확인 요청 알림
+  → 명시적 resume이 저장된 입력으로 새 시도 생성
 ```
 
-기동 시 양쪽 `processing/`에 남아 있는 고아 파일 (크래시 등)은 `failed/`로 이동하여 복구합니다.
+위의 커맨드형 파일 회수는 LLM 태스크에 적용하지 않습니다. 기존 LLM JSONL·기술자는 마이그레이션/export 형식이며 실행 시작 신호가 아닙니다.

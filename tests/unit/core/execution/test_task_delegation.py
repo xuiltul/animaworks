@@ -37,12 +37,10 @@ from core.execution._sdk_hooks import (  # noqa: E402
     _select_subordinate,
 )
 
-
 # ── _read_status_json ─────────────────────────────────────────
 
 
 class TestReadStatusJson:
-
     def test_reads_valid_json(self, tmp_path: Path) -> None:
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
@@ -68,13 +66,9 @@ class TestReadStatusJson:
 
 
 class TestSelectSubordinate:
-
     def _make_config(self, animas: dict[str, dict]) -> SimpleNamespace:
         cfg = SimpleNamespace()
-        cfg.animas = {
-            name: SimpleNamespace(**data)
-            for name, data in animas.items()
-        }
+        cfg.animas = {name: SimpleNamespace(**data) for name, data in animas.items()}
         return cfg
 
     @patch("core.config.models.load_config")
@@ -85,15 +79,18 @@ class TestSelectSubordinate:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "status.json").write_text(
-            json.dumps({"enabled": True}), encoding="utf-8",
+            json.dumps({"enabled": True}),
+            encoding="utf-8",
         )
 
         mock_animas_dir.return_value = animas_dir
-        mock_load.return_value = self._make_config({
-            "boss": {"supervisor": None},
-            "alice": {"supervisor": "boss"},
-            "bob": {"supervisor": "boss"},
-        })
+        mock_load.return_value = self._make_config(
+            {
+                "boss": {"supervisor": None},
+                "alice": {"supervisor": "boss"},
+                "bob": {"supervisor": "boss"},
+            }
+        )
 
         boss_dir = animas_dir / "boss"
         boss_dir.mkdir(parents=True)
@@ -110,21 +107,25 @@ class TestSelectSubordinate:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "status.json").write_text(
-            json.dumps({"enabled": True}), encoding="utf-8",
+            json.dumps({"enabled": True}),
+            encoding="utf-8",
         )
 
         bob_dir = animas_dir / "bob"
         bob_dir.mkdir(parents=True)
         (bob_dir / "status.json").write_text(
-            json.dumps({"enabled": True}), encoding="utf-8",
+            json.dumps({"enabled": True}),
+            encoding="utf-8",
         )
 
         mock_animas_dir.return_value = animas_dir
-        mock_load.return_value = self._make_config({
-            "boss": {"supervisor": None},
-            "alice": {"supervisor": "boss"},
-            "bob": {"supervisor": "boss"},
-        })
+        mock_load.return_value = self._make_config(
+            {
+                "boss": {"supervisor": None},
+                "alice": {"supervisor": "boss"},
+                "bob": {"supervisor": "boss"},
+            }
+        )
 
         boss_dir = animas_dir / "boss"
         boss_dir.mkdir(parents=True)
@@ -140,14 +141,17 @@ class TestSelectSubordinate:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "status.json").write_text(
-            json.dumps({"enabled": False}), encoding="utf-8",
+            json.dumps({"enabled": False}),
+            encoding="utf-8",
         )
 
         mock_animas_dir.return_value = animas_dir
-        mock_load.return_value = self._make_config({
-            "boss": {"supervisor": None},
-            "alice": {"supervisor": "boss"},
-        })
+        mock_load.return_value = self._make_config(
+            {
+                "boss": {"supervisor": None},
+                "alice": {"supervisor": "boss"},
+            }
+        )
 
         boss_dir = animas_dir / "boss"
         boss_dir.mkdir(parents=True)
@@ -164,14 +168,17 @@ class TestSelectSubordinate:
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
         (alice_dir / "status.json").write_text(
-            json.dumps({"enabled": True, "role": "engineer"}), encoding="utf-8",
+            json.dumps({"enabled": True, "role": "engineer"}),
+            encoding="utf-8",
         )
 
         mock_animas_dir.return_value = animas_dir
-        mock_load.return_value = self._make_config({
-            "boss": {"supervisor": None},
-            "alice": {"supervisor": "boss"},
-        })
+        mock_load.return_value = self._make_config(
+            {
+                "boss": {"supervisor": None},
+                "alice": {"supervisor": "boss"},
+            }
+        )
 
         boss_dir = animas_dir / "boss"
         boss_dir.mkdir(parents=True)
@@ -185,9 +192,11 @@ class TestSelectSubordinate:
         """Returns None when anima has no subordinates."""
         animas_dir = tmp_path / "animas"
         mock_animas_dir.return_value = animas_dir
-        mock_load.return_value = self._make_config({
-            "worker": {"supervisor": "boss"},
-        })
+        mock_load.return_value = self._make_config(
+            {
+                "worker": {"supervisor": "boss"},
+            }
+        )
 
         worker_dir = animas_dir / "worker"
         worker_dir.mkdir(parents=True)
@@ -200,14 +209,15 @@ class TestSelectSubordinate:
 
 
 class TestInterceptTaskToDelegation:
-
     @patch("core.execution._sdk_hooks._select_subordinate", return_value=None)
     def test_returns_none_when_no_subordinate(self, mock_select, tmp_path: Path) -> None:
         anima_dir = tmp_path / "animas" / "boss"
         anima_dir.mkdir(parents=True)
 
         result = _intercept_task_to_delegation(
-            anima_dir, {"description": "test", "prompt": "do it"}, None,
+            anima_dir,
+            {"description": "test", "prompt": "do it"},
+            None,
         )
         assert result is None
 
@@ -231,9 +241,11 @@ class TestInterceptTaskToDelegation:
         run_dir = data_dir / "run" / "inbox_wake"
         run_dir.mkdir(parents=True)
 
-        with patch("core.paths.get_animas_dir", return_value=animas_dir), \
-             patch("core.paths.get_shared_dir", return_value=shared_dir), \
-             patch("core.paths.get_data_dir", return_value=data_dir):
+        with (
+            patch("core.paths.get_animas_dir", return_value=animas_dir),
+            patch("core.paths.get_shared_dir", return_value=shared_dir),
+            patch("core.paths.get_data_dir", return_value=data_dir),
+        ):
             result = _intercept_task_to_delegation(
                 boss_dir,
                 {"description": "Build feature", "prompt": "Implement the login form"},
@@ -245,17 +257,15 @@ class TestInterceptTaskToDelegation:
         assert "alice" in result["reason"]
         assert result["task_id"]
 
-        # Verify subordinate queue entry
-        alice_queue = alice_dir / "state" / "task_queue.jsonl"
-        assert alice_queue.exists()
-        entries = [json.loads(l) for l in alice_queue.read_text(encoding="utf-8").splitlines() if l.strip()]
+        from core.memory.task_queue import TaskQueueManager
+
+        # One canonical subordinate entry, projected through a requester alias.
+        entries = [entry.model_dump() for entry in TaskQueueManager(alice_dir).list_tasks()]
         assert len(entries) >= 1
         assert entries[0]["assignee"] == "alice"
 
         # Verify own tracking entry
-        boss_queue = boss_dir / "state" / "task_queue.jsonl"
-        assert boss_queue.exists()
-        own_entries = [json.loads(l) for l in boss_queue.read_text(encoding="utf-8").splitlines() if l.strip()]
+        own_entries = [entry.model_dump() for entry in TaskQueueManager(boss_dir).list_tasks()]
         assert any(e.get("status") == "delegated" for e in own_entries)
 
         # Verify wake file

@@ -207,6 +207,55 @@ class TestFindServerPidByProcess:
 
 
 class TestStopServer:
+    @pytest.mark.parametrize("exit_after", [12.0, 89.0])
+    @pytest.mark.parametrize("force", [False, True])
+    def test_default_waits_for_whole_server_shutdown_without_force_kill(self, exit_after, force):
+        from cli.commands.server import cmd_stop
+
+        clock = [0.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with (
+            patch("cli.commands.server.time.monotonic", side_effect=lambda: clock[0]),
+            patch("cli.commands.server.time.sleep", side_effect=sleep),
+            patch("cli.commands.server._read_pid", return_value=12345),
+            patch("cli.commands.server._is_process_alive", side_effect=lambda pid: clock[0] < exit_after),
+            patch("cli.commands.server.terminate_pid") as terminate,
+            patch("cli.commands.server._remove_pid_file") as remove,
+            patch("cli.commands.server._kill_orphan_runners", return_value=0),
+        ):
+            cmd_stop(argparse.Namespace(force=force))
+
+        assert exit_after <= clock[0] < 90
+        terminate.assert_called_once_with(12345, force=False, include_children=False)
+        remove.assert_called_once()
+
+    def test_default_still_reports_failure_at_ninety_seconds(self):
+        from cli.commands.server import cmd_stop
+
+        clock = [0.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        with (
+            patch("cli.commands.server.time.monotonic", side_effect=lambda: clock[0]),
+            patch("cli.commands.server.time.sleep", side_effect=sleep),
+            patch("cli.commands.server._read_pid", return_value=12345),
+            patch("cli.commands.server._is_process_alive", return_value=True),
+            patch("cli.commands.server.terminate_pid") as terminate,
+            patch("cli.commands.server._remove_pid_file") as remove,
+            pytest.raises(SystemExit) as stopped,
+        ):
+            cmd_stop(argparse.Namespace(force=False))
+
+        assert stopped.value.code == 1
+        assert 90 <= clock[0] < 90.3
+        terminate.assert_called_once_with(12345, force=False, include_children=False)
+        remove.assert_not_called()
+
     @patch("cli.commands.server._kill_orphan_runners", return_value=0)
     @patch("cli.commands.server._find_server_pid_by_process", return_value=None)
     @patch("cli.commands.server._read_pid", return_value=None)

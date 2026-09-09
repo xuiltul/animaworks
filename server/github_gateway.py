@@ -4,38 +4,77 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""GitHub webhook gateway for PR review and dispatcher notifications."""
+"""GitHub webhook gateway: verified PR events become one notification to the dispatcher Anima.
+
+The gateway no longer creates tasks or posts to GitHub itself (2026-09
+teardown). It records PR state, debounces bursts of pushes, excludes our own
+bot/reviewer accounts, and sends exactly one deduplicated report per
+(PR, head SHA, event category) to ``dispatcher_anima``. The dispatcher Anima
+decides who should act and calls ``delegate_task`` itself.
+"""
 
 import asyncio
-import fcntl  # noqa: F401  # Backward-compatible module attribute for lock tests.
+import fcntl
+import json
 import logging
+import os
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import core.review_multipass as review_multipass
 from core.config.models import load_config
 from core.config.schemas import GitHubWebhookConfig
 from core.i18n import t
-from core.memory.task_queue import TaskQueueManager
 from core.messenger import Messenger
-from core.paths import get_animas_dir, get_shared_dir
-from core.tasks_dispatch import FAILING_CI_CONCLUSIONS, dispatch_direct_task
+from core.paths import get_shared_dir
 
 logger = logging.getLogger("animaworks.github_gateway")
 
 STATE_FILENAME = "pr-review-dispatch-state.json"
-MAX_FAILED_REDISPATCHES = 2
-
-
-def _now_iso() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+FAILING_CI_CONCLUSIONS = frozenset({"FAILURE", "CANCELLED", "TIMED_OUT", "STARTUP_FAILURE"})
 
 
 def _default_state() -> dict[str, Any]:
-    return review_multipass.default_state()
+    return {"prs": {}}
+
+
+def _load_state(state_file: Path) -> dict[str, Any]:
+    try:
+        raw = state_file.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return _default_state()
+    try:
+        state = json.loads(raw) if raw.strip() else _default_state()
+    except json.JSONDecodeError:
+        return _default_state()
+    if not isinstance(state, dict):
+        return _default_state()
+    state.setdefault("prs", {})
+    return state
+
+
+def _save_state(state_file: Path, state: dict[str, Any]) -> None:
+    """Atomically persist the dispatcher state under the caller's lock."""
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=state_file.parent,
+            prefix=f".{state_file.name}.",
+            delete=False,
+        ) as temp_handle:
+            json.dump(state, temp_handle, indent=1, ensure_ascii=False)
+            temp_handle.write("\n")
+            temp_handle.flush()
+            os.fsync(temp_handle.fileno())
+            temp_path = Path(temp_handle.name)
+        temp_path.replace(state_file)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 @contextmanager
@@ -43,15 +82,20 @@ def locked_dispatch_state(state_file: Path) -> Iterator[dict[str, Any]]:
     """Read, mutate, and persist dispatcher state under an exclusive flock.
 
     A stable sidecar inode is locked while the JSON is atomically replaced.
-    The fallback cron uses the same sidecar (via ``core.review_multipass``),
-    so neither process can overwrite state loaded by the other.
     """
-    with review_multipass.locked_state(state_file) as state:
-        yield state
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    with state_file.with_suffix(".lock").open("a+", encoding="utf-8") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        try:
+            state = _load_state(state_file)
+            yield state
+            _save_state(state_file, state)
+        finally:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
 
 class GitHubWebhookManager:
-    """Dispatch signed GitHub webhook events to the configured Animas."""
+    """Turn signed GitHub webhook events into notifications for the dispatcher Anima."""
 
     def __init__(
         self,
@@ -138,6 +182,8 @@ class GitHubWebhookManager:
         elif event == "workflow_run":
             await self._handle_workflow_run(repo, payload)
 
+    # ── pull_request ─────────────────────────────────────────────────
+
     async def _handle_pull_request(self, repo: str, payload: dict[str, Any]) -> None:
         action = str(payload.get("action") or "")
         pr = payload.get("pull_request") or {}
@@ -145,157 +191,117 @@ class GitHubWebhookManager:
         if not number:
             return
         key = f"{repo}#{number}"
+        sha = str((pr.get("head") or {}).get("sha") or "")
+        title = str(pr.get("title") or "")[:120]
+        url = str(pr.get("html_url") or f"https://github.com/{repo}/pull/{number}")
+        author = str((pr.get("user") or {}).get("login") or "")
+        body = str(pr.get("body") or "")
 
         if action == "closed":
             task = self._debounce_tasks.pop(key, None)
             if task:
                 task.cancel()
+            await asyncio.to_thread(
+                self._notify_once,
+                key=key,
+                repo=repo,
+                number=number,
+                sha=sha,
+                category="closed",
+                title=title,
+                event_label="closed",
+                author=author,
+                url=url,
+                body=body,
+            )
             await asyncio.to_thread(self._remove_pr_state, key)
             return
-
-        if pr.get("mergeable") is False or str(pr.get("mergeable_state") or "").lower() in {
-            "conflicting",
-            "dirty",
-        }:
-            await asyncio.to_thread(
-                self._send,
-                self._config.dispatcher_anima,
-                t(
-                    "github_gateway.conflict",
-                    repo=repo,
-                    number=number,
-                    sha=str((pr.get("head") or {}).get("sha") or ""),
-                    url=str(pr.get("html_url") or f"https://github.com/{repo}/pull/{number}"),
-                ),
-                "conflict",
-                f"conflict:{key}",
-            )
 
         if action not in {"opened", "synchronize", "reopened", "ready_for_review"}:
             return
         if bool(pr.get("draft")) and action != "ready_for_review":
             return
-
-        sha = str((pr.get("head") or {}).get("sha") or "")
         if not sha:
             return
-        title = str(pr.get("title") or "")[:120]
         await asyncio.to_thread(self._record_pr_state, key, sha, title)
-        self._restart_debounce(key, sha, title)
+        self._restart_debounce(key, sha, title, action, author, url, body)
 
     def _record_pr_state(self, key: str, sha: str, title: str) -> None:
         with locked_dispatch_state(self._require_state_file()) as state:
-            previous = state["prs"].get(key) or {}
-            state["prs"][key] = {
-                "sha": sha,
-                "sha_seen_at": _now_iso(),
-                "notified_sha": previous.get("notified_sha", ""),
-                "title": title,
-            }
+            entry = state["prs"].setdefault(key, {"notified": {}})
+            entry["sha"] = sha
+            entry["title"] = title
 
     def _remove_pr_state(self, key: str) -> None:
         with locked_dispatch_state(self._require_state_file()) as state:
             state["prs"].pop(key, None)
 
-    def _restart_debounce(self, key: str, sha: str, title: str) -> None:
+    def _restart_debounce(self, key: str, sha: str, title: str, action: str, author: str, url: str, body: str) -> None:
         previous = self._debounce_tasks.get(key)
         if previous:
             previous.cancel()
-        task = asyncio.create_task(self._debounce_then_dispatch(key, sha, title))
+        task = asyncio.create_task(self._debounce_then_notify(key, sha, title, action, author, url, body))
         self._debounce_tasks[key] = task
 
-    async def _debounce_then_dispatch(self, key: str, sha: str, title: str) -> None:
+    async def _debounce_then_notify(
+        self, key: str, sha: str, title: str, action: str, author: str, url: str, body: str
+    ) -> None:
         task = asyncio.current_task()
         try:
             await asyncio.sleep(self._config.quiet_seconds)
-            await asyncio.to_thread(self._dispatch_review_if_current, key, sha, title)
+            repo, _, number_s = key.rpartition("#")
+            await asyncio.to_thread(
+                self._notify_once,
+                key=key,
+                repo=repo,
+                number=int(number_s),
+                sha=sha,
+                category="push",
+                title=title,
+                event_label=action,
+                author=author,
+                url=url,
+                body=body,
+                require_sha=sha,
+            )
         except asyncio.CancelledError:
             raise
         finally:
             if self._debounce_tasks.get(key) is task:
                 self._debounce_tasks.pop(key, None)
 
-    def _dispatch_review_if_current(self, key: str, sha: str, title: str) -> None:
-        models = list(getattr(self._config, "review_multipass_models", None) or [])
-        with locked_dispatch_state(self._require_state_file()) as state:
-            entry = state["prs"].get(key)
-            if not entry or entry.get("sha") != sha or entry.get("notified_sha") == sha:
-                return
-            if models:
-                repo, _, number = key.partition("#")
-                review_multipass.dispatch_multipass_reviews(
-                    state,
-                    [{"repo": repo, "number": int(number or 0), "sha": sha, "title": title}],
-                    reviewer=self._config.reviewer_anima,
-                    models=models,
-                    quiet_seconds=self._config.quiet_seconds,
-                    dispatch=dispatch_direct_task,
-                )
-            else:
-                quiet = self._format_quiet_period()
-                content = t(
-                    "github_gateway.review_dispatch",
-                    pr_key=key,
-                    sha=sha[:8],
-                    title=title,
-                    quiet=quiet,
-                )
-                self._send(self._config.reviewer_anima, content, "review", key)
-            entry["notified_sha"] = sha
-
-    def _format_quiet_period(self) -> str:
-        seconds = self._config.quiet_seconds
-        if seconds >= 60 and seconds % 60 == 0:
-            return t("github_gateway.minutes", value=int(seconds // 60))
-        return t("github_gateway.seconds", value=f"{seconds:g}")
+    # ── pull_request_review ─────────────────────────────────────────────
 
     async def _handle_review(self, repo: str, payload: dict[str, Any]) -> None:
         if payload.get("action") != "submitted":
             return
         review = payload.get("review") or {}
         author = str((review.get("user") or {}).get("login") or "")
-        review_id = review.get("id")
-        if review_id is None:
+        if self._is_bot(author):
             return
         pr = payload.get("pull_request") or {}
         number = int(pr.get("number") or 0)
-        state = str(review.get("state") or "").upper()
-        if self._is_bot(author):
-            # bot自身のreviewはFRC判定(HOLD/PASS)の投稿なので、除外せずrinへ転送する
-            # reviewer_login 名義の APPROVED / CHANGES_REQUESTED も同様にFRC結果として扱う
-            await asyncio.to_thread(
-                self._dispatch_frc_result_once,
-                f"review:{review_id}",
-                repo,
-                number,
-                str((pr.get("head") or {}).get("sha") or ""),
-                str(review.get("body") or ""),
-                str(review.get("html_url") or ""),
-                str(review.get("state") or ""),
-            )
-            if state == "CHANGES_REQUESTED":
-                await asyncio.to_thread(
-                    self._dispatch_review_task_once,
-                    repo,
-                    number,
-                    str(review_id),
-                    author,
-                    str(review.get("body") or ""),
-                    str(review.get("html_url") or ""),
-                    True,
-                )
+        if not number:
             return
-        emphasis = "【CHANGES_REQUESTED】 " if state == "CHANGES_REQUESTED" else ""
+        key = f"{repo}#{number}"
+        sha = str((pr.get("head") or {}).get("sha") or "")
+        state_word = str(review.get("state") or "")
         await asyncio.to_thread(
-            self._dispatch_comment_once,
-            f"review:{review_id}",
-            repo,
-            number,
-            author,
-            str(review.get("body") or ""),
-            str(review.get("html_url") or ""),
-            f"{emphasis}review {state}".strip(),
+            self._notify_once,
+            key=key,
+            repo=repo,
+            number=number,
+            sha=sha,
+            category="review",
+            title=str(pr.get("title") or ""),
+            event_label=f"review:{state_word}".rstrip(":"),
+            author=author,
+            url=str(review.get("html_url") or ""),
+            body=str(review.get("body") or ""),
+            item_id=str(review.get("id") or ""),
         )
+
+    # ── issue_comment / pull_request_review_comment ─────────────────────
 
     async def _handle_comment(self, event: str, repo: str, payload: dict[str, Any]) -> None:
         if payload.get("action") != "created":
@@ -304,253 +310,155 @@ class GitHubWebhookManager:
         author = str((comment.get("user") or {}).get("login") or "")
         if self._is_bot(author):
             return
-        comment_id = comment.get("id")
-        if comment_id is None:
-            return
         if event == "pull_request_review_comment":
-            kind = "review-comment"
             number = int((payload.get("pull_request") or {}).get("number") or 0)
+            kind = "review-comment"
         else:
-            kind = "issue-comment"
             number = int((payload.get("issue") or {}).get("number") or 0)
+            kind = "issue-comment"
+        if not number:
+            return
+        key = f"{repo}#{number}"
         await asyncio.to_thread(
-            self._dispatch_comment_once,
-            f"{kind}:{comment_id}",
-            repo,
-            number,
-            author,
-            str(comment.get("body") or ""),
-            str(comment.get("html_url") or ""),
-            kind,
+            self._notify_once,
+            key=key,
+            repo=repo,
+            number=number,
+            sha="",
+            category="comment",
+            title="",
+            event_label=kind,
+            author=author,
+            url=str(comment.get("html_url") or ""),
+            body=str(comment.get("body") or ""),
+            item_id=str(comment.get("id") or ""),
         )
 
-    def _dispatch_comment_once(
-        self,
-        dedupe_key: str,
-        repo: str,
-        number: int,
-        author: str,
-        body: str,
-        url: str,
-        kind: str,
-    ) -> None:
-        with locked_dispatch_state(self._require_state_file()) as state:
-            seen = state["seen_comments"]
-            if dedupe_key in seen:
-                return
-            if (
-                kind in {"issue-comment", "review-comment"}
-                and self._config.bot_login
-                and f"@{self._config.bot_login}".casefold() in body.casefold()
-            ):
-                comment_id = dedupe_key.rsplit(":", 1)[-1]
-                instruction = t(
-                    "github_gateway.command_task",
-                    repo=repo,
-                    number=number,
-                    body=body,
-                    url=url,
-                )
-                dispatch_direct_task(
-                    target=self._config.implementer_anima,
-                    task_id=f"gh-cmd-{comment_id}",
-                    summary=t("github_gateway.command_summary", repo=repo, number=number),
-                    instruction=instruction,
-                    meta={"repo": repo, "number": number, "url": url, "kind": kind},
-                )
-                seen[dedupe_key] = _now_iso()
-                return
-            dispatch_direct_task(
-                target=self._config.implementer_anima,
-                task_id=f"gh-comment-{dedupe_key.replace(':', '-')}",
-                summary=t("github_gateway.command_summary", repo=repo, number=number),
-                instruction=t(
-                    "github_gateway.command_task",
-                    repo=repo,
-                    number=number,
-                    body=body,
-                    url=url,
-                ),
-                meta={
-                    "repo": repo,
-                    "number": number,
-                    "url": url,
-                    "kind": kind,
-                    "author": author,
-                },
-            )
-            content = (
-                "【外部レビューコメント検知】\n\n"
-                f"- [{kind}] {repo}#{number} {author}\n\n{body}\n\nURL: {url}\n\n"
-                "全文をnatsumeへ直接投入済みです。Rinも全文を独立判断し、"
-                "必要な追跡を procedures/pr-event-detection-patrol.md に従って実施してください。"
-            )
-            self._send(self._config.dispatcher_anima, content, "comment", dedupe_key)
-            seen[dedupe_key] = _now_iso()
-
-    def _dispatch_frc_result_once(
-        self,
-        dedupe_key: str,
-        repo: str,
-        number: int,
-        head_sha: str,
-        body: str,
-        url: str,
-        review_state: str = "",
-    ) -> None:
-        with locked_dispatch_state(self._require_state_file()) as state:
-            seen = state["seen_comments"]
-            if dedupe_key in seen:
-                return
-            state_upper = (review_state or "").strip().upper()
-            if state_upper == "APPROVED":
-                verdict = "PASS"
-            elif state_upper == "CHANGES_REQUESTED":
-                verdict = "HOLD"
-            else:
-                head = body.lstrip().upper()
-                if head.startswith("HOLD"):
-                    verdict = "HOLD"
-                elif head.startswith("PASS"):
-                    verdict = "PASS"
-                else:
-                    verdict = t("github_gateway.unknown_verdict")
-            content = t(
-                "github_gateway.frc_result",
-                verdict=verdict,
-                repo=repo,
-                number=number,
-                head_sha=head_sha,
-                url=url,
-                summary=body,
-            )
-            self._send(self._config.dispatcher_anima, content, "frc-result", dedupe_key)
-            seen[dedupe_key] = _now_iso()
-
-    def _dispatch_review_task_once(
-        self,
-        repo: str,
-        number: int,
-        review_id: str,
-        author: str,
-        body: str,
-        url: str,
-        bot_derived: bool,
-    ) -> None:
-        with locked_dispatch_state(self._require_state_file()) as state:
-            review_tasks = state["review_tasks"]
-            if review_id in review_tasks:
-                return
-            bot_note = t(
-                "github_gateway.review_task_bot_note" if bot_derived else "github_gateway.review_task_human_note"
-            )
-            dispatch_direct_task(
-                target=self._config.implementer_anima,
-                task_id=f"gh-review-{repo.replace('/', '-')}#{number}-{review_id}",
-                summary=t("github_gateway.review_task_summary", repo=repo, number=number),
-                instruction=t(
-                    "github_gateway.review_task",
-                    repo=repo,
-                    number=number,
-                    url=url or f"https://github.com/{repo}/pull/{number}",
-                    author=author or "unknown",
-                    bot_note=bot_note,
-                    body=body,
-                ),
-                meta={
-                    "repo": repo,
-                    "number": number,
-                    "review_id": review_id,
-                    "reviewer": author,
-                    "url": url,
-                    "bot_derived": bot_derived,
-                },
-            )
-            review_tasks[review_id] = _now_iso()
+    # ── workflow_run ─────────────────────────────────────────────────
 
     async def _handle_workflow_run(self, repo: str, payload: dict[str, Any]) -> None:
         workflow = payload.get("workflow_run") or {}
-        if (
-            payload.get("action") != "completed"
-            or str(workflow.get("conclusion") or "").upper() not in FAILING_CI_CONCLUSIONS
-        ):
+        conclusion = str(workflow.get("conclusion") or "").upper()
+        if payload.get("action") != "completed" or conclusion not in FAILING_CI_CONCLUSIONS:
             return
         sha = str(workflow.get("head_sha") or "")
         if not sha:
             return
         prs = workflow.get("pull_requests") or []
-        items = [
-            (int(pr.get("number") or 0), sha)
+        numbers = [
+            int(pr.get("number") or 0)
             for pr in prs
             if int(pr.get("number") or 0)
             and (not (pr.get("head") or {}).get("sha") or (pr.get("head") or {}).get("sha") == sha)
         ]
-        if not items:
+        if not numbers:
             return
-        await asyncio.to_thread(
-            self._dispatch_ci_once,
-            repo,
-            items,
-            str(workflow.get("name") or "workflow"),
-            str(workflow.get("html_url") or ""),
-        )
+        name = str(workflow.get("name") or "workflow")
+        url = str(workflow.get("html_url") or "")
+        for number in numbers:
+            key = f"{repo}#{number}"
+            await asyncio.to_thread(
+                self._notify_once,
+                key=key,
+                repo=repo,
+                number=number,
+                sha=sha,
+                category="ci",
+                title="",
+                event_label="workflow_run",
+                author="",
+                url=url,
+                body="",
+                ci_name=name,
+                ci_conclusion=conclusion,
+            )
 
-    def _dispatch_ci_once(
+    # ── shared notify/dedupe core ───────────────────────────────────────
+
+    def _notify_once(
         self,
+        *,
+        key: str,
         repo: str,
-        items: list[tuple[int, str]],
-        workflow_name: str,
+        number: int,
+        sha: str,
+        category: str,
+        title: str,
+        event_label: str,
+        author: str,
         url: str,
+        body: str,
+        ci_name: str = "",
+        ci_conclusion: str = "",
+        require_sha: str | None = None,
+        item_id: str = "",
     ) -> None:
+        """Send one notification per (PR, head SHA, category[, item_id]), deduped via state.
+
+        *item_id* (comment id / review id) makes each distinct comment or
+        review its own dedupe slot, so a second human comment on the same
+        head is still delivered; redeliveries of the same item are not.
+
+        *sha* is the authoritative head SHA when known (pull_request,
+        pull_request_review, workflow_run); comment events pass ``""`` and
+        fall back to the PR's last-recorded head SHA so redeliveries still
+        dedupe. *require_sha* guards the debounced push path against a
+        superseded head slipping through after cancellation.
+        """
         with locked_dispatch_state(self._require_state_file()) as state:
-            notified = state["ci_notified"]
-            failure_signatures = state["ci_failure_signatures"]
-            retries = state["failed_task_retries"]
-            target_dir = get_animas_dir() / self._config.implementer_anima
-            for number, sha in items:
-                key = f"{repo}#{number}_{sha[:8]}"
-                if failure_signatures.get(key) not in (None, workflow_name):
-                    notified.pop(key, None)
-                elif key in notified:
-                    failure_signatures.setdefault(key, workflow_name)
-                if key not in notified or not target_dir.is_dir():
-                    continue
-                task_id = f"gh-ci-{repo.replace('/', '-')}#{number}-{sha[:8]}"
-                task = TaskQueueManager(target_dir).get_task_by_id(task_id)
-                if (
-                    task is not None
-                    and task.status == "failed"
-                    and int(retries.get(task_id, 0)) < MAX_FAILED_REDISPATCHES
-                ):
-                    notified.pop(key, None)
-                    retries[task_id] = int(retries.get(task_id, 0)) + 1
-            fresh = [
-                (number, sha, f"{repo}#{number}_{sha[:8]}")
-                for number, sha in items
-                if f"{repo}#{number}_{sha[:8]}" not in notified
-            ]
-            if not fresh:
+            entry = state["prs"].setdefault(key, {"notified": {}})
+            if require_sha is not None and entry.get("sha") != require_sha:
                 return
-            now = _now_iso()
-            for number, sha, key in fresh:
-                pr_url = f"https://github.com/{repo}/pull/{number}"
-                instruction = t(
-                    "github_gateway.ci_task",
-                    number=number,
-                    pr_url=pr_url,
-                    workflow_name=workflow_name,
-                    sha=sha,
-                    workflow_url=url,
-                )
-                dispatch_direct_task(
-                    target=self._config.implementer_anima,
-                    task_id=f"gh-ci-{repo.replace('/', '-')}#{number}-{sha[:8]}",
-                    summary=t("github_gateway.ci_summary", repo=repo, number=number),
-                    instruction=instruction,
-                    meta={"repo": repo, "number": number, "sha": sha, "workflow_url": url},
-                )
-                notified[key] = now
-                failure_signatures[key] = workflow_name
+            effective_sha = sha or str(entry.get("sha") or "")
+            if sha:
+                entry["sha"] = sha
+            if title:
+                entry["title"] = title
+            notified = entry.setdefault("notified", {})
+            dedup_sha = effective_sha or "-"
+            slot = f"{category}:{item_id}" if item_id else category
+            if notified.get(slot) == dedup_sha:
+                return
+            content = self._build_notification(
+                repo=repo,
+                number=number,
+                title=str(entry.get("title") or title or f"PR #{number}"),
+                event_label=event_label,
+                author=author,
+                url=url,
+                body=body,
+                ci_name=ci_name,
+                ci_conclusion=ci_conclusion,
+            )
+            self._send(self._config.dispatcher_anima, content, category, f"{key}:{slot}:{dedup_sha[:12]}")
+            notified[slot] = dedup_sha
+
+    def _build_notification(
+        self,
+        *,
+        repo: str,
+        number: int,
+        title: str,
+        event_label: str,
+        author: str,
+        url: str,
+        body: str,
+        ci_name: str,
+        ci_conclusion: str,
+    ) -> str:
+        excerpt = (body or "").strip()[:500]
+        ci_line = t("github_gateway.notify_ci_line", name=ci_name, conclusion=ci_conclusion) if ci_name else ""
+        return t(
+            "github_gateway.notify",
+            repo=repo,
+            number=number,
+            title=title,
+            event_label=event_label,
+            author=author or "unknown",
+            url=url,
+            excerpt=excerpt,
+            ci_line=ci_line,
+        )
 
     def _is_bot(self, author: str) -> bool:
         """True when the author is bot_login or reviewer_login."""
@@ -562,13 +470,12 @@ class GitHubWebhookManager:
         return (bool(bot) and author_cf == bot.casefold()) or (bool(reviewer) and author_cf == reviewer.casefold())
 
     def _send(self, to: str, content: str, kind: str, key: str) -> None:
-        Messenger(self._require_shared_dir(), "pr-review-dispatch").send(
+        Messenger(self._require_shared_dir(), "github-gateway").send(
             to=to,
             content=content,
             intent="report",
-            skip_logging=True,
-            meta={"source": "github-webhook", "kind": kind, "key": key},
             source="system",
+            meta={"source": "github-webhook", "kind": kind, "key": key},
         )
 
     def _require_shared_dir(self) -> Path:

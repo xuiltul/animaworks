@@ -9,13 +9,13 @@ must return canonical IDs that resolve to a real execution mode, never B).
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
+from core.config.model_catalog import _build_static_model_catalog, available_model_id_set
 from core.config.models import AnimaWorksConfig, CredentialConfig
 from server.routes.config_routes import (
-    _build_static_model_catalog,
-    available_model_id_set,
     validate_chat_model,
 )
 
@@ -57,9 +57,8 @@ class TestAvailableModelsCanonicalIds:
         """H-2: every returned id must resolve to a real mode (never Mode B)."""
         from core.config.model_mode import resolve_execution_mode
 
-        with (
-            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
-            patch("core.config.model_catalog.is_grok_authenticated", return_value=False),
+        with patch(
+            "core.config.model_catalog.discovered_model_ids", return_value={"openai/gpt-4.1", "claude-sonnet-4-6"}
         ):
             ids = available_model_id_set(provider_config)
 
@@ -70,8 +69,9 @@ class TestAvailableModelsCanonicalIds:
 
 
 class TestValidateChatModel:
-    def _patch_allowed(self, allowed_set, anima_model="claude-sonnet-4-6"):
+    def _patch_allowed(self, allowed_set, anima_model="claude-sonnet-4-6", *, buildable=True):
         from contextlib import ExitStack
+
         from core.schemas import ModelConfig
 
         mc = ModelConfig(model=anima_model, fallback_models=["x:grok/grok-4.5"])
@@ -88,6 +88,14 @@ class TestValidateChatModel:
                 return_value=mc,
             )
         )
+        # Credential resolution is a second gate; the isolated test config
+        # carries no credentials at all.
+        stack.enter_context(
+            patch(
+                "core.config.model_config.can_build_model_override",
+                return_value=buildable,
+            )
+        )
         return stack
 
     def test_empty_or_none_passes(self):
@@ -98,6 +106,17 @@ class TestValidateChatModel:
     def test_allowed_model_passes(self):
         with self._patch_allowed({"openai/gpt-4.1"}):
             assert validate_chat_model("anima", "openai/gpt-4.1") is None
+
+    def test_model_without_a_credential_is_rejected_at_the_wall(self):
+        """A catalog entry that cannot resolve a credential must 422 here.
+
+        It used to be accepted and then dropped inside the anima, so the
+        reply came back on the unchanged model with nothing said.
+        """
+        with self._patch_allowed({"opus"}, buildable=False):
+            err = validate_chat_model("anima", "s:opus")
+        assert err is not None
+        assert "no credential" in err
 
     def test_anima_default_model_passes(self):
         # anima's current model is always allowed even if outside the catalog.

@@ -1,5 +1,7 @@
 # Priming チャネル技術リファレンス
 
+既定の `compact` は送信者・正本タスク・明示的な `always_prime` 保護条件と、必要なときだけ上限付き関連検索を取得する。最近の活動・エピソード・グラフの各チャネルは検索前に除外する。下記のチャネル一覧はオプトインの `full` の機能一覧で、すべてのトリガーで全チャネルが動く意味ではない。想起にはフレームワーク本文の目標とは独立したトークン予算を使う。
+
 PrimingEngine が実行する全チャネルの詳細仕様。
 バジェット、検索ソース、フィルタリング、動的調整を含む。
 
@@ -13,10 +15,10 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 |---------|---------------------|--------|-------|
 | A: sender_profile | 500 | `shared/users/{sender}/index.md` | medium |
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
-| C: related_knowledge | 1000 | RAG ベクトル検索（knowledge + common_knowledge） | medium / untrusted |
-| C0: important_knowledge | 500 | `[IMPORTANT]` タグ付きチャンク | medium |
-| E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
-| F: episodes | 800 | RAG ベクトル検索（episodes/） | medium |
+| C: related_knowledge | 1200 | RAG ベクトル検索（knowledge + common_knowledge） | medium / untrusted |
+| C0: important_knowledge | 300 | `[IMPORTANT]` タグ付きチャンク | medium |
+| E: pending_tasks | 500 | TaskStore + accepted task results | trusted |
+| F: episodes | 400 | RAG ベクトル検索（episodes/） | medium |
 | G: graph_context | 500 | MemoryBackend の community context + recent facts | medium |
 
 追加注入:
@@ -62,7 +64,7 @@ PrimingEngine が実行する全チャネルの詳細仕様。
 
 RAG ベクトル検索で関連知識を注入する。
 
-- **バジェット**: 1000トークン
+- **バジェット**: 1200トークン
 - **検索方式**: Dual-query（メッセージコンテキスト + キーワードのみ）
 - **検索対象**: 個人 `knowledge/` + `shared_common_knowledge` コレクション
 - **最小スコア**: `config.json` の `rag.min_retrieval_score`（デフォルト 0.3）
@@ -82,7 +84,7 @@ RAG ベクトル検索で関連知識を注入する。
 
 `[IMPORTANT]` タグ付きチャンクの概要ポインタを常時注入する。
 
-- **バジェット**: 500トークン
+- **バジェット**: 300トークン
 - **対象**: `knowledge/` 内の `[IMPORTANT]` タグ付きチャンク
 - **注入形式**: 概要ポインタのみ（全文ではない）。詳細は `read_memory_file` で取得
 - **用途**: 重要な業務ルール・判断基準の確実な想起
@@ -110,7 +112,7 @@ RAG ベクトル検索で関連知識を注入する。
 
 RAG ベクトル検索で関連エピソードを注入する。
 
-- **バジェット**: 800トークン
+- **バジェット**: 400トークン
 - **検索対象**: `episodes/` コレクション（ChromaDB）
 - **最小スコア**: Channel C と共通（`rag.min_retrieval_score`）
 

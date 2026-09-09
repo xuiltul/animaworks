@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -11,14 +12,13 @@ consolidation processes, and performance benchmarks.
 
 import time
 from datetime import timedelta
-from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from core.memory.priming import PrimingEngine, format_priming_section
-
+from core.time_utils import now_jst
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -368,9 +368,7 @@ async def test_priming_performance_under_200ms(anima_dir: Path):
         )
 
         mean_threshold = 300 if ci_mode else 100
-        assert mean_latency < mean_threshold, (
-            f"Mean latency {mean_latency:.2f}ms exceeds threshold {mean_threshold}ms"
-        )
+        assert mean_latency < mean_threshold, f"Mean latency {mean_latency:.2f}ms exceeds threshold {mean_threshold}ms"
 
 
 # ── Additional Tests ──────────────────────────────────────────
@@ -388,8 +386,7 @@ async def test_priming_empty_directories(tmp_path: Path):
     engine = PrimingEngine(anima_dir)
 
     # Mock RAG retriever to return no results (empty anima has no indexed docs)
-    with patch("core.memory.priming.PrimingEngine._channel_c_related_knowledge",
-               return_value=("", "")):
+    with patch("core.memory.priming.PrimingEngine._channel_c_related_knowledge", return_value=("", "")):
         result = await engine.prime_memories(
             message="Test message",
             sender_name="unknown",
@@ -405,7 +402,7 @@ async def test_priming_empty_directories(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_priming_dynamic_budget_adjustment(anima_dir: Path):
-    """Test dynamic budget adjustment based on message type."""
+    """Exercise the runtime compact profile and its pre-search budget cap."""
     with patch("core.paths.get_shared_dir", return_value=anima_dir.parent / "shared"):
         engine = PrimingEngine(anima_dir)
 
@@ -415,6 +412,8 @@ async def test_priming_dynamic_budget_adjustment(anima_dir: Path):
             sender_name="yamada",
             channel="chat",
             enable_dynamic_budget=True,
+            profile="compact",
+            max_tokens=2000,
         )
 
         # Test complex request (large budget: 3000 tokens)
@@ -425,6 +424,8 @@ async def test_priming_dynamic_budget_adjustment(anima_dir: Path):
             sender_name="yamada",
             channel="chat",
             enable_dynamic_budget=True,
+            profile="compact",
+            max_tokens=2000,
         )
 
         # Greeting should have smaller or equal result
@@ -434,7 +435,7 @@ async def test_priming_dynamic_budget_adjustment(anima_dir: Path):
         if not greeting_result.is_empty() and not request_result.is_empty():
             # Both should be under their respective budgets
             assert greeting_result.estimated_tokens() <= 600  # 500 + margin
-            assert request_result.estimated_tokens() <= 3200  # 3000 + margin
+            assert request_result.estimated_tokens() <= 2000
 
         # Test heartbeat (minimal budget: 200 tokens)
         heartbeat_result = await engine.prime_memories(
@@ -442,8 +443,11 @@ async def test_priming_dynamic_budget_adjustment(anima_dir: Path):
             sender_name="system",
             channel="heartbeat",
             enable_dynamic_budget=True,
+            profile="compact",
+            max_tokens=2000,
         )
 
         # Heartbeat should be smallest
-        if not heartbeat_result.is_empty():
-            assert heartbeat_result.estimated_tokens() <= 250  # 200 + margin
+        assert heartbeat_result.estimated_tokens() <= 250  # 200 + formatting margin
+        assert heartbeat_result.recent_activity == ""
+        assert heartbeat_result.episodes == ""

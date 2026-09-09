@@ -1,46 +1,28 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
-from core._anima_inbox import _rescue_regenerate_pending
 from core.memory.task_queue import TaskQueueManager
 from core.taskboard.models import AttentionVisibility
 from core.taskboard.store import TaskBoardStore
-from core.tooling.handler_skills import SkillsToolsMixin
+from core.taskboard.tasks import process_identity
+from core.tasks_dispatch import publish_tasks
 
 pytestmark = pytest.mark.e2e
 
 
-def _make_handler(anima_dir: Path) -> SkillsToolsMixin:
-    handler = object.__new__(SkillsToolsMixin)
-    handler._anima_dir = anima_dir
-    handler._anima_name = anima_dir.name
-    handler._activity = MagicMock()
-    handler._pending_executor_wake = None
-    return handler
-
-
-def test_taskboard_blocks_retry_and_delegation_rescue_resurrection(tmp_path: Path) -> None:
+def test_archived_cancelled_task_cannot_be_republished_as_new_work(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     (anima_dir / "state").mkdir(parents=True, exist_ok=True)
 
     queue = TaskQueueManager(anima_dir)
-    entry = queue.add_task(
-        source="human",
-        original_instruction="do not resurrect this task",
-        assignee="sakura",
-        summary="do not resurrect this task",
-        task_id="archived1234",
-        meta={"task_desc": {"title": "do not resurrect this task"}},
-    )
-    queue.update_status(entry.task_id, "failed", summary="FAILED: old failure")
+    payload = {"task_id": "archived1234", "title": "do not resurrect", "description": "do not resurrect this task"}
+    entry = publish_tasks(anima_dir, [payload])[0]
+    queue.update_status(entry.task_id, "cancelled")
 
     store = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
     store.upsert_metadata(
@@ -49,34 +31,26 @@ def test_taskboard_blocks_retry_and_delegation_rescue_resurrection(tmp_path: Pat
         visibility=AttentionVisibility.ARCHIVED,
     )
 
-    retry_result = json.loads(
-        _make_handler(anima_dir)._handle_update_task({"task_id": entry.task_id, "status": "pending"})
-    )
-    _rescue_regenerate_pending(
-        anima_dir,
-        entry.task_id,
-        SimpleNamespace(content="delegated work", from_person="manager"),
-    )
+    # Duplicate delivery is idempotent, not a resume/reconstruction request.
+    publish_tasks(anima_dir, [payload])
 
-    assert retry_result["error_type"] == "TaskSuppressed"
     assert not (anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
     assert not (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()
-    assert TaskQueueManager(anima_dir).get_task_by_id(entry.task_id).status == "failed"
+    assert TaskQueueManager(anima_dir).get_task_by_id(entry.task_id).status == "cancelled"
+    assert queue.store.pending("sakura") == []
+    assert queue.store.claim("sakura", entry.task_id, process_identity()) is None
 
 
-def test_delegation_rescue_recreates_future_snoozed_task_only_in_deferred(tmp_path: Path) -> None:
+def test_snoozed_task_needs_explicit_resume_and_retains_complete_input(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     (anima_dir / "state").mkdir(parents=True, exist_ok=True)
 
     queue = TaskQueueManager(anima_dir)
-    entry = queue.add_task(
-        source="human",
-        original_instruction="wake later",
-        assignee="sakura",
-        summary="wake later",
-        task_id="snoozed1234",
-    )
+    payload = {"task_id": "snoozed1234", "title": "wake later", "description": "full original task context"}
+    entry = publish_tasks(anima_dir, [payload])[0]
+    attempt = queue.store.claim("sakura", entry.task_id, process_identity())
+    queue.store.finish(attempt["_attempt_token"], status="pending", stop_kind="interrupted")
     TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3").upsert_metadata(
         anima_name="sakura",
         task_id=entry.task_id,
@@ -84,11 +58,10 @@ def test_delegation_rescue_recreates_future_snoozed_task_only_in_deferred(tmp_pa
         snoozed_until=(datetime.now(UTC) + timedelta(hours=1)).isoformat(),
     )
 
-    _rescue_regenerate_pending(
-        anima_dir,
-        entry.task_id,
-        SimpleNamespace(content="delegated work", from_person="manager"),
-    )
+    assert queue.store.pending("sakura") == []
+    publish_tasks(anima_dir, [{"task_id": entry.task_id, "resume": True}])
 
+    assert [item["task_id"] for item in queue.store.pending("sakura")] == [entry.task_id]
+    assert queue.store.get_input("sakura", entry.task_id)["description"] == payload["description"]
     assert not (anima_dir / "state" / "pending" / f"{entry.task_id}.json").exists()
-    assert (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()
+    assert not (anima_dir / "state" / "pending" / "deferred" / f"{entry.task_id}.json").exists()

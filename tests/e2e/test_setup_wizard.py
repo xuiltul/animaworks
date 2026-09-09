@@ -22,6 +22,16 @@ from httpx import ASGITransport, AsyncClient
 from core.config import AnimaWorksConfig, invalidate_cache, save_config
 
 
+@pytest.fixture(autouse=True)
+def _codex_setup_model():
+    with patch(
+        "server.routes.setup._resolve_codex_setup_model",
+        new_callable=AsyncMock,
+        return_value="codex/test-account-default",
+    ):
+        yield
+
+
 # ── Helpers ──────────────────────────────────────────────────
 
 
@@ -84,9 +94,7 @@ class TestSetupGuard:
     async def test_root_redirects_to_setup_during_setup(self, setup_app):
         """Root / redirects to /setup/ when setup is not complete."""
         transport = ASGITransport(app=setup_app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test", follow_redirects=False
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test", follow_redirects=False) as client:
             resp = await client.get("/")
             assert resp.status_code == 307
             assert "/setup/" in resp.headers["location"]
@@ -105,9 +113,7 @@ class TestSetupGuard:
     async def test_setup_page_redirects_after_completion(self, completed_app):
         """Accessing /setup/ after completion redirects to /."""
         transport = ASGITransport(app=completed_app)
-        async with AsyncClient(
-            transport=transport, base_url="http://test", follow_redirects=False
-        ) as client:
+        async with AsyncClient(transport=transport, base_url="http://test", follow_redirects=False) as client:
             resp = await client.get("/setup/")
             assert resp.status_code == 307
             assert resp.headers["location"] == "/"
@@ -867,9 +873,7 @@ class TestSetupWithUserInfo:
         _write_config(data_dir, setup_complete=False)
         app = _create_app(data_dir)
 
-        with patch.object(
-            app.state.supervisor, "start_all", new_callable=AsyncMock
-        ) as mock_start:
+        with patch.object(app.state.supervisor, "start_all", new_callable=AsyncMock) as mock_start:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
@@ -927,9 +931,7 @@ class TestSetupWithUserInfo:
 
                 # Step 3: Verify config.json
                 invalidate_cache()
-                config_raw = json.loads(
-                    (data_dir / "config.json").read_text("utf-8")
-                )
+                config_raw = json.loads((data_dir / "config.json").read_text("utf-8"))
                 assert config_raw["setup_complete"] is True
                 assert config_raw["locale"] == "en"
 
@@ -958,3 +960,92 @@ class TestSetupWithUserInfo:
 
                 resp = await client.get("/api/animas")
                 assert resp.status_code != 503
+
+
+@pytest.mark.parametrize(
+    ("provider", "credentials", "model", "mode", "credential"),
+    [
+        ("openai", {"openai": {"type": "codex_login"}}, "codex/test-account-default", "C", "openai"),
+        (None, {"openai": {"type": "codex_login"}}, "codex/test-account-default", "C", "openai"),
+        ("openai", {"openai": {"api_key": "test-key"}}, "openai/gpt-4.1", "A", "openai"),
+        ("google", {"google": {"api_key": "test-key"}}, "google/gemini-2.5-flash", "A", "google"),
+        ("cursor_agent", {}, "cursor/claude-sonnet-4-6", "D", "cursor_agent"),
+        ("gemini_cli", {}, "gemini/2.5-pro", "G", "gemini_cli"),
+        ("claude_code", {}, "claude-opus-4-6", "S", "anthropic"),
+        ("ollama", {}, "ollama/glm4:9b", "B", "ollama"),
+    ],
+)
+async def test_setup_first_anima_uses_selected_provider(data_dir, provider, credentials, model, mode, credential):
+    """Resolve the actual worker config after completing a fresh setup."""
+    from core.config.model_config import load_model_config
+
+    _write_config(data_dir)
+    app = _create_app(data_dir)
+    with patch.object(app.state.supervisor, "start_all", new_callable=AsyncMock):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/setup/complete",
+                json={
+                    "provider": provider,
+                    "credentials": credentials,
+                    "ollama_url": "http://localhost:12345/v1/",
+                    "anima": {"name": "hikari"},
+                },
+            )
+            assert response.status_code == 200, response.text
+    resolved = load_model_config(data_dir / "animas" / "hikari")
+    assert resolved.model == model
+    assert resolved.resolved_mode == mode
+    assert resolved.credential == credential
+    if provider == "ollama":
+        assert resolved.api_base_url == "http://localhost:12345"
+    if credentials.get("openai", {}).get("type") == "codex_login":
+        assert resolved.credential_type == "codex_login"
+
+
+async def test_setup_activates_runtime_without_restart(data_dir, monkeypatch):
+    """First-run setup starts shared services before launching workers."""
+    import asyncio
+
+    from core import startup_progress
+    from server.app import lifespan
+
+    _write_config(data_dir, external_tasks={"enabled": False})
+    app = _create_app(data_dir)
+    app.state.listen_port = 18892
+    app.state.vector_worker = AsyncMock()
+    app.state.startup_preflight_runner = lambda **kwargs: None
+    monkeypatch.delenv("ANIMAWORKS_VECTOR_URL", raising=False)
+    startup_progress._reset_for_testing()
+    try:
+        with (
+            patch("core.config.global_permissions.GlobalPermissionsCache.get"),
+            patch("server.app._startup_animas_background", new_callable=AsyncMock) as start_animas,
+            patch("server.app._run_model_warmup", new_callable=AsyncMock),
+            patch("server.app._warm_voice_greets", new_callable=AsyncMock),
+            patch("server.app._start_usage_governor_if_enabled", new_callable=AsyncMock),
+        ):
+            async with lifespan(app):
+                start_animas.assert_not_awaited()
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                    response = await client.post(
+                        "/api/setup/complete",
+                        json={
+                            "provider": "openai",
+                            "credentials": {"openai": {"type": "codex_login"}},
+                            "anima": {"name": "hikari"},
+                        },
+                    )
+                    assert response.status_code == 200, response.text
+                await asyncio.wait_for(app.state._anima_startup_task, timeout=5)
+                start_animas.assert_awaited_once()
+                app.state.vector_worker.start.assert_awaited_once()
+                assert app.state.supervisor.child_env_urls == {
+                    "ANIMAWORKS_EMBED_URL": "http://127.0.0.1:18892/api/internal/embed",
+                    "ANIMAWORKS_VECTOR_URL": "http://127.0.0.1:18892/api/internal/vector",
+                    "ANIMAWORKS_RERANK_URL": "http://127.0.0.1:18892/api/internal/rerank",
+                }
+                assert app.state.msg_log_scheduler.running
+                assert startup_progress.snapshot()["status"] == "ready"
+    finally:
+        startup_progress._reset_for_testing()

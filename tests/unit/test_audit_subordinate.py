@@ -320,11 +320,11 @@ class TestAuditSubordinatePermissions:
 
     def test_non_descendant_rejected(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
-        _setup_subordinate(tmp_path, "mio", supervisor="taka")
+        _setup_subordinate(tmp_path, "mio", supervisor="owner")
 
         p1, p2, _ = _patches(tmp_path, {
             "sakura": {},
-            "mio": {"supervisor": "taka"},
+            "mio": {"supervisor": "owner"},
         })
         with p1:
             result = handler.handle("audit_subordinate", {"name": "mio"})

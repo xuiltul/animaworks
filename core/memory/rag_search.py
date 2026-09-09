@@ -7,6 +7,8 @@ import hashlib
 import json
 import logging
 import os
+import threading
+import time
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -30,6 +32,8 @@ from core.memory.rag.shared_meta import read_shared_hash, reset_shared_for_compa
 from core.memory.rag.store import CollectionExistence
 
 logger = logging.getLogger("animaworks.memory")
+
+_INDEX_RETRY_SECONDS = 30.0
 
 try:
     from core.memory.bm25 import search_activity_log, search_longterm_memory_bm25
@@ -107,6 +111,8 @@ class RAGMemorySearch:
         self._indexer = None
         self._retriever = None
         self._indexer_initialized = False
+        self._indexer_init_lock = threading.Lock()
+        self._index_retry_at: float | None = None
         self._auto_index_on_access = not os.environ.get("ANIMAWORKS_TASK_IPC_PATH", "").strip()
         self._last_search_meta: dict[str, object] = {}
 
@@ -118,6 +124,7 @@ class RAGMemorySearch:
         model to avoid costly repeated initialization.
         """
         self._indexer_initialized = True
+        self._index_retry_at = None
         try:
             from core.memory.rag import MemoryIndexer
             from core.memory.rag.singleton import get_vector_store
@@ -126,6 +133,7 @@ class RAGMemorySearch:
             vector_store = get_vector_store(anima_name)
             if vector_store is None:
                 logger.debug("RAG vector store unavailable, indexer disabled")
+                self._schedule_index_retry()
                 return
             self._indexer = MemoryIndexer(vector_store, anima_name, self._anima_dir)
             logger.debug("RAG indexer initialized for anima=%s", anima_name)
@@ -150,6 +158,8 @@ class RAGMemorySearch:
                     continue
                 try:
                     indexed = self._indexer.index_directory(memory_dir, memory_type)
+                    if indexed.files_failed or indexed.files_unprocessed:
+                        self._schedule_index_retry()
                     if indexed.chunks_indexed > 0:
                         logger.debug(
                             "Indexed %d chunks from %s/",
@@ -157,6 +167,7 @@ class RAGMemorySearch:
                             memory_type,
                         )
                 except Exception as e:
+                    self._schedule_index_retry()
                     if memory_type == "facts":
                         warn_rate_limited(
                             logger,
@@ -177,12 +188,16 @@ class RAGMemorySearch:
                         state_dir,
                         anima_name,
                     )
+                    outcome = getattr(self._indexer, "_last_index_file_outcome", None)
+                    if getattr(outcome, "status", None) == "failed":
+                        self._schedule_index_retry()
                     if indexed > 0:
                         logger.debug(
                             "Indexed %d chunks from conversation_summary",
                             indexed,
                         )
                 except Exception as e:
+                    self._schedule_index_retry()
                     warn_rate_limited(
                         logger,
                         "fact_extraction.conversation_summary_index",
@@ -194,7 +209,19 @@ class RAGMemorySearch:
         except ImportError:
             logger.debug("RAG dependencies not installed, indexing disabled")
         except Exception as e:
+            self._schedule_index_retry()
             logger.warning("Failed to initialize RAG indexer: %s", e)
+        finally:
+            if self._index_retry_at is not None:
+                # A long failed catch-up must still cool down before a queued
+                # caller retries it. Single-file failures do not postpone an
+                # already scheduled retry in _schedule_index_retry().
+                self._index_retry_at = time.monotonic() + _INDEX_RETRY_SECONDS
+
+    def _schedule_index_retry(self) -> None:
+        """Retry failed catch-up on later access without a hot outage loop."""
+        if self._index_retry_at is None:
+            self._index_retry_at = time.monotonic() + _INDEX_RETRY_SECONDS
 
     # ── Shared collection change detection ────────────────
 
@@ -431,8 +458,11 @@ class RAGMemorySearch:
         Task runners initialize only the read-capable indexer; root preflight,
         consolidation, and cron remain responsible for automatic indexing.
         """
-        if not self._indexer_initialized:
-            self._init_indexer()
+        with self._indexer_init_lock:
+            if not self._indexer_initialized or (
+                self._index_retry_at is not None and time.monotonic() >= self._index_retry_at
+            ):
+                self._init_indexer()
         if self._auto_index_on_access:
             self._check_shared_collections()
         return self._indexer
@@ -573,6 +603,7 @@ class RAGMemorySearch:
             "abstain_on_low_confidence": True,
             "confidence_threshold": 0.35,
             "rrf_confidence_threshold": 0.02,
+            "enable_spreading_activation": True,
             "iterative_retrieval_enabled": True,
             "iterative_min_results": 2,
             "entity_registry_enabled": True,
@@ -594,6 +625,7 @@ class RAGMemorySearch:
             rag = load_config().rag
             defaults.update(
                 {
+                    "enable_spreading_activation": rag.enable_spreading_activation,
                     "rerank_enabled": rag.rerank_enabled,
                     "rerank_candidate_pool": rag.rerank_candidate_pool,
                     "cross_encoder_model": rag.cross_encoder_model,
@@ -672,6 +704,8 @@ class RAGMemorySearch:
         access_batch=None,
     ) -> list[dict]:
         """Episodes vector search with graph spreading activation."""
+        if not self._load_rag_pipeline_settings().get("enable_spreading_activation", True):
+            return []
         if indexer is None:
             indexer = self._get_indexer()
         if indexer is None:
@@ -1268,7 +1302,12 @@ class RAGMemorySearch:
         if indexer:
             try:
                 indexer.index_file(path, memory_type, force=force, origin=origin)
+                outcome = getattr(indexer, "_last_index_file_outcome", None)
+                if self._auto_index_on_access and getattr(outcome, "status", None) == "failed":
+                    self._schedule_index_retry()
             except Exception as e:
+                if self._auto_index_on_access:
+                    self._schedule_index_retry()
                 logger.warning("Failed to index %s file: %s", memory_type, e)
         self._update_longterm_bm25_source(path, memory_type)
 

@@ -137,11 +137,11 @@ async def test_channel_c_runs_unified_search_in_thread(tmp_path: Path, monkeypat
 
     assert 'read_memory_file(path="knowledge/deploy.md")' in medium
     assert untrusted == ""
-    assert any(func is searcher.search_many for func in threaded_funcs)
+    assert channel_c_module._search_related_knowledge in threaded_funcs
 
 
 @pytest.mark.asyncio
-async def test_channel_c_includes_metadata_for_external_knowledge(tmp_path: Path) -> None:
+async def test_channel_c_omits_metadata_for_external_knowledge(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "test"
     (anima_dir / "knowledge").mkdir(parents=True)
     searcher = _fake_unified_search(
@@ -167,7 +167,8 @@ async def test_channel_c_includes_metadata_for_external_knowledge(tmp_path: Path
         )
 
     assert medium == ""
-    assert "updated: 2026-06-03 | origin: external_web" in untrusted
+    assert "updated:" not in untrusted
+    assert "origin:" not in untrusted
     assert 'read_memory_file(path="knowledge/vendor.md")' in untrusted
 
 

@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import Request
 
+from core.execution._tool_summary import summarize_tool_args
 from core.execution.base import resolve_streamed_leaked_thinking
 from core.i18n import t
 from server.events import emit, emit_notification
@@ -195,7 +196,19 @@ def _chunk_to_event(chunk: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     if event_type == "text_delta":
         return "text_delta", {"text": chunk["text"]}
     if event_type == "tool_start":
-        return "tool_start", {"tool_name": chunk["tool_name"], "tool_id": chunk["tool_id"]}
+        start_payload: dict[str, Any] = {
+            "tool_name": chunk["tool_name"],
+            "tool_id": chunk["tool_id"],
+        }
+        # Engines that already know the arguments at start time (Gemini CLI)
+        # pass them along, so the UI can show them without waiting for
+        # ``tool_detail``.
+        raw_input = chunk.get("input")
+        if isinstance(raw_input, dict) and raw_input:
+            summary = summarize_tool_args(chunk["tool_name"] or "", raw_input)
+            if summary:
+                start_payload["input_summary"] = summary[:200]
+        return "tool_start", start_payload
     if event_type == "tool_detail":
         return "tool_detail", {
             "tool_id": chunk.get("tool_id", ""),

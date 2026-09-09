@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """quality_gate.py — Anima品質ゲートv1（人間確認の優先順位付け）
 
-Animaの外向き成果物（human_notify=takaへの通知、response_sent=チャット返信）を
+Animaの外向き成果物（human_notify=オーナーへの通知、response_sent=チャット返信）を
 別モデル（consolidationモデル=codex/gpt-5.5）で事後採点し、
 「人間が確認すべきもの」を要確認フラグ付きの日次レポートにする。
 
@@ -33,7 +33,7 @@ REPORT_DIR = Path.home() / ".animaworks/shared/quality_reports"
 
 TARGET_TYPES = ("human_notify", "response_sent")
 
-RUBRIC_PROMPT = """あなたはAI秘書の成果物を監査する品質検査官です。以下はAI秘書「{anima}」が人間(taka)へ向けて出力した{kind}です。懐疑的に検査してください。
+RUBRIC_PROMPT = """あなたはAI秘書の成果物を監査する品質検査官です。以下はAI秘書「{anima}」が人間のオーナーへ向けて出力した{kind}です。懐疑的に検査してください。
 
 --- 成果物ここから ---
 {content}
@@ -101,7 +101,7 @@ async def score_item(anima: str, item: dict, sem: asyncio.Semaphore) -> dict:
 
 async def run(anima: str, target_date: str, max_items: int) -> tuple[Path, int, int]:
     items = load_outbound(anima, target_date)
-    # human_notify（taka向け通知）を優先してサンプリング
+    # human_notify（オーナー向け通知）を優先してサンプリング
     items.sort(key=lambda e: (e["type"] != "human_notify", e.get("ts", "")))
     dropped = max(0, len(items) - max_items)
     items = items[:max_items]

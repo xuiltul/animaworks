@@ -7,9 +7,158 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Reduced tool-result token growth for task runs: `list_tasks` now returns a compact summary by default (`detail=True` for the full view), and `search_memory` caps results at 8K tokens / 600 lines (~a third of the previous limit).
+- Record Codex `cached_input_tokens` as `cache_read_tokens` so cache read cost shows in token-usage accounting.
+- `heartbeat.delegation_dm_enabled` (default `true`) lets delegate_task skip the wake-up DM, since the pending descriptor already reaches the assignee.
+- Orphan reaper grace is now derived from each anima's heartbeat interval (`heartbeat.orphan_grace_multiplier` / `heartbeat.orphan_grace_min_seconds`) instead of a fixed 30 minutes, so runs that end without a completion declaration can be re-submitted by the anima's next heartbeat before being reaped.
+
+## [0.13.0] - 2026-09-05
+
+### Added
+
+- Codex command hooks enforce command deny lists, including regular-expression entries, and guard recursive searches across newline and command-substitution boundaries.
+- Development-team Anima templates for lead, engineer, and researcher roles.
+- Configurable heartbeat outbound limits via `heartbeat.outbound_limit_enabled`.
+
+### Changed
+
+- Task states are now `pending`, `in_progress`, `delegated`, `done`, and `cancelled`. Legacy `blocked`/`failed` rows load as `pending`; only the running task executor may set `in_progress` through the execution path.
+- Task creation through `animaworks-tool task add` writes an executable descriptor, supports `--workspace`, and rejects a foreign assignee. Task listings identify missing descriptors, and orphan cleanup prevents ledger-only tasks from indefinitely blocking work.
+- Task batches dispatch concurrently. Heartbeat prompts guide Animas to resubmit their own pending work through `submit_tasks`.
+- GitHub webhook handling is reduced to one notification per event. Multi-pass review passes run concurrently and superseded reviews are cancelled.
+
 ### Removed
 
-- `completion_gate` ツールと enforcement 機構を全面削除（Mode A リトライ注入・Mode S Stop フック・マーカー IPC・関連テンプレート/テスト）
+- The `machine` tool (`animaworks-tool machine run` / MCP `machine_run`), its configuration model, and associated prompts/templates. A migration step removes the retired `machine` key from `config.json`.
+- Task `deadline`, `exclusive_key`, and `unblock_check` fields, plus harness-side blocked recovery, automatic continuation, exclusion, preemption, and attention gates. The internal task API still accepts and ignores the retired deadline/exclusive-key fields for compatibility.
+
+### Fixed
+
+- First-Anima setup now applies the selected provider and credentials. Codex login discovers an account-visible recommended model instead of assuming a fixed model is available.
+- Completing setup starts the normal runtime services; child processes use the actual server port. Bootstrap stays resumable until the profile is complete, and heartbeat/cron wait for initial setup.
+- Avatar generation runs in the background while chat remains available, respects the chosen realistic/anime style and tool permissions, and updates the visible portrait without a page reload.
+- Cross-process image-generation locking prevents duplicate output. Isolated background commands persist their results and completion notifications under the original task ID.
+- Missing initial memory collections return empty results, and duplicate collection initialization is idempotent without masking storage failures.
+- Task-runner startup, result delivery under IPC backpressure, process cleanup, cancellation, and crash recovery preserve task visibility and titles. Invalid pending-task payloads no longer crash the watcher.
+- Chat streams finish cleanup in the producer context before terminal responses. Shutdown no longer starts asset reconciliation.
+- Command-injection checks honor the configured enforcement mode, sandboxed Codex SSH avoids unreadable system drop-ins, and fallback error classification bounds the inspected text.
+- Unit and E2E fixtures match the current task contracts, tolerate process-exit races, and serve browser assets with production-style URL substitutions. Process-monitor tests isolate unrelated image generation.
+
+### Upgrade notes
+
+- Update task integrations to the current state vocabulary and remove retired task fields. Existing `blocked`/`failed` ledger rows remain readable as `pending`; use cancellation with an explanation when work cannot proceed.
+- Replace `machine` tool usage in custom skills and prompts. Use the supported execution modes and task-delegation tools appropriate to the workflow.
+- Keep external skills in their configured host-side roots; do not place symlinks under `common_skills/` or an Anima's `skills/` directory.
+- Legacy memory remains the default; Neo4j remains optional.
+
+## [0.12.0] - 2026-08-25
+
+### Added
+
+#### Multi-model routing
+- Router-less 3-layer multi-model routing: per-task model override at the task schema and delegation-tool layer (`delegate_task`/skill dispatch accept a `model` field, validated against `model_catalog.py` before dispatch).
+- Per-message chat model override: a Cursor-style model picker lets a user pin a specific model for one chat message, wired through `chat.py`/`chat_producer.py`/`chat_models.py`.
+- Multi-pass FRC review: `core/review_multipass.py` runs per-model review tasks and synthesizes a verdict, with credential isolation and server-side model validation hardening from follow-up review rounds.
+
+#### Voice
+- Streaming STT with LocalAgreement-2 partial transcripts (`core/voice/stt_stream.py`), surfaced live in the voice popup.
+- Voice front lane + async `ask_anima` delegation (`core/voice/front.py`): low-latency scripted replies hand off longer turns to the full agent loop without blocking the mic.
+- RTC loopback AEC enabling voice barge-in in VAD mode (`voice-playback.js`/`voice-vad.js`), with first-TTS-until-AEC-ready gating and readiness-race test coverage.
+- Proactive speech: the anima can initiate voice turns unprompted, gated by new voice config schema fields.
+- Pseudo-Live2D voice popup animator (`bustup-animator.js`): expression-frame compositing driven by voice/emotion state, replacing the static bustup image.
+- TTS look-ahead pipeline (`core/voice/session.py`) and voice-fast mode: thinking-token suppression and task offload to keep voice turns responsive.
+- Irodori TTS reading rules: emoji allowlist, yomi dictionary, and era-reading normalization for natural Japanese pronunciation.
+- Continuous memory-grounded monologue while the user is away: 10s cadence with no cutoff, AI-VTuber style corner rotation, and a read-only `read_memory` tool the front lane is forced to call on memory corners (`tests/e2e/test_voice_monologue_e2e.py` observes real turns).
+- Katakana readings for alphabet terms: the front lane writes `GitHub（ギットハブ）`, TTS speaks the kana while subtitles keep the spelling (`resolve_ruby`/`strip_ruby`); the front lane can also run on `azure/<deployment>` credentials from `config.json`, including gpt-5 reasoning models.
+
+#### Memory & RAG (rag-a through rag-e)
+- rag-a: eliminated inline index rebuilds from the chat runner's hot path (`core/memory/rag_search.py`).
+- rag-b: IPC vector-store retry with split connect/read timeouts and parallel query execution (`core/memory/rag/ipc_store.py`, `unified_search.py`).
+- rag-c: entities-repair path — corrupted entity indexes rebuild via `cli/commands/index_cmd.py` and `core/memory/entity_index.py`.
+- rag-d: entity-boost matching converted to an Aho-Corasick automaton (`core/memory/retrieval/entity.py`) for O(text) alias scanning, with a benchmark script.
+- rag-e (final mile): sub-second memory search across `bm25.py`, `rag/graph.py`, `rag/retriever.py`, and `unified_search.py`.
+- Priming C/F optimization: BM25 and unified-search priming paths tuned for latency (`core/memory/priming/utils.py`, `retriever.py`).
+- `search_memory` P1/P2 fixes: time-aware retrieval and entity-alias associative recall hardened, with a public-boundary e2e test and performance benchmark.
+- Memory LLM-output parsing hardening: multi-stage parser (`core/memory/_llm_parse.py`) with locale-aware heading detection, covering consolidation, distillation, and extraction paths.
+
+#### Skills
+- External skill roots: host-side skill directories (`~/.claude`, `~/.codex`, `~/.grok`, `~/.agents`) are wired into the Skill index, with their pointer files added to the read-allow list.
+- Dense (embedding-similarity) ranking wired into the skill router: rank-based top-5 bonus blended with existing sparse scoring.
+
+#### Task & cron hardening
+- Blocked-task auto-unblock mechanism (`core/blocked_recovery.py`): time-based recovery for blocked tasks that still pass a liveness check.
+- Task-completion hardening: blocked-reprobe containment, recovery-path separation, orphaned-task repair, and a stale-task scoreboard fragment surfaced in prompts.
+- Cron fire assurance: cron registration visibility, persistent fire-audit logging (`core/memory/cron_logger.py`), and heartbeat back-fill for unterminated cron runs.
+
+#### Model fallback & execution
+- Quota-exhaustion error classifier extended to Cursor Agent and Gemini CLI executors (`core/execution/cursor_agent.py`, `gemini_cli.py`), deciding auth-task failure from `error_category` rather than raw text.
+- Fallback-lane completion: three-path separation (primary/fallback/pending) hardened across the agent cycle, heartbeat, inbox, and messaging layers.
+- Fallback-classify guard: `rate_guard.py` and `model_config.py` gained stricter fallback-eligibility classification to avoid misrouting non-quota errors.
+- Agent SDK failures now propagate to the fallback path instead of being swallowed (`ef7b2d94`), and chat model fallback exhaustion is surfaced instead of retried indefinitely (`dce0b97a`).
+
+#### Integrations
+- Google Calendar: `get`/`update`/`delete` event actions added to `core/tools/google_calendar.py`.
+- Google Sheets: write support (`core/tools/google_sheets.py`).
+- Gmail: draft listing, fetch, and in-place editing (`core/tools/gmail.py`), gated behind the action-memory permission gate.
+
+#### DeepSeek execution
+- Proactive context compaction, overflow recovery, and thinking-token wiring for DeepSeek via LiteLLM (`core/execution/_litellm_context.py`, `_litellm_streaming.py`), with expanded default model config.
+
+#### PR pipeline
+- Persistent conflict reminders and full-text comment dispatch for stalled PRs (`server/github_gateway.py`, `scripts/pr-review-dispatch.py`).
+- Fix-request detection gated on an explicit mention or `CHANGES_REQUESTED` review, avoiding false-positive re-alerts.
+
+#### Anima runtime & policy
+- Anima repository/file-access policy aligned with the write-access charter (`core/file_access_policy.py`, `docs/specs/write-access-charter.ja.md`), simplifying the credential-resolver path.
+
+#### Chat & CLI
+- Bare URLs in plain-text chat bubbles are now linkified (`render-utils.js`).
+- Native `animaworks demo` CLI command (`cli/demo.py`) replaces the Docker-based demo flow.
+
+### Changed
+
+- Foreground command timeout default raised from 30s to 120s (`core/tooling/handler_files.py`), reducing false timeouts on longer shell operations.
+- Librarian hidden from the pixel workspace scene layout; its MCP config moved to `.mcp.json` (`awlib`).
+
+### Removed
+
+- `completion_gate` tool and enforcement mechanism removed entirely (Mode A retry injection, Mode S Stop hook, marker IPC, and related templates/tests).
+- Docker-based demo (`demo/Dockerfile`, `docker-compose.yml`, `entrypoint.sh`) removed in favor of the native `animaworks demo` command.
+- Team-design common-knowledge templates (coo/corporate-planning role checklists, injection templates, machine docs) retired as unused scaffolding.
+
+### Fixed
+
+#### Voice
+- Self-loop bug where the mic picked up the anima's own TTS output, cutting off replies mid-sentence.
+- Residual TTS echo still tripping the VAD: playback-time barge-in now requires sustained high-confidence speech, then pauses (not stops) and asks the server for an STT verdict — self-echo (text similar to recent TTS) resumes playback.
+- Voice front lane promising work (「確認しておきますね」) without emitting the `ask_anima` tool call; prompt restructured so requests reliably delegate while small talk does not.
+- Monologues piling up while the browser was still playing the previous one: the idle watcher now paces self-turns by estimated client playback end (`proactive_lead_sec`), not synthesis end.
+- VAD misfire leaving the mic stuck open, and a related turn-interruption bug from misfire during an active turn.
+- Two causes of silent voice responses: thinking-token exhaustion and misfire-triggered turn cancellation.
+- Proactive speech failing to fire on a silent mic input.
+- Voice barge-in gated on playback AEC readiness to avoid a startup race.
+
+#### Memory & task safety
+- LLM-output regex hazards: SSE `<think>` stripping, verdict parsing, and heading detection hardened against locale and formatting variance (4 fixes across `_anima_messaging.py`, `emotion_tag.py`, `chat_emotion.py`).
+- Legacy non-object credential payloads now rejected instead of silently accepted.
+- Blocked-task checkless auto-resume removed — blocked tasks now fail closed instead of auto-resuming on a timer without a liveness check.
+
+#### PR pipeline & cron
+- `pr-review-dispatch.py`: fix-request stale-comment warnings and conflict-follow-through reminders now persist correctly across re-checks.
+- Cron `START` log write moved to after lock acquisition, and a conflict-marker guard added to CI and the pre-commit hook.
+- Chat stream now releases correctly on IPC disconnect, preventing a stuck stream lock and enabling Irodori TTS recovery.
+
+#### Integrations & execution
+- Gmail token-persist failure no longer kills an otherwise-successful token refresh; sandboxed animas can now read the message cache read-only and refresh Google Calendar/Tasks tokens without a writable data dir.
+- `TypeError` avoided when a CLI-auth override clears `api_key_env`.
+- `mcp` pinned to `<2` as a direct dependency so `pip install` honors the constraint transitively.
+- Translation-helper name shadowing avoided in a supervisor/execution path.
+
+#### CI & tests
+- E2E suite recovery (9 failing tests) across embed centralization, episode dedup, heartbeat decomposition, and remake-assets coverage.
+- CI test-compatibility and stabilization pass across the unit/e2e suites (ruff formatting, import sorting, i18n hardcode baseline adjustments) merged into a single maintenance sweep.
 
 ## [0.11.0] - 2026-07-28
 
@@ -1784,7 +1933,9 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/xuiltul/animaworks/compare/v0.12.0...v0.13.0
+[0.12.0]: https://github.com/xuiltul/animaworks/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/xuiltul/animaworks/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/xuiltul/animaworks/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/xuiltul/animaworks/compare/v0.9.1...v0.9.2

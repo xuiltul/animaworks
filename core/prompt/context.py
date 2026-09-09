@@ -34,6 +34,13 @@ CHARS_PER_TOKEN = 4
 # Context window sizes per model family (input tokens).
 # Keys are matched as prefixes against the model name (after stripping provider/).
 MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # Claude CLI aliases (Mode S): bare names the CLI resolves to the latest
+    # model of that line.  Without them a picked alias falls through to the
+    # 128K default and the tracker measures against the wrong window.
+    "fable": 200_000,
+    "opus": 200_000,
+    "sonnet": 200_000,
+    "haiku": 200_000,
     # Anthropic (current generation — conservative default; override via config)
     "claude-opus-4-6": 128_000,
     "claude-sonnet-4-6": 128_000,
@@ -82,6 +89,10 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "qwen2.5": 128_000,
 }
 _DEFAULT_CONTEXT_WINDOW = 128_000
+
+# Below this much room above the baseline there is nothing meaningful to
+# measure, so the tracker falls back to the plain absolute ratio.
+_MIN_HEADROOM_TOKENS = 8_000
 
 # ── Context threshold auto-scaling ─────────────────────────
 # Models with context windows >= this size use the configured threshold as-is.
@@ -179,6 +190,11 @@ class ContextTracker:
     _threshold_hit: bool = field(default=False, init=False, repr=False)
     _input_tokens: int = field(default=0, init=False, repr=False)
     _output_tokens: int = field(default=0, init=False, repr=False)
+    # Tokens the session already costs before a word of conversation: the
+    # system prompt plus every tool and MCP schema.  Captured from the first
+    # measurement of the session; 0 until then.
+    _baseline_tokens: int = field(default=0, init=False, repr=False)
+    _last_tokens: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.model:
@@ -207,7 +223,27 @@ class ContextTracker:
 
     @property
     def usage_ratio(self) -> float:
+        """Absolute fullness — tokens in the request over the window."""
         return self._last_ratio
+
+    @property
+    def baseline_tokens(self) -> int:
+        """The session's fixed cost, measured on its first turn."""
+        return self._baseline_tokens
+
+    @property
+    def fill_ratio(self) -> float:
+        """How much of the *conversation space* is used (0.0-1.0+).
+
+        The system prompt and the tool/MCP schemas are paid on turn one and
+        never come back, so measuring against the whole window made the
+        threshold fire on the first or second turn of every session: an
+        anima carrying ~93K of prompt into a 200K window opened at 47% and
+        crossed a 50% threshold immediately.  Discounting the baseline from
+        both sides asks the question that matters — how full is the part
+        that can actually grow.
+        """
+        return self._fill_ratio(self._last_tokens)
 
     @property
     def threshold_exceeded(self) -> bool:
@@ -217,6 +253,62 @@ class ContextTracker:
         """Force the threshold flag for external triggers (e.g. Mode S auto-compact)."""
         if not self._threshold_hit:
             self._threshold_hit = True
+
+    # ── Measurement bookkeeping ─────────────────────────────
+
+    def _fill_ratio(self, tokens: int) -> float:
+        """Conversation fullness for *tokens*, with the baseline discounted.
+
+        Falls back to the absolute ratio while no baseline is known, or when
+        the baseline leaves no room worth measuring (a misconfigured window
+        smaller than the prompt itself).
+        """
+        window = self.context_window
+        if not window:
+            return 0.0
+        headroom = window - self._baseline_tokens
+        if self._baseline_tokens <= 0 or headroom < _MIN_HEADROOM_TOKENS:
+            return tokens / window
+        return max(tokens - self._baseline_tokens, 0) / headroom
+
+    def _record(self, tokens: int, *, source: str, set_baseline: bool = True) -> bool:
+        """Store a measurement and decide whether the threshold is crossed.
+
+        *set_baseline* is False for measurements that are a cumulative sum
+        over the session rather than a snapshot of one request, which would
+        otherwise seed a baseline far larger than the real prompt.
+
+        Returns True when this measurement *newly* crossed it.
+        """
+        self._last_tokens = tokens
+        window = self.context_window
+        self._last_ratio = tokens / window if window else 0.0
+        if set_baseline and self._baseline_tokens <= 0 and tokens > 0:
+            self._baseline_tokens = tokens
+            logger.info(
+                "Context baseline for this session: %d tokens of %d window (%.1f%%, model=%s)",
+                tokens,
+                window,
+                self._last_ratio * 100,
+                self.model,
+            )
+        fill = self._fill_ratio(tokens)
+        if self._threshold_hit or fill < self.threshold:
+            return False
+        self._threshold_hit = True
+        logger.warning(
+            "Context threshold %.0f%% exceeded (%s): %d tokens / %d window "
+            "(%.1f%% absolute, %.1f%% of the %d tokens above the %d baseline)",
+            self.threshold * 100,
+            source,
+            tokens,
+            window,
+            self._last_ratio * 100,
+            fill * 100,
+            max(window - self._baseline_tokens, 0),
+            self._baseline_tokens,
+        )
+        return True
 
     # ── Transcript-based estimation (Agent SDK) ────────────
 
@@ -233,20 +325,8 @@ class ContextTracker:
             return self._last_ratio
 
         estimated_tokens = file_size // CHARS_PER_TOKEN
-        ratio = estimated_tokens / self.context_window
-        self._last_ratio = ratio
-
-        if not self._threshold_hit and ratio >= self.threshold:
-            self._threshold_hit = True
-            logger.warning(
-                "Context threshold %.0f%% exceeded (transcript estimate): ~%d tokens / %d window (%.1f%%)",
-                self.threshold * 100,
-                estimated_tokens,
-                self.context_window,
-                ratio * 100,
-            )
-
-        return ratio
+        self._record(estimated_tokens, source="transcript estimate")
+        return self._last_ratio
 
     # ── Unified usage update ────────────────────────────────
 
@@ -255,6 +335,7 @@ class ContextTracker:
         usage: dict | None,
         *,
         include_output_in_ratio: bool = False,
+        is_cumulative: bool = False,
     ) -> bool:
         """Unified context-usage update for any provider's usage dict.
 
@@ -270,6 +351,9 @@ class ContextTracker:
                 only ``input_tokens`` is used -- correct for per-request
                 usage where output tokens from prior turns are already
                 folded into the next request's ``input_tokens``.
+            is_cumulative: True when *usage* sums the whole session rather
+                than describing one request, so it must not seed the
+                session baseline.
 
         Returns:
             True if the threshold was *newly* crossed by this update.
@@ -282,20 +366,7 @@ class ContextTracker:
         self._output_tokens = usage.get("output_tokens") or usage.get("completion_tokens") or 0
 
         numerator = (self._input_tokens + self._output_tokens) if include_output_in_ratio else self._input_tokens
-        self._last_ratio = numerator / self.context_window if self.context_window else 0.0
-
-        newly_crossed = False
-        if not self._threshold_hit and self._last_ratio >= self.threshold:
-            self._threshold_hit = True
-            newly_crossed = True
-            logger.warning(
-                "Context threshold %.0f%% exceeded: %d tokens / %d window (%.1f%%)",
-                self.threshold * 100,
-                numerator,
-                self.context_window,
-                self._last_ratio * 100,
-            )
-        return newly_crossed
+        return self._record(numerator, source="usage", set_baseline=not is_cumulative)
 
     # ── Legacy convenience methods (delegate to update()) ─
 
@@ -320,7 +391,7 @@ class ContextTracker:
         all turns in the session (not the current context size).  Prefer
         ``update_from_message_start()`` for accurate mid-session tracking.
         """
-        self.update(usage, include_output_in_ratio=True)
+        self.update(usage, include_output_in_ratio=True, is_cumulative=True)
 
     def update_from_message_start(self, usage: dict | None) -> bool:
         """Update from a StreamEvent ``message_start`` usage dict (S mode).
@@ -351,3 +422,5 @@ class ContextTracker:
         self._threshold_hit = False
         self._input_tokens = 0
         self._output_tokens = 0
+        self._baseline_tokens = 0
+        self._last_tokens = 0

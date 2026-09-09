@@ -295,6 +295,7 @@
   "chat.memory_procedures": "手順書",
   "chat.message_to": "{name} にメッセージ...",
   "chat.messages_count": "{count}メッセージ",
+  "chat.bootstrap_welcome": "{name} は、あなたとの会話からプロフィールを作ります。「明るい相談相手になって」など、性格や雰囲気の希望を送ってみましょう。",
   "chat.messages_empty": "メッセージはまだありません",
   "chat.human_notify_approve": "承認",
   "chat.human_notify_comment": "コメント",
@@ -879,5 +880,7 @@
   "ws.turns": "ターン",
   "ws.view_toggle_title": "ビュー切替",
   "chat.model_default": "anima既定",
-  "chat.model_selector": "このメッセージのモデル"
+  "chat.model_selector": "このスレッドのモデル",
+  "chat.model_group_other": "その他",
+  "chat.model_load_error": "モデル一覧を取得できませんでした"
 }

@@ -297,6 +297,8 @@ _TIMEOUT_PATTERNS = (
 )
 
 _NETWORK_PATTERNS = (
+    "connectionrefused",
+    "econnrefused",
     "connection reset",
     "connection refused",
     "connection aborted",
@@ -308,6 +310,24 @@ _NETWORK_PATTERNS = (
     "name resolution",
     "temporary failure in name resolution",
 )
+
+
+def detect_cli_error_envelope(text: str) -> str | None:
+    """Recognize synthetic CLI provider failures, never arbitrary error prose."""
+    body = (text or "").strip()
+    if re.match(
+        r"^API Error:\s*(?:ConnectionRefused\b|ECONNREFUSED\b|Connection error\b|"
+        r"Unable to connect\b|[45]\d\d\b)",
+        body,
+        re.IGNORECASE,
+    ):
+        return body
+    if body.startswith("Failed to authenticate.") and "API Error:" in body:
+        return body
+    if re.fullmatch(r"You've reached your [^\n]{1,64} limit\. Switch to another model\.", body):
+        return body
+    return None
+
 
 _TRANSPORT_ERROR_TYPES = frozenset(
     {
@@ -385,6 +405,11 @@ def classify_llm_error_message(message: str) -> tuple[FailoverReason, RecoveryHi
     """
     try:
         msg = message.lower()
+        status = re.match(r"^\s*API Error:\s*([45]\d\d)\b", message, re.IGNORECASE)
+        if status:
+            error = Exception(message)
+            error.status_code = int(status.group(1))
+            return classify_llm_error(error)
         if any(p in msg for p in _CONTENT_POLICY_PATTERNS):
             return FailoverReason.CONTENT_POLICY, _hint_for(FailoverReason.CONTENT_POLICY)
         retry_after = _extract_retry_after(Exception(message), msg)

@@ -23,7 +23,7 @@ Subcommands marked with ⚠ in the tool guide (system prompt):
 - `image_gen pipeline` / `fullbody` / `bustup` / `icon` / `chibi` / `3d` / `rigging` / `animations`
 - `local_llm generate` / `chat`
 - `transcribe audio` (subcommand name is `audio`)
-- Potentially long-running `machine run` and similar (follow the ⚠ marks in the tool guide)
+- Potentially long-running commands (follow the ⚠ marks in the tool guide)
 
 Tools with `background_eligible: true` in each tool’s `EXECUTION_PROFILE` are registered as background-eligible
 via the profile (e.g. `chatwork sync` / `download`).
@@ -103,8 +103,8 @@ Use **`list_background_tasks`** for a merged list of in-memory and on-disk tasks
 
 - After a **crash or abnormal exit**, if JSON is left under `processing/`, **PendingTaskExecutor** recovers it when the Anima process starts:
   - **Command-type** (`animaworks-tool submit`): `state/background_tasks/pending/processing/*.json` → `state/background_tasks/pending/failed/`
-  - **LLM-type** (`submit_tasks` / Heartbeat handoff): `state/pending/processing/*.json` → `state/pending/failed/`
-  These use **different directories** from submit in this guide (the latter is the `state/pending/` tree).
+  - **LLM-type** work uses canonical tasks and fenced attempts, not descriptor recovery. Incomplete work remains pending with a durable attention notification; inspect effects before explicitly resuming.
+  Legacy LLM files are migration evidence only. Do not move or regenerate them to restart work.
 
 ## Common Mistakes
 
@@ -149,7 +149,7 @@ Results are ingested via heartbeat-oriented notification files, so polling or bl
 - **`on_complete`**: Even if the callback raises, the task’s completed/failed state is preserved; the failure is logged only.
 - **Eligible tool names** (`is_eligible`) merge these **three layers** (later wins). Keys are matched as dictionary keys (you may have both Mode A schema names like `generate_3d_model` and Mode S submit-style `image_gen:3d`):
   1. In-code default `_DEFAULT_ELIGIBLE_TOOLS` (values are guideline seconds; current keys):
-     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (30 each), `local_llm` / `run_command` (60 each), `machine_run` (600)
+     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations` (30 each), `local_llm` / `run_command` (60 each)
   2. Via `BackgroundTaskManager.from_profiles`, subcommands with `background_eligible: true` from each module’s `EXECUTION_PROFILE` (`core.tools._base.get_eligible_tools_from_profiles`). Keys are `"{tool_name}:{subcmd}"`; seconds come from `expected_seconds` (default 60 if unset).
   3. `config.json` `background_task.eligible_tools` — each key’s `threshold_s` overrides the duration in seconds.
 - **Disable**: `background_task.enabled: false` in `config.json` prevents creating `BackgroundTaskManager` at all (in that case, the submit queue may still be picked up but the executor side logs a warning).
@@ -168,19 +168,15 @@ Independently of **background tool execution**, `core/background.py` defines `ro
 5. Actual work is delegated to `BackgroundTaskManager.submit(composite_name, tool_args, execute_fn)`. `composite_name` is `tool:subcommand` (e.g. `image_gen:3d`) and is checked against `is_eligible`.
 6. On completion, `_on_background_task_complete` writes `state/background_notifications/{task_id}.md`, which heartbeat’s `drain_background_notifications()` reads.
 
-### LLM-type tasks (`state/pending/`)
+### LLM-type tasks (canonical task store)
 
-LLM tasks written by Heartbeat or the `submit_tasks` tool go to a **different directory**, `state/pending/`.
+1. `submit_tasks` / `delegate_task` atomically publish complete instructions, context, acceptance criteria, constraints, model and dependencies.
+2. The watcher claims a ready task in the same transaction that creates its attempt. It checks dependencies and configured worker capacity; nonparallel tasks serialize only within their own batch.
+3. An attempt ending without a `done` / `cancelled` declaration leaves the task pending, not automatically runnable. Inspect side effects and resume explicitly with `submit_tasks(batch_id="resume", tasks=[{"task_id":"ID","resume":true}])` when appropriate.
+4. Results may be referenced by `state/task_results/{task_id}.md`; durable task state, saved input and attempts remain authoritative. Completion is declared with `update_task`, never inferred from an LLM response or a file's existence.
+5. Durable notifications request attention or report completion without depending on periodic heartbeat. DM contents never reconstruct task input.
 
-1. `submit_tasks` writes task descriptors to `state/pending/{task_id}.json` (`task_type: "llm"`, `batch_id`, etc.)
-2. The watcher monitors `state/pending/` similarly.
-3. Tasks with `batch_id` are batched and executed via `_dispatch_batch` according to the DAG.
-4. Tasks with `parallel: true` run under a semaphore (`config.json` `background_task.max_parallel_llm_tasks`, default 3).
-5. Tasks with `depends_on` run after dependencies complete.
-6. Results go to `state/task_results/{task_id}.md` (summaries are length-capped). If `reply_to` is set, completion/failure is notified by DM.
-7. Tasks older than 24 hours (TTL) are skipped.
-
-This differs from `animaworks-tool submit` in entry point and directory layout.
+Do not edit SQLite or legacy task files directly; use task tools. The command-tool pipeline described above remains separate.
 
 ### File Lifecycle
 
@@ -198,12 +194,12 @@ Also the **task state file** (overall execution):
 state/background_tasks/{task_id}.json   # running → completed / failed
 ```
 
-**LLM-type** (`submit_tasks` / Heartbeat):
+**LLM-type** (`submit_tasks` / `delegate_task`):
 
 ```
-state/pending/*.json
-  → pending/processing/*.json
-  → success: deleted | failure: pending/failed/*.json
+saved input → ready pending → claimed attempt (in_progress)
+  → declared done/cancelled, or pending + durable attention notification
+  → explicit resume creates a new attempt using the saved input
 ```
 
-On startup, orphaned files left in each respective `processing/` are moved to `failed/` for recovery.
+The command-file recovery described above does not apply to LLM tasks. Old LLM JSONL/descriptor files are migration/export formats, not live execution signals.

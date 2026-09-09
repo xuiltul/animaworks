@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from core.lifecycle.anima_merge import AnimaMergeService, MergePhase
+from core.memory.task_queue import TaskQueueManager
 from core.taskboard.store import TaskBoardStore
 from tests.test_anima_merge import (
     _add_rewrite_refs_fixture,
@@ -25,19 +26,18 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
     _add_rewrite_refs_fixture(data_dir, source, target)
     _stub_rebuild_substeps(monkeypatch)
     source_before = {
-        path.relative_to(source).as_posix(): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
+        path.relative_to(source).as_posix(): path.read_bytes() for path in source.rglob("*") if path.is_file()
     }
 
     result = AnimaMergeService(data_dir, "source", "target").run(execute=True)
 
     source_after = {
-        path.relative_to(source).as_posix(): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
+        path.relative_to(source).as_posix(): path.read_bytes() for path in source.rglob("*") if path.is_file()
     }
-    assert source_after == source_before
+    assert {k: v for k, v in source_after.items() if k != "status.json"} == {
+        k: v for k, v in source_before.items() if k != "status.json"
+    }
+    assert json.loads(source_after["status.json"])["enabled"] is False
 
     worker_status = json.loads((data_dir / "animas" / "worker" / "status.json").read_text(encoding="utf-8"))
     assert worker_status["supervisor"] == "target"
@@ -65,14 +65,10 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
     assert moved_message["to_person"] == "target"
     assert moved_message["from_person"] == "source"
     assert moved_message["meta"]["task_id"] == "collision-task__from_source"
-    moved_report = json.loads(
-        (data_dir / "shared" / "inbox" / "target" / "report.json").read_text(encoding="utf-8")
-    )
+    moved_report = json.loads((data_dir / "shared" / "inbox" / "target" / "report.json").read_text(encoding="utf-8"))
     assert moved_report["to_person"] == "target"
     assert moved_report["meta"]["task_id"] == "collision-task"
-    historical = json.loads(
-        (data_dir / "shared" / "inbox" / "worker" / "historical.json").read_text(encoding="utf-8")
-    )
+    historical = json.loads((data_dir / "shared" / "inbox" / "worker" / "historical.json").read_text(encoding="utf-8"))
     assert historical["from_person"] == "source"
 
     merged_episode = target / "episodes" / "2026-07-15_source.md"
@@ -88,8 +84,7 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
         "unique-task": "unique-task",
     }
     target_queue = [
-        json.loads(line)
-        for line in (target / "state" / "task_queue.jsonl").read_text(encoding="utf-8").splitlines()
+        entry.model_dump() for entry in TaskQueueManager(target).store.read("target", archived=True).values()
     ]
     assert {entry["task_id"] for entry in target_queue} == {
         "collision-task",
@@ -98,9 +93,9 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
     }
     migrated = next(entry for entry in target_queue if entry["task_id"] == "collision-task__from_source")
     assert migrated["assignee"] == "target"
-    worker_queue = json.loads(
-        (data_dir / "animas" / "worker" / "state" / "task_queue.jsonl").read_text(encoding="utf-8")
-    )
+    worker_queue = next(
+        iter(TaskQueueManager(data_dir / "animas" / "worker").store.read("worker").values())
+    ).model_dump()
     assert worker_queue["assignee"] == "target"
     assert worker_queue["meta"]["delegated_to"] == "target"
     assert worker_queue["meta"]["delegated_task_id"] == "collision-task__from_source"
@@ -108,16 +103,18 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
         "anima_name": "target",
         "task_id": "collision-task__from_source",
     }
-    pending = json.loads(
-        (target / "state" / "pending" / "collision-task__from_source.json").read_text(encoding="utf-8")
-    )
+    with TaskQueueManager(target).store.reader() as database:
+        pending = json.loads(
+            database.execute(
+                "SELECT input_json FROM tasks WHERE anima='target' AND task_id='collision-task__from_source'"
+            ).fetchone()[0]
+        )
+    assert not (target / "state" / "pending" / "collision-task__from_source.json").exists()
     assert pending["task_id"] == "collision-task__from_source"
     assert pending["depends_on"] == ["unique-task"]
     assert pending["submitted_by"] == pending["reply_to"] == "target"
     assert (target / "state" / "task_results" / "unique-task.md").read_text(encoding="utf-8") == "unique result\n"
-    assert (target / "state" / "task_results" / "terminal-result.md").read_text(
-        encoding="utf-8"
-    ) == "terminal result\n"
+    assert (target / "state" / "task_results" / "terminal-result.md").read_text(encoding="utf-8") == "terminal result\n"
 
     board = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3")
     assert {(item.anima_name, item.task_id) for item in board.list_metadata()} == {
@@ -134,17 +131,17 @@ def test_anima_merge_rewrite_refs_updates_all_external_surfaces(
         "task_id": "collision-task__from_source",
     }
 
-    assert json.loads((data_dir / "run" / "notification_map.json").read_text(encoding="utf-8"))["thread"][
-        "anima"
-    ] == "target"
-    assert json.loads((data_dir / "run" / "discord_thread_map.json").read_text(encoding="utf-8"))["message"][
-        "anima"
-    ] == "target"
+    assert (
+        json.loads((data_dir / "run" / "notification_map.json").read_text(encoding="utf-8"))["thread"]["anima"]
+        == "target"
+    )
+    assert (
+        json.loads((data_dir / "run" / "discord_thread_map.json").read_text(encoding="utf-8"))["message"]["anima"]
+        == "target"
+    )
     usage = json.loads((data_dir / "usage_governor_state.json").read_text(encoding="utf-8"))
     assert usage["suspended_animas"] == ["target"]
-    assert json.loads((data_dir / "animas" / ".bootstrap_retries.json").read_text(encoding="utf-8")) == {
-        "target": 1
-    }
+    assert json.loads((data_dir / "animas" / ".bootstrap_retries.json").read_text(encoding="utf-8")) == {"target": 1}
     assert not (data_dir / "run" / "events" / "source").exists()
     assert not (data_dir / "run" / "animas" / "source.lock").exists()
     assert (data_dir / "run" / "inbox_wake" / "target").is_file()

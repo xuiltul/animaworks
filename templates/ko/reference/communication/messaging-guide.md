@@ -57,7 +57,7 @@ send_message(
 | 용도 | 사용 도구 | 예시 |
 |------|----------|------|
 | 진행/결과 보고 | send_message (intent=report) | 상사에게 태스크 완료 보고 |
-| 태스크 위임 | delegate_task | 부하에게 태스크 위임 (state/pending/에 기록, 즉시 실행) |
+| 태스크 위임 | delegate_task | 직속 부하에게 하나의 영속 태스크를 위임; task_tracker로 진행 확인 |
 | 질문/문의 | send_message (intent=question) | 불명확한 점 확인 |
 | 확인/감사/FYI | post_channel (Board) | "확인했습니다", "공유합니다" |
 | 3명 이상에게 전달 | post_channel (Board) | 팀 전체 공지 |

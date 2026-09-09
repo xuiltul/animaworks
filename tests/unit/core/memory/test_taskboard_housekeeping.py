@@ -5,7 +5,6 @@ import os
 import time
 from datetime import timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 from core.memory.task_queue import TaskQueueManager
 from core.memory.taskboard_housekeeping import (
@@ -13,7 +12,6 @@ from core.memory.taskboard_housekeeping import (
     _cleanup_current_state,
     cleanup_taskboard_stale_artifacts,
 )
-from core.platform.processing_lease import processing_lease_path, write_processing_lease
 from core.taskboard.store import TaskBoardStore
 from core.time_utils import now_local
 
@@ -32,144 +30,6 @@ def _write_json(path: Path, payload: dict[str, object], *, age_hours: int = 0) -
         old_ts = time.time() - (age_hours * 3600)
         os.utime(path, (old_ts, old_ts))
     return path
-
-
-def test_stale_processing_moves_to_failed_syncs_queue_and_appends_event(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    anima_dir = _anima_dir(data_dir)
-    queue = TaskQueueManager(anima_dir)
-    queue.add_task(
-        source="human",
-        original_instruction="recover this task",
-        assignee="sakura",
-        summary="recover this task",
-        status="in_progress",
-        task_id="task-processing",
-    )
-    processing = _write_json(
-        anima_dir / "state" / "pending" / "processing" / "task-processing.json",
-        {"task_id": "task-processing"},
-        age_hours=25,
-    )
-
-    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
-
-    assert result["processing_recovered"] == 1
-    assert result["processing_queue_synced"] == 1
-    assert not processing.exists()
-    assert (anima_dir / "state" / "pending" / "failed" / "task-processing.json").exists()
-
-    task = queue.get_task_by_id("task-processing")
-    assert task is not None
-    assert task.status == "failed"
-    assert task.summary == "FAILED: stale processing task recovered by housekeeping"
-
-    events = TaskBoardStore(data_dir / "shared" / "taskboard.sqlite3").list_events(
-        anima_name="sakura",
-        task_id="task-processing",
-    )
-    assert events[-1]["event_type"] == "stale_processing_recovered"
-    assert events[-1]["payload"]["queue_synced"] is True
-
-
-def test_stale_processing_with_live_lease_is_skipped(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    anima_dir = _anima_dir(data_dir)
-    queue = TaskQueueManager(anima_dir)
-    queue.add_task(
-        source="human",
-        original_instruction="keep running",
-        assignee="sakura",
-        summary="live task",
-        status="in_progress",
-        task_id="live-processing",
-    )
-    processing = _write_json(
-        anima_dir / "state" / "pending" / "processing" / "live-processing.json",
-        {"task_id": "live-processing"},
-        age_hours=25,
-    )
-    lease = write_processing_lease(processing, anima="sakura", task_id="live-processing")
-
-    with patch("core.memory.taskboard_housekeeping.is_processing_lease_live", return_value=True):
-        result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
-
-    assert result["processing_recovered"] == 0
-    assert result["processing_live_leases_skipped"] == 1
-    assert processing.exists()
-    assert lease.exists()
-    assert queue.get_task_by_id("live-processing").status == "in_progress"
-
-
-def test_stale_processing_with_dead_lease_is_recovered(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    anima_dir = _anima_dir(data_dir)
-    queue = TaskQueueManager(anima_dir)
-    queue.add_task(
-        source="human",
-        original_instruction="recover dead lease",
-        assignee="sakura",
-        summary="dead task",
-        status="in_progress",
-        task_id="dead-processing",
-    )
-    processing = _write_json(
-        anima_dir / "state" / "pending" / "processing" / "dead-processing.json",
-        {"task_id": "dead-processing"},
-        age_hours=25,
-    )
-    write_processing_lease(processing, anima="sakura", task_id="dead-processing", pid=999_999_999)
-
-    with patch("core.memory.taskboard_housekeeping.is_processing_lease_live", return_value=False):
-        result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
-
-    failed = anima_dir / "state" / "pending" / "failed" / "dead-processing.json"
-    assert result["processing_recovered"] == 1
-    assert not processing.exists()
-    assert failed.exists()
-    assert not processing_lease_path(processing).exists()
-    assert processing_lease_path(failed).exists()
-    assert queue.get_task_by_id("dead-processing").status == "failed"
-
-
-def test_unreadable_processing_file_is_moved_without_queue_sync(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    anima_dir = _anima_dir(data_dir)
-    path = anima_dir / "state" / "pending" / "processing" / "bad.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("{bad json", encoding="utf-8")
-    old_ts = time.time() - (25 * 3600)
-    os.utime(path, (old_ts, old_ts))
-
-    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
-
-    assert result["processing_recovered"] == 1
-    assert result["processing_unreadable"] == 1
-    assert result["processing_queue_synced"] == 0
-    assert not path.exists()
-    assert (anima_dir / "state" / "pending" / "failed" / "bad.json").exists()
-
-
-def test_deferred_wakes_elapsed_snooze_and_fails_stale_unsnoozed_file(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    anima_dir = _anima_dir(data_dir)
-    elapsed = (now_local() - timedelta(minutes=1)).isoformat()
-    _write_json(
-        anima_dir / "state" / "pending" / "deferred" / "elapsed.json",
-        {"task_id": "elapsed", "snoozed_until": elapsed},
-    )
-    _write_json(
-        anima_dir / "state" / "pending" / "deferred" / "stale.json",
-        {"task_id": "stale"},
-        age_hours=25,
-    )
-
-    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
-
-    assert result["deferred_woken"] == 1
-    assert result["deferred_failed"] == 1
-    assert (anima_dir / "state" / "pending" / "elapsed.json").exists()
-    assert (anima_dir / "state" / "pending" / "failed" / "stale.json").exists()
 
 
 def test_suppressed_retention_and_background_running_cleanup(tmp_path: Path) -> None:
@@ -201,9 +61,8 @@ def test_suppressed_retention_and_background_running_cleanup(tmp_path: Path) -> 
 
     result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
 
-    assert result["suppressed_deleted"] == 1
     assert result["background_running_deleted"] == 1
-    assert not old_suppressed.exists()
+    assert old_suppressed.exists()
     assert recent_suppressed.exists()
     assert not old_running.exists()
     assert missing_created_running.exists()
@@ -416,3 +275,29 @@ def test_stale_archived_metadata_is_purged_after_retention(tmp_path: Path) -> No
     assert result["purged_deleted"] == 1
     assert store.get_metadata("sakura", "old-archived") is None
     assert store.get_metadata("sakura", "recent-archived") is not None
+
+
+def test_legacy_descriptors_never_requeue_canonical_work(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    anima_dir = _anima_dir(data_dir)
+    queue = TaskQueueManager(anima_dir)
+    queue.add_task(
+        source="human",
+        original_instruction="finished work",
+        assignee="sakura",
+        summary="finished",
+        task_id="old-task",
+    )
+    queue.update_status("old-task", "done")
+    paths = [
+        _write_json(
+            anima_dir / "state" / "pending" / folder / "old-task.json",
+            {"task_id": "old-task", "snoozed_until": "2020-01-01T00:00:00+09:00"},
+            age_hours=1000,
+        )
+        for folder in ("processing", "deferred", "suppressed")
+    ]
+    result = cleanup_taskboard_stale_artifacts(data_dir, 24, 48, 24, 30)
+    assert all(path.exists() for path in paths)
+    assert queue.get_task_by_id("old-task").status == "done"
+    assert not any(key.startswith(("processing_", "deferred_", "suppressed_")) for key in result)

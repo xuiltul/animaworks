@@ -13,8 +13,7 @@ import { renderStreamingBubbleInner, updateStreamingZone, TextAnimator, stripThi
 import { renderWsThreadTabs } from "./chat-thread.js";
 import { wsSaveDraft, wsClearDraft, isMobileView } from "./chat-mobile.js";
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
-import { fetchAvailableModels } from "./api.js";
-import { modelAlias } from "./anima.js";
+import { fetchModelCatalog, populateModelSelect } from "../../shared/chat/model-picker.js";
 
 const logger = createLogger("ws-chat-streaming");
 let _getDom = () => ({});
@@ -22,39 +21,71 @@ let _getImageManager = () => null;
 let _convRafPending = false;
 let _convLatestStreamingMsg = null;
 
+// Per-thread model selection, persisted in localStorage as one JSON map.
+const MODEL_STORAGE_KEY = "animaworks_ws_model_by_thread";
+let _modelByThread = {};
+try {
+  const raw = localStorage.getItem(MODEL_STORAGE_KEY);
+  const parsed = raw ? JSON.parse(raw) : {};
+  _modelByThread = parsed && typeof parsed === "object" ? parsed : {};
+} catch {
+  _modelByThread = {};
+}
+
+function _saveModelMap() {
+  try { localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(_modelByThread)); }
+  catch { /* quota exceeded */ }
+}
+
+function _wsModelKey() {
+  const st = getState();
+  return `${st.conversationAnima}|${st.activeThreadId || "default"}`;
+}
+
 export function initStreaming({ getDom, getImageManager }) {
   _getDom = getDom;
   _getImageManager = getImageManager;
 }
 
 /**
- * Populate the per-message model picker from GET /api/system/available-models.
- * The empty option (“anima既定”) sends no model so the anima default is used.
+ * Populate the per-thread model picker from the shared model catalog.
+ * Options are grouped by <optgroup>; the selection is remembered per thread
+ * in localStorage. The empty option (“anima既定”) sends no model so the
+ * anima default is used. Built with DOM APIs (not innerHTML) so external
+ * model IDs (e.g. Ollama names) cannot break out of an attribute.
  */
 export async function initChatModelPicker() {
   const dom = _getDom();
   const select = dom.convModel;
   if (!select) return;
-  let models = [];
-  try {
-    const data = await fetchAvailableModels();
-    models = data?.models || [];
-  } catch (err) {
-    logger.error("Failed to load chat model picker options", { error: err?.message });
-    return;
-  }
-  // Build the picker with DOM APIs (not innerHTML string interpolation) so
-  // external model IDs (e.g. Ollama names) cannot break out of an attribute.
-  const fragment = document.createDocumentFragment();
-  const defaultOpt = new Option(t("chat.model_default"), "");
-  defaultOpt.selected = true;
-  fragment.append(defaultOpt);
-  for (const m of models) {
-    if (!m || !m.id) continue;
-    const label = modelAlias(m.id) || m.label || m.id;
-    fragment.append(new Option(label, m.id));
-  }
-  select.replaceChildren(fragment);
+
+  const catalog = await fetchModelCatalog();
+  populateModelSelect(select, catalog, _modelByThread[_wsModelKey()] || "", {
+    defaultLabel: t("chat.model_default"),
+    otherLabel: t("chat.model_group_other"),
+    errorTitle: t("chat.model_load_error"),
+  });
+
+  select.addEventListener("change", () => {
+    const anima = getState().conversationAnima;
+    if (!anima) return;
+    _modelByThread[_wsModelKey()] = select.value;
+    _saveModelMap();
+  });
+
+  wsRestoreModelSelect();
+}
+
+/**
+ * Restore the model select to the stored value for the current
+ * anima/thread (or the anima default). Call after anima/thread switches.
+ */
+export function wsRestoreModelSelect() {
+  const dom = _getDom();
+  const select = dom.convModel;
+  if (!select) return;
+  const anima = getState().conversationAnima;
+  select.value = anima ? (_modelByThread[_wsModelKey()] || "") : "";
 }
 
 function _mgr() { return ChatSessionManager.getInstance(); }

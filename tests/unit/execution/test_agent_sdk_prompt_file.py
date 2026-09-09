@@ -248,3 +248,59 @@ class TestPromptFileCleanup:
         assert len(created_files) >= 1
         for f in created_files:
             assert not f.exists(), f"Temp file was not cleaned up: {f}"
+
+
+class TestMcpIsolation:
+    """Only the servers animaworks builds may attach to an anima's session."""
+
+    @pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+    def test_strict_mcp_config_is_always_passed(self, model_config, anima_dir):
+        """Account-level claude.ai connectors must not ride along.
+
+        Without ``--strict-mcp-config`` the CLI also loads whatever the
+        logged-in claude.ai account has connected — for this fleet Gmail /
+        Calendar / Drive, 40 tools whose schemas every anima paid for on
+        every single request.
+        """
+        executor = _make_executor(model_config, anima_dir)
+        with patch_agent_sdk():
+            options, temp_files = executor._build_sdk_options(
+                "You are a helpful assistant.",
+                200000,
+                {},
+            )
+        # ``ClaudeAgentOptions`` is mocked as ``MagicMock``, so the kwargs
+        # land on the returned instance as attributes.
+        assert "strict-mcp-config" in options.extra_args
+        assert options.extra_args["strict-mcp-config"] is None  # boolean flag
+        assert set(options.mcp_servers) == {"aw"}
+        for f in temp_files:
+            f.unlink(missing_ok=True)
+
+    @pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+    def test_builtin_tool_surface_is_pinned(self, model_config, anima_dir):
+        """The CLI sends every built-in schema; only the used ones are worth it.
+
+        25 built-in tools plus the account connectors measured ~69K tokens
+        of a 200K window on this fleet, before any conversation.
+        """
+        from core.execution._sdk_options import BUILTIN_TOOLS
+
+        executor = _make_executor(model_config, anima_dir)
+        with patch_agent_sdk():
+            options, temp_files = executor._build_sdk_options(
+                "You are a helpful assistant.",
+                200000,
+                {},
+            )
+        assert options.extra_args["tools"] == ",".join(BUILTIN_TOOLS)
+        # Bash carries almost all real tool traffic; Skill is what the
+        # skill loader needs.  Losing either would be silent.
+        assert "Bash" in BUILTIN_TOOLS
+        assert "Skill" in BUILTIN_TOOLS
+        # Losing ToolSearch re-sends every schema in full (+11K measured).
+        assert "ToolSearch" in BUILTIN_TOOLS
+        # Subagents are off for animas; delegation goes through aw MCP.
+        assert not [t for t in BUILTIN_TOOLS if t.startswith("Task")]
+        for f in temp_files:
+            f.unlink(missing_ok=True)

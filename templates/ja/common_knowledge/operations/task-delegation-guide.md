@@ -1,144 +1,43 @@
-## タスク実行の仕組み
+# タスク投入と委譲
 
-### タスク委譲の方法
+## 実行経路
 
-> **注意**: Agent/Task ツール（サブエージェント起動）は**無効化**されている。タスクの委譲には `delegate_task` を使う。`submit_tasks` は通常チャット/Heartbeat/Inbox/TaskExec には表示されず、明示的なバックグラウンド実行ワークフローでのみ使う。
+Agent/Task のネイティブなサブエージェント起動は使わず、公開されているタスクツールを使う。
+通常チャットで完了できる仕事は直接実行する。継続追跡だけなら `backlog_task`、
+自分のバックグラウンド実行は `submit_tasks`、有効な直属部下への委譲は
+`delegate_task(name="担当名", instruction="原指示と完了条件", summary="要約")`。
+ツールの提供範囲と権限に従い、無効な担当への委譲や無断の別経路への切替をしない。
+Heartbeat は判断・投入に使い、長時間の実作業は TaskExec に渡す。
 
-**部下がいる場合** → `delegate_task` で部下に委任する
-- description に部下名を含めると、その部下に指名委任される
-  例: "alice にAPIテストを実施させる"
-  例: "bob がコードレビューを担当する"
-- 名前がなければ workload 最小 + role マッチで自動選択される
-- 全部下が無効の場合は state/pending/ にフォールバック
+## 引き継ぐ情報
 
-**部下がいない場合** → 通常はこのセッションで直接実行する。明示的なバックグラウンド実行ワークフローが有効な場合のみ `submit_tasks` で投入する
-- state/pending/ に書き出され、TaskExec が別セッションで自動実行する
-- 実行者はあなたと同じ identity・行動指針・記憶ディレクトリ・組織情報を持つ
-- task_id が返却される。完了時にDMで通知される
-- Heartbeat でタスク結果を確認できる（state/task_results/）
+実行者は会話履歴を自動的に共有しない。原指示、目的、関連ファイルと分かる範囲の場所、
+現状、完了条件、承認条件、禁止事項を渡す。存在しないパスや行番号は作らない。
+`description` と `context`、`acceptance_criteria`、`constraints`、`file_paths` を用途に応じて使う。
+モデルと登録済み workspace の指定も保持する。他Animaの個人ディレクトリへの書込みを指示しない。
 
-### タスク投入ツールの使い分け
+`submit_tasks(batch_id="work", tasks=[{"task_id":"job","title":"仕事","description":"具体的な依頼"}])`
+はタスクと実行入力を一括公開する。同じIDの再送は再実行ではない。
+`parallel:true` はworker数の上限内で並列可能、`depends_on` は先行タスクの完了と試行終了を待つ。
+依存先が取消・未完なら確認が必要であり、成功したと推測しない。
 
-| 手段 | 目的 | 実行キュー (Layer 1) | 追跡 (Layer 2) | いつ使うか |
-|------|------|---------------------|----------------|-----------|
-| `submit_tasks` | タスクの実行投入・登録 | `state/pending/` に作成 | `task_queue.jsonl` に登録 | 明示的なバックグラウンド実行ワークフローで、自分のTaskExecに渡すとき |
-| `delegate_task` | 部下へのタスク委譲 | 部下の `state/pending/` に作成 | 両者の `task_queue.jsonl` に登録 | 部下に任せるとき |
+## 状態・結果・再開
 
-**重要**: 人間からの指示を受けた通常チャットでは `submit_tasks` を使わない。直接実行し、後続管理が必要な場合は `update_task`、`state/current_state.md`、または明示的なバックグラウンド実行ワークフローで記録する。
+状態は `list_tasks(detail=true)`、委譲の追跡は `task_tracker()` で確認する。
+追跡IDは部下が所有する同じタスクのaliasであり、台帳同期やファイル救済は不要。
+`task_tracker(status="all")` は全件、`status="completed"` は done/cancelled。
+実行権と `in_progress` はホストが管理する。結果は根拠付きの `done`、
+具体的な待機理由付き `pending`、明示的な中止の `cancelled` で宣言する。
 
-**【MUST】`state/pending/` にJSONファイルを手動で作成してはならない。** 明示的なバックグラウンド実行ワークフローで `submit_tasks` が表示されている場合のみ、そのツール経由で投入すること。
+未完通知を受けたら既済の外部操作と成果を確認し、続行が適切なときだけ
+`submit_tasks(batch_id="resume-job", tasks=[{"task_id":"job","resume":true}])` で保存済み入力を再利用する。
+実行中・完了・取消済みの仕事はこの方法で再開できない。無限の再投入をしない。
+結果要約は `state/task_results/{task_id}/{attempt_token}.md`。ファイルの存在だけで完了扱いにしない。
 
-## 明示的バックグラウンド実行での submit_tasks
+## 重複と報告
 
-`submit_tasks` は通常セッションでは使わない。ユーザーまたはスキルが「バックグラウンドで」と明示し、ツール一覧に `submit_tasks` が表示されている場合だけ使う。単一タスクでも tasks 配列1件で投入する。
-
-### 実行者（TaskExec）について
-
-TaskExec はサブエージェントとして動作する。あなたと同じ identity・行動指針・記憶ディレクトリ・組織情報を持つが、**あなたの会話履歴・短期記憶・Priming結果にはアクセスできない**。
-
-そのため、タスクの `description` と `context` に十分な情報を含めることが重要。
-
-### description の記述原則
-
-- **ファイルパスと行番号は必ず記載する**: 実行者は記憶検索ができるが、具体的な場所を指定した方が確実に正しいファイルに到達できる
-- **現在の作業状態を含める**: current_state.md の関連部分を `context` フィールドにコピーすること（自動注入されるが、明示的に補足すると精度が上がる）
-- **「なぜやるか」を明記する**: 背景と目的がないと実行者が判断を誤る
-
-### description に含めるべき情報
-
-- **何をするか**: 具体的な作業内容（「リファクタリングする」ではなく「core/auth/manager.py の verify_token() を async 化する」）
-- **なぜやるか**: 背景と目的（1-2文）
-- **どこを見るか**: 関連ファイルパスと行番号（`file_paths` フィールドにも記載）
-- **完了条件**: 何をもって「できた」とするか（`acceptance_criteria` フィールドにも記載）
-- **制約**: やってはいけないこと、互換性要件（`constraints` フィールドにも記載）
-
-### 使用例
-
-単一タスク:
-
-```
-submit_tasks(batch_id="hb-20260301-api-fix", tasks=[
-  {{"task_id": "api-fix", "title": "API認証のasync化",
-   "description": "core/auth/manager.py の verify_token()（L45-60）を async 化する。FastAPI の非同期ハンドラからの呼び出しでブロッキングが発生しているため。",
-   "context": "current_state.md: API応答遅延の調査中。verify_token が同期I/Oでブロックしている",
-   "file_paths": ["core/auth/manager.py:45"],
-   "acceptance_criteria": ["verify_token が async def になっている", "既存テストが通る"],
-   "constraints": ["公開APIの引数・戻り値を変えない"]}}
-])
-```
-
-並列タスク:
-
-```
-submit_tasks(batch_id="deploy-20260301", tasks=[
-  {{"task_id": "lint", "title": "Lint実行", "description": "全ファイルにlintを実行", "parallel": true}},
-  {{"task_id": "test", "title": "テスト実行", "description": "ユニットテスト実行", "parallel": true}},
-  {{"task_id": "deploy", "title": "デプロイ", "description": "lint・テスト通過後にデプロイ",
-   "parallel": false, "depends_on": ["lint", "test"]}}
-])
-```
-
-### タスクオブジェクト
-
-| フィールド | 必須 | 説明 |
-|-----------|------|------|
-| `task_id` | MUST | バッチ内で一意のタスクID |
-| `title` | MUST | タスクのタイトル |
-| `description` | MUST | 具体的な作業内容（上記の記述原則に従う） |
-| `parallel` | MAY | `true` で並列実行可能（デフォルト: `false`） |
-| `depends_on` | MAY | 依存する先行タスクIDの配列 |
-| `context` | MAY | 背景情報（current_state.md の関連部分を含める） |
-| `file_paths` | MAY | 関連ファイルパス |
-| `acceptance_criteria` | MAY | 完了条件 |
-| `constraints` | MAY | 制約事項 |
-| `reply_to` | MAY | 完了時の通知先 |
-
-### 実行ルール
-
-- `parallel: true` かつ依存関係なしのタスクはセマフォ制限内で同時実行される
-- `depends_on` に指定された全タスクが成功完了してから実行される
-- 先行タスクの結果は依存タスクのコンテキストに自動注入される
-- 先行タスクが失敗した場合、依存タスクはスキップされる
-- 循環依存はバリデーションで拒否される
-
-### 禁止パターン
-
-- ❌ 「適切にリファクタリングする」（曖昧すぎる）
-- ❌ 「前回の続きをやる」（実行者は会話履歴を持たない）
-- ❌ ファイルパスなしの指示（実行者は探索から始めることになる）
-- ❌ context が空（背景情報なしでは実行者が判断を誤る）
-- ❌ 通常チャット/Heartbeat/Inbox/TaskExec で `submit_tasks` を使おうとする
-- ❌ `state/pending/` にJSONを手動作成（明示的バックグラウンド実行では必ず `submit_tasks` を使うこと）
-- ❌ 他Animaのディレクトリ（`knowledge/` 等）への書き込み指示（部下はそのパスに書き込めない。共有には `common_knowledge/` を使うこと）
-
-### タスク結果
-
-完了したタスクの結果は `state/task_results/{task_id}.json` に保存される。
-依存タスクには先行タスクの結果要約が自動的にコンテキストとして注入される。
-
-## 委譲タスクの追跡
-
-`task_tracker` ツールで委譲したタスクの進捗を確認できる。
-部下側の task_queue.jsonl から最新ステータスを突き合わせて返す。
-
-```
-task_tracker()                     # アクティブな委譲タスク一覧（デフォルト）
-task_tracker(status="all")         # 完了済み含む全タスク
-task_tracker(status="completed")   # 完了済みのみ
-```
-
-| status | 意味 |
-|--------|------|
-| `active` | 進行中（done/cancelled/failed 以外）。デフォルト |
-| `all` | 全件 |
-| `completed` | 完了済み（done/cancelled/failed）のみ |
-
-### 自動同期（sync_delegated）
-
-Heartbeat 完了後に自動実行される。部下のタスクキューで以下の状態変化を検出し、上司側の追跡エントリ（`delegated` ステータス）を自動更新する:
-
-- 部下側が `done` or `cancelled` → 上司側を `done` に更新
-- 部下側が `failed` → 上司側を `failed` に更新
-- アーカイブ済みタスクも検索対象（`task_queue_archive.jsonl`）
-
-手動で `task_tracker` を呼ぶ必要はないが、Heartbeat 間の即時確認には引き続き `task_tracker` が有用。
+同じ依頼の未完仕事があると分かっているなら、そのIDへ追加情報を渡す。
+重複の疑いだけで古い仕事を自動取消・上書きせず、担当と実行状態を確認する。
+必要な承認・独立レビューは保持する。結果は判断が必要な依頼者へ報告し、全階層への
+同内容転送や、別の手書き台帳への二重記録を必須にしない。
+保存の詳細は `common_knowledge/anatomy/task-architecture.md` を参照。

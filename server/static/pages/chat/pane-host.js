@@ -1,6 +1,7 @@
 // ── Pane Host — manages multiple independent Chat pane instances ──
 import { t } from "/shared/i18n.js";
-import { createChatContext, CONSTANTS } from "./ctx.js";
+import { createChatContext, CONSTANTS, modelKey, syncModelSelect, scheduleSaveChatUiState } from "./ctx.js";
+import { fetchModelCatalog, populateModelSelect } from "../../shared/chat/model-picker.js";
 import { createAnimaController } from "./anima-controller.js";
 import { createThreadController } from "./thread-controller.js";
 import { createChatRenderer } from "./chat-renderer.js";
@@ -16,6 +17,7 @@ import { createMeetingController } from "./meeting-controller.js";
 import { createWorkIndicatorController } from "./work-indicator-controller.js";
 import { initSplitter } from "./splitter.js";
 import { onEvent } from "../../modules/websocket.js";
+import { invalidateAvatarCache } from "../../modules/avatar-resolver.js";
 
 const LAYOUT_KEY = "aw-chat-pane-layout";
 
@@ -100,6 +102,9 @@ function paneHtml() {
           ></textarea>
           <div class="chat-input-actions">
             <button type="button" class="chat-attach-btn" data-chat-id="chatPageAttachBtn" title="${t("chat.attach_image")}">+</button>
+            <select class="chat-model-select" data-chat-id="chatPageModel" data-i18n-title="chat.model_selector" title="${t("chat.model_selector")}">
+              <option value=""></option>
+            </select>
             <div class="context-ring-wrap" data-chat-id="chatContextRing" title="">
               <svg class="context-ring" viewBox="0 0 36 36" aria-hidden="true">
                 <circle class="context-ring-bg" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"/>
@@ -183,6 +188,8 @@ export function createPaneHost(rootContainer) {
     paneEl.addEventListener("pointerdown", () => _handlePaneFocus(id), true);
     paneEl.addEventListener("focusin", () => _handlePaneFocus(id));
 
+    _initModelSelect(ctx, paneEl);
+
     ctx.controllers.sidebar.initRightPaneVisibility();
     ctx.controllers.events.bindPaneEvents();
     ctx.controllers.meeting.init();
@@ -200,6 +207,9 @@ export function createPaneHost(rootContainer) {
       if (!anima) return;
 
       if (bsStatus === "started") {
+        // Interactive setup is a conversation: keep its messages and input
+        // visible while the Anima asks questions or writes its profile.
+        if (anima.bootstrap_state?.mode === "interactive") return;
         anima.status = "bootstrapping";
         anima.bootstrapping = true;
         anima._bootstrapStartedAt = Date.now();
@@ -239,6 +249,28 @@ export function createPaneHost(rootContainer) {
     });
     pane.intervals.push(unsubBootstrap);
 
+    const refreshAvatar = async (name) => {
+      if (!name || !ctx.state.animas.some(a => a.name === name)) return;
+      await invalidateAvatarCache(name);
+      delete ctx.state.animaTabAvatarUrls[name];
+      ctx.controllers.anima.renderAnimaTabs();
+      if (name === ctx.state.selectedAnima) {
+        await ctx.controllers.avatar.updateAvatar();
+        ctx.controllers.renderer.renderChat(false);
+      }
+    };
+    pane.intervals.push(onEvent("anima.assets_updated", ({ name }) => {
+      refreshAvatar(name).catch(() => {});
+    }));
+    // CLI/background generation may produce the first portrait before its
+    // completion event. Retry an absent avatar without reloading the page.
+    pane.intervals.push(setInterval(() => {
+      const name = ctx.state.selectedAnima;
+      if (name && !ctx.state.animaTabAvatarUrls[name] && !ctx.state.animaTabAvatarLoading[name]) {
+        refreshAvatar(name).catch(() => {});
+      }
+    }, 30000));
+
     if (panes.length === 1) {
       focusedIdx = 0;
       _startFocusedIntervals();
@@ -247,6 +279,37 @@ export function createPaneHost(rootContainer) {
     _saveLayout();
     _updatePaneControls();
     return pane;
+  }
+
+  function _initModelSelect(ctx, paneEl) {
+    const select = paneEl.querySelector('[data-chat-id="chatPageModel"]');
+    if (!select) return;
+
+    // Initial text of the anima-default option comes from JS (i18n).
+    const defaultOpt = select.options[0];
+    if (defaultOpt) defaultOpt.textContent = t("chat.model_default");
+
+    // Populate the picker once; the catalog is shared/memoized across panes.
+    // Initial selection is the anima default; anima/thread switches will
+    // sync the stored per-thread value via syncModelSelect().
+    fetchModelCatalog()
+      .then(catalog => {
+        if (!select.isConnected) return;
+        populateModelSelect(select, catalog, "", {
+          defaultLabel: t("chat.model_default"),
+          otherLabel: t("chat.model_group_other"),
+          errorTitle: t("chat.model_load_error"),
+        });
+        syncModelSelect(ctx);
+      })
+      .catch(() => {});
+
+    select.addEventListener("change", () => {
+      const { selectedAnima, selectedThreadId } = ctx.state;
+      if (!selectedAnima) return;
+      ctx.state.modelByThread[modelKey(selectedAnima, selectedThreadId)] = select.value;
+      scheduleSaveChatUiState(ctx);
+    });
   }
 
   function removePane(id) {

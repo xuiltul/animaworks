@@ -23,27 +23,27 @@ def test_public_search_reads_fresh_mixed_script_write_and_abstains(tmp_path: Pat
 
     handler.handle(
         "write_memory_file",
-        {"path": "knowledge/custody.md", "content": "Coldcard乱数問題とBitcoin自己保管方針"},
+        {"path": "knowledge/retention.md", "content": "Dashboard集計問題とMetrics保管方針"},
     )
 
-    hit = handler.handle("search_memory", {"query": "Bitcoin", "scope": "knowledge"})
+    hit = handler.handle("search_memory", {"query": "Metrics", "scope": "knowledge"})
     miss = handler.handle("search_memory", {"query": "qzxv_nonexistent_847291", "scope": "knowledge"})
 
-    assert "knowledge/custody.md" in hit
-    assert "Bitcoin自己保管方針" in hit
+    assert "knowledge/retention.md" in hit
+    assert "Metrics保管方針" in hit
     assert miss == "No results for 'qzxv_nonexistent_847291'"
 
-    handler.handle("read_memory_file", {"path": "knowledge/custody.md"})
+    handler.handle("read_memory_file", {"path": "knowledge/retention.md"})
     handler.handle(
         "write_memory_file",
-        {"path": "knowledge/custody.md", "content": "Meridian hardware wallet policy", "mode": "overwrite"},
+        {"path": "knowledge/retention.md", "content": "Meridian device policy", "mode": "overwrite"},
     )
-    assert "No results" in handler.handle("search_memory", {"query": "Bitcoin", "scope": "knowledge"})
-    assert "knowledge/custody.md" in handler.handle("search_memory", {"query": "Meridian", "scope": "knowledge"})
+    assert "No results" in handler.handle("search_memory", {"query": "Metrics", "scope": "knowledge"})
+    assert "knowledge/retention.md" in handler.handle("search_memory", {"query": "Meridian", "scope": "knowledge"})
 
     handler.handle(
         "archive_memory_file",
-        {"path": "knowledge/custody.md", "reason": "superseded in boundary test"},
+        {"path": "knowledge/retention.md", "reason": "superseded in boundary test"},
     )
     assert "No results" in handler.handle("search_memory", {"query": "Meridian", "scope": "knowledge"})
 
@@ -85,7 +85,7 @@ def test_public_activity_search_applies_exact_time_range(tmp_path: Path) -> None
 def test_public_search_fixed_gold_set_meets_hit_targets(tmp_path: Path) -> None:
     handler = _handler(tmp_path / "animas" / "test")
     gold = {
-        "Coldcard": ("knowledge/custody.md", "Coldcard Bitcoin hardware wallet custody"),
+        "Widget": ("knowledge/retention.md", "Widget metrics retention policy"),
         "espresso": ("knowledge/coffee.md", "Alice prefers espresso for morning focus"),
         "ZephyrNova": ("knowledge/project.md", "ZephyrNova launch checklist and telemetry"),
         "請求書": ("knowledge/accounting.md", "請求書の月次照合と承認手順"),

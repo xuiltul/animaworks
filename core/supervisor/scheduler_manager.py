@@ -57,6 +57,24 @@ def _active_hour_spec(active_start: int | None, active_end: int | None) -> str:
     return f"{active_start}-23,0-{active_end - 1}"
 
 
+def read_per_anima_heartbeat_interval(anima_dir: Path, app_config: Any) -> int:
+    """Read heartbeat_interval_minutes from status.json, fallback to global config.
+
+    Only int/float values in [1, 1440] are accepted; anything else (missing,
+    malformed, or out of range) falls back to ``app_config.heartbeat.interval_minutes``.
+    """
+    try:
+        status_path = anima_dir / "status.json"
+        if status_path.is_file():
+            data = json.loads(status_path.read_text(encoding="utf-8"))
+            val = data.get("heartbeat_interval_minutes")
+            if isinstance(val, (int, float)) and 1 <= val <= 1440:
+                return int(val)
+    except (json.JSONDecodeError, OSError, ValueError):
+        logger.debug("Failed to read heartbeat_interval_minutes from %s", anima_dir)
+    return app_config.heartbeat.interval_minutes
+
+
 class SchedulerManager:
     """APScheduler management: heartbeat/cron registration, execution, reload."""
 
@@ -161,16 +179,7 @@ class SchedulerManager:
 
     def _read_per_anima_interval(self, app_config: Any) -> int:
         """Read heartbeat_interval_minutes from status.json, fallback to global config."""
-        try:
-            status_path = self._anima_dir / "status.json"
-            if status_path.is_file():
-                data = json.loads(status_path.read_text(encoding="utf-8"))
-                val = data.get("heartbeat_interval_minutes")
-                if isinstance(val, (int, float)) and 1 <= val <= 1440:
-                    return int(val)
-        except (json.JSONDecodeError, OSError, ValueError):
-            logger.debug("Failed to read heartbeat_interval_minutes from %s", self._anima_dir)
-        return app_config.heartbeat.interval_minutes
+        return read_per_anima_heartbeat_interval(self._anima_dir, app_config)
 
     def _setup_heartbeat(self) -> None:
         """Register heartbeat job from heartbeat.md + config.json + activity_level."""
@@ -898,9 +907,22 @@ class SchedulerManager:
 
     # ── Tick Handlers ────────────────────────────────────────────
 
+    def _awaiting_initial_setup(self) -> bool:
+        """Keep periodic work out of the user's initial profile conversation."""
+        from core.bootstrap_state import get_bootstrap_status
+
+        return bool(get_bootstrap_status(self._anima_dir).get("needs_bootstrap"))
+
     async def heartbeat_tick(self) -> None:
         """Execute a scheduled heartbeat."""
         if not self._anima:
+            return
+        # A job already dispatched by APScheduler can outlive a disable/reload.
+        # Only this periodic entrance is gated; messages and cron keep working.
+        if not self._anima.memory.read_model_config().heartbeat_enabled:
+            return
+        if self._awaiting_initial_setup():
+            logger.debug("Scheduled heartbeat deferred until setup completes: %s", self._anima_name)
             return
         # Detect schedule file changes (Mode S Write/Edit bypass)
         self._check_schedule_freshness()
@@ -945,6 +967,9 @@ class SchedulerManager:
     async def cron_tick(self, task: CronTask) -> None:
         """Execute a scheduled cron task."""
         if not self._anima:
+            return
+        if self._awaiting_initial_setup():
+            logger.debug("Scheduled cron deferred until setup completes: %s", self._anima_name)
             return
 
         # Detect schedule file changes and skip stale tasks
@@ -1036,47 +1061,14 @@ class SchedulerManager:
                         "result": result,
                     },
                 )
-                # If command produced non-empty output, run a follow-up
-                # cron LLM session so the Anima can review and act on the
-                # results with full background context (heartbeat-equivalent).
-                stdout = result.get("stdout", "").strip()
-                if stdout and result.get("exit_code", 0) == 0:
-                    # trigger_heartbeat=False means no follow-up analysis
-                    if not task.trigger_heartbeat:
-                        logger.info(
-                            "Cron command '%s' trigger_heartbeat=False, skipping cron LLM for %s",
-                            task.name,
-                            self._anima_name,
-                        )
-                        return
+                from core.supervisor.cron_followup import command_followup_output
 
-                    # skip_pattern: if stdout matches, suppress follow-up
-                    if task.skip_pattern:
-                        try:
-                            if re.search(task.skip_pattern, stdout):
-                                logger.info(
-                                    "Cron command '%s' output matched skip_pattern, suppressing cron LLM for %s",
-                                    task.name,
-                                    self._anima_name,
-                                )
-                                return
-                        except re.error as e:
-                            logger.warning(
-                                "Invalid skip_pattern '%s' for task '%s': %s — continuing without skip",
-                                task.skip_pattern,
-                                task.name,
-                                e,
-                            )
-
-                    logger.info(
-                        "Cron command '%s' produced output, running cron LLM for %s",
-                        task.name,
-                        self._anima_name,
-                    )
+                command_output = command_followup_output(task, result)
+                if command_output is not None:
                     followup_result = await self._anima.run_cron_task(
                         task.name,
-                        task.description or f"cron.mdの「{task.name}」の指示に従って処理してください。",
-                        command_output=stdout,
+                        task.description or t("scheduler.cron_fallback_description", task_name=task.name),
+                        command_output=command_output,
                         **({"skills": task.skills} if task.skills else {}),
                     )
                     success = success and self._cron_result_succeeded(followup_result)

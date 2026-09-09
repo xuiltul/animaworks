@@ -16,6 +16,8 @@ import argparse
 import json
 import os
 import sys
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -48,13 +50,16 @@ def cmd_task(args: argparse.Namespace) -> None:
 
 
 def _cmd_add(args: argparse.Namespace, manager) -> None:
+    from core.tasks_dispatch import publish_tasks
+    from core.workspace import resolve_workspace
+
     source = getattr(args, "source", "anima")
     instruction = getattr(args, "instruction", "")
     assignee = getattr(args, "assignee", "")
     summary = getattr(args, "summary", "") or instruction[:100]
-    deadline = getattr(args, "deadline", None)
     relay_chain_raw = getattr(args, "relay_chain", None)
     relay_chain = relay_chain_raw.split(",") if relay_chain_raw else []
+    workspace_raw = getattr(args, "workspace", None)
 
     if not instruction:
         print("Error: --instruction is required", file=sys.stderr)
@@ -63,19 +68,59 @@ def _cmd_add(args: argparse.Namespace, manager) -> None:
         print("Error: --assignee is required", file=sys.stderr)
         sys.exit(1)
 
-    entry = manager.add_task(
-        source=source,
-        original_instruction=instruction,
-        assignee=assignee,
-        summary=summary,
-        deadline=deadline,
-        relay_chain=relay_chain,
-    )
+    # 1-1: This CLI only adds to your own queue. Foreign assignees would land
+    # in another anima's ledger while the descriptor is written to this one.
+    anima_name = manager.anima_dir.name
+    if assignee != anima_name:
+        print(
+            f"Error: --assignee must be '{anima_name}'. This command only adds tasks to your own queue.\n"
+            "To hand work to another anima, use the delegate_task tool instead.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    # 1-3: optional workspace resolution
+    resolved_wd = ""
+    if workspace_raw:
+        try:
+            resolved_wd = str(resolve_workspace(workspace_raw))
+        except ValueError as e:
+            print(f"Error: workspace resolution failed: {e}", file=sys.stderr)
+            sys.exit(2)
+
+    submitted_by = relay_chain[0] if relay_chain else anima_name
+    task_desc = {
+        "task_type": "llm",
+        "task_id": uuid.uuid4().hex[:12],
+        "title": summary,
+        "description": instruction,
+        "context": "",
+        "acceptance_criteria": [],
+        "constraints": [],
+        "file_paths": [],
+        "submitted_by": submitted_by,
+        "submitted_at": datetime.now(UTC).isoformat(),
+        "reply_to": submitted_by,
+        "source": "cli",
+        "working_directory": resolved_wd,
+        "model": "",
+    }
+    try:
+        entry = publish_tasks(manager.anima_dir, [task_desc], source=source, meta={"relay_chain": relay_chain})[0]
+    except Exception as e:
+        print(f"Error: failed to submit task: {e}", file=sys.stderr)
+        sys.exit(3)
+
     result = entry.model_dump()
+    result["executable"] = True
+    result["note"] = "picked up by the pending watcher within a few seconds"
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def _cmd_update(args: argparse.Namespace, manager) -> None:
+    from core.i18n import t
+    from core.tasks_dispatch import update_task
+
     task_id = getattr(args, "task_id", "")
     status = getattr(args, "status", "")
     summary = getattr(args, "summary", None)
@@ -86,8 +131,19 @@ def _cmd_update(args: argparse.Namespace, manager) -> None:
     if not status:
         print("Error: --status is required", file=sys.stderr)
         sys.exit(1)
+    if status == "in_progress":
+        print(
+            "Error: status 'in_progress' is written only by the running TaskExec.\n"
+            "To (re)start a task, submit it with the submit_tasks tool. To close it, use --status done or cancelled.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
-    entry = manager.update_status(task_id, status, summary=summary)
+    try:
+        entry = update_task(manager, task_id, status, summary=summary)
+    except Exception as exc:
+        print(t("tooling.task_update_failed", error=str(exc)), file=sys.stderr)
+        sys.exit(3)
     if entry is None:
         print(f"Error: task not found or invalid status: {task_id}", file=sys.stderr)
         sys.exit(1)
@@ -97,9 +153,12 @@ def _cmd_update(args: argparse.Namespace, manager) -> None:
 
 
 def _cmd_list(args: argparse.Namespace, manager) -> None:
+    from core.memory.task_queue import mark_executability
+
     status_filter = getattr(args, "status", None)
     tasks = manager.list_tasks(status=status_filter)
     result = [t.model_dump() for t in tasks]
+    mark_executability(result, manager.anima_dir)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -114,17 +173,17 @@ def register_task_command(subparsers) -> None:
     p_add.add_argument("--instruction", required=True, help="Original instruction text")
     p_add.add_argument("--assignee", required=True, help="Assignee anima name")
     p_add.add_argument("--summary", default=None, help="1-line summary (default: instruction[:100])")
-    p_add.add_argument("--deadline", default=None, help="ISO8601 deadline")
     p_add.add_argument("--relay-chain", default=None, help="Comma-separated relay chain")
+    p_add.add_argument("--workspace", default=None, help="Workspace alias or path for the task's working_directory")
 
     # task update
     p_update = task_sub.add_parser("update", help="Update task status")
     p_update.add_argument("--task-id", required=True, help="Task ID")
-    p_update.add_argument("--status", required=True, choices=["pending", "in_progress", "done", "cancelled", "blocked"])
+    p_update.add_argument("--status", required=True, choices=["pending", "delegated", "done", "cancelled"])
     p_update.add_argument("--summary", default=None, help="Updated summary")
 
     # task list
     p_list = task_sub.add_parser("list", help="List tasks")
-    p_list.add_argument("--status", default=None, choices=["pending", "in_progress", "done", "cancelled", "blocked"])
+    p_list.add_argument("--status", default=None, choices=["pending", "in_progress", "delegated", "done", "cancelled"])
 
     p_task.set_defaults(func=cmd_task)

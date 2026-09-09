@@ -80,6 +80,18 @@ def test_is_action_gated_false_when_tool_module_not_found() -> None:
         assert is_action_gated("nonexistent_tool", "send", set()) is False
 
 
+def test_is_action_gated_respects_gated_as() -> None:
+    """An action with gated_as gates under that name's permission key."""
+    with patch(
+        "core.tooling.permissions._load_execution_profile",
+        return_value={"upload": {"gated": True, "gated_as": "send"}},
+    ):
+        # Allowed when gated_as permission (chatwork_send) is present.
+        assert is_action_gated("chatwork", "upload", {"chatwork_send"}) is False
+        # Blocked when not present.
+        assert is_action_gated("chatwork", "upload", set()) is True
+
+
 def test_is_action_gated_false_when_action_not_in_profile() -> None:
     """is_action_gated returns False when action not in EXECUTION_PROFILE."""
     with patch(

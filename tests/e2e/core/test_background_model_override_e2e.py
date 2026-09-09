@@ -124,13 +124,16 @@ class TestGlobalDefaultPropagation:
         assert result is not None
         assert result.model == "claude-sonnet-4-6"
 
-    def test_per_anima_overrides_global(self):
-        """Per-anima background_model takes priority over global default."""
+    @pytest.mark.parametrize("credential_available", [False, True])
+    def test_per_anima_overrides_global(self, credential_available):
+        """Cross-provider priority requires its own explicitly configured auth."""
         from core._anima_heartbeat import HeartbeatMixin
+        from core.config.models import CredentialConfig
 
         mc = ModelConfig(
             model="claude-opus-4-6",
             background_model="openai/gpt-4.1",
+            api_key="synthetic-main-provider-key",
         )
 
         class FakeMixin(HeartbeatMixin):
@@ -140,10 +143,21 @@ class TestGlobalDefaultPropagation:
         mixin.agent = MagicMock()
         mixin.agent.model_config = mc
 
-        result = mixin._resolve_background_config()
+        config = AnimaWorksConfig(
+            credentials={"openai": CredentialConfig(api_key="synthetic-openai-key")} if credential_available else {}
+        )
+        config.heartbeat.default_model = "claude-sonnet-4-6"
+        with patch("core.config.models.load_config", return_value=config):
+            if not credential_available:
+                with pytest.raises(ValueError, match="No credential configured"):
+                    mixin._resolve_background_config()
+                assert mixin.agent.model_config.api_key == "synthetic-main-provider-key"
+                return
+            result = mixin._resolve_background_config()
 
         assert result is not None
         assert result.model == "openai/gpt-4.1"
+        assert result.api_key == "synthetic-openai-key"
 
 
 # ── Role defaults merge ──────────────────────────────────────
@@ -226,8 +240,8 @@ class TestCrossProviderCredential:
         assert result.api_base_url == "https://myresource.openai.azure.com"
         assert result.extra_keys["api_version"] == "2024-12-01-preview"
 
-    def test_missing_credential_uses_main(self):
-        """When background_credential is set but not in config, main creds remain."""
+    def test_missing_credential_rejects_cross_provider_reuse(self):
+        """An unknown background credential must not leak the main provider key."""
         from core._anima_heartbeat import HeartbeatMixin
 
         mc = ModelConfig(
@@ -249,10 +263,9 @@ class TestCrossProviderCredential:
             mock_cfg.credentials = {}
             mock_config.return_value = mock_cfg
 
-            result = mixin._resolve_background_config()
-
-        assert result.model == "openai/gpt-4.1"
-        assert result.api_key == "main-key"
+            with pytest.raises(ValueError, match="No credential configured"):
+                mixin._resolve_background_config()
+        assert mixin.agent.model_config.api_key == "main-key"
 
 
 # ── Inbox uses _resolve_background_config via MRO ─────────────

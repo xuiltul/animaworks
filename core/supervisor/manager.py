@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
@@ -919,12 +918,12 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
             yield response
 
     async def _zombie_reaper_loop(self) -> None:
-        """Periodically reap zombie child processes as a safety net.
+        """Poll only our Anima Popen owners as a periodic safety net.
 
-        Calls ``os.waitpid(-1, WNOHANG)`` in a loop to collect any child
-        processes that have exited but not yet been waited on.  This runs
-        every 60 seconds and acts purely as a fallback — normal code paths
-        should call ``wait()`` explicitly.
+        Never reap arbitrary children: taking their wait status makes another
+        Popen report a fabricated success (ECHILD -> returncode=0), and can
+        steal completion from asyncio, SDK or vector-worker subprocess owners.
+        Popen.poll preserves the real exit status for health reconciliation.
         """
         from core.i18n import t as _t
 
@@ -932,14 +931,15 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
             try:
                 await asyncio.sleep(60)
                 reaped = 0
-                while True:
+                for handle in list(self.processes.values()):
+                    process = handle.process
+                    if process is None or process.returncode is not None:
+                        continue
                     try:
-                        pid, _ = os.waitpid(-1, os.WNOHANG)
-                        if pid == 0:
-                            break
-                        reaped += 1
-                    except ChildProcessError:
-                        break
+                        if process.poll() is not None:
+                            reaped += 1
+                    except Exception:
+                        logger.debug("Anima process poll failed in zombie reaper", exc_info=True)
                 if reaped:
                     logger.info(_t("supervisor.zombie_reaped", count=reaped))
             except asyncio.CancelledError:

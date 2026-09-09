@@ -18,8 +18,8 @@ from core.exceptions import DeliveryError
 from core.i18n import t
 from core.messenger import InboxItem, Messenger
 from core.schemas import Message
-from core.tooling.handler_comms import CommsToolsMixin
 from core.time_utils import now_local
+from core.tooling.handler_comms import CommsToolsMixin
 
 
 @pytest.fixture
@@ -807,7 +807,7 @@ class TestServerFallback:
             return resp
 
         with (
-            patch("pathlib.Path.write_text", side_effect=OSError(30, "Read-only file system")),
+            patch("core.memory._io.atomic_write_text", side_effect=OSError(30, "Read-only file system")),
             patch("httpx.post", side_effect=fake_post),
         ):
             msg = messenger.send("bob", "hello", skip_logging=True)
@@ -818,7 +818,7 @@ class TestServerFallback:
 
     def test_send_raises_delivery_error_when_fallback_fails(self, messenger: Messenger) -> None:
         with (
-            patch("pathlib.Path.write_text", side_effect=OSError(30, "Read-only file system")),
+            patch("core.memory._io.atomic_write_text", side_effect=OSError(30, "Read-only file system")),
             patch("httpx.post", side_effect=ConnectionError("server down")),
             pytest.raises(DeliveryError, match="server fallback"),
         ):

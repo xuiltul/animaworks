@@ -225,6 +225,8 @@ def create_voice_router() -> APIRouter:
                                 running_tasks.append(task)
                             elif msg_type == "interrupt":
                                 await session.handle_interrupt()
+                            elif msg_type == "barge_probe":
+                                await session.handle_barge_probe()
                             elif msg_type == "discard_audio":
                                 await session.handle_discard_audio()
                         except json.JSONDecodeError:

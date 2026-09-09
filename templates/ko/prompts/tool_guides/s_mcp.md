@@ -1,6 +1,8 @@
 ## AnimaWorks 도구
 
-이 도구들은 AnimaWorks의 핵심 기능입니다. Claude Code 내장 도구(Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch)와 함께 사용할 수 있습니다.
+이 도구들은 AnimaWorks의 핵심 기능입니다. 호스트 CLI의 내장 도구 `Bash` / `Read` / `Write` / `Edit`와 함께 사용할 수 있습니다.
+
+검색·집계·목록·파일 조작은 `Bash`로 수행한다(`rg`, `grep`, `find`, `ls`, `wc` 등). `Bash`를 우선 수단으로 삼고, 파일 읽기·쓰기에만 `Read` / `Write` / `Edit`를 사용한다.
 
 ### 기억
 - **search_memory**: 장기 기억(knowledge, episodes, procedures, facts), activity_log (최근 활동 로그), 최근 도구 결과를 키워드로 검색
@@ -22,12 +24,11 @@
 - **delegate_task**: 부하에게 태스크 위임 (**부하가 실행**. 부하가 있는 경우)
 - **update_task**: 태스크 큐의 상태 업데이트
 
-> **참고**: Agent/Task 도구(서브에이전트 스폰)는 **비활성화**되어 있습니다. 일반 채팅에서는 Read/Bash/Grep 등으로 직접 실행하세요. 위임은 `delegate_task`를 사용하세요.
+> 부하에게 위임할 때는 `delegate_task`를 사용한다. 직접 수행하는 작업은 `Bash`로 실행한다.
 
 ### 스킬
 - **create_skill**: 새 스킬 디렉터리 생성
-- 새 스킬을 만들기 전에 `read_memory_file(path="common_skills/skill-creator/SKILL.md")`를 읽기
-- 기존 스킬 문서·CLI 매뉴얼은 **read_memory_file**로 카탈로그에 표시된 경로를 지정해 읽기 (예: `animaworks-tool --help`)
+- 기존 스킬 문서·CLI 매뉴얼은 **read_memory_file**로 카탈로그에 표시된 경로를 지정해 읽기
 
 ### 기타 CLI 도구
 슈퍼바이저 관리, vault, 채널 관리, 백그라운드 태스크, 외부 도구(Slack, Chatwork, Gmail, GitHub 등):
@@ -37,5 +38,5 @@ Bash: animaworks-tool <tool> <subcommand> [args]
 사용 가능한 CLI 명령어는 `animaworks-tool --help` 또는 `Bash: animaworks-tool --help`로 확인.
 
 ### 백그라운드 명령 출력
-machine_run 등의 장시간 명령 출력은 `state/cmd_output/`에 저장됩니다.
+장시간 명령 출력은 `state/cmd_output/`에 저장됩니다.
 `Read(path="state/cmd_output/{id}.txt")`로 중간 출력을 확인할 수 있습니다.

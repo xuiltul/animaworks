@@ -10,7 +10,7 @@ import pytest
 from core.memory.priming import PrimingEngine
 from core.memory.task_queue import TaskQueueManager
 from core.taskboard.store import TaskBoardStore
-from core.time_utils import now_iso, now_local
+from core.time_utils import now_local
 
 
 @pytest.fixture
@@ -48,6 +48,9 @@ def _append_task_entry(
     }
     with queue_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    from core.taskboard.tasks import TaskStore, task_database_path
+
+    TaskStore(task_database_path(anima_dir)).import_legacy(anima_dir)
 
 
 @pytest.mark.asyncio
@@ -119,51 +122,16 @@ async def test_channel_e_filters_task_results(attention_env: tuple[Path, TaskBoa
     assert "old orphan result" not in result
 
 
-@pytest.mark.asyncio
-async def test_channel_e_surfaces_recent_failed_tasks(attention_env: tuple[Path, TaskBoardStore]) -> None:
-    anima_dir, _store = attention_env
-    queue = TaskQueueManager(anima_dir)
-    task = queue.add_task(
-        source="anima",
-        original_instruction="fetch data",
-        assignee="sakura",
-        summary="fetch data",
-        task_id="failed1234",
-        meta={"executor": "taskexec"},
-        status="in_progress",
-    )
-    queue.update_status(task.task_id, "failed", summary="failed fetch data")
-
-    result = await PrimingEngine(anima_dir)._channel_e_pending_tasks()
-
-    assert "failed12" in result
-    assert "failed fetch data" in result
-
-
-@pytest.mark.asyncio
-async def test_channel_e_hides_explicitly_archived_failed_tasks(
-    attention_env: tuple[Path, TaskBoardStore],
-) -> None:
-    anima_dir, store = attention_env
-    queue = TaskQueueManager(anima_dir)
-    task = queue.add_task(
-        source="anima",
-        original_instruction="archived failure",
-        assignee="sakura",
-        summary="archived failure",
-        task_id="failed1234",
-        status="in_progress",
-    )
-    queue.update_status(task.task_id, "failed", summary="archived failed fetch")
-    store.upsert_metadata(anima_name="sakura", task_id=task.task_id, visibility="archived")
-
-    result = await PrimingEngine(anima_dir)._channel_e_pending_tasks()
-
-    assert "archived failed fetch" not in result
+# ── "failed"-specific board behavior was retired along with the "failed"
+# status itself (see A1 task-model teardown plan). What used to be
+# test_channel_e_surfaces_recent_failed_tasks and
+# test_channel_e_hides_explicitly_archived_failed_tasks tested a review
+# workflow that no longer exists at the queue level.
 
 
 @pytest.mark.asyncio
 async def test_channel_e_preserves_legacy_prompt_signals(attention_env: tuple[Path, TaskBoardStore]) -> None:
+    """STALE and auto-taskexec markers still surface (OVERDUE/deadline were retired)."""
     anima_dir, _store = attention_env
     now = now_local()
     _append_task_entry(
@@ -171,14 +139,6 @@ async def test_channel_e_preserves_legacy_prompt_signals(attention_env: tuple[Pa
         task_id="stale1234",
         summary="stale board work",
         updated_at=(now - timedelta(minutes=45)).isoformat(),
-        deadline=(now + timedelta(hours=1)).isoformat(),
-    )
-    _append_task_entry(
-        anima_dir,
-        task_id="overdue1234",
-        summary="overdue board work",
-        updated_at=now_iso(),
-        deadline=(now - timedelta(hours=1)).isoformat(),
     )
     TaskQueueManager(anima_dir).add_task(
         source="anima",
@@ -194,8 +154,7 @@ async def test_channel_e_preserves_legacy_prompt_signals(attention_env: tuple[Pa
 
     assert "stale board work" in result
     assert "STALE" in result
-    assert "overdue board work" in result
-    assert "OVERDUE" in result
+    assert "OVERDUE" not in result
     assert "(auto: TaskExec)" in result
 
 
@@ -220,26 +179,24 @@ async def test_channel_e_preserves_delegated_status_section(tmp_path: Path) -> N
         original_instruction="delegated board work",
         assignee="sakura",
         summary="delegated board work",
-        deadline="1h",
         meta={"delegated_to": "hinata", "delegated_task_id": subordinate_task.task_id},
     )
 
     result = await PrimingEngine(anima_dir)._channel_e_pending_tasks()
 
-    assert "delegated board work" in result
+    assert "subordinate work" in result  # alias reflects the canonical child record
     assert "hinata: pending" in result
     assert "⏳" in result
 
 
 @pytest.mark.asyncio
-async def test_channel_e_falls_back_when_taskboard_db_is_corrupt(tmp_path: Path) -> None:
+async def test_channel_e_reads_sqlite_without_jsonl_projection(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     for subdir in ["episodes", "knowledge", "skills", "state"]:
         (anima_dir / subdir).mkdir(parents=True, exist_ok=True)
     shared_dir = data_dir / "shared"
     shared_dir.mkdir()
-    (shared_dir / "taskboard.sqlite3").write_text("not sqlite", encoding="utf-8")
 
     queue = TaskQueueManager(anima_dir)
     queue.add_task(
@@ -252,4 +209,23 @@ async def test_channel_e_falls_back_when_taskboard_db_is_corrupt(tmp_path: Path)
 
     result = await PrimingEngine(anima_dir)._channel_e_pending_tasks()
 
+    assert not (anima_dir / "state" / "task_queue.jsonl").exists()
     assert "fallback visible work" in result
+
+
+@pytest.mark.asyncio
+async def test_channel_e_reads_only_current_completed_attempt_result(tmp_path: Path):
+    anima_dir = tmp_path / "runtime" / "animas" / "fixture"
+    anima_dir.mkdir(parents=True)
+    queue = TaskQueueManager(anima_dir)
+    queue.submit({"task_id": "job", "title": "job", "description": "work"})
+    attempt = queue.store.claim("fixture", "job", {"pid": 1, "process_start_time": 1})
+    token = attempt["_attempt_token"]
+    queue.store.finish(token, status="done", stop_kind="completed")
+    result_dir = anima_dir / "state/task_results/job"
+    result_dir.mkdir(parents=True)
+    (result_dir / f"{token}.md").write_text("current completed result")
+    (result_dir / "obsolete.md").write_text("stale result must not return")
+    result = await PrimingEngine(anima_dir)._channel_e_pending_tasks()
+    assert "[job] current completed result" in result
+    assert "stale result" not in result

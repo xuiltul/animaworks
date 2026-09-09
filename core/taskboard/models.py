@@ -33,14 +33,14 @@ class BoardColumn(StrEnum):
 
 
 class TaskQueueRef(BaseModel):
-    """Stable reference to one task_queue.jsonl entry."""
+    """Stable reference to one canonical task record."""
 
     anima_name: str
     task_id: str
 
 
 class TaskBoardMetadata(BaseModel):
-    """TaskBoard-only metadata layered over task_queue.jsonl entries."""
+    """TaskBoard-only presentation metadata layered over canonical tasks."""
 
     anima_name: str
     task_id: str
@@ -76,7 +76,6 @@ class BoardTask(BaseModel):
     assignee: str | None = None
     queue_status: str | None = None
     summary: str | None = None
-    deadline: str | None = None
     relay_chain: list[str] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
     queue_updated_at: str | None = None

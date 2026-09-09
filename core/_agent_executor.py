@@ -50,342 +50,66 @@ class ExecutorFactoryMixin:
             logger.debug("Personal tools discovery skipped", exc_info=True)
             return {}
 
-    def _create_executor(self, model_config=None):
-        """Factory: create the appropriate executor for the resolved mode.
+    def _create_executor(self, model_config=None, *, _unavailable_modes=frozenset()):
+        """Construct the selected adapter; only configured alternatives may replace it."""
+        from importlib import import_module
 
-        For mode S (Agent SDK), falls back gracefully:
-          1. Try ``AgentSDKExecutor`` (requires ``claude_agent_sdk``)
-          2. If ImportError, try ``AnthropicFallbackExecutor`` (requires ``anthropic``)
-          3. If that also fails, fall back to ``LiteLLMExecutor`` with the
-             ``anthropic/`` provider prefix
-        """
-        from core.execution import (
-            AnthropicFallbackExecutor,
-            AssistedExecutor,
-            LiteLLMExecutor,
-        )
+        from core.config.model_config import resolve_unavailable_model_config
+        from core.exceptions import ExecutorUnavailableError
+        from core.execution import AssistedExecutor, LiteLLMExecutor
+        from core.i18n import t
 
         active_config = model_config or self.model_config
         mode = self._resolve_execution_mode(active_config)
-
-        def _configured_cli_fallback(realm: str):
-            if not active_config.fallback_models:
-                return None
-            from core.config.model_config import resolve_effective_model_config
-            from core.execution.error_classifier import guard_key, provider_family_of
-            from core.execution.fallback_activity import log_model_fallback
-            from core.execution.rate_guard import get_rate_guard
-            from core.memory.activity import ActivityLogger
-
-            guard = get_rate_guard()
-            guard.report_block(
-                guard_key(provider_family_of(active_config.model), realm),
-                guard.config.default_block_seconds,
-                "executor_unavailable",
-            )
-            fallback_config = resolve_effective_model_config(active_config)
-            if all(
-                getattr(fallback_config, field, None) == getattr(active_config, field, None)
-                for field in ("model", "execution_mode", "resolved_mode", "credential")
-            ):
-                return None
-            log_model_fallback(
-                ActivityLogger(self.anima_dir),
-                active_config,
-                fallback_config,
-                channel="executor",
-                phase="unavailable",
-            )
-            return self._create_executor(fallback_config)
-
-        if mode == "s":
-            # ── Try Agent SDK first ──────────────────────────
+        common = {
+            "model_config": active_config,
+            "anima_dir": self.anima_dir,
+            "tool_registry": self._tool_registry,
+            "personal_tools": self._personal_tools,
+            "interrupt_event": self._interrupt_event,
+        }
+        adapters = {
+            "s": ("agent_sdk", "AgentSDKExecutor", None),
+            "c": ("codex_sdk", "CodexSDKExecutor", "is_codex_sdk_available"),
+            "d": ("cursor_agent", "CursorAgentExecutor", "is_cursor_agent_available"),
+            "g": ("gemini_cli", "GeminiCLIExecutor", "is_gemini_cli_available"),
+            "x": ("grok_cli", "GrokCLIExecutor", "is_grok_cli_available"),
+        }
+        if mode in adapters:
+            module_name, class_name, availability = adapters[mode]
             try:
-                from core.execution.agent_sdk import AgentSDKExecutor
-
-                return AgentSDKExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_registry=self._tool_registry,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-            except ImportError:
-                logger.warning(
-                    "AgentSDKExecutor unavailable (claude_agent_sdk not installed), trying AnthropicFallbackExecutor"
-                )
-
-            # ── Try Anthropic SDK fallback ────────────────────
-            try:
-                import anthropic  # noqa: F401
-
-                logger.info("Using AnthropicFallbackExecutor for Claude model")
-                return AnthropicFallbackExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_handler=self._tool_handler,
-                    tool_registry=self._tool_registry,
-                    memory=self.memory,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-            except ImportError:
-                logger.warning(
-                    "AnthropicFallbackExecutor also unavailable (anthropic not installed), "
-                    "falling back to LiteLLM with anthropic provider"
-                )
-
-            # ── Last resort: LiteLLM with anthropic provider ─
-            return LiteLLMExecutor(
-                model_config=active_config,
-                anima_dir=self.anima_dir,
-                tool_handler=self._tool_handler,
-                tool_registry=self._tool_registry,
-                memory=self.memory,
-                personal_tools=self._personal_tools,
-                interrupt_event=self._interrupt_event,
-            )
-
-        if mode == "c":
-            try:
-                from core.execution.codex_sdk import (
-                    CodexSDKExecutor,
-                    is_codex_sdk_available,
-                )
-
-                if not is_codex_sdk_available():
-                    raise ImportError("openai_codex not installed")
-                return CodexSDKExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_registry=self._tool_registry,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                    codex_home=self._codex_home,
-                )
-            except ImportError:
-                configured = _configured_cli_fallback("codex")
-                if configured is not None:
-                    return configured
-                logger.warning(
-                    "CodexSDKExecutor unavailable for model=%s resolved_mode=%s "
-                    "(openai-codex not installed); falling back to LiteLLM (Mode A)",
-                    active_config.model,
-                    active_config.resolved_mode,
-                )
-                fallback_model_config = active_config.model_copy(deep=True)
-                fallback_model: str | None = fallback_model_config.fallback_model
-
-                # If fallback_model is not explicitly configured, pick a safe
-                # provider/model based on available credentials.
-                if not fallback_model:
-                    model_name = fallback_model_config.model
-                    uses_anthropic_key = bool(
-                        fallback_model_config.api_key and fallback_model_config.api_key.startswith("sk-ant-")
-                    ) or fallback_model_config.api_key_env.upper().startswith("ANTHROPIC")
-                    if model_name.startswith("codex/"):
-                        if uses_anthropic_key:
-                            fallback_model = "anthropic/claude-sonnet-4-6"
-                        else:
-                            bare = model_name.split("/", 1)[1]
-                            fallback_model = f"openai/{bare}"
-
-                if fallback_model:
-                    fallback_model_config.model = fallback_model
-                    logger.warning(
-                        "Mode C fallback remapped model: %s -> %s",
-                        active_config.model,
-                        fallback_model_config.model,
-                    )
-                fallback_model_config.execution_mode = "A"
-                fallback_model_config.resolved_mode = "A"
-
-                # openai/* fallback without credentials cannot succeed — fail
-                # clearly instead of empty-response retry storms.
-                if fallback_model_config.model.startswith("openai/"):
-                    import os
-
-                    has_openai_cred = bool(fallback_model_config.api_key) or bool(os.environ.get("OPENAI_API_KEY"))
-                    if not has_openai_cred:
-                        from core.exceptions import ExecutorUnavailableError
-                        from core.i18n import t
-
-                        raise ExecutorUnavailableError(t("executor.codex_unavailable_no_openai_cred")) from None
-
+                if mode == "s" and not self._sdk_available:
+                    raise ImportError("claude_agent_sdk unavailable")
+                module = import_module(f"core.execution.{module_name}")
+                if availability and not getattr(module, availability)():
+                    raise ImportError(f"{class_name} unavailable")
+                executor_class = getattr(module, class_name)
+            except ImportError as exc:
+                unavailable = _unavailable_modes | {mode.upper()}
+                fallback = resolve_unavailable_model_config(active_config, unavailable_modes=unavailable)
+                if fallback is None:
+                    raise ExecutorUnavailableError(
+                        t("executor.unavailable_no_configured_fallback", mode=mode.upper(), model=active_config.model)
+                    ) from exc
                 from core.execution.fallback_activity import log_model_fallback
                 from core.memory.activity import ActivityLogger
 
                 log_model_fallback(
                     ActivityLogger(self.anima_dir),
                     active_config,
-                    fallback_model_config,
+                    fallback,
                     channel="executor",
                     phase="unavailable",
                 )
+                return self._create_executor(fallback, _unavailable_modes=unavailable)
+            if mode == "c":
+                common["codex_home"] = self._codex_home
+            return executor_class(**common)
 
-                return LiteLLMExecutor(
-                    model_config=fallback_model_config,
-                    anima_dir=self.anima_dir,
-                    tool_handler=self._tool_handler,
-                    tool_registry=self._tool_registry,
-                    memory=self.memory,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-
-        if mode == "d":
-            try:
-                from core.execution.cursor_agent import (
-                    CursorAgentExecutor,
-                    is_cursor_agent_available,
-                )
-
-                if not is_cursor_agent_available():
-                    raise ImportError("cursor-agent CLI not found")
-                return CursorAgentExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_registry=self._tool_registry,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-            except ImportError:
-                logger.warning(
-                    "CursorAgentExecutor unavailable (cursor-agent not installed), falling back to LiteLLM (Mode A)"
-                )
-                return LiteLLMExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_handler=self._tool_handler,
-                    tool_registry=self._tool_registry,
-                    memory=self.memory,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-
-        if mode == "g":
-            try:
-                from core.execution.gemini_cli import (
-                    GeminiCLIExecutor,
-                    is_gemini_cli_available,
-                )
-
-                if not is_gemini_cli_available():
-                    raise ImportError("gemini CLI not found")
-                return GeminiCLIExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_registry=self._tool_registry,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-            except ImportError:
-                logger.warning(
-                    "GeminiCLIExecutor unavailable (gemini CLI not installed), falling back to LiteLLM (Mode A)"
-                )
-                fallback_model_config = active_config.model_copy(deep=True)
-                model_name = fallback_model_config.model
-                if model_name.startswith("gemini/"):
-                    bare = model_name.split("/", 1)[1]
-                    if bare.startswith("gemini-"):
-                        fallback_model_config.model = f"google/{bare}"
-                    else:
-                        fallback_model_config.model = f"google/gemini-{bare}"
-                    logger.warning(
-                        "Mode G fallback remapped model: %s -> %s",
-                        active_config.model,
-                        fallback_model_config.model,
-                    )
-                return LiteLLMExecutor(
-                    model_config=fallback_model_config,
-                    anima_dir=self.anima_dir,
-                    tool_handler=self._tool_handler,
-                    tool_registry=self._tool_registry,
-                    memory=self.memory,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-
-        if mode == "x":
-            try:
-                from core.execution.grok_cli import (
-                    GrokCLIExecutor,
-                    is_grok_cli_available,
-                )
-
-                if not is_grok_cli_available():
-                    raise ImportError("grok CLI not found")
-                return GrokCLIExecutor(
-                    model_config=active_config,
-                    anima_dir=self.anima_dir,
-                    tool_registry=self._tool_registry,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-            except ImportError:
-                configured = _configured_cli_fallback("grok")
-                if configured is not None:
-                    return configured
-                logger.warning(
-                    "GrokCLIExecutor unavailable for model=%s resolved_mode=%s "
-                    "(grok CLI not installed); falling back to LiteLLM (Mode A)",
-                    active_config.model,
-                    active_config.resolved_mode,
-                )
-                fallback_model_config = active_config.model_copy(deep=True)
-                model_name = fallback_model_config.model
-                if model_name.startswith("grok/"):
-                    bare = model_name.split("/", 1)[1]
-                    fallback_model_config.model = f"xai/{bare}"
-                    logger.warning(
-                        "Mode X fallback remapped model: %s -> %s",
-                        active_config.model,
-                        fallback_model_config.model,
-                    )
-                fallback_model_config.execution_mode = "A"
-                fallback_model_config.resolved_mode = "A"
-                from core.execution.fallback_activity import log_model_fallback
-                from core.memory.activity import ActivityLogger
-
-                log_model_fallback(
-                    ActivityLogger(self.anima_dir),
-                    active_config,
-                    fallback_model_config,
-                    channel="executor",
-                    phase="unavailable",
-                )
-                return LiteLLMExecutor(
-                    model_config=fallback_model_config,
-                    anima_dir=self.anima_dir,
-                    tool_handler=self._tool_handler,
-                    tool_registry=self._tool_registry,
-                    memory=self.memory,
-                    personal_tools=self._personal_tools,
-                    interrupt_event=self._interrupt_event,
-                )
-
+        common.update(tool_handler=self._tool_handler, memory=self.memory)
         if mode == "a":
-            return LiteLLMExecutor(
-                model_config=active_config,
-                anima_dir=self.anima_dir,
-                tool_handler=self._tool_handler,
-                tool_registry=self._tool_registry,
-                memory=self.memory,
-                personal_tools=self._personal_tools,
-                interrupt_event=self._interrupt_event,
-            )
-
-        # mode == "b" (basic)
-        return AssistedExecutor(
-            model_config=active_config,
-            anima_dir=self.anima_dir,
-            tool_handler=self._tool_handler,
-            memory=self.memory,
-            messenger=self.messenger,
-            tool_registry=self._tool_registry,
-            personal_tools=self._personal_tools,
-            interrupt_event=self._interrupt_event,
-        )
+            return LiteLLMExecutor(**common)
+        return AssistedExecutor(**common, messenger=self.messenger)
 
     def _resolve_api_key(self) -> str | None:
         """Resolve the actual API key (direct value from config.json, then env var)."""

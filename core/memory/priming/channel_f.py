@@ -12,12 +12,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from core.file_access_policy import load_denied_roots, memory_source_is_allowed
+from core.memory.priming.items import ItemizedMemory, MemoryItem, render_items
 from core.memory.priming.utils import build_queries, build_unified_searcher, normalize_trigger
 from core.memory.rag.indexer import MemoryIndexer
 from core.memory.retrieval.unified_search import UnifiedMemorySearch
@@ -60,6 +62,15 @@ def extract_episode_summary(content: str, source: str) -> str:
     if path:
         return _single_line(Path(path).stem.replace("-", " ").replace("_", " "))
     return "Related episode memory"
+
+
+def _episode_updated(metadata: dict, path: str) -> str:
+    """Use explicit metadata or the episode filename as a freshness key."""
+    updated = str(metadata.get("updated_at") or metadata.get("updated") or metadata.get("created_at") or "")
+    if updated:
+        return updated
+    match = re.search(r"\d{4}-\d{2}-\d{2}", path)
+    return match.group(0) if match else ""
 
 
 def format_episode_pointer(
@@ -143,6 +154,7 @@ async def channel_f_episodes(
                     if not merged:
                         return ""
                     parts: list[str] = []
+                    items: list[MemoryItem] = []
                     accessed_memories = []
                     for mem in merged:
                         meta = mem.metadata if isinstance(mem.metadata, dict) else {}
@@ -158,14 +170,24 @@ async def channel_f_episodes(
                             logger.debug("Channel F: skipping Neo4j episode from denied source: %s", path)
                             continue
                         accessed_memories.append(mem)
-                        parts.append(
-                            format_episode_pointer(
-                                index=len(parts) + 1,
-                                score=mem.score,
-                                source=source,
-                                content=mem.content,
-                                path=path,
-                            ),
+                        text = format_episode_pointer(
+                            index=len(parts) + 1,
+                            score=mem.score,
+                            source=source,
+                            content=mem.content,
+                            path=path,
+                        )
+                        parts.append(text)
+                        items.append(
+                            MemoryItem(
+                                source="episodes",
+                                key=path
+                                or f"{_episode_updated(meta, path)}|{extract_episode_summary(mem.content, source)}",
+                                text=text,
+                                ref=path,
+                                updated=_episode_updated(meta, path),
+                                rank=float(mem.score),
+                            )
                         )
                     if accessed_memories:
                         try:
@@ -177,7 +199,7 @@ async def channel_f_episodes(
                         "Channel F: Neo4j episode search returned %d results",
                         len(merged),
                     )
-                    return "\n".join(parts) if parts else ""
+                    return ItemizedMemory(render_items(items, ""), items) if items else ""
 
         if not episodes_dir.is_dir():
             return ""
@@ -201,6 +223,7 @@ async def channel_f_episodes(
             return ""
 
         parts = []
+        items = []
         for result in results:
             source = str(result.get("source_file", "") or result.get("doc_id", "") or "")
             path = to_episode_memory_path(source)
@@ -213,13 +236,24 @@ async def channel_f_episodes(
             if not memory_source_is_allowed(anima_dir, path, denied_roots):
                 logger.debug("Channel F: skipping episode from denied source: %s", path)
                 continue
-            parts.append(
-                format_episode_pointer(
-                    index=len(parts) + 1,
-                    score=float(result.get("score", 0.0) or 0.0),
-                    source=source,
-                    content=str(result.get("content", "") or ""),
-                    path=path,
+            text = format_episode_pointer(
+                index=len(parts) + 1,
+                score=float(result.get("score", 0.0) or 0.0),
+                source=source,
+                content=str(result.get("content", "") or ""),
+                path=path,
+            )
+            parts.append(text)
+            metadata = result if isinstance(result, dict) else {}
+            items.append(
+                MemoryItem(
+                    source="episodes",
+                    key=path
+                    or f"{_episode_updated(metadata, path)}|{extract_episode_summary(str(result.get('content', '') or ''), source)}",
+                    text=text,
+                    ref=path,
+                    updated=_episode_updated(metadata, path),
+                    rank=float(result.get("score", 0.0) or 0.0),
                 )
             )
 
@@ -227,7 +261,7 @@ async def channel_f_episodes(
             "Channel F: Episode search returned %d results",
             len(results),
         )
-        return "\n".join(parts) if parts else ""
+        return ItemizedMemory(render_items(items, ""), items) if items else ""
 
     except Exception as e:
         logger.warning("Channel F: Episode search failed: %s", e)

@@ -334,7 +334,7 @@ async def finalize_session(
     timestamp = now_local()
     time_str = timestamp.strftime("%H:%M")
     episode_entry = f"## {time_str} — {parsed.title}\n\n{parsed.episode_body}\n"
-    memory_mgr.append_episode(episode_entry)
+    await asyncio.to_thread(memory_mgr.append_episode, episode_entry)
 
     # F8: The episode above is now durably written. Advance and persist the
     # finalization cursor *before* the LLM compression await below. A crash

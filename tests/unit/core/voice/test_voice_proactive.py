@@ -6,11 +6,11 @@
 
 Covers:
   - enabled by default (opt-out); disabled → the idle watcher task is never started
-  - silence threshold + all guards clear → one self-turn runs (delay doubles)
+  - silence threshold + all guards clear → one self-turn runs at a fixed delay
   - each fire-guard blocks the self-turn
-  - cap of 2 consecutive self-turns (needs a user turn to reset)
-  - user turn resets the escalation counters
-  - proactive turn records only the assistant conversation turn
+  - no cap on consecutive self-turns
+  - user turn resets the monologue counter
+  - proactive turns are not recorded in conversation.json
   - close() cancels the idle watcher task
 """
 
@@ -25,10 +25,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.config.schemas import VoiceConfig
-from core.voice.session import PROACTIVE_SYNTHETIC_PROMPT, VoiceSession
+from core.voice.front import READ_MEMORY_TOOL
+from core.voice.session import VoiceSession, build_proactive_prompt
 from core.voice.tts_base import TTSConfig
 
 INITIAL_DELAY = VoiceConfig().proactive_initial_delay_sec
+PROACTIVE_PROMPT = build_proactive_prompt(0)
 
 
 def _audio_frames() -> bytes:
@@ -66,7 +68,12 @@ def _make_session(*, proactive: bool = True, ticks: float = 0.0) -> VoiceSession
     return sess
 
 
-def _lane_stub(*, fired: asyncio.Event | None = None, log: list | None = None) -> AsyncMock:
+def _lane_stub(
+    *,
+    fired: asyncio.Event | None = None,
+    log: list | None = None,
+    calls: list[dict] | None = None,
+) -> AsyncMock:
     """A fake front lane whose stream yields one short line."""
     lane = AsyncMock()
     lane.check_health = AsyncMock(return_value=True)
@@ -75,6 +82,8 @@ def _lane_stub(*, fired: asyncio.Event | None = None, log: list | None = None) -
     async def _stream(user_text: str, **kwargs):  # type: ignore[no-untyped-def]
         if log is not None:
             log.append(user_text)
+        if calls is not None:
+            calls.append(kwargs)
         if fired is not None:
             fired.set()
         yield "こんにちは"
@@ -110,6 +119,7 @@ class TestProactiveEnablement:
     def test_enabled_by_default(self) -> None:
         # Proactive speech is opt-out: the config default must stay True.
         assert VoiceConfig().proactive_enabled is True
+        assert INITIAL_DELAY == 10.0
 
     def test_disabled_does_not_start_loop(self) -> None:
         sess = _make_session(proactive=False)
@@ -147,7 +157,7 @@ class TestProactiveEnablement:
 
 class TestProactiveTurn:
     @pytest.mark.asyncio
-    async def test_turn_runs_once_and_escalates(self) -> None:
+    async def test_turn_runs_once_at_constant_delay(self) -> None:
         sess = _make_session(proactive=True)
         fired = asyncio.Event()
         sess._front_lane = _lane_stub(fired=fired)
@@ -158,8 +168,7 @@ class TestProactiveTurn:
         # Give the loop a beat to finalize the turn bookkeeping.
         await asyncio.sleep(0.02)
         assert sess._proactive_count == 1
-        # delay doubles after a self-turn
-        assert sess._proactive_delay == pytest.approx(2.0)
+        assert sess._proactive_delay == pytest.approx(1.0)
         # last activity was refreshed so no immediate second fire
         assert time.monotonic() - sess._last_activity < 1.0
         task = sess._idle_watcher
@@ -172,17 +181,36 @@ class TestProactiveTurn:
     async def test_turn_uses_synthetic_instruction(self) -> None:
         sess = _make_session(proactive=True)
         log: list[str] = []
+        calls: list[dict] = []
         fired = asyncio.Event()
-        sess._front_lane = _lane_stub(fired=fired, log=log)
+        sess._front_lane = _lane_stub(fired=fired, log=log, calls=calls)
         _ready_to_fire(sess)
         sess._ensure_idle_watcher()
         await asyncio.wait_for(fired.wait(), timeout=2.0)
-        assert log and PROACTIVE_SYNTHETIC_PROMPT in log
+        assert log and PROACTIVE_PROMPT in log
+        assert calls[0]["tools"] == [READ_MEMORY_TOOL]
         task = sess._idle_watcher
         sess._idle_watcher = None
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+
+
+class TestProactivePrompt:
+    def test_prompt_changes_for_first_and_later_turns(self) -> None:
+        first = build_proactive_prompt(0)
+        later = build_proactive_prompt(1)
+
+        assert "軽い一言" in first
+        assert "read_memory" not in first
+        assert "read_memory" in later
+        assert "独り言モード" in later
+
+    def test_fourth_later_prompt_requests_older_memory(self) -> None:
+        fourth = build_proactive_prompt(4)
+
+        assert "read_memory" in fourth
+        assert "少し前の記憶" in fourth
 
 
 # ── Fire-guards ───────────────────────────────────────────────
@@ -208,6 +236,33 @@ class TestProactiveGuards:
         assert sess._should_proactive() is False
 
     @pytest.mark.asyncio
+    async def test_pending_client_playback_blocks(self) -> None:
+        sess = _make_session()
+        _ready_to_fire(sess)
+        sess._proactive_lead_sec = 5.0
+        sess._playback_end_at = time.monotonic() + 30
+        assert sess._should_proactive() is False
+
+    async def test_playback_within_lead_allows(self) -> None:
+        sess = _make_session()
+        _ready_to_fire(sess)
+        sess._proactive_lead_sec = 5.0
+        sess._playback_end_at = time.monotonic() + 4
+        assert sess._should_proactive() is True
+
+    async def test_note_playback_accumulates_from_now(self) -> None:
+        sess = _make_session()
+        sess._playback_end_at = 0.0  # long past
+        sess._note_playback(3.0)
+        sess._note_playback(2.0)
+        assert 4.9 < sess._playback_end_at - time.monotonic() <= 5.0
+
+    async def test_interrupt_resets_playback_estimate(self) -> None:
+        sess = _make_session()
+        sess._playback_end_at = time.monotonic() + 30
+        await sess.handle_interrupt()
+        assert sess._playback_end_at == 0.0
+
     async def test_recognized_speech_blocks(self) -> None:
         sess = _make_session(proactive=True)
         _ready_to_fire(sess)
@@ -243,26 +298,24 @@ class TestProactiveGuards:
         assert sess._should_proactive() is False
 
 
-# ── Escalation cap + reset ────────────────────────────────────
+# ── Continuous monologue + reset ─────────────────────────────
 
 
-class TestProactiveEscalation:
+class TestProactiveContinuation:
     @pytest.mark.asyncio
-    async def test_cap_at_two_self_turns(self) -> None:
+    async def test_count_five_still_allows_self_turn(self) -> None:
         sess = _make_session(proactive=True)
         log: list = []
         sess._front_lane = _lane_stub(log=log)
         _ready_to_fire(sess)
-        sess._proactive_count = 2
-        assert sess._should_proactive() is False
-        await _run_ticks(sess, n=2)
-        assert log == []
+        sess._proactive_count = 5
+        assert sess._should_proactive() is True
 
     @pytest.mark.asyncio
     async def test_user_turn_resets_count_and_delay(self) -> None:
         sess = _make_session(proactive=True)
         sess._front_lane = _lane_stub()
-        # simulate prior escalation
+        # simulate prior monologues
         sess._proactive_count = 3
         sess._proactive_delay = 400.0
         sess._audio_buffer.extend(_audio_frames())
@@ -291,23 +344,21 @@ class TestProactiveEscalation:
 
 class TestProactiveRecording:
     @pytest.mark.asyncio
-    async def test_proactive_records_assistant_only(self) -> None:
+    async def test_proactive_does_not_record_conversation(self) -> None:
         sess = _make_session(proactive=True)
         sess._front_lane = _lane_stub()
         mock_conv = MagicMock()
         with patch("core.memory.conversation.ConversationMemory", return_value=mock_conv):
             await sess._run_front_turn(
                 sess._front_lane,
-                PROACTIVE_SYNTHETIC_PROMPT,
+                PROACTIVE_PROMPT,
                 "human",
                 True,
                 record_user=False,
+                record=False,
             )
-        roles = [c.args[0] for c in mock_conv.append_turn.call_args_list]
-        assert roles == ["assistant"]
-        # the synthetic instruction must never be written as a user turn
-        written = [c.args[1] for c in mock_conv.append_turn.call_args_list]
-        assert all(PROACTIVE_SYNTHETIC_PROMPT not in w for w in written)
+        mock_conv.append_turn.assert_not_called()
+        mock_conv.save.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_self_turn_owns_tts_worker(self) -> None:
@@ -328,7 +379,7 @@ class TestProactiveRecording:
         ):
             ok = await sess._run_front_turn(
                 sess._front_lane,
-                PROACTIVE_SYNTHETIC_PROMPT,
+                PROACTIVE_PROMPT,
                 "human",
                 True,
                 record_user=False,
@@ -353,7 +404,7 @@ class TestProactiveRecording:
         sess._front_lane = lane
         _ready_to_fire(sess)
         await _run_ticks(sess, n=2)
-        assert sess._proactive_count == 0  # failure does not consume the cap
+        assert sess._proactive_count == 0  # failure does not advance the prompt
         assert time.monotonic() - sess._last_activity < 1.0  # timer rewound
 
     @pytest.mark.asyncio
@@ -474,7 +525,7 @@ class TestProactiveConcurrency:
         with patch("core.memory.conversation.ConversationMemory", return_value=MagicMock()):
             ok = await sess._run_front_turn(
                 sess._front_lane,
-                PROACTIVE_SYNTHETIC_PROMPT,
+                PROACTIVE_PROMPT,
                 "human",
                 True,
                 record_user=False,
@@ -508,7 +559,7 @@ class TestProactiveConcurrency:
         async def _run() -> bool:
             return await sess._run_front_turn(
                 lane,
-                PROACTIVE_SYNTHETIC_PROMPT,
+                PROACTIVE_PROMPT,
                 "human",
                 True,
                 record_user=False,
@@ -549,7 +600,13 @@ class TestEmptyTurnAndDiscard:
         sess._front_lane = lane
         mock_conv = MagicMock()
         with patch("core.memory.conversation.ConversationMemory", return_value=mock_conv):
-            ok = await sess._run_front_turn(lane, PROACTIVE_SYNTHETIC_PROMPT, "human", True, record_user=False)
+            ok = await sess._run_front_turn(
+                lane,
+                PROACTIVE_PROMPT,
+                "human",
+                True,
+                record_user=False,
+            )
         assert ok is False
         assert mock_conv.append_turn.call_args_list == []
 
@@ -592,3 +649,43 @@ class TestProactiveTeardown:
         await sess.close()
         assert sess._idle_watcher is None
         assert task.cancelled()
+
+
+class TestMonologueBlockList:
+    def test_block_list_keeps_content_words_only(self) -> None:
+        recent = ["🤭💦あっ、また黙っちゃった… LGTのDynamicって用語、気になる？", ""]
+        prompt = build_proactive_prompt(2, recent)
+        assert "すでに話した話題" in prompt
+        assert "LGT" in prompt and "Dynamic" in prompt and "用語" in prompt
+        # phrasing (hiragana) and emoji must not be quoted back to the model
+        assert "黙っちゃった" not in prompt and "🤭" not in prompt
+
+    def test_no_block_list_when_nothing_said(self) -> None:
+        assert "すでに話した話題" not in build_proactive_prompt(1, [])
+
+
+def test_wav_seconds_parses_duration() -> None:
+    import io
+    import wave
+
+    from core.voice.session import _wav_seconds
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(24000)
+        w.writeframes(b"\x00\x00" * 12000)  # 0.5s
+    assert _wav_seconds(buf.getvalue()) == pytest.approx(0.5)
+    assert _wav_seconds(b"not wav") is None
+    assert _wav_seconds(b"") is None
+
+
+def test_zakkan_corner_rotates_seed_and_skips_memory_hint() -> None:
+    first = build_proactive_prompt(3)
+    second = build_proactive_prompt(8)
+
+    assert "ツールは使わない" in first and "ツールは使わない" in second
+    assert "今回のお題は「今の時間帯」" in first
+    assert "今回のお題は「今の季節や天気」" in second
+    assert "少し前の記憶" not in second

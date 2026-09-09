@@ -16,12 +16,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.memory.priming.constants import (
-    _CHARS_PER_TOKEN,
-    _MAX_KEYWORD_INPUT_LEN,
-    _MINIMAL_STOPWORDS,
-    _RE_UNICODE_WORDS,
-)
+from core.memory.priming.constants import _MAX_KEYWORD_INPUT_LEN, _MINIMAL_STOPWORDS, _RE_UNICODE_WORDS
+from core.prompt.tokens import truncate_to_tokens
 
 if TYPE_CHECKING:
     from core.memory.rag.retriever import MemoryRetriever
@@ -301,21 +297,7 @@ def truncate_head(text: str, max_tokens: int) -> str:
     Suitable for sender profiles (basic info at the top) and
     ripgrep results (best matches first).
     """
-    max_chars = max_tokens * _CHARS_PER_TOKEN
-    if len(text) <= max_chars:
-        return text
-
-    # Truncate at sentence boundary if possible
-    truncated = text[:max_chars]
-    last_period = max(
-        truncated.rfind("。"),
-        truncated.rfind("."),
-        truncated.rfind("\n"),
-    )
-    if last_period > max_chars * 0.8:  # If we're close enough
-        return truncated[: last_period + 1]
-
-    return truncated + "..."
+    return truncate_to_tokens(text, max_tokens, keep="head")
 
 
 def truncate_tail(text: str, max_tokens: int) -> str:
@@ -323,15 +305,4 @@ def truncate_tail(text: str, max_tokens: int) -> str:
 
     Suitable for recent episodes where newest entries are most relevant.
     """
-    max_chars = max_tokens * _CHARS_PER_TOKEN
-    if len(text) <= max_chars:
-        return text
-
-    # Keep the tail portion
-    truncated = text[-max_chars:]
-    # Try to start at a clean boundary
-    first_newline = truncated.find("\n")
-    if first_newline != -1 and first_newline < max_chars * 0.2:
-        return truncated[first_newline + 1 :]
-
-    return "..." + truncated
+    return truncate_to_tokens(text, max_tokens, keep="tail")

@@ -1232,7 +1232,9 @@ def test_repair_reindexes_shared_collections_when_requested(data_dir: Path, monk
     assert read_shared_hash(anima_dir, "shared_common_knowledge_hash") is not None
     assert read_shared_hash(anima_dir, "shared_common_skills_hash") is not None
     assert shared_index_meta_path(anima_dir).is_file()
-    assert not (anima_dir / "index_meta.json").exists()
+    # Shared hashes stay in their separate file. Publication now also commits
+    # the rebuilt personal metadata, which is empty for this synthetic indexer.
+    assert json.loads((anima_dir / "index_meta.json").read_text(encoding="utf-8")) == {}
 
 
 def test_repair_failure_preserves_live_db_and_records_state(data_dir: Path, monkeypatch):

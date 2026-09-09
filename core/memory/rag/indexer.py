@@ -108,6 +108,8 @@ class MemoryIndexer:
         collection_prefix: str | None = None,
         embedding_model: SentenceTransformer | None = None,
         upsert_quarantine_failure_threshold: int | None = None,
+        source_data_dir: Path | None = None,
+        source_file_stats: dict[str, os.stat_result] | None = None,
     ) -> None:
         """Initialize indexer.
 
@@ -123,10 +125,30 @@ class MemoryIndexer:
             embedding_model: Pre-initialized SentenceTransformer instance.
                 When provided, ``_init_embedding_model()`` is skipped,
                 avoiding redundant model loading.
+            source_data_dir: Private full-rebuild input root, or None for the
+                ordinary live indexing path. Preserves snapshot exclusion policy.
+            source_file_stats: Original source stats keyed by copied absolute
+                path; keeps document creation timestamps stable during repair.
         """
         self.vector_store = vector_store
         self.anima_name = anima_name
         self.anima_dir = anima_dir
+        # Explicit full rebuilds read private copies. Keep source timestamps
+        # and exclusion policy without changing normal runtime indexing.
+        self._source_file_stats = source_file_stats or {}
+        self._source_data_dir = source_data_dir
+        self._source_ragignore = None
+        if source_data_dir is not None:
+            ignore_path = source_data_dir / ".ragignore"
+            self._source_ragignore = (
+                [
+                    line.strip()
+                    for line in ignore_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")
+                ]
+                if ignore_path.exists()
+                else []
+            )
         self.collection_prefix = collection_prefix or anima_name
         self._embedding_model_name_override = embedding_model_name
         if upsert_quarantine_failure_threshold is None:
@@ -261,6 +283,18 @@ class MemoryIndexer:
                 json.dump(self.index_meta, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning("Failed to save index metadata: %s", e)
+
+    def _source_is_ragignored(self, path: Path) -> bool:
+        root = getattr(self, "_source_data_dir", None)
+        if root is None:
+            return self.is_ragignored(path)
+        from core.paths import get_data_dir
+
+        # Absolute .ragignore patterns refer to the original runtime layout,
+        # not the randomly named private copy used by a repair.
+        original_root = get_data_dir()
+        original_path = original_root / path.relative_to(root)
+        return is_rag_excluded(original_path, root=original_root, ragignore_patterns=self._source_ragignore or ())
 
     def _load_upsert_failure_state(self) -> dict:
         """Load persistent per-file upsert failures and quarantine history."""
@@ -426,7 +460,7 @@ class MemoryIndexer:
         # Check .ragignore exclusion. Remove any previously-indexed chunks so
         # a file that matches .ragignore only after indexing does not linger
         # in the collection (mirrors the curator-denied path below).
-        if self.is_ragignored(file_path):
+        if self._source_is_ragignored(file_path):
             logger.debug("Skipping ragignored file: %s", file_path)
             self.delete_indexed_file(file_path, memory_type)
             return self._finish_index_file(0, "skipped")
@@ -454,10 +488,15 @@ class MemoryIndexer:
                 logger.debug("Failed to evaluate skill curator access for %s", file_path, exc_info=True)
 
         # Check if file has changed
+        source_stat = file_path.stat()
         file_hash = self._compute_file_hash(file_path)
+        embedding_signature = self._document_embedding_signature()
 
         if not force and file_key in self.index_meta:
-            if self.index_meta[file_key].get("hash") == file_hash:
+            if (
+                self.index_meta[file_key].get("hash") == file_hash
+                and self.index_meta[file_key].get("embedding_signature", embedding_signature) == embedding_signature
+            ):
                 # Verify the collection still exists in the vector store
                 # before short-circuiting.  If the vectordb was wiped or
                 # recreated since the last index, the meta hash would
@@ -468,8 +507,8 @@ class MemoryIndexer:
                     logger.debug("File unchanged, skipping: %s", file_path)
                     return self._finish_index_file(0, "unchanged")
                 if existence is CollectionExistence.UNAVAILABLE:
-                    logger.debug("Collection availability unknown, skipping re-index of %s", file_path)
-                    return self._finish_index_file(0, "unchanged")
+                    logger.debug("Collection availability unknown, deferring re-index of %s", file_path)
+                    return self._finish_index_file(0, "failed", transient=True)
                 logger.info(
                     "Collection '%s' missing despite tracked hash, forcing re-index of %s",
                     collection_name,
@@ -487,6 +526,8 @@ class MemoryIndexer:
 
         # Chunk the content
         chunks = self._chunk_file(file_path, content, memory_type, origin=origin)
+        if not self._source_stat_matches(file_path, source_stat):
+            return self._finish_index_file(0, "failed", transient=True)
 
         if not chunks:
             logger.debug("No chunks extracted from %s", file_path)
@@ -504,13 +545,48 @@ class MemoryIndexer:
             # source or spending more embedding work.
             return self._finish_index_file(0, "failed", transient=True)
 
-        source_mtime_ns = file_path.stat().st_mtime_ns
+        source_mtime_ns = source_stat.st_mtime_ns
         for chunk in chunks:
             chunk.metadata["source_hash"] = file_hash
             chunk.metadata["source_mtime_ns"] = source_mtime_ns
+            # Explicitly overwrite an old signature when policy is unknown:
+            # native upserts can merge metadata rather than removing keys.
+            chunk.metadata["embedding_signature"] = embedding_signature or ""
 
-        # Generate embeddings
-        embeddings = self._generate_embeddings([chunk.content for chunk in chunks])
+        existing = indexer_delete.get_indexed_file_documents(self, collection_name, file_key)
+        if existing is None:
+            return self._finish_index_file(0, "failed", transient=True)
+        # Reuse only the same ID's exact embedding input and known model /
+        # prefix signature. A truncated listing cannot prove completeness.
+        by_id = (
+            {document.id: document for document in existing}
+            if not force and max(len(existing), len(chunks)) < 10_000
+            else {}
+        )
+        metadata_only = []
+        changed = []
+        access_keys = set(access_tracking_metadata())
+        for chunk in chunks:
+            old = by_id.get(chunk.id)
+            if (
+                old is not None
+                and embedding_signature is not None
+                and old.content == chunk.content
+                and old.metadata.get("embedding_signature") == embedding_signature
+                and not (set(old.metadata) - set(chunk.metadata) - access_keys)
+            ):
+                # Preserve access counters; updating source metadata must not
+                # turn a retrieval into an unused memory again.
+                chunk.metadata = {key: value for key, value in chunk.metadata.items() if key not in access_keys}
+                metadata_only.append(chunk)
+            else:
+                changed.append(chunk)
+        embeddings = self._generate_embeddings([chunk.content for chunk in changed]) if changed else []
+        if (
+            not self._source_stat_matches(file_path, source_stat)
+            or embedding_signature != self._document_embedding_signature()
+        ):
+            return self._finish_index_file(0, "failed", transient=True)
 
         # Build documents
         from core.memory.rag.store import Document
@@ -522,23 +598,75 @@ class MemoryIndexer:
                 embedding=embeddings[i],
                 metadata=chunk.metadata,
             )
-            for i, chunk in enumerate(chunks)
+            for i, chunk in enumerate(changed)
         ]
 
-        if not indexer_delete.upsert_file_documents(self, collection_name, file_key, file_path, documents):
+        if not indexer_delete.upsert_file_documents(
+            self,
+            collection_name,
+            file_key,
+            file_path,
+            documents,
+            existing_ids=[document.id for document in existing],
+            metadata_only=metadata_only,
+        ):
             transient_probe = getattr(self.vector_store, "is_transient_write_failure", None)
             transient = bool(callable(transient_probe) and transient_probe(collection_name))
             return self._finish_index_file(0, "failed", transient=transient)
+        if not self._source_stat_matches(file_path, source_stat):
+            return self._finish_index_file(0, "failed", transient=True)
 
         self.index_meta[file_key] = {
             "hash": file_hash,
             "indexed_at": now_iso(),
             "chunks": len(chunks),
+            "embedding_signature": embedding_signature,
         }
         self._save_index_meta()
 
-        logger.info("Indexed %d chunks from %s", len(chunks), file_path)
+        logger.info(
+            "Indexed %d chunks from %s (embedded=%d reused=%d)",
+            len(chunks),
+            file_path,
+            len(changed),
+            len(metadata_only),
+        )
         return self._finish_index_file(len(chunks), "indexed")
+
+    @staticmethod
+    def _source_stat_matches(file_path: Path, before: os.stat_result) -> bool:
+        try:
+            after = file_path.stat()
+        except OSError:
+            return False
+        return (before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+
+    @staticmethod
+    def _document_embedding_signature() -> str | None:
+        """Fingerprint the same model and input-prefix policy as the encoder."""
+        from core.config import load_config
+        from core.memory.rag.singleton import get_embedding_model_name
+
+        try:
+            rag = load_config().rag
+            policy = [
+                "document-v1",
+                get_embedding_model_name(),
+                rag.embedding_e5_prefix_enabled,
+                rag.embedding_query_prefix or "",
+                rag.embedding_document_prefix or "",
+                rag.embedding_max_seq_length,
+            ]
+        except Exception:
+            # The encoder has fail-soft defaults, but an unknown policy must
+            # never authorize reuse of a previously generated embedding.
+            logger.debug("Embedding policy unavailable; disabling chunk reuse", exc_info=True)
+            return None
+        return hashlib.sha256(json.dumps(policy, ensure_ascii=False).encode("utf-8")).hexdigest()
 
     def delete_indexed_file(self, file_path: Path, memory_type: str) -> int:
         return indexer_delete.delete_indexed_file(self, file_path, memory_type)
@@ -686,7 +814,7 @@ class MemoryIndexer:
             if not source_key.is_relative_to(directory_key):
                 continue
             source_path = anima_dir / source_key
-            if not os.path.lexists(source_path) or self.is_ragignored(source_path):
+            if not os.path.lexists(source_path) or self._source_is_ragignored(source_path):
                 stale_sources.append(source_file)
                 if len(stale_sources) >= STALE_RECONCILIATION_LIMIT:
                     break
@@ -757,22 +885,23 @@ class MemoryIndexer:
         Returns:
             Number of chunks indexed
         """
+        self._last_index_file_outcome = _IndexFileOutcome(status="failed")
         conv_file = conversation_path / "conversation.json"
         if not conv_file.exists():
             logger.debug("conversation.json not found at %s", conv_file)
-            return 0
+            return self._finish_index_file(0, "skipped")
 
         try:
             with open(conv_file, encoding="utf-8") as f:
                 conv_data = json.load(f)
         except Exception as e:
             logger.warning("Failed to read conversation.json: %s", e)
-            return 0
+            return self._finish_index_file(0, "failed")
 
         summary = conv_data.get("compressed_summary", "")
         if not summary or len(summary) < 50:
             logger.debug("compressed_summary too short or empty, skipping")
-            return 0
+            return self._finish_index_file(0, "skipped")
 
         # Check if content has changed via hash
         content_hash = hashlib.sha256(summary.encode("utf-8")).hexdigest()
@@ -785,10 +914,10 @@ class MemoryIndexer:
                 existence = self._collection_exists(collection_name)
                 if existence is CollectionExistence.EXISTS:
                     logger.debug("compressed_summary unchanged, skipping")
-                    return 0
+                    return self._finish_index_file(0, "unchanged")
                 if existence is CollectionExistence.UNAVAILABLE:
                     logger.debug("Conversation collection availability unknown, skipping re-index")
-                    return 0
+                    return self._finish_index_file(0, "failed", transient=True)
                 logger.info(
                     "Collection '%s' missing despite tracked hash, forcing re-index of conversation_summary",
                     collection_name,
@@ -802,13 +931,13 @@ class MemoryIndexer:
 
         if not chunks:
             logger.debug("No chunks extracted from compressed_summary")
-            return 0
+            return self._finish_index_file(0, "skipped")
 
         # Gate GPU work on write availability.  A failed create is the
         # fail-soft signal used by HTTP circuit/fence/unavailable paths.
         if not self.vector_store.create_collection(collection_name):
             logger.warning("Conversation summary collection unavailable for write, skipping index")
-            return 0
+            return self._finish_index_file(0, "failed", transient=True)
 
         # Generate embeddings
         embeddings = self._generate_embeddings([c.content for c in chunks])
@@ -827,7 +956,9 @@ class MemoryIndexer:
         ]
         if not self.vector_store.upsert(collection_name, documents):
             logger.warning("Upsert failed for conversation_summary, skipping index_meta update")
-            return 0
+            transient_probe = getattr(self.vector_store, "is_transient_write_failure", None)
+            transient = bool(callable(transient_probe) and transient_probe(collection_name))
+            return self._finish_index_file(0, "failed", transient=transient)
 
         self._mark_collection_known(collection_name)
 
@@ -839,7 +970,7 @@ class MemoryIndexer:
         self._save_index_meta()
 
         logger.info("Indexed %d conversation_summary chunks for %s", len(chunks), anima_name)
-        return len(chunks)
+        return self._finish_index_file(len(chunks), "indexed")
 
     def _chunk_markdown_text(
         self,
@@ -1246,7 +1377,7 @@ class MemoryIndexer:
         }
 
         # File timestamps
-        stat = file_path.stat()
+        stat = getattr(self, "_source_file_stats", {}).get(str(file_path)) or file_path.stat()
         metadata["created_at"] = ensure_aware(datetime.fromtimestamp(stat.st_ctime)).isoformat()
         metadata["updated_at"] = ensure_aware(datetime.fromtimestamp(stat.st_mtime)).isoformat()
 
@@ -1255,6 +1386,7 @@ class MemoryIndexer:
             metadata["importance"] = "important"
         else:
             metadata["importance"] = "normal"
+        metadata["always_prime"] = (frontmatter or {}).get("always_prime") is True
 
         # ── ActionRule ──────────
         if "[ACTION-RULE]" in content:

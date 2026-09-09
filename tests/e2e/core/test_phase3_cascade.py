@@ -295,7 +295,9 @@ async def test_corruption_isolated_and_reads_continue_during_repair(
         assert healthy.result["results"][0]["document"]["content"] == "cascade-b indexed while sibling corrupt"
 
         embed_server.arm_repair_gate()
-        repairing = asyncio.create_task(root_a.send_request("repair_memory", {"include_shared": False}, timeout=60))
+        # A whole-store replacement must include shared collections; partial
+        # rebuilds are deliberately rejected before any embedding work starts.
+        repairing = asyncio.create_task(root_a.send_request("repair_memory", {"include_shared": True}, timeout=60))
         assert await asyncio.to_thread(embed_server.repair_started.wait, 10)
         during_repair = await _query(root_a)
         assert during_repair.error and "repair in progress" in during_repair.error["message"].lower()
@@ -358,13 +360,17 @@ async def test_root_sigkill_respawn_preserves_db_and_recovers_lease(
         )
 
         await root.start()
-        await _wait_for(lambda: (failed / descriptor.name).exists())
+        await _wait_for(lambda: not descriptor.exists())
+        assert not (failed / descriptor.name).exists()
         assert _db_snapshot(anima_dir) == before
         query = await _query_ready(root)
         assert query.error is None
         assert query.result["results"][0]["document"]["content"] == "sigkill durable sentinel"
         recovered = queue.get_task_by_id(entry.task_id)
-        assert recovered.status == "failed" and "INTERRUPTED" in recovered.summary
+        assert recovered.status == "pending"
+        assert recovered.summary == "interrupted phase3 task"
+        assert "INTERRUPTED" in recovered.meta["last_run_note"]
+        assert recovered.meta["last_run_stop_kind"] == "crash"
     finally:
         await root.stop(drain_streams=False)
 

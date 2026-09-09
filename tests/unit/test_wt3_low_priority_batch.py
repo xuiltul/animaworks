@@ -333,8 +333,8 @@ class TestPrimingRegexCompiledConstants:
         assert "世界" in tokens
         assert "test123" in tokens
 
-    def test_re_unicode_words_matches_katakana(self):
-        """_RE_UNICODE_WORDS should match katakana sequences."""
+    def test_re_unicode_words_matches_kaオーナーna(self):
+        """_RE_UNICODE_WORDS should match kaオーナーna sequences."""
         from core.memory.priming import _RE_UNICODE_WORDS
 
         tokens = _RE_UNICODE_WORDS.findall("テスト マレーシア")

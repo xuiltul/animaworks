@@ -9,6 +9,7 @@ Verifies the full AgentCore integration with CodexSDKExecutor using
 mocked Codex SDK.  No real Codex CLI or API key required.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,6 +26,18 @@ def _mock_codex(start_thread):
     codex.thread_resume = AsyncMock(return_value=start_thread)
     codex.close = AsyncMock()
     return codex
+
+
+def _mock_result_thread(thread_id, result):
+    async def events():
+        yield SimpleNamespace(
+            type="item.completed", item=SimpleNamespace(type="agent_message", text=result.final_response)
+        )
+        yield SimpleNamespace(type="turn.completed", usage=result.usage)
+
+    turn = MagicMock()
+    turn.stream.return_value = events()
+    return SimpleNamespace(id=thread_id, turn=AsyncMock(return_value=turn))
 
 
 # ── Executor creation tests ──────────────────────────────────
@@ -48,8 +61,10 @@ class TestExecutorCreation:
         # Verify mode resolves to 'c'
         assert agent._resolve_execution_mode() == "c"
 
-    def test_create_executor_mode_c_fallback_to_a(self, make_agent_core):
-        """codex/* model + openai-codex missing → LiteLLMExecutor fallback."""
+    def test_create_executor_mode_c_missing_sdk_does_not_silently_switch_auth(self, make_agent_core):
+        """Missing Codex SDK requires an explicit configured fallback."""
+        from core.exceptions import ExecutorUnavailableError
+
         agent = make_agent_core(name="codex-fallback", model="codex/o4-mini")
 
         with (
@@ -58,12 +73,9 @@ class TestExecutorCreation:
                 "core.execution.codex_sdk.CodexSDKExecutor",
                 side_effect=ImportError("No module named 'openai_codex'"),
             ),
+            pytest.raises(ExecutorUnavailableError),
         ):
-            executor = agent._create_executor()
-
-        from core.execution.litellm_loop import LiteLLMExecutor
-
-        assert isinstance(executor, LiteLLMExecutor)
+            agent._create_executor()
 
 
 # ── Run cycle tests ──────────────────────────────────────────
@@ -80,11 +92,9 @@ class TestRunCycle:
         mock_turn = MagicMock()
         mock_turn.final_response = "Codex response"
         mock_turn.items = []
-        mock_turn.usage = MagicMock(input_tokens=50, output_tokens=20)
+        mock_turn.usage = SimpleNamespace(input_tokens=50, output_tokens=20)
 
-        mock_thread = MagicMock()
-        mock_thread.run = AsyncMock(return_value=mock_turn)
-        mock_thread.id = "thread-chat-001"
+        mock_thread = _mock_result_thread("thread-chat-001", mock_turn)
 
         mock_codex = _mock_codex(mock_thread)
 
@@ -107,9 +117,7 @@ class TestRunCycle:
         mock_turn.items = []
         mock_turn.usage = None
 
-        mock_thread = MagicMock()
-        mock_thread.run = AsyncMock(return_value=mock_turn)
-        mock_thread.id = "thread-hb-001"
+        mock_thread = _mock_result_thread("thread-hb-001", mock_turn)
 
         mock_codex = _mock_codex(mock_thread)
 
@@ -132,9 +140,7 @@ class TestRunCycle:
         mock_turn.items = []
         mock_turn.usage = None
 
-        mock_thread = MagicMock()
-        mock_thread.run = AsyncMock(return_value=mock_turn)
-        mock_thread.id = "thread-cron-001"
+        mock_thread = _mock_result_thread("thread-cron-001", mock_turn)
 
         mock_codex = _mock_codex(mock_thread)
 
@@ -157,9 +163,7 @@ class TestRunCycle:
         mock_turn.items = []
         mock_turn.usage = None
 
-        mock_thread = MagicMock()
-        mock_thread.run = AsyncMock(return_value=mock_turn)
-        mock_thread.id = "thread-task-001"
+        mock_thread = _mock_result_thread("thread-task-001", mock_turn)
 
         mock_codex = _mock_codex(mock_thread)
 

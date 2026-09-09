@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.i18n import t
 from core.supervisor.pending_executor import (
     _SENTINEL_CANCELLED,
     _SENTINEL_EXPIRED,
@@ -26,16 +27,6 @@ from core.supervisor.pending_executor import (
     TaskExecError,
     _classify_task_result,
 )
-
-
-@pytest.fixture(autouse=True)
-def _legacy_completion_semantics():
-    with patch(
-        "core.supervisor.pending_executor._completion_declaration_required",
-        return_value=False,
-    ):
-        yield
-
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -92,7 +83,7 @@ class TestClassifyTaskResult:
     def test_cancelled(self):
         status, summary = _classify_task_result(_SENTINEL_CANCELLED)
         assert status == "cancelled"
-        assert "cancelled" in summary.lower()
+        assert summary == t("pending_executor.task_cancelled")
 
     def test_expired(self):
         status, summary = _classify_task_result(_SENTINEL_EXPIRED)
@@ -118,10 +109,10 @@ class TestClassifyTaskResult:
     def test_auth_keyword_body_maps_to_done(self):
         """Body text merely quoting an auth error must not fail the task (structured check now)."""
         status, summary = _classify_task_result(
-            '401 unauthorized の対処を文書化しました: Failed to authenticate. API Error: 401'
+            "401 unauthorized の対処を文書化しました: Failed to authenticate. API Error: 401"
         )
         assert status == "done"
-        assert summary == '401 unauthorized の対処を文書化しました: Failed to authenticate. API Error: 401'
+        assert summary == "401 unauthorized の対処を文書化しました: Failed to authenticate. API Error: 401"
 
 
 # ── Bug B: error chunk detection ──────────────────────────
@@ -182,9 +173,11 @@ class TestRunLlmTaskErrorDetection:
         executor._anima.agent.set_task_cwd = MagicMock()
         executor._anima.agent.set_interrupt_event = MagicMock()
 
-        with patch("core.paths.load_prompt", return_value="prompt"), \
-             patch("core.memory.activity.ActivityLogger"), \
-             patch("core.memory.streaming_journal.StreamingJournal"):
+        with (
+            patch("core.paths.load_prompt", return_value="prompt"),
+            patch("core.memory.activity.ActivityLogger"),
+            patch("core.memory.streaming_journal.StreamingJournal"),
+        ):
             result = await executor._run_llm_task(task)
             assert "recovered" in result
 
@@ -209,9 +202,11 @@ class TestRunLlmTaskErrorDetection:
         executor._anima.agent.set_task_cwd = MagicMock()
         executor._anima.agent.set_interrupt_event = MagicMock()
 
-        with patch("core.paths.load_prompt", return_value="prompt"), \
-             patch("core.memory.activity.ActivityLogger"), \
-             patch("core.memory.streaming_journal.StreamingJournal"):
+        with (
+            patch("core.paths.load_prompt", return_value="prompt"),
+            patch("core.memory.activity.ActivityLogger"),
+            patch("core.memory.streaming_journal.StreamingJournal"),
+        ):
             result = await executor._run_llm_task(task)
             assert result == "all good"
 
@@ -226,7 +221,7 @@ class TestRunLlmTaskErrorDetection:
             {
                 "type": "cycle_done",
                 "cycle_result": {
-                    "summary": '401 unauthorized の対処を文書化しました',
+                    "summary": "401 unauthorized の対処を文書化しました",
                 },
             },
         ]
@@ -247,7 +242,7 @@ class TestRunLlmTaskErrorDetection:
             patch("core.memory.streaming_journal.StreamingJournal"),
         ):
             result = await executor._run_llm_task(task)
-            assert result == '401 unauthorized の対処を文書化しました'
+            assert result == "401 unauthorized の対処を文書化しました"
 
     @pytest.mark.asyncio
     async def test_error_category_auth_raises_taskexec_error(self, tmp_path):
@@ -259,7 +254,7 @@ class TestRunLlmTaskErrorDetection:
             {
                 "type": "cycle_done",
                 "cycle_result": {
-                    "summary": 'just some text',
+                    "summary": "just some text",
                     "error_category": "auth",
                 },
             },
@@ -293,95 +288,123 @@ class TestExecuteLlmTaskStatusMapping:
         executor = _make_executor(tmp_path)
         task = _make_task_desc()
 
-        with patch.object(executor, "_run_llm_task", return_value=_SENTINEL_CANCELLED), \
-             patch.object(executor, "_sync_task_queue") as mock_sync:
+        with (
+            patch.object(executor, "_run_llm_task", return_value=_SENTINEL_CANCELLED),
+            patch.object(executor, "_sync_task_queue") as mock_sync,
+        ):
             await executor._execute_llm_task(task)
-            mock_sync.assert_called_once_with(
-                "test-task-1", "cancelled", summary="cancelled before execution"
-            )
+            mock_sync.assert_called_once_with("test-task-1", "cancelled", summary=t("pending_executor.task_cancelled"))
 
     @pytest.mark.asyncio
     async def test_expired_maps_to_cancelled_status(self, tmp_path):
         executor = _make_executor(tmp_path)
         task = _make_task_desc()
 
-        with patch.object(executor, "_run_llm_task", return_value=_SENTINEL_EXPIRED), \
-             patch.object(executor, "_sync_task_queue") as mock_sync:
+        with (
+            patch.object(executor, "_run_llm_task", return_value=_SENTINEL_EXPIRED),
+            patch.object(executor, "_sync_task_queue") as mock_sync,
+        ):
             await executor._execute_llm_task(task)
-            mock_sync.assert_called_once_with(
-                "test-task-1", "cancelled", summary="expired (TTL exceeded)"
-            )
+            mock_sync.assert_called_once_with("test-task-1", "cancelled", summary="expired (TTL exceeded)")
 
     @pytest.mark.asyncio
     async def test_normal_result_maps_to_done(self, tmp_path):
         executor = _make_executor(tmp_path)
         task = _make_task_desc()
 
-        with patch.object(executor, "_run_llm_task", return_value="success"), \
-             patch.object(executor, "_sync_task_queue") as mock_sync:
+        with (
+            patch.object(executor, "_run_llm_task", return_value="success"),
+            patch.object(executor, "_sync_task_queue") as mock_sync,
+        ):
             await executor._execute_llm_task(task)
-            mock_sync.assert_called_once_with(
-                "test-task-1", "done", summary="success"
-            )
+            mock_sync.assert_called_once_with("test-task-1", "done", summary="success")
 
     @pytest.mark.asyncio
-    async def test_engine_auth_failure_maps_to_failed_and_returns(self, tmp_path):
-        """Engine AUTH terminal (error_category) → TaskExecError → failed + delegation return.
+    async def test_engine_auth_failure_returns_to_pending_and_notifies(self, tmp_path):
+        """Engine AUTH terminal (error_category) → TaskExecError → pending + notification.
 
         ``_run_llm_task`` raises ``TaskExecError`` when the cycle reports
-        ``error_category == 'auth'``.  ``_execute_llm_task`` must mark the
-        task failed and send the failure/return notification to the delegator.
+        ``error_category == 'auth'``.  ``_execute_llm_task`` must hand the task
+        back to its owner as pending and tell the delegator once.
         """
         executor = _make_executor(tmp_path)
         task = _make_task_desc(
             reply_to={"name": "test-anima"},
         )
 
-        with patch.object(
-            executor, "_run_llm_task", side_effect=TaskExecError("authentication error"),
-        ), patch.object(executor, "_sync_task_queue") as mock_sync, \
-             patch.object(executor, "_write_failed_result"):
+        with (
+            patch.object(
+                executor,
+                "_run_llm_task",
+                side_effect=TaskExecError("authentication error"),
+            ),
+            patch.object(executor, "_sync_task_queue") as mock_sync,
+        ):
             await executor._execute_llm_task(task)
             mock_sync.assert_called_once()
-            assert mock_sync.call_args[0][1] == "failed"
+            assert mock_sync.call_args[0][1] == "pending"
             assert executor._anima.messenger.send.call_args.kwargs["to"] == "test-anima"
 
     @pytest.mark.asyncio
-    async def test_error_exception_maps_to_failed(self, tmp_path):
+    async def test_error_exception_returns_to_pending(self, tmp_path):
         executor = _make_executor(tmp_path)
         task = _make_task_desc()
 
-        with patch.object(
-            executor, "_run_llm_task", side_effect=TaskExecError("boom")
-        ), patch.object(executor, "_sync_task_queue") as mock_sync, \
-             patch.object(executor, "_write_failed_result"):
+        with (
+            patch.object(executor, "_run_llm_task", side_effect=TaskExecError("boom")),
+            patch.object(executor, "_sync_task_queue") as mock_sync,
+        ):
             await executor._execute_llm_task(task)
             mock_sync.assert_called_once()
-            assert mock_sync.call_args[0][1] == "failed"
+            assert mock_sync.call_args[0][1] == "pending"
 
 
-# ── Bug C: serial batch failed_dependency queue sync ────────
+# ── Bug C: serial batch unfinished dependency queue sync ────
 
 
-class TestSerialBatchFailedDependency:
+class TestSerialBatchUnfinishedDependency:
     @pytest.mark.asyncio
-    async def test_failed_dependency_syncs_to_queue(self, tmp_path):
-        """Serial batch failed_dependency should call _sync_task_queue with 'failed'."""
+    async def test_unfinished_dependency_syncs_to_queue(self, tmp_path):
+        """An ended incomplete predecessor never releases or reruns its child."""
+        from core.memory.task_queue import TaskQueueManager
+        from core.taskboard.tasks import process_identity
+        from core.tasks_dispatch import publish_tasks
+
         executor = _make_executor(tmp_path)
-
         tasks = [
-            {"task_id": "dep1", "description": "dep", "depends_on": [], "parallel": False},
-            {"task_id": "child1", "description": "child", "depends_on": ["dep1"], "parallel": False},
+            {
+                "task_id": "dep1",
+                "title": "Dependency",
+                "description": "dep",
+                "depends_on": [],
+                "parallel": False,
+                "batch_id": "test-batch",
+            },
+            {
+                "task_id": "child1",
+                "title": "Child",
+                "description": "child",
+                "depends_on": ["dep1"],
+                "parallel": False,
+                "batch_id": "test-batch",
+            },
         ]
-
-        with patch.object(executor, "_run_llm_task", side_effect=RuntimeError("dep failed")), \
-             patch.object(executor, "_sync_task_queue") as mock_sync, \
-             patch.object(executor, "_write_failed_result"), \
-             patch.object(executor, "_get_semaphore", return_value=asyncio.Lock()):
-            await executor._dispatch_batch("test-batch", tasks)
-
-            sync_calls = {call[0][0]: call[0][1] for call in mock_sync.call_args_list}
-            assert "dep1" in sync_calls
-            assert sync_calls["dep1"] == "failed"
-            assert "child1" in sync_calls
-            assert sync_calls["child1"] == "failed"
+        publish_tasks(executor._anima_dir, tasks)
+        store = TaskQueueManager(executor._anima_dir).store
+        claim = store.claim("test-anima", "dep1", process_identity())
+        assert claim is not None
+        assert store.claim("test-anima", "child1", process_identity()) is None
+        with (
+            patch.object(
+                executor, "execute_pending_task", new=AsyncMock(side_effect=RuntimeError("dep failed"))
+            ) as execute,
+        ):
+            await executor._execute_canonical_task(claim)
+        execute.assert_awaited_once()
+        assert store.get("test-anima", "dep1").status == "pending"
+        assert store.get("test-anima", "child1").status == "pending"
+        assert store.active_attempts("test-anima") == []
+        assert store.claim("test-anima", "dep1", process_identity()) is None
+        assert store.claim("test-anima", "child1", process_identity()) is None
+        assert [event["task_id"] for event in store.wakeups("test-anima")] == ["dep1"]
+        assert store.get_input("test-anima", "child1")["depends_on"] == ["dep1"]

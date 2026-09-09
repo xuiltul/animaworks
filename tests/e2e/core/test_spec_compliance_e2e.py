@@ -15,10 +15,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from core.time_utils import today_local
 
 from core.memory.activity import ActivityLogger
-
+from core.time_utils import today_local
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -79,13 +78,13 @@ async def test_from_to_fields_in_priming_pipeline(anima_dir: Path, tmp_path: Pat
             keywords=[],
         )
 
-    # DM group header shows the peer name (to_person), not the sender
+    # Compact priming preserves the actual event and sender/recipient fields.
     assert "kotoha" in result
     # message_received single entry shows from_person
     assert "taro" in result
-    # "sakura" (dm_sent from_person) is not shown in the DM group header
-    # because DM groups display the peer name; verify it was stored on disk instead
-    assert "DM" in result  # DM group exists
+    assert "sakura" in result
+    assert "MSG> dm_sent" in result
+    assert "MSG< message_received" in result
 
 
 # ── Fix 2: memory_write event E2E ─────────────────────────────

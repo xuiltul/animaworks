@@ -19,12 +19,12 @@ _MOCK_SECTIONS = (
     "[group1_header]: # 1. 動作環境と行動ルール\n"
     "[current_time_label]: **現在時刻**:\n"
     "[group2_header]: # 2. あなた自身\n"
-    "[group3_header]: # 3. 現在の状況\n"
+    "[group3_header]: # 6. 現在の状況\n"
     "[current_state_header]: ## 現在の状態\n"
     "[pending_tasks_header]: ## 未完了タスク\n"
-    "[group4_header]: # 4. 記憶と能力\n"
-    "[group5_header]: # 5. 組織とコミュニケーション\n"
-    "[group6_header]: # 6. メタ設定\n"
+    "[group4_header]: # 3. 記憶と能力\n"
+    "[group5_header]: # 4. 組織とコミュニケーション\n"
+    "[group6_header]: # 5. メタ設定\n"
     "[you_marker]:   ← あなた\n"
     "[common_label]: (共通)\n"
     "[recent_tool_results_header]: ## Recent Tool Results\n"
@@ -145,7 +145,7 @@ class TestInboxPromptIsolation:
             )
         assert '<section name="emotion_instruction">' not in result.system_prompt
 
-    def test_inbox_includes_a_reflection(self, tmp_path):
+    def test_inbox_does_not_inject_redundant_a_reflection(self, tmp_path):
         memory = _mock_memory(tmp_path)
 
         reflection_text = "## A-mode reflection\nReflect on past actions."
@@ -159,7 +159,7 @@ class TestInboxPromptIsolation:
                 trigger="inbox:alice",
                 context_window=200_000,
             )
-        assert "Reflect on past actions" in result.system_prompt
+        assert "Reflect on past actions" not in result.system_prompt
 
     def test_chat_still_works_identically(self, tmp_path):
         """Regression: chat trigger should still include all sections."""

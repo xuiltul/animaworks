@@ -102,8 +102,8 @@ submit は即座に JSON を標準出力へ出して終了する（`task_id` は
 
 - **クラッシュや異常終了**で `processing/` に JSON が残った場合、Anima プロセス起動時に **PendingTaskExecutor** が回収する:
   - **コマンド型**（`animaworks-tool submit`）: `state/background_tasks/pending/processing/*.json` → `state/background_tasks/pending/failed/`
-  - **LLM 型**（`submit_tasks` / Heartbeat 書き出し）: `state/pending/processing/*.json` → `state/pending/failed/`
-  いずれも本ガイドの submit とは **ディレクトリが別**（後者は `state/pending/` ツリー）。
+  - **LLM 型**は正規タスクと試行IDで管理し、記述子を回収しない。未完了の仕事はpendingと永続的な要確認通知を残す。実際の副作用を確認してから明示的に再開する。
+  旧LLMファイルは移行の証拠のみ。再開のために移動・再生成しない。
 
 ## よくある間違い
 
@@ -148,7 +148,7 @@ submit したらすぐに次の作業に移ること。
 - **`on_complete`**: コールバック内で例外が出てもタスクの完了/失敗状態は維持され、失敗はログに記録されるのみ。
 - **資格あるツール名**（`is_eligible`）は次の **3 層**をマージ（後勝ち）。キーはそのまま辞書照合（Mode A のスキーマ名 `generate_3d_model` と Mode S 提出用の `image_gen:3d` の**両方**があり得る）:
   1. コード内デフォルト `_DEFAULT_ELIGIBLE_TOOLS`（値は目安秒数。現状のキー）:
-     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）、`machine_run`（600）
+     `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）
   2. `BackgroundTaskManager.from_profiles` 経由で、各モジュールの `EXECUTION_PROFILE` から `background_eligible: true` のサブコマンドを抽出（`core.tools._base.get_eligible_tools_from_profiles`）。キーは `"{tool_name}:{subcmd}"`、秒数は `expected_seconds`（未設定時 60）
   3. `config.json` の `background_task.eligible_tools` — 各キーに対し `threshold_s` を秒数として上書き
 - **無効化**: `config.json` で `background_task.enabled: false` にすると `BackgroundTaskManager` 自体が作られない（その場合、submit キューは取り込まれても実行側で警告になる）。
@@ -167,19 +167,15 @@ submit したらすぐに次の作業に移ること。
 5. 実処理は `BackgroundTaskManager.submit(composite_name, tool_args, execute_fn)` に委譲。`composite_name` は `tool:subcommand`（例: `image_gen:3d`）。これが `is_eligible` と照合される。
 6. 完了時に `_on_background_task_complete` が `state/background_notifications/{task_id}.md` を書き、heartbeat で `drain_background_notifications()` が読み取る。
 
-### LLM 型タスク（`state/pending/`）
+### LLM 型タスク（正規タスクストア）
 
-Heartbeat や `submit_tasks` ツールが書き出す LLM タスクは **別ディレクトリ** `state/pending/` に投入される。
+1. `submit_tasks` / `delegate_task` が完全な指示・文脈・完了条件・制約・モデル・依存関係を原子的に登録する。
+2. watcherは実行可能なタスクの取得と試行作成を同じtransactionで行う。依存先と設定済みワーカー容量を確認し、非並列の制約は同じバッチ内に限定する。
+3. `done` / `cancelled` 宣言なしで試行が終わるとpendingに戻るが自動再実行しない。副作用を確認し、必要なら `submit_tasks(batch_id="resume", tasks=[{"task_id":"ID","resume":true}])` で明示再開する。
+4. 結果は `state/task_results/{task_id}.md` を参照できる場合があるが、状態・入力・試行は正規ストアが正本。完了は `update_task` で宣言し、LLMの応答やファイルの存在から推測しない。
+5. 要確認・完了通知は永続化し、定期heartbeatに依存せず届ける。DMから実行入力を再構成しない。
 
-1. `submit_tasks` が `state/pending/{task_id}.json` にタスク記述子を書く（`task_type: "llm"`, `batch_id` 等）
-2. watcher が `state/pending/` を同様に監視
-3. `batch_id` 付きタスクはバッチに蓄積し、`_dispatch_batch` で DAG に基づき実行
-4. `parallel: true` のタスクはセマフォ（`config.json` の `background_task.max_parallel_llm_tasks`、デフォルト 3）で並列実行
-5. `depends_on` で依存関係を指定したタスクは、依存完了後に実行
-6. 結果は `state/task_results/{task_id}.md` に保存（要約は長さ上限あり）。`reply_to` があれば DM で完了/失敗通知
-7. 24 時間経過したタスク（TTL）はスキップされる
-
-本ガイドの `animaworks-tool submit` とは入口・ディレクトリが異なる。
+SQLiteや旧タスクファイルを直接編集せず、タスクツールを使う。上記のコマンド型パイプラインとは別の仕組み。
 
 ### ファイルのライフサイクル
 
@@ -197,12 +193,12 @@ state/background_tasks/pending/*.json
 state/background_tasks/{task_id}.json   # running → completed / failed
 ```
 
-**LLM 型**（`submit_tasks` / Heartbeat）:
+**LLM 型**（`submit_tasks` / `delegate_task`）:
 
 ```
-state/pending/*.json
-  → pending/processing/*.json
-  → 成功: 削除 | 失敗: pending/failed/*.json
+保存済み入力 → 実行可能pending → 取得済み試行（in_progress）
+  → done/cancelled宣言、またはpending + 永続的な要確認通知
+  → 明示resumeで保存済み入力を使う新しい試行
 ```
 
-起動時には、**それぞれの** `processing/` に残った孤立ファイルを `failed/` へ移動してリカバリする。
+上記のコマンド型ファイル回収はLLMタスクには適用しない。旧LLMのJSONL・記述子は移行・export形式であり、実行開始の合図ではない。

@@ -10,7 +10,7 @@ from core.taskboard.store import TaskBoardStore
 from core.time_utils import now_local
 
 _SS = {
-    "group3_header": "# 3. Current Situation",
+    "group3_header": "# 6. Current Situation",
     "current_state_header": "## Current State",
 }
 _FS = {"truncated": "(earlier portion omitted)"}

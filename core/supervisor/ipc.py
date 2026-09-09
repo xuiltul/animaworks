@@ -215,25 +215,48 @@ class IPCServer:
                 except json.JSONDecodeError as e:
                     logger.error("Invalid JSON in IPC request: %s", e)
                     error_response = IPCResponse(id="unknown", error={"code": "INVALID_JSON", "message": str(e)})
-                    writer.write((error_response.to_json() + "\n").encode("utf-8"))
-                    await writer.drain()
+                    if not self._try_send_error(writer, error_response):
+                        break
+                    try:
+                        await writer.drain()
+                    except (ConnectionError, OSError):
+                        break
                 except Exception as e:
                     logger.exception("Error handling IPC request: %s", e)
                     error_response = IPCResponse(
                         id=request.id if request is not None else "unknown",
                         error={"code": "HANDLER_ERROR", "message": str(e)},
                     )
-                    writer.write((error_response.to_json() + "\n").encode("utf-8"))
-                    await writer.drain()
+                    # The usual cause is the peer vanishing mid-write; pushing an
+                    # error frame down the same broken pipe just re-raises.
+                    if not self._try_send_error(writer, error_response):
+                        break
+                    try:
+                        await writer.drain()
+                    except (ConnectionError, OSError):
+                        break
 
         except asyncio.CancelledError:
             logger.info("IPC connection cancelled")
         except Exception as e:
             logger.exception("IPC connection error: %s", e)
         finally:
-            writer.close()
-            await writer.wait_closed()
+            # Never let cleanup escape: an exception here surfaces as
+            # "Unhandled exception in client_connected_cb" in asyncio.
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                logger.debug("IPC connection cleanup failed: %s", peer, exc_info=True)
             logger.debug("IPC connection closed: %s", peer)
+
+    @staticmethod
+    def _try_send_error(writer: asyncio.StreamWriter, response: IPCResponse) -> bool:
+        try:
+            writer.write((response.to_json() + "\n").encode("utf-8"))
+        except (ConnectionError, OSError):
+            return False
+        return True
 
     async def stop(self) -> None:
         """Stop the server."""

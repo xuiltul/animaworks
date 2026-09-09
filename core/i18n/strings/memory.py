@@ -10,6 +10,86 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "rag.rebuild_symlink_input": {
+        "ja": "再構築の入力にシンボリックリンクは使用できません: {path}",
+        "en": "A symlink is not a safe rebuild input: {path}",
+        "ko": "재구축 입력에 심볼릭 링크를 사용할 수 없습니다: {path}",
+    },
+    "rag.rebuild_input_changed": {
+        "ja": "RAG再構築の入力が変更されたため、古いDBへの切り替えを中止します。",
+        "en": "RAG rebuild inputs changed; refusing stale database promotion.",
+        "ko": "RAG 재구축 입력이 변경되어 오래된 DB로의 전환을 중단합니다.",
+    },
+    "rag.rebuild_invalid_metadata": {
+        "ja": "再構築した索引メタデータが不正です。",
+        "en": "Invalid rebuilt index metadata.",
+        "ko": "재구축한 색인 메타데이터가 올바르지 않습니다.",
+    },
+    "rag.rebuild_invalid_manifest": {
+        "ja": "RAG再構築の入力マニフェストが不正です。",
+        "en": "Invalid RAG rebuild source manifest.",
+        "ko": "RAG 재구축 입력 매니페스트가 올바르지 않습니다.",
+    },
+    "rag.phase3_repair_requires_shared": {
+        "ja": "phase3の全DB再構築にはinclude_shared=Trueが必要です。共有記憶を除外すると既存の共有索引が失われます。",
+        "en": "Phase3 full-DB repair requires include_shared=True to preserve shared memory collections.",
+        "ko": "공유 메모리 컬렉션을 보존하려면 phase3 전체 DB 재구축에 include_shared=True가 필요합니다.",
+    },
+    "rag.signature_unknown_shape": {
+        "ja": "埋め込み索引の署名が不明です（メタデータがオブジェクトではありません）。",
+        "en": "Embedding index signature is unknown (metadata is not an object).",
+        "ko": "임베딩 색인 서명을 알 수 없습니다(메타데이터가 객체가 아님).",
+    },
+    "rag.signature_unknown_fields": {
+        "ja": "埋め込み索引の署名が不明です（モデル・prefixの履歴が未記録または不正です）。",
+        "en": "Embedding index signature is unknown (model/prefix provenance is missing or invalid).",
+        "ko": "임베딩 색인 서명을 알 수 없습니다(모델/prefix 이력이 없거나 잘못됨).",
+    },
+    "rag.signature_unreadable": {
+        "ja": "埋め込み索引の署名が不明です（メタデータを読み取れません）。",
+        "en": "Embedding index signature is unknown (metadata cannot be read).",
+        "ko": "임베딩 색인 서명을 알 수 없습니다(메타데이터를 읽을 수 없음).",
+    },
+    "rag.signature_model_changed": {
+        "ja": "埋め込みモデルが変更されています: {previous} -> {current}。",
+        "en": "Embedding model changed: {previous} -> {current}.",
+        "ko": "임베딩 모델이 변경되었습니다: {previous} -> {current}.",
+    },
+    "rag.signature_prefix_changed": {
+        "ja": "埋め込みE5 prefix設定が変更されています: {previous} -> {current}。",
+        "en": "Embedding E5 prefix setting changed: {previous} -> {current}.",
+        "ko": "임베딩 E5 prefix 설정이 변경되었습니다: {previous} -> {current}.",
+    },
+    "rag.indexing_blocked": {
+        "ja": "{reason} 索引を更新する前に履歴を検証するか、バックアップ付きの全再構築を実施してください。",
+        "en": "{reason} Verify provenance or perform a backed-up full rebuild before indexing.",
+        "ko": "{reason} 색인을 갱신하기 전에 이력을 검증하거나 백업 후 전체 재구축하세요.",
+    },
+    "rag.daily_indexing_blocked": {
+        "ja": "{reason} 日次索引更新をスキップします。履歴の検証またはバックアップ付き全再構築が必要です。",
+        "en": "{reason} Skipping daily indexing — verify provenance or perform a backed-up full rebuild.",
+        "ko": "{reason} 일일 색인 갱신을 건너뜁니다. 이력 검증 또는 백업 후 전체 재구축이 필요합니다.",
+    },
+    "rag.invalid_anima_name": {
+        "ja": "Anima名が不正です。",
+        "en": "Invalid Anima name",
+        "ko": "Anima 이름이 잘못되었습니다.",
+    },
+    "rag.root_unavailable": {
+        "ja": "ルート記憶サービスを利用できません。",
+        "en": "Root memory service unavailable",
+        "ko": "루트 메모리 서비스를 사용할 수 없습니다.",
+    },
+    "rag.root_operation_failed": {
+        "ja": "ルート記憶操作に失敗しました。",
+        "en": "Root memory operation failed",
+        "ko": "루트 메모리 작업에 실패했습니다.",
+    },
+    "rag.worker_operation_disabled": {
+        "ja": "phase3 Animaのvector worker操作は禁止されています: {anima}",
+        "en": "Vector worker operation disabled for phase3 anima: {anima}",
+        "ko": "phase3 Anima의 vector worker 작업이 금지되어 있습니다: {anima}",
+    },
     "conversation.activity_context_header": {
         "ja": "## セッション中のその他の活動",
         "en": "## Other activity during session",

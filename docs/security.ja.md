@@ -133,7 +133,7 @@ ToolHandler でも Mode S でも、`permissions.global.json` の `commands.deny`
 
 #### レイヤー2.5: エージェント個別の禁止コマンド
 
-各エージェントの `permissions.json` で `commands.deny`（文字列リスト）により追加ブロック可能。Mode S ではパイプ連結の **各セグメント**（`\|`（ただし `\|\|` は除く）、`&&`、`||` で分割）ごとに、セグメント文字列または先頭コマンド名への部分一致で判定される。
+各エージェントの `permissions.json` で `commands.deny`（文字列リスト）により追加ブロック可能。 エントリが `re:` で始まる場合は残りを正規表現として各セグメントに `re.search` する（例: `re:\brm\s+(-\w*[rR]|--recursive)` は `rm -r`/`-fr`/`-R`/`--recursive` を網羅。部分一致の `"rm -rf"` は `rm -r` で迂回された）。Mode S ではパイプ連結の **各セグメント**（`\|`（ただし `\|\|` は除く）、`&&`、`||` で分割）ごとに、セグメント文字列または先頭コマンド名への部分一致で判定される。
 
 #### レイヤー3: コマンド権限モデル
 
@@ -162,7 +162,6 @@ ToolHandler でも Mode S でも、`permissions.global.json` の `commands.deny`
 | chatwork | `chatwork_send` |
 | discord | `discord_send`, `discord_channel_post` |
 | github | `github_create-issue`, `github_create-pr` |
-| machine | `machine_run` |
 
 判定: `core/tooling/permissions.is_action_gated` と dispatch 時チェック。稼働中 Anima 向け移行は `docs/specs/pi-fix2-gated-tools-migration.md` と `scripts/migrate_pi_fix2_gated_allows.py`（既定 dry-run）を参照。
 

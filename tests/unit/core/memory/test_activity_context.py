@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -24,7 +25,7 @@ from core.tooling.handler import ToolHandler
         ("heartbeat", "heartbeat", "heartbeat"),
         ("cron:daily", "cron", "cron:daily"),
         ("inbox:alice", "inbox", "inbox"),
-        ("message:taka", "chat", "chat"),
+        ("message:owner", "chat", "chat"),
         ("manual", "chat", "chat"),
     ],
 )
@@ -132,3 +133,62 @@ def test_unbound_logger_uses_active_runtime_context(tmp_path: Path) -> None:
         entry = activity.log("heartbeat_end")
 
     assert entry.ctx == "heartbeat"
+
+
+def test_active_runtime_overrides_stale_binding_but_explicit_context_wins(tmp_path: Path) -> None:
+    activity = ActivityLogger(tmp_path / "alice")
+    stale = RuntimeSessionContext.create(session_type="task", thread_id="old", trigger="task:old")
+    active = RuntimeSessionContext.create(session_type="task", thread_id="new", trigger="task:new")
+    activity.bind_runtime_session(stale)
+    with runtime_session_scope(active):
+        assert activity.log("tool_use", tool="read_file").ctx == "task:new"
+        assert activity.log("tool_use", tool="read_file", ctx="task:explicit").ctx == "task:explicit"
+        assert activity.log("tool_use", tool="read_file", ctx="").ctx == ""
+    assert activity.log("tool_use", tool="read_file").ctx == "task:old"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scoped", [False, True])
+async def test_shared_logger_isolates_parallel_bindings_and_to_thread(tmp_path: Path, scoped: bool) -> None:
+    from contextlib import nullcontext
+
+    activity = ActivityLogger(tmp_path / "alice")
+    barrier = asyncio.Barrier(2)
+
+    async def worker(name: str) -> tuple[str, str]:
+        context = RuntimeSessionContext.create(session_type="task", thread_id=name, trigger=f"task:{name}")
+        with runtime_session_scope(context) if scoped else nullcontext():
+            activity.bind_runtime_session(context)
+            await barrier.wait()
+            direct = activity.log("tool_use", tool=f"direct-{name}")
+            threaded = await asyncio.to_thread(activity.log, "tool_use", tool=f"thread-{name}")
+            return direct.ctx, threaded.ctx
+
+    results = await asyncio.gather(worker("first"), worker("second"))
+    assert results == [("task:first", "task:first"), ("task:second", "task:second")]
+    assert activity.log("heartbeat_end").ctx == ""
+    loaded = {entry.tool: entry.ctx for entry in activity.recent(days=1) if entry.tool}
+    assert loaded == {
+        "direct-first": "task:first",
+        "thread-first": "task:first",
+        "direct-second": "task:second",
+        "thread-second": "task:second",
+    }
+
+
+@pytest.mark.asyncio
+async def test_thread_rebinding_does_not_mutate_calling_context(tmp_path: Path) -> None:
+    activity = ActivityLogger(tmp_path / "alice")
+    activity.bind_runtime_session(
+        RuntimeSessionContext.create(session_type="task", thread_id="parent", trigger="task:parent")
+    )
+
+    def child() -> str:
+        assert activity.log("tool_use", tool="inherited").ctx == "task:parent"
+        activity.bind_runtime_session(
+            RuntimeSessionContext.create(session_type="task", thread_id="child", trigger="task:child")
+        )
+        return activity.log("tool_use", tool="rebound").ctx
+
+    assert await asyncio.to_thread(child) == "task:child"
+    assert activity.log("tool_use", tool="parent").ctx == "task:parent"

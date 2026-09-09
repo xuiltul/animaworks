@@ -23,14 +23,11 @@ _BUDGET_HEARTBEAT = 200
 # Channel-specific token budgets (default distribution)
 _BUDGET_SENDER_PROFILE = 500
 _BUDGET_RECENT_ACTIVITY = 1300  # Unified: old B(600) + E(700)
-_BUDGET_RELATED_KNOWLEDGE = 1000
-_BUDGET_IMPORTANT_KNOWLEDGE = 500
+_BUDGET_RELATED_KNOWLEDGE = 1200
+_BUDGET_IMPORTANT_KNOWLEDGE = 300
 _BUDGET_PENDING_TASKS = 500
-_BUDGET_RELATED_EPISODES = 800
+_BUDGET_RELATED_EPISODES = 400
 _BUDGET_GRAPH_CONTEXT = 500
-
-# Rough characters-per-token for Japanese/English mixed text
-_CHARS_PER_TOKEN = 4
 
 # Pre-compiled regex pattern for language-agnostic keyword extraction
 _RE_UNICODE_WORDS = re.compile(r"[\w]+", re.UNICODE)

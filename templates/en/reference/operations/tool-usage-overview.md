@@ -71,8 +71,8 @@ In Mode A/B unified schemas, names are **PascalCase**. Inside `ToolHandler` they
 
 Forbidden (none of these terminate):
 
-- `glob.glob('/home/main/.animaworks/**/...', recursive=True)` — Python's `**` descends through symlinks, so the search expands without bound
-- `os.walk('/home/main/.animaworks')` starting from the top
+- `glob.glob('~/.animaworks/**/...', recursive=True)` — Python's `**` descends through symlinks, so the search expands without bound
+- `os.walk('~/.animaworks')` starting from the top
 - `find ~/.animaworks`, `du -sh ~/.animaworks`, or `rg` rooted at `~/.animaworks` with no path narrowing
 
 Instead:
@@ -169,7 +169,6 @@ Action names are `call_human`, `send_message`, `post_channel`, `write_memory_fil
 | **google_tasks** | Google Tasks |
 | **image_gen** | Image / 3D generation pipelines (prefer `submit` for long runs) |
 | **local_llm** | Local LLM calls |
-| **machine** | “Machine tool” that runs external agent CLIs in an isolated environment |
 | **notion** | Notion API |
 | **slack** | Slack |
 | **transcribe** | Speech-to-text |

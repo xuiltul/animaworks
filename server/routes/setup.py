@@ -9,10 +9,11 @@ from __future__ import annotations
 
 """Setup wizard API routes for first-launch configuration."""
 
+import asyncio
 import logging
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -115,6 +116,10 @@ class UserSetup(BaseModel):
 
 class SetupCompleteRequest(BaseModel):
     locale: str = "ja"
+    provider: Literal["claude_code", "anthropic", "openai", "google", "cursor_agent", "gemini_cli", "ollama"] | None = (
+        None
+    )
+    ollama_url: str = ""
     credentials: dict[str, dict[str, str]] = {}
     anima: AnimaSetup | None = None
     user: UserSetup | None = None
@@ -254,6 +259,37 @@ def create_setup_router() -> APIRouter:
             config.anima_defaults.mode_s_auth = "max"
             logger.info("Set anima_defaults.mode_s_auth=max for Anthropic subscription auth")
 
+        # The wizard's selected provider must also drive the first Anima's
+        # runtime model. Saving credentials alone leaves the Claude default.
+        provider = body.provider
+        if provider is None:
+            # Compatibility with clients that sent only credentials.
+            provider = next((p["id"] for p in AVAILABLE_PROVIDERS if p["id"] in body.credentials), None)
+        if provider:
+            credential_name = "anthropic" if provider == "claude_code" else provider
+            credential = config.credentials.get(credential_name)
+            if credential is None:
+                credential = CredentialConfig()
+                config.credentials[credential_name] = credential
+            if provider == "claude_code":
+                credential.type = "claude_code_login"
+                model = AVAILABLE_PROVIDERS[0]["models"][0]
+                config.anima_defaults.mode_s_auth = "max"
+            elif provider == "openai" and credential.type == "codex_login":
+                model = await _resolve_codex_setup_model()
+            else:
+                model = next(p["models"][0] for p in AVAILABLE_PROVIDERS if p["id"] == provider)
+                if provider == "anthropic":
+                    config.anima_defaults.mode_s_auth = "max" if anthropic_subscription else "api"
+                elif provider == "ollama":
+                    from core.config.local_llm import normalize_ollama_base_url
+
+                    credential.base_url = normalize_ollama_base_url(body.ollama_url)
+                    model = config.local_llm.default_model
+            config.anima_defaults.model = model
+            config.anima_defaults.credential = credential_name
+            config.anima_defaults.execution_mode = None
+
         # Create anima if specified
         if body.anima:
             from core.anima_factory import create_blank
@@ -330,7 +366,10 @@ def create_setup_router() -> APIRouter:
                     new_anima_names.append(anima_dir.name)
         request.app.state.anima_names = new_anima_names
 
-        if new_anima_names:
+        activate_runtime = getattr(request.app.state, "activate_runtime", None)
+        if activate_runtime is not None:
+            await activate_runtime()
+        elif new_anima_names:
             try:
                 await request.app.state.supervisor.start_all(new_anima_names)
                 logger.info("Started %d anima(s) after setup", len(new_anima_names))
@@ -344,6 +383,29 @@ def create_setup_router() -> APIRouter:
 
 
 # ── Helper functions ───────────────────────────────────────
+
+
+async def _resolve_codex_setup_model() -> str:
+    """Use the signed-in account's recommended model, rather than a stale ID."""
+    from core.i18n import t
+
+    try:
+        from openai_codex import AsyncCodex, CodexConfig
+
+        from core.execution.codex_sdk import _patch_reasoning_effort_enum
+        from core.platform.codex import get_codex_executable
+
+        _patch_reasoning_effort_enum()
+        async with asyncio.timeout(20):
+            async with AsyncCodex(CodexConfig(codex_bin=get_codex_executable())) as client:
+                models = (await client.models()).data
+        visible = [m for m in models if not m.hidden]
+        selected = next((m for m in visible if m.is_default), next(iter(visible), None))
+        if selected is not None:
+            return f"codex/{selected.model}"
+    except Exception:
+        logger.warning("Could not discover models for Codex setup", exc_info=True)
+    raise HTTPException(status_code=503, detail=t("setup.codex_models_unavailable"))
 
 
 def _normalize_locale(

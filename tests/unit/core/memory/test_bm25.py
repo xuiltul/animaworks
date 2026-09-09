@@ -88,8 +88,8 @@ def test_tokenize_mixed() -> None:
 
 
 def test_tokenize_splits_ascii_at_cjk_boundaries() -> None:
-    tokens = tokenize("Coldcard乱数問題とtakaのBitcoin自己保管方針")
-    assert tokens == ["coldcard", "乱数問題と", "taka", "の", "bitcoin", "自己保管方針"]
+    tokens = tokenize("Dashboard集計問題とownerのMetrics保管方針")
+    assert tokens == ["dashboard", "集計問題と", "owner", "の", "metrics", "保管方針"]
 
 
 def test_tokenize_empty() -> None:
@@ -700,7 +700,7 @@ def test_previous_schema_remains_searchable_until_background_rebuild(tmp_path: P
     assert hits[0]["source_file"] == "knowledge/a.md"
     assert bm25_module.is_longterm_bm25_dirty(anima_dir)
 
-    _write_longterm_memory(anima_dir, "knowledge/new.md", "# New\n\nMeridian custody policy.")
+    _write_longterm_memory(anima_dir, "knowledge/new.md", "# New\n\nMeridian retention policy.")
     update_longterm_bm25_source(anima_dir, "knowledge/new.md")
     assert search_longterm_memory_bm25(anima_dir, "ZephyrNova", memory_types=("knowledge",))
     assert search_longterm_memory_bm25(anima_dir, "Meridian", memory_types=("knowledge",))
@@ -778,15 +778,15 @@ def test_longterm_delta_add_and_tombstone(tmp_path: Path) -> None:
     _write_longterm_memory(anima_dir, "knowledge/base.md", "# Base\n\nUnrelated launch notes.")
     rebuild_longterm_bm25_index(anima_dir)
 
-    _write_longterm_memory(anima_dir, "knowledge/new.md", "# New\n\nColdcard custody policy.")
+    _write_longterm_memory(anima_dir, "knowledge/new.md", "# New\n\nWidget retention policy.")
     update_longterm_bm25_source(anima_dir, "knowledge/new.md")
-    assert search_longterm_memory_bm25(anima_dir, "Coldcard", memory_types=("knowledge",))[0]["source_file"] == (
+    assert search_longterm_memory_bm25(anima_dir, "Widget", memory_types=("knowledge",))[0]["source_file"] == (
         "knowledge/new.md"
     )
 
     (anima_dir / "knowledge" / "new.md").unlink()
     update_longterm_bm25_source(anima_dir, "knowledge/new.md")
-    assert search_longterm_memory_bm25(anima_dir, "Coldcard", memory_types=("knowledge",)) == []
+    assert search_longterm_memory_bm25(anima_dir, "Widget", memory_types=("knowledge",)) == []
 
 
 def test_longterm_sync_rechunks_only_changed_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

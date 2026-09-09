@@ -147,70 +147,15 @@ create_skill(skill_name="deploy-procedure", description="Production deploy proce
 
 ## Automatic memory processes
 
-### Priming (automatic recall)
+The default `compact` profile recalls sender information, pending tasks, explicit resident pointers, recent outbound activity and pending human notifications. Related knowledge is searched for chat/task requests and questions, but not routine heartbeat/cron/report events. Broad activity, episode and graph expansion are available with the opt-in `full` profile or explicit search. `priming.max_tokens` defaults to 2,000; notifications and mandatory resident rules are preserved independently. Per-Anima `status.json: priming_profile` overrides the global profile without changing model routing.
 
-Each time a conversation starts, the Priming engine searches related memories in parallel and injects only relevant context into the system prompt. It does not read all memories every time.
+Search when past instructions, customer facts or unfinished work are needed; no ritual search or success report is required for every response. Skills and procedure bodies are read on demand. Only explicitly resident knowledge is included automatically; `[IMPORTANT]` does not by itself mean always resident.
 
-| Source | What it searches | Default budget guide * |
-|--------|------------------|------------------------|
-| Sender profile | The other party's user info | 500 |
-| Recent activity | Unified activity log timeline + shared channels | 1300 |
-| Important knowledge | Summary pointers for `[IMPORTANT]` knowledge | 500 |
-| Related knowledge | RAG over personal `knowledge` + shared `common_knowledge` | 1000 |
-| Pending tasks | TaskBoard + task queue + running tasks + overflow inbox + task results | 500 |
-| Episodes | RAG search over `episodes/` | 800 |
-| Graph context | Community context and recent facts from the memory backend | 500 |
+Before side effects, applicable `[ACTION-RULE]` checks, permission boundaries, approval and duplicate-action prevention still apply. Read indicated rules if an action is stopped. Untrusted search results remain separate from trusted context.
 
-Skills and procedures are read when needed through active skill context, Skill Hub, `read_memory_file`, or `search_memory(scope="skills")`. Skill bodies are not automatically injected in full.
+Daily consolidation extracts episodes from unprocessed activity chunks and checkpoints successful inputs. Raw activity and memory originals are retained. Knowledge rewriting is a separate, default-off phase (`consolidation.knowledge_mutation_enabled`). Weekly/monthly mutation, distillation, downscaling, self-correction, automatic skill learning and fact extraction are default off; indexing, repair and reading existing facts remain available. Optional maintenance must preserve entity detail, provenance and safety rules. A skipped/no-change run is normal, not a reason to retry.
 
-\* In normal paths, the overall cap changes by message type such as greeting, question, request, and heartbeat. You can adjust `priming.budget_*` and `heartbeat_context_pct` in `config.json`.
-
-Also injected:
-
-- **Recent outbound history**: `channel_post` / `message_sent` in the last 2 hours (max 3 items)
-- **Pending human notifications**: `human_notify` in the last 24 hours (up to ~500 tokens)
-
-**Channel C and trust**: Results are split into **medium** and **untrusted** from chunk `origin`, etc. Untrusted content is trimmed into a separate slice from the remaining budget and handled in the prompt-injection defense context (see `common_knowledge/security/`).
-
-**`[IMPORTANT]` and C0**: `[IMPORTANT]` knowledge appears in C0 as “title + one-line summary + pointer to `read_memory_file`.” Because it is on a path separate from ordinary RAG (C), important rules are harder to miss even when the query does not match. When moving must-have business rules into knowledge, prefix with `[IMPORTANT]`.
-
-Priming runs automatically; no explicit action is required.
-
-### Memory check before action
-
-For side-effecting actions such as external sends, channel posts, human notifications, and memory writes, related `[ACTION-RULE]` items and required memories may be checked before execution. If you are stopped, read the indicated memory with `read_memory_file`, then run the action again.
-
-### Consolidation (memory integration)
-
-**Production integration work** (episode summarization, extraction into knowledge, consistency checks, etc.) **is executed by the Anima’s own tool loop** (`run_consolidation`). `ConsolidationEngine` mainly handles preprocessing (collecting episodes and resolution events) and postprocessing (RAG rebuild, invoking forgetting).
-
-| Frequency | Flow (summary) |
-|-----------|----------------|
-| **Daily** | If episode count in the last 24h meets the threshold → `run_consolidation(daily)` → then **Synaptic downscaling** (metadata only) → **RAG index rebuild** |
-| **Weekly** | `run_consolidation(weekly)` → pattern distillation → **RAG rebuild** |
-| **Monthly** | **Complete forgetting** (delete / archive chunks that stayed low-activity long-term) and procedure archive housekeeping → **RAG rebuild** (no Anima loop) |
-
-Daily runs can be disabled or tuned (episode threshold, `max_turns`) via config. Very short runs may be retried on schedule.
-
-### Forgetting (active forgetting)
-
-If memories accumulate without bound, search quality drops; forgetting is applied in two stages:
-
-| Stage | Frequency | Condition | Action |
-|-------|-----------|-----------|--------|
-| Synaptic downscaling | Daily | `knowledge` / `episodes`: no access for **90 days** **and** fewer than **3** references → mark `low`. Procedures use different thresholds (e.g. unused **180** days and fewer than **3** total uses, or many failures and low utility) | Record activity `low` and `low_activation_since` |
-| Complete forgetting | Monthly | Stays `low` for **> 90 days** and `access_count <= 2` | Remove from vectors; move sources to `archive/forgotten/` |
-
-**Protection rules** (harder to forget):
-
-| Target | Protection |
-|--------|------------|
-| `skills/`, `shared/users/` (as types) | Always protected (never in forgetting scope) |
-| `[IMPORTANT]` (`importance == important`) | Protected, especially for knowledge and procedures |
-| Knowledge: `success_count >= 2` | Protected |
-| Procedures: `importance == "important"` / `protected == True` / `version >= 3` | Protected (procedure-specific checks) |
-
-**Procedure-specific rule**: Subject to downscaling if inactive **180** days with fewer than **3** uses, or `failure_count >= 3` and utility below **0.3**.
+Curator promotions/retirements are proposals by default; security blocking can still quarantine a skill immediately. Operator-controlled explicit changes remain possible. Outcome counts are diagnostic evidence, not proof of task quality.
 
 ---
 

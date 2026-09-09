@@ -512,13 +512,14 @@ All animas can see this profile.
 
 
 @pytest.mark.asyncio
-async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket):
+@pytest.mark.parametrize("weekly_enabled", [False, True])
+async def test_system_cron_integration(tmp_path: Path, data_dir: Path, mock_llm, mock_websocket, weekly_enabled):
     """Test 4: System cron integration.
 
     Verifies:
     - ProcessSupervisor sets up system crons correctly
     - daily_consolidation cron registered at 02:00
-    - weekly_integration cron registered on Sunday 03:00
+    - weekly_integration cron registered only when explicitly enabled
     - Crons trigger consolidation for all animas
     - WebSocket broadcasts results
     """
@@ -561,6 +562,12 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
         encoding="utf-8",
     )
 
+    from core.config import load_config, save_config
+
+    config = load_config()
+    config.consolidation.weekly_enabled = weekly_enabled
+    save_config(config)
+
     # Create DigitalAnima and LifecycleManager
     with patch("core.paths.get_shared_dir", return_value=shared_dir):
         anima = DigitalAnima(anima_dir, shared_dir)
@@ -600,7 +607,7 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
         job_ids = [job.id for job in jobs]
 
         assert "system_daily_consolidation" in job_ids
-        assert "system_weekly_integration" in job_ids
+        assert ("system_weekly_integration" in job_ids) is weekly_enabled
         assert "system_dm_log_rotation" in job_ids
 
         # Verify cron schedules
@@ -609,7 +616,7 @@ async def test_system_cron_integration(tmp_path: Path, mock_llm, mock_websocket)
         # The trigger should be a CronTrigger with hour=2, minute=0
 
         weekly_job = supervisor.scheduler.get_job("system_weekly_integration")
-        assert weekly_job is not None
+        assert (weekly_job is not None) is weekly_enabled
         # The trigger should be a CronTrigger with day_of_week="sun", hour=3
 
         # Test manual trigger of daily consolidation

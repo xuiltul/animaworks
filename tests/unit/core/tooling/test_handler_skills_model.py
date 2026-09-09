@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from core.memory.task_queue import TaskQueueManager
 from core.tooling.handler import ToolHandler
 
 
@@ -44,8 +45,11 @@ class TestSubmitTasksModelValidation:
         parsed = json.loads(result)
         assert parsed.get("status") == "submitted"
         pending = handler._anima_dir / "state" / "pending" / "task-1.json"
-        assert pending.exists()
-        assert json.loads(pending.read_text(encoding="utf-8"))["model"] == "openai/gpt-4.1"
+        assert not pending.exists()
+        assert (
+            TaskQueueManager(handler._anima_dir).store.get_input(handler._anima_dir.name, "task-1")["model"]
+            == "openai/gpt-4.1"
+        )
 
     def test_unknown_model_returns_invalid_arguments(self, tmp_path: Path) -> None:
         handler = _handler(tmp_path)
@@ -98,4 +102,7 @@ class TestSubmitTasksModelValidation:
         parsed = json.loads(result)
         assert parsed.get("status") == "submitted"
         pending = handler._anima_dir / "state" / "pending" / "task-1.json"
-        assert json.loads(pending.read_text(encoding="utf-8")).get("model") == ""
+        assert (
+            TaskQueueManager(handler._anima_dir).store.get_input(handler._anima_dir.name, "task-1").get("model") == ""
+        )
+        assert not pending.exists()

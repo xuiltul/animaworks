@@ -20,16 +20,15 @@ async def test_persistent_goal_loop_continue_then_done(data_dir) -> None:
         max_iterations=3,
     )
     queue = TaskQueueManager(anima_dir)
-    queue.add_task(
-        source="anima",
-        original_instruction="Create checklist",
-        assignee="alice",
-        summary="Create checklist",
-        task_id="seed",
-        status="in_progress",
+    queue.submit(
+        {"task_id": "seed", "task_type": "llm", "title": "Create checklist", "description": "Create checklist"},
         meta={"executor": "taskexec", "goal_id": goal.goal_id},
     )
-    queue.update_status("seed", "done", summary="Checklist drafted")
+    seed_attempt = queue.store.claim("alice", "seed", {})
+    assert seed_attempt is not None
+    assert queue.store.finish(
+        seed_attempt["_attempt_token"], status="done", stop_kind="completed", summary="Checklist drafted"
+    )
 
     executor = PendingTaskExecutor(
         anima=SimpleNamespace(agent=SimpleNamespace(human_notifier=None)),  # type: ignore[arg-type]
@@ -48,9 +47,22 @@ async def test_persistent_goal_loop_continue_then_done(data_dir) -> None:
     await executor._handle_goal_completion({"task_id": "seed"}, "Checklist drafted")
     continuation = TaskQueueManager(anima_dir).get_active_goal_task(goal.goal_id)
     assert continuation is not None
-    assert (anima_dir / "state" / "pending" / f"{continuation.task_id}.json").exists()
+    descriptor = queue.store.get_input("alice", continuation.task_id)
+    assert descriptor is not None
+    assert descriptor["task_type"] == "llm"
+    assert descriptor["acceptance_criteria"] == goal.success_criteria
+    assert "Verify it." in descriptor["description"]
+    assert continuation.task_id in {item["task_id"] for item in queue.store.pending("alice")}
+    assert not (anima_dir / "state" / "pending" / f"{continuation.task_id}.json").exists()
 
-    queue.update_status(continuation.task_id, "done", summary="Checklist verified and published")
+    continuation_attempt = queue.store.claim("alice", continuation.task_id, {})
+    assert continuation_attempt is not None
+    assert queue.store.finish(
+        continuation_attempt["_attempt_token"],
+        status="done",
+        stop_kind="completed",
+        summary="Checklist verified and published",
+    )
     await executor._handle_goal_completion(
         {"task_id": continuation.task_id},
         "Checklist verified and published",
@@ -60,4 +72,6 @@ async def test_persistent_goal_loop_continue_then_done(data_dir) -> None:
     assert final is not None
     assert final.status == "done"
     assert final.iteration_count == 2
+    assert queue.get_active_goal_task(goal.goal_id) is None
+    assert queue.store.pending("alice") == []
     assert list((anima_dir / "episodes").glob("*_goal_loop.md"))

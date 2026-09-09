@@ -128,9 +128,9 @@ def _intercept_task_to_pending(
     *,
     actual_tool_name: str = "Task",
 ) -> str:
-    """Convert a Task/Agent tool call into a pending LLM task JSON.
+    """Convert a Task/Agent tool call into a canonical pending LLM task.
 
-    Writes a task descriptor to ``state/pending/`` so that
+    Publishes the complete execution input to the task store so that
     ``PendingTaskExecutor`` picks it up and runs it as an independent
     minimal-context LLM session.  Returns the generated task_id.
     """
@@ -165,42 +165,9 @@ def _intercept_task_to_pending(
         "working_directory": "",
     }
 
-    pending_dir = anima_dir / "state" / "pending"
-    pending_dir.mkdir(parents=True, exist_ok=True)
-    task_path = pending_dir / f"{task_id}.json"
-    task_path.write_text(
-        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    from core.tasks_dispatch import publish_tasks
 
-    # Layer 2: Register in task_queue.jsonl for tracking
-    try:
-        from core.memory.task_queue import TaskQueueManager
-
-        manager = TaskQueueManager(anima_dir)
-        manager.add_task(
-            source="anima",
-            original_instruction=prompt[:5000],
-            assignee=anima_dir.name,
-            summary=description[:200],
-            task_id=task_id,
-            status="in_progress",
-            meta={
-                "executor": "taskexec",
-                "task_desc": {
-                    "title": description,
-                    "description": prompt,
-                    "context": "\n\n".join(context_parts),
-                    "acceptance_criteria": [],
-                    "constraints": [],
-                    "file_paths": [],
-                    "reply_to": anima_dir.name,
-                    "working_directory": "",
-                },
-            },
-        )
-    except Exception:
-        logger.warning("Failed to register intercepted task in task_queue: %s", task_id, exc_info=True)
+    publish_tasks(anima_dir, [task_desc])
 
     _log_tool_use(
         anima_dir,
@@ -227,7 +194,7 @@ def _do_pending_intercept(
     intercepted_task_ids: set[str],
     on_task_intercepted: Callable[[], None] | None,
 ) -> Any:
-    """Intercept a Task/Agent call to state/pending/ and return deny response."""
+    """Publish a Task/Agent call to the canonical queue and return deny response."""
     from claude_agent_sdk.types import (
         PreToolUseHookSpecificOutput,
         SyncHookJSONOutput,
@@ -251,7 +218,7 @@ def _do_pending_intercept(
             permissionDecision="deny",
             permissionDecisionReason=(
                 f"INTERCEPT_OK: Task accepted (task_id: {task_id}). "
-                f"Written to state/pending/ for background execution. "
+                f"Published to the task execution queue for background execution. "
                 f"The executor has your identity, injection, behavior rules, "
                 f"memory guide, and org context. "
                 f"Do NOT call Task or TaskOutput for this task_id again. "
@@ -335,30 +302,15 @@ def _intercept_task_to_delegation(
     animas_dir = get_animas_dir()
     target_dir = animas_dir / target_name
 
-    # Add task to subordinate's queue
-    from core.memory.task_queue import TaskQueueManager
+    import uuid
 
-    sub_tqm = TaskQueueManager(target_dir)
-    try:
-        sub_entry = sub_tqm.add_task(
-            source="anima",
-            original_instruction=prompt,
-            assignee=target_name,
-            summary=description[:100],
-            deadline="2h",
-            relay_chain=[my_name],
-        )
-    except Exception as e:
-        logger.error("Task persistence failed in delegate_task (subordinate queue): %s", e)
-        return {
-            "task_id": "persist_failed",
-            "reason": f"DELEGATION_FAILED: Failed to persist task to subordinate queue: {e}. Please retry.",
-        }
+    from core.tasks_dispatch import publish_delegation
 
-    # Write pending task JSON so PendingTaskExecutor picks it up for immediate execution
+    sub_task_id = uuid.uuid4().hex[:12]
+    tracking_task_id = uuid.uuid4().hex[:12]
     task_desc = {
         "task_type": "llm",
-        "task_id": sub_entry.task_id,
+        "task_id": sub_task_id,
         "title": description[:100],
         "description": prompt,
         "context": "",
@@ -371,12 +323,11 @@ def _intercept_task_to_delegation(
         "source": "delegation",
         "working_directory": "",
     }
-    pending_dir = target_dir / "state" / "pending"
-    pending_dir.mkdir(parents=True, exist_ok=True)
-    (pending_dir / f"{sub_entry.task_id}.json").write_text(
-        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    try:
+        publish_delegation(target_dir, task_desc, delegator=my_name, tracking_task_id=tracking_task_id)
+    except Exception as exc:
+        logger.exception("Failed to publish SDK delegation")
+        return {"task_id": "persist_failed", "reason": f"DELEGATION_FAILED: {exc}"}
 
     # Send DM via Messenger
     dm_result = ""
@@ -390,38 +341,15 @@ def _intercept_task_to_delegation(
             content=t(
                 "handler.delegation_dm_content",
                 instruction=prompt[:500],
-                deadline="2h",
-                task_id=sub_entry.task_id,
+                task_id=sub_task_id,
             ),
             intent="delegation",
-            meta={"task_id": sub_entry.task_id},
+            meta={"task_id": sub_task_id},
         )
         dm_result = "DM sent"
     except Exception as e:
         dm_result = f"DM failed: {e}"
         logger.warning("Delegation DM failed: %s -> %s: %s", my_name, target_name, e)
-
-    # Add tracking entry to own queue
-    own_tqm = TaskQueueManager(anima_dir)
-    try:
-        own_entry = own_tqm.add_delegated_task(
-            original_instruction=prompt,
-            assignee=target_name,
-            summary=f"[delegated→{target_name}] {description[:80]}",
-            deadline="2h",
-            relay_chain=[my_name, target_name],
-            meta={
-                "delegated_to": target_name,
-                "delegated_task_id": sub_entry.task_id,
-            },
-        )
-    except Exception as e:
-        logger.warning("Failed to persist tracking entry for delegate_task (DM already sent): %s", e)
-        return {
-            "task_id": "persist_failed",
-            "reason": f"DELEGATION_PARTIAL: Task sent to {target_name} but tracking entry failed: {e}. "
-            "DM was delivered; check subordinate queue manually.",
-        }
 
     # Write wake file so inbox_wake_dispatcher triggers process_inbox
     try:
@@ -443,15 +371,15 @@ def _intercept_task_to_delegation(
     logger.info(
         "Task tool intercepted → delegated to %s: sub_task=%s own_task=%s",
         target_name,
-        sub_entry.task_id,
-        own_entry.task_id,
+        sub_task_id,
+        tracking_task_id,
     )
 
     return {
-        "task_id": own_entry.task_id,
+        "task_id": tracking_task_id,
         "reason": (
             f"DELEGATION_OK: Task delegated to {target_name} "
-            f"(sub_task_id: {sub_entry.task_id}, own_tracking_id: {own_entry.task_id}). "
+            f"(sub_task_id: {sub_task_id}, own_tracking_id: {tracking_task_id}). "
             f"{dm_result}. "
             f"Do NOT call Task or TaskOutput for this task again. "
             f"Proceed with your current conversation."

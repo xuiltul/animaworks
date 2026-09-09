@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "awlib": {
-      "command": "/home/main/dev/animaworks/.venv/bin/animaworks",
+      "command": ".venv/bin/animaworks",
       "args": ["mcp", "--anima", "librarian"]
     }
   }

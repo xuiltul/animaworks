@@ -10,13 +10,8 @@ Anima의 작업 상태를 관리하는 `state/` 디렉토리의 상세 사양입
 ```
 state/
 ├── current_state.md          # 워킹 메모리 (자유 형식 Markdown)
-├── task_queue.jsonl           # 태스크 레지스트리 (append-only JSONL)
-├── pending/                   # LLM 태스크 실행 큐 (JSON)
-│   ├── {task_id}.json         # 제출된 태스크
-│   ├── processing/            # 실행 중 (PendingTaskExecutor가 이동)
-│   └── failed/                # 실패 태스크
 ├── task_results/              # TaskExec 완료 결과
-│   └── {task_id}.md           # 결과 요약 (최대 2000자, 7일 TTL)
+│   └── {task_id}/{attempt_token}.md
 ├── conversation.json          # 대화 상태
 ├── conversations/             # 스레드별 대화 파일
 ├── recovery_note.md           # 크래시 복구 노트
@@ -32,7 +27,7 @@ state/
 
 Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇을 관찰했는지", "어떤 블로커가 있는지"를 자유 형식으로 기록합니다. 태스크 관리용이 아니라 상황 인식을 위한 공간입니다.
 
-태스크의 공식적인 추적 및 관리는 `task_queue.jsonl` (Layer 2)이 담당합니다.
+태스크 추적은 호스트가 관리하는 정본 TaskStore가 담당합니다. `list_tasks`로 확인하고 태스크 도구로 변경하세요. DB나 큐 파일을 직접 수정하지 마세요.
 
 ### 사이즈 제어
 
@@ -46,7 +41,7 @@ Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇
 
 - 일반 Heartbeat / cron / 대화 finalize에서는 `current_state.md`를 유지합니다
 - 세션 요약에 현재 상태가 포함되어도 `current_state.md`가 비어 있거나 idle일 때만 기록합니다
-- 활성 표시 task가 없는 오래된 state는 TaskBoard housekeeping에 의해 아카이브될 수 있습니다
+- 활성 태스크가 없는 오래된 state는 TaskBoard housekeeping이 보관할 수 있습니다. 숨겨진 활성 태스크도 state를 보호합니다
 
 **Heartbeat 중 선택적 정리**:
 
@@ -99,77 +94,17 @@ Anima의 워킹 메모리입니다. "지금 무엇을 하고 있는지", "무엇
 
 ---
 
-## task_queue.jsonl
+## 기존 태스크 파일
 
-태스크 레지스트리입니다. 상세는 `common_knowledge/anatomy/task-architecture.md` (Layer 2)를 참조하세요.
+`state/task_queue.jsonl`과 `state/pending/`은 마이그레이션·내보내기 증거로만 보존합니다. 실행 중인 큐가 아닙니다. 운영자가 기존 쓰기 작업을 중지하고 백업과 함께 명시적으로 가져온 뒤 정본 런타임을 시작해야 합니다. 재개하려고 파일을 삭제하거나 재투입하거나 만들어 내지 마세요.
 
-### 엔트리 스키마 (TaskEntry)
+## 태스크 실행과 결과
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `task_id` | string | 고유 ID |
-| `ts` | ISO8601 | 생성 일시 |
-| `source` | `"human"` / `"anima"` | 태스크 출처 |
-| `original_instruction` | string | 원본 지시문 |
-| `assignee` | string | 담당 Anima명 |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
-| `summary` | string | 한 줄 요약 |
-| `deadline` | ISO8601 / null | 기한 |
-| `relay_chain` | array | 위임 체인 |
-| `updated_at` | ISO8601 | 최종 업데이트 일시 |
-| `meta` | object | `executor`, `batch_id`, `task_desc`, `origin` 등 |
+호스트가 지시와 태스크를 원자적으로 저장하고 실행 가능한 작업을 가져와 모든 시도를 기록합니다. `in_progress`는 호스트 소유입니다. 에이전트는 `update_task`로 `done`, `pending`, `cancelled`를 선언합니다. `list_tasks(detail=true)`로 의존 관계와 주의 사유를 확인하세요. pending은 재시도를 뜻하지 않습니다. 원인을 해결한 뒤 `submit_tasks(..., tasks=[{"task_id": "ID", "resume": true}])`로 같은 태스크를 명시적으로 재개하세요.
 
----
+수락한 결과 요약은 `state/task_results/{task_id}/{attempt_token}.md`에 저장됩니다(최대 2000자). 후속 태스크에는 호스트가 선택한 수락된 결과를 제공하며 오래된 파일의 존재만으로 완료를 판단하지 않습니다. 원본 기록을 보존하고 결과를 직접 써서 성공한 시도를 가장하지 마세요.
 
-## pending/ 디렉토리
-
-LLM 태스크 실행 큐입니다. 상세는 `common_knowledge/anatomy/task-architecture.md` (Layer 1)를 참조하세요.
-
-### 라이프사이클
-
-```
-pending/{task_id}.json → processing/{task_id}.json → 성공: 삭제 / 실패: failed/로 이동
-```
-
-- TTL: 24시간 (`_LLM_TASK_TTL_HOURS`). 초과한 태스크는 건너뜀
-- 폴링 간격: 3초 (`_PENDING_WATCHER_POLL_INTERVAL`)
-- `task_queue.jsonl`에서 `cancelled`인 태스크는 자동 건너뜀 → `failed/`로 이동
-
-### JSON 스키마
-
-| 필드 | 타입 | 필수 | 설명 |
-|------|------|------|------|
-| `task_type` | string | Yes | `"llm"` |
-| `task_id` | string | Yes | 고유 ID |
-| `batch_id` | string | No | 배치 ID (submit_tasks) |
-| `title` | string | Yes | 제목 |
-| `description` | string | Yes | 지시 내용 |
-| `parallel` | boolean | No | 병렬 실행 가능 여부 |
-| `depends_on` | array | No | 선행 태스크 ID |
-| `context` | string | No | 추가 컨텍스트 |
-| `acceptance_criteria` | array | No | 완료 조건 |
-| `constraints` | array | No | 제약 |
-| `file_paths` | array | No | 관련 파일 |
-| `workspace` | string | No | 작업 디렉토리 (별칭) |
-| `submitted_by` | string | Yes | 제출자 |
-| `submitted_at` | ISO8601 | Yes | 제출 일시 |
-| `source` | string | No | `"delegation"` 등 |
-
----
-
-## task_results/ 디렉토리
-
-TaskExec이 완료한 태스크의 결과 요약을 저장합니다.
-
-| 파라미터 | 값 |
-|----------|-----|
-| 파일명 | `{task_id}.md` |
-| 최대 글자 수 | 2000 (`_TASK_RESULT_MAX_CHARS`) |
-| TTL | 7일 (하우스키핑에 의해 자동 삭제) |
-
-의존 태스크 (`depends_on`)는 이 파일의 내용을 컨텍스트로 자동 수신합니다.
-
----
+장시간 명령 도구는 별도 경로를 유지합니다. `animaworks-tool submit`은 `state/background_tasks/pending/`에 제출하고 BackgroundTaskManager가 명령 상태와 알림을 관리합니다. `operations/background-tasks.md`와 `operations/task-management.md`를 참조하세요.
 
 ## read_subordinate_state
 

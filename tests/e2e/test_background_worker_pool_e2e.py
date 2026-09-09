@@ -10,7 +10,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.models import invalidate_cache
+from core.memory.task_queue import TaskQueueManager
 from core.supervisor.pending_executor import PendingTaskExecutor
+from core.tasks_dispatch import publish_tasks
 from tests.helpers.filesystem import create_anima_dir, create_test_data_dir
 
 
@@ -87,7 +89,7 @@ async def test_three_single_pending_llm_tasks_overlap_across_worker_slots(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """watcher_loop dispatches three standalone TaskExec files concurrently."""
+    """watcher_loop claims three canonical tasks concurrently, exactly once each."""
     data_dir = create_test_data_dir(tmp_path)
     monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(data_dir))
     invalidate_cache()
@@ -131,10 +133,7 @@ async def test_three_single_pending_llm_tasks_overlap_across_worker_slots(
                 "description": "Prove standalone TaskExec concurrency",
                 "working_directory": str(workspace),
             }
-            (pending_dir / f"{task_id}.json").write_text(
-                json.dumps(descriptor),
-                encoding="utf-8",
-            )
+            publish_tasks(anima_dir, [descriptor])
 
         shutdown_event = asyncio.Event()
         executor = PendingTaskExecutor(
@@ -144,20 +143,16 @@ async def test_three_single_pending_llm_tasks_overlap_across_worker_slots(
             shutdown_event=shutdown_event,
         )
 
-        with patch(
-            "core.supervisor.pending_executor._completion_declaration_required",
-            return_value=False,
-        ):
-            watcher = asyncio.create_task(executor.watcher_loop())
-            await asyncio.wait_for(recorder.all_ended.wait(), timeout=5.0)
-            # Let each detached coordinator task finish its processing-file
-            # cleanup before asking watcher_loop to shut down.
-            async with asyncio.timeout(2.0):
-                while executor._active_dispatch_tasks:
-                    await asyncio.sleep(0.01)
-            shutdown_event.set()
-            executor.wake()
-            await asyncio.wait_for(watcher, timeout=2.0)
+        watcher = asyncio.create_task(executor.watcher_loop())
+        await asyncio.wait_for(recorder.all_ended.wait(), timeout=5.0)
+        # Let each coordinator record its attempt result and release its slot
+        # before asking watcher_loop to shut down.
+        async with asyncio.timeout(2.0):
+            while executor._active_dispatch_tasks:
+                await asyncio.sleep(0.01)
+        shutdown_event.set()
+        executor.wake()
+        await asyncio.wait_for(watcher, timeout=2.0)
 
         assert set(recorder.started) == set(task_ids)
         assert set(recorder.ended) == set(task_ids)
@@ -170,6 +165,11 @@ async def test_three_single_pending_llm_tasks_overlap_across_worker_slots(
         assert not list(pending_dir.glob("*.json"))
         assert not list(processing_dir.glob("*.json"))
         assert not list(processing_dir.glob("*.lease"))
+        with TaskQueueManager(anima_dir).store.reader() as db:
+            attempts = db.execute("SELECT task_id,number,ended_at FROM task_attempts").fetchall()
+        assert len(attempts) == 3
+        assert {row["task_id"] for row in attempts} == set(task_ids)
+        assert all(row["number"] == 1 and row["ended_at"] for row in attempts)
         assert not executor._active_task_ids
         assert not anima._active_background_workers
         assert anima._background_worker_queue.qsize() == 3

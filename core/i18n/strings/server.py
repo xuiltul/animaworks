@@ -204,6 +204,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "ワークスペースの解決に失敗しました: {error}",
         "en": "Failed to resolve workspace: {error}",
     },
+    "setup.codex_models_unavailable": {
+        "ja": "Codexの利用可能なモデルを確認できませんでした。ログイン状態と接続を確認して、もう一度お試しください。",
+        "en": "Could not load available Codex models. Check your login and connection, then try again.",
+    },
     "setup.cli_tools_auth": {
         "ja": "CLIツール認証状態",
         "en": "CLI Tools Auth Status",
@@ -236,116 +240,38 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Gemini CLI 認証",
         "en": "Gemini CLI Auth",
     },
-    "github_gateway.review_dispatch": {
+    "github_gateway.notify": {
         "ja": (
-            "【PR新規コミット検出（push静穏確認済み）】\n\n"
-            "- {pr_key} {sha}: {title}\n\n"
-            "最終pushから{quiet}以上静穏を確認済みです。"
-            "上記PRの current HEAD に対する差分レビュー/FRCを直ちに実施してください。"
-            "過去HEADへのレビューは新push時点で無効です。"
-            "複数件ある場合はbackgroundタスクとして並列に処理して構いません。"
+            "【GitHub通知】\n\n"
+            "- PR: {repo}#{number} {title}\n"
+            "- イベント: {event_label}\n"
+            "- 起点: {author}\n"
+            "- URL: {url}{ci_line}\n\n"
+            "本文（先頭500文字）:\n{excerpt}\n\n"
+            "対応が必要なら誰に頼むか決めてdelegate_taskしてください。"
         ),
         "en": (
-            "[New PR commit detected (push quiet period confirmed)]\n\n"
-            "- {pr_key} {sha}: {title}\n\n"
-            "No pushes have occurred for at least {quiet}. Review/FRC the current HEAD immediately. "
-            "Reviews of previous HEADs became invalid when the new push arrived. "
-            "Multiple PRs may be processed in parallel as background tasks."
+            "[GitHub notification]\n\n"
+            "- PR: {repo}#{number} {title}\n"
+            "- Event: {event_label}\n"
+            "- Origin: {author}\n"
+            "- URL: {url}{ci_line}\n\n"
+            "Body (first 500 chars):\n{excerpt}\n\n"
+            "If this needs action, decide who to ask and call delegate_task."
+        ),
+        "ko": (
+            "【GitHub 알림】\n\n"
+            "- PR: {repo}#{number} {title}\n"
+            "- 이벤트: {event_label}\n"
+            "- 시작자: {author}\n"
+            "- URL: {url}{ci_line}\n\n"
+            "본문(첫 500자):\n{excerpt}\n\n"
+            "대응이 필요하면 누구에게 맡길지 정해서 delegate_task 하세요."
         ),
     },
-    "github_gateway.minutes": {"ja": "{value}分", "en": "{value} minutes"},
-    "github_gateway.seconds": {"ja": "{value}秒", "en": "{value} seconds"},
-    "github_gateway.conflict": {
-        "ja": (
-            "【要対応・マージコンフリクト継続検知】\n\n"
-            "- PR: {repo}#{number}\n- HEAD: {sha}\n- URL: {url}\n\n"
-            "baseブランチとのコンフリクトが残っています。重複通知でも無視せず、"
-            "natsumeのcanonical laneが実際に解消pushを完了するまで追跡してください。"
-        ),
-        "en": (
-            "[ACTION REQUIRED: merge conflict still present]\n\n"
-            "- PR: {repo}#{number}\n- HEAD: {sha}\n- URL: {url}\n\n"
-            "The base-branch conflict remains. Even if this notification repeats, track the canonical "
-            "natsume lane until the conflict-resolution push is actually complete."
-        ),
-    },
-    "github_gateway.unknown_verdict": {"ja": "判定不明", "en": "Unknown verdict"},
-    "github_gateway.frc_result": {
-        "ja": (
-            "【FRC結果検知】\n\n"
-            "- 判定: {verdict}\n- PR: {repo}#{number}\n- HEAD: {head_sha}\n"
-            "- URL: {url}\n- 本文全文:\n{summary}\n\n"
-            "HOLDの場合は procedures/pr-event-detection-patrol.md に従って"
-            "natsumeへの修正ディスパッチを実施してください。"
-        ),
-        "en": (
-            "[FRC result detected]\n\n"
-            "- Verdict: {verdict}\n- PR: {repo}#{number}\n- HEAD: {head_sha}\n"
-            "- URL: {url}\n- Full body:\n{summary}\n\n"
-            "For HOLD, follow procedures/pr-event-detection-patrol.md and dispatch the fix to natsume."
-        ),
-    },
-    "github_gateway.ci_failure": {
-        "ja": "【CI FAILURE検知】\n\n{lines}\n  {url}\n\n修正担当（natsume）へのディスパッチをお願いします。",
-        "en": "[CI FAILURE detected]\n\n{lines}\n  {url}\n\nPlease dispatch this to the fix owner (natsume).",
-    },
-    "github_gateway.command_task": {
-        "ja": (
-            "GitHub の {repo}#{number} に次のコメントが投稿された。\n\n{body}\n\nURL: {url}\n\n"
-            "上記コメントの指示に従って対応せよ。コンフリクト解消の場合は "
-            "procedures/pr-conflict-resolution.md の手順（worktreeでorigin/baseをmerge・"
-            "テスト通過確認・通常push・force-push禁止）に従う。"
-        ),
-        "en": (
-            "The following comment was posted on GitHub at {repo}#{number}.\n\n{body}\n\nURL: {url}\n\n"
-            "Follow the instructions in the comment. For conflict resolution, follow "
-            "procedures/pr-conflict-resolution.md: merge origin/base in the branch worktree, "
-            "confirm tests pass, use a normal push, and never force-push."
-        ),
-    },
-    "github_gateway.command_summary": {
-        "ja": "GitHubコメント対応 {repo}#{number}",
-        "en": "Handle GitHub comment {repo}#{number}",
-    },
-    "github_gateway.ci_task": {
-        "ja": (
-            "PR #{number} ({pr_url}) の CI ({workflow_name}) が head {sha} で失敗。"
-            "原因を調査し修正をpushせよ。\nworkflow URL: {workflow_url}"
-        ),
-        "en": (
-            "CI ({workflow_name}) failed at head {sha} for PR #{number} ({pr_url}). "
-            "Investigate the cause, fix it, and push the fix.\nworkflow URL: {workflow_url}"
-        ),
-    },
-    "github_gateway.ci_summary": {
-        "ja": "CI失敗修正 {repo}#{number}",
-        "en": "Fix CI failure {repo}#{number}",
-    },
-    "github_gateway.review_task_bot_note": {
-        "ja": "bot由来のCHANGES_REQUESTEDです。",
-        "en": "This CHANGES_REQUESTED review came from a bot.",
-    },
-    "github_gateway.review_task_human_note": {
-        "ja": "人間レビュアー由来です。",
-        "en": "This review came from a human reviewer.",
-    },
-    "github_gateway.review_task_summary": {
-        "ja": "レビュー指摘対応 {repo}#{number}",
-        "en": "Address review feedback {repo}#{number}",
-    },
-    "github_gateway.review_task": {
-        "ja": (
-            "PR #{number} ({url}) に @{author} から CHANGES_REQUESTED が投稿された。{bot_note}\n\n"
-            "レビュー本文:\n{body}\n\n"
-            "指摘を確認して必要な修正を行うこと。レビュアーが人間の場合、指摘に技術的に"
-            "同意できない時は独断で押し切らず上長(rin)へ報告して判断を仰ぐこと。"
-        ),
-        "en": (
-            "@{author} submitted CHANGES_REQUESTED on PR #{number} ({url}). {bot_note}\n\n"
-            "Review body:\n{body}\n\n"
-            "Review the feedback and make the necessary changes. If the reviewer is human and you "
-            "technically disagree, do not override the feedback unilaterally; report it to your manager "
-            "(rin) and ask for a decision."
-        ),
+    "github_gateway.notify_ci_line": {
+        "ja": "\n- CI: {name} ({conclusion})",
+        "en": "\n- CI: {name} ({conclusion})",
+        "ko": "\n- CI: {name} ({conclusion})",
     },
 }

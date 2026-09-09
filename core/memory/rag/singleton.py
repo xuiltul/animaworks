@@ -41,6 +41,7 @@ _vector_store_init_failed: set[str | None] = set()
 _http_stores: dict[tuple[str, str | None], HttpVectorStore] = {}
 _ipc_stores: dict[tuple[str, str | None], IpcVectorStore] = {}
 _ipc_vector_requester: MemoryRequester | None = None
+_ipc_vector_owner: str | None = None
 _embedding_model: SentenceTransformer | None = None
 _embedding_model_name: str | None = None
 _embedding_model_device: str | None = None
@@ -255,18 +256,22 @@ def _get_http_store(base_url: str, anima_name: str | None) -> HttpVectorStore:
     return _http_stores[key]
 
 
-def configure_ipc_vector_requester(requester: MemoryRequester | None) -> None:
+def configure_ipc_vector_requester(requester: MemoryRequester | None, *, anima_name: str | None = None) -> None:
     """Install the task runner's root-memory requester for phase3 operations."""
-    global _ipc_vector_requester
+    global _ipc_vector_requester, _ipc_vector_owner
 
     with _lock:
         _ipc_vector_requester = requester
+        _ipc_vector_owner = anima_name if requester is not None else None
         _ipc_stores.clear()
 
 
 def _get_ipc_store(base_url: str, anima_name: str | None) -> IpcVectorStore | None:
     requester = _ipc_vector_requester
     if requester is None:
+        return None
+    if _ipc_vector_owner is not None and anima_name != _ipc_vector_owner:
+        logger.warning("Root vector store owner mismatch: requested=%s owner=%s", anima_name, _ipc_vector_owner)
         return None
     normalized_url = base_url.rstrip("/")
     key = (normalized_url, anima_name)
@@ -298,6 +303,11 @@ def get_vector_store(anima_name: str | None = None) -> VectorStore | None:
     global _direct_disabled_warned, _init_failed
 
     vector_url = os.environ.get("ANIMAWORKS_VECTOR_URL")
+    # A phase3 root also executes inbox/tool work locally. Its registered
+    # requester must win over the HTTP proxy to avoid a server round trip to
+    # this same owner. The env flag is inherited by disposable task children.
+    if _ipc_vector_requester is not None:
+        return _get_ipc_store(vector_url or "", anima_name)
     if os.environ.get("ANIMAWORKS_MEMORY_VIA_ROOT") == "1":
         if vector_url:
             return _get_ipc_store(vector_url, anima_name)
@@ -965,7 +975,7 @@ def get_embedding_e5_prefix_enabled() -> bool:
 def _reset_for_testing():
     """Reset singletons for test isolation."""
     global _bulk_yield_count, _direct_disabled_warned, _embedding_model, _embedding_model_device, _embedding_model_name
-    global _init_failed, _interactive_waiters, _ipc_vector_requester, _last_error_reset_monotonic
+    global _init_failed, _interactive_waiters, _ipc_vector_requester, _ipc_vector_owner, _last_error_reset_monotonic
     global _vector_store_lifecycle_gate
     from core.gpu import reset_gpu_status_for_testing
 
@@ -978,6 +988,7 @@ def _reset_for_testing():
         _http_stores.clear()
         _ipc_stores.clear()
         _ipc_vector_requester = None
+        _ipc_vector_owner = None
         _embedding_model = None
         _embedding_model_name = None
         _embedding_model_device = None

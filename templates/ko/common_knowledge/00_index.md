@@ -12,11 +12,11 @@ AnimaWorks의 모든 Anima가 공유하는 레퍼런스 문서 목차입니다.
 ## ⭐ 먼저 읽기
 
 AnimaWorks를 처음 사용하거나 전체 그림을 정리하고 싶은 경우, 아래 1개 파일을 먼저 읽으세요.
-Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심이 한 페이지에 정리되어 있습니다.
+Heartbeat / Cron / 팀 설계 / 메모리 / 비용 최적화의 핵심이 한 페이지에 정리되어 있습니다.
 
 | 파일 | 내용 |
 |------|------|
-| **`anatomy/essentials.md`** | **AnimaWorks 에센셜 가이드** — 실행 경로·Heartbeat vs Cron·machine 사용법·팀 설계·태스크 라우팅·기억 시스템·비용 최적화를 한 페이지로 파악 |
+| **`anatomy/essentials.md`** | **AnimaWorks 에센셜 가이드** — 실행 경로·Heartbeat vs Cron·팀 설계·태스크 라우팅·기억 시스템·비용 최적화를 한 페이지로 파악 |
 
 읽은 후, 각 주제의 상세 내용은 아래 목차에서 찾으세요.
 
@@ -61,8 +61,6 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 | 문제 | 참조 |
 |------|------|
 | 도구 사용법이나 호출 방법을 모르겠다 | `reference/operations/tool-usage-overview.md` |
-| machine 도구 사용법을 모르겠다 | `operations/machine/tool-usage.md` |
-| 내 역할에서 machine 워크플로를 알고 싶다 | `operations/machine/workflow-{pdm,engineer,reviewer,tester}.md` |
 | 모델 선택이나 변경 방법을 모르겠다 | `reference/operations/model-guide.md` (→ reference) |
 | Mode S의 인증 방식을 변경하고 싶다 | `reference/operations/mode-s-auth-guide.md` (→ reference) |
 | 음성 채팅 설정이나 사용법을 모르겠다 | `reference/operations/voice-chat-guide.md` (→ reference) |
@@ -105,7 +103,7 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 
 | 파일 | 개요 |
 |------|------|
-| ⭐ `essentials.md` | **에센셜 가이드** — AnimaWorks 전체를 한 페이지로 파악 (실행 경로·Heartbeat vs Cron·machine·팀 설계·기억·비용 최적화) |
+| ⭐ `essentials.md` | **에센셜 가이드** — AnimaWorks 전체를 한 페이지로 파악 (실행 경로·Heartbeat vs Cron·팀 설계·기억·비용 최적화) |
 | `what-is-anima.md` | Anima란 무엇인가 (개념, 설계 철학, 라이프사이클, 실행 경로) |
 | `anima-anatomy.md` | → `reference/anatomy/anima-anatomy.md`로 이동. 구성 파일 완전 가이드 |
 | `memory-system.md` | 기억 시스템 가이드 (기억의 종류, Priming, Consolidation, Forgetting, 도구 활용) |
@@ -145,16 +143,6 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 | `model-guide.md` | → `reference/operations/model-guide.md`로 이동. 모델 선택 및 설정 가이드 |
 | `mode-s-auth-guide.md` | → `reference/operations/mode-s-auth-guide.md`로 이동. Mode S 인증 모드 설정 가이드 |
 | `voice-chat-guide.md` | → `reference/operations/voice-chat-guide.md`로 이동. 음성 채팅 가이드 |
-
-### operations/machine/ — machine 도구 워크플로
-
-| 파일 | 개요 |
-|------|------|
-| `tool-usage.md` | machine 도구 사용 가이드(공통 원칙·메타 패턴·상태·레이트 제한) |
-| `workflow-pdm.md` | machine 워크플로 — PdM(조사→계획서) ※현재 영문 |
-| `workflow-engineer.md` | machine 워크플로 — Engineer(구체화→구현) ※현재 영문 |
-| `workflow-reviewer.md` | machine 워크플로 — Reviewer(리뷰→메타 리뷰) ※현재 영문 |
-| `workflow-tester.md` | machine 워크플로 — Tester(테스트 설계→실행→결과) ※현재 영문 |
 
 ### security/ — 보안
 
@@ -212,11 +200,6 @@ Heartbeat / Cron / machine / 팀 설계 / 메모리 / 비용 최적화의 핵심
 | 실행 모드, S-mode, A-mode, B-mode, C-mode | `reference/operations/tool-usage-overview.md` |
 | 백그라운드, submit, 장시간 도구 | `operations/background-tasks.md` |
 | 워크스페이스, workspace, 작업 디렉토리, working_directory | `operations/workspace-guide.md` |
-| machine, machine run, 외부 에이전트, 계획서 | `operations/machine/tool-usage.md` |
-| 조사, investigation, PdM, plan.md | `operations/machine/workflow-pdm.md` |
-| impl-plan, 구체화, 구현 계획 | `operations/machine/workflow-engineer.md` |
-| 리뷰, review, 메타 리뷰 | `operations/machine/workflow-reviewer.md` |
-| 테스트, test, E2E, 테스터 | `operations/machine/workflow-tester.md` |
 | 모델, models.json, credential, set-model, 컨텍스트 윈도우 | `reference/operations/model-guide.md` |
 | background_model, 백그라운드 모델, 비용 최적화 | `reference/operations/model-guide.md` |
 | Mode S, 인증, API 직접, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |

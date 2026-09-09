@@ -84,7 +84,7 @@ def test_enqueue_continuation_creates_normal_task_and_avoids_duplicates(tmp_path
     entry = manager.enqueue_continuation(
         state.goal_id,
         judgment,
-        source_task_desc={"working_directory": "/tmp/work", "reply_to": "alice"},
+        source_task_desc={"working_directory": str(tmp_path), "reply_to": "alice"},
         result_summary="build prepared",
     )
     duplicate = manager.enqueue_continuation(
@@ -100,8 +100,8 @@ def test_enqueue_continuation_creates_normal_task_and_avoids_duplicates(tmp_path
     assert entry.meta["goal_id"] == state.goal_id
     assert entry.meta["executor"] == "taskexec"
     pending_json = anima_dir / "state" / "pending" / f"{entry.task_id}.json"
-    assert pending_json.exists()
-    assert json.loads(pending_json.read_text(encoding="utf-8"))["task_type"] == "llm"
+    assert not pending_json.exists()
+    assert TaskQueueManager(anima_dir).store.get_input(anima_dir.name, entry.task_id)["task_type"] == "llm"
 
 
 def test_human_task_defers_continuation(tmp_path: Path, monkeypatch) -> None:
@@ -113,7 +113,6 @@ def test_human_task_defers_continuation(tmp_path: Path, monkeypatch) -> None:
         original_instruction="urgent user task",
         assignee="alice",
         summary="urgent",
-        deadline="1h",
     )
 
     result = manager.enqueue_continuation(
@@ -339,11 +338,7 @@ async def test_goal_judge_background_model_call_is_narrow_and_parseable(tmp_path
     async def fake_acompletion(**kwargs):
         captured.update(kwargs)
         return SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content='{"verdict":"done","reason":"tests pass"}')
-                )
-            ]
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"verdict":"done","reason":"tests pass"}'))]
         )
 
     monkeypatch.setitem(sys.modules, "litellm", SimpleNamespace(acompletion=fake_acompletion))

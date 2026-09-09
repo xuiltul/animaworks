@@ -7,7 +7,7 @@ Covers:
 - 3-lock structure (_conversation_locks, _inbox_lock, _background_lock, _state_file_lock)
 - Trigger-based prompt section filtering (chat/inbox/heartbeat/cron/task)
 - New prompt template loading (inbox_message, task_exec)
-- Heartbeat plan-focus (no inbox processing, Observe/Plan/Reflect)
+- Heartbeat decision-focus (no inbox processing, no mandatory reflection ritual)
 - Cron LLM sessions with heartbeat-equivalent context
 - InboxRateLimiter wiring (process_inbox_message instead of run_heartbeat)
 - PendingTaskExecutor LLM task dispatch
@@ -139,8 +139,9 @@ class TestPromptTemplates:
 
         path = TEMPLATES_DIR / "ja" / "common_knowledge" / "operations" / "task-delegation-guide.md"
         text = path.read_text(encoding="utf-8")
-        assert "タスク実行の仕組み" in text
-        assert "禁止パターン" in text
+        assert "タスク投入と委譲" in text
+        assert '"resume":true' in text
+        assert "自動取消・上書きせず" in text
 
     def test_task_complete_notify_loads(self):
         from core.paths import load_prompt
@@ -149,22 +150,27 @@ class TestPromptTemplates:
         assert "t1" in result
         assert "Done" in result
 
-    def test_heartbeat_template_has_plan_section(self):
+    def test_heartbeat_template_keeps_execution_handoff_and_explicit_resume(self):
         from core.paths import load_prompt
 
         result = load_prompt(
             "heartbeat",
             checklist="- check item",
         )
-        assert "Plan" in result
-        assert "Act" not in result or "実際の作業" in result
+        assert "- check item" in result
+        assert "submit_tasks" in result
+        assert "delegate_task" in result
+        assert '"resume":true' in result
+        assert "HEARTBEAT_OK" in result
+        assert "Observe → Plan → Reflect" not in result
 
     def test_heartbeat_checklist_no_inbox_check(self):
         from core.paths import load_prompt
 
         result = load_prompt("heartbeat_default_checklist")
         assert "Inboxに未読メッセージがあるか" not in result
-        assert "pending/" in result
+        assert "list_tasks" in result
+        assert "pending/" not in result
 
 
 # ── Trigger-Based Prompt Filtering ──────────────────────────
@@ -402,9 +408,10 @@ class TestCronLLMSession:
 
             assert result.summary == "fallback ok"
             assert dp.agent.run_cycle.await_count == 2
-            assert [
-                call.kwargs["model_config_override"] for call in dp.agent.run_cycle.await_args_list
-            ] == [primary, fallback]
+            assert [call.kwargs["model_config_override"] for call in dp.agent.run_cycle.await_args_list] == [
+                primary,
+                fallback,
+            ]
 
     async def test_cron_retry_failure_is_recorded_as_error(self, data_dir, make_anima):
         anima_dir = make_anima("cron_fallback_failure")

@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from core.memory.conversation import ConversationMemory
 
 from core._agent_prompt_log import _PROMPT_HARD_LIMIT_BYTES, _PROMPT_SOFT_LIMIT_BYTES
-from core.i18n import t
 from core.prompt.builder import build_system_prompt
+from core.prompt.tokens import estimate_tokens
 
 logger = logging.getLogger("animaworks.agent")
 
@@ -57,10 +57,6 @@ class PrimingMixin:
         from core.memory.priming import PrimingEngine, format_priming_section
         from core.prompt.builder import TIER_LIGHT, TIER_MICRO, TIER_MINIMAL, TIER_STANDARD
 
-        if prompt_tier in (TIER_MINIMAL, TIER_MICRO):
-            logger.debug("Priming: skipped (tier=%s)", prompt_tier)
-            return ("", "")
-
         session_type = resolve_runtime_session_type(trigger)
         if session_type == SESSION_TYPE_HEARTBEAT:
             channel = "heartbeat"
@@ -91,6 +87,9 @@ class PrimingMixin:
         recent_human_messages = self._get_recent_human_messages(trigger, model_config=active_model_config)
 
         try:
+            from core.memory.priming.policy import resolve_priming_policy
+
+            policy = resolve_priming_policy(self.anima_dir)
             if not hasattr(self, "_priming_engine"):
                 from core.paths import get_shared_dir
                 from core.prompt.context import resolve_context_window as _rcw_priming
@@ -113,8 +112,11 @@ class PrimingMixin:
                 sender_name,
                 channel=channel,
                 intent=message_intent,
-                enable_dynamic_budget=True,
+                enable_dynamic_budget=policy.dynamic_budget,
                 recent_human_messages=recent_human_messages,
+                profile="compact" if prompt_tier in (TIER_MINIMAL, TIER_MICRO, TIER_LIGHT) else policy.profile,
+                max_tokens=min(policy.max_tokens, 1000) if prompt_tier == TIER_STANDARD else policy.max_tokens,
+                include_related=prompt_tier not in (TIER_MINIMAL, TIER_MICRO, TIER_LIGHT),
             )
 
             pending_notifications = result.pending_human_notifications
@@ -123,24 +125,12 @@ class PrimingMixin:
                 logger.debug("Priming: No memories found")
                 return ("", pending_notifications)
 
-            # T3 Light: sender_profile only
-            if prompt_tier == TIER_LIGHT:
-                if result.sender_profile:
-                    logger.info("Priming: tier=light, returning sender_profile only")
-                    section = t("agent.priming_tier_light_header", sender_name=sender_name) + result.sender_profile
-                    return (section, pending_notifications)
-                return ("", pending_notifications)
-
             formatted = format_priming_section(result, sender_name)
             logger.info(
                 "Priming: Retrieved %d tokens of memories (tier=%s)",
                 result.estimated_tokens(),
                 prompt_tier,
             )
-
-            # T2 Standard: truncate to ~1000 tokens (≈4000 chars)
-            if prompt_tier == TIER_STANDARD and len(formatted) > 4000:
-                formatted = formatted[:4000] + t("agent.omitted_rest")
 
             return (formatted, pending_notifications)
 
@@ -178,12 +168,39 @@ class PrimingMixin:
         return "\n".join(content_lines) if content_lines else prompt
 
     def _get_recent_human_messages(self, trigger: str, *, model_config=None) -> list[str]:
-        """Get last 5 human messages from conversation memory for priming context.
+        """Get recent human messages from the trigger's own activity source.
 
         Returns newest-first list of human message contents.
-        Active for human chat triggers only.
+        Chat behavior remains conversation-backed; inbox reads only the activity
+        log so unrelated chat history cannot leak into a background run.
         """
         from core.execution.session_types import trigger_uses_chat_session
+
+        if trigger.startswith("inbox:"):
+            try:
+                from core.memory.activity import ActivityLogger
+
+                animas_dir = self.anima_dir.parent
+                anima_names = {path.name.casefold() for path in animas_dir.iterdir() if path.is_dir()}
+                entries = ActivityLogger(self.anima_dir).recent(
+                    days=2,
+                    types=["message_received"],
+                    limit=100,
+                )
+                messages: list[str] = []
+                for entry in reversed(entries):
+                    sender = str(entry.from_person or "").strip()
+                    if not sender or sender.casefold() == "system" or sender.casefold() in anima_names:
+                        continue
+                    content = str(entry.content or entry.summary or "").strip()
+                    if content:
+                        messages.append(content[:200])
+                    if len(messages) == 3:
+                        break
+                return messages
+            except Exception:
+                logger.debug("Failed to load recent inbox human messages for priming", exc_info=True)
+                return []
 
         if not trigger.startswith("message:") or not trigger_uses_chat_session(trigger):
             return []
@@ -264,7 +281,6 @@ class PrimingMixin:
 
     # ── Context-window-aware tier downgrade ─────────────────
 
-    _BYTES_PER_TOKEN_ESTIMATE = 4
     _TOKENS_PER_MCP_SCHEMA = 200
     _TOKENS_PER_TOOL_SCHEMA = 150
     _MIN_TOOL_OVERHEAD = 5000
@@ -288,6 +304,7 @@ class PrimingMixin:
         trigger: str,
         pending_human_notifications: str = "",
         thread_id: str = "default",
+        shortterm_text: str = "",
     ) -> str:
         """Ensure system prompt fits context window, shrinking budget if needed.
 
@@ -295,14 +312,15 @@ class PrimingMixin:
         with progressively smaller system_budget until it fits within 80%
         of the context window.
 
-        Returns the (possibly rebuilt) system prompt.
+        Returns the (possibly rebuilt) system prompt. If mandatory context
+        still cannot fit, raise ExecutionError instead of stripping authority
+        boundaries, human decisions, or durable task context.
         """
         from core.prompt.builder import _compute_system_budget
 
         tool_overhead = self._estimate_tool_overhead(mode)
-        sys_bytes = len(system_prompt.encode("utf-8"))
-        prompt_bytes = len(prompt.encode("utf-8"))
-        estimated_tokens = (sys_bytes + prompt_bytes) // self._BYTES_PER_TOKEN_ESTIMATE + tool_overhead
+        prompt_tokens = estimate_tokens(prompt)
+        estimated_tokens = estimate_tokens(system_prompt) + prompt_tokens + tool_overhead
         max_input_tokens = int(context_window * 0.80)
 
         if estimated_tokens <= max_input_tokens:
@@ -311,37 +329,38 @@ class PrimingMixin:
         original_budget = _compute_system_budget(context_window)
         logger.warning(
             "Estimated prompt %d tokens exceeds context limit %d "
-            "(budget=%d, context_window=%d); attempting budget shrink",
+            "(target=%d, ceiling=%d, context_window=%d); attempting budget shrink",
             estimated_tokens,
             max_input_tokens,
-            original_budget,
+            original_budget.target,
+            original_budget.ceiling,
             context_window,
         )
 
         best_prompt = system_prompt
         for shrink in (0.75, 0.50, 0.25):
-            reduced_budget = int(original_budget * shrink)
+            reduced_budget = int(original_budget.target * shrink)
             build_result = build_system_prompt(
                 self.memory,
                 tool_registry=self._tool_registry,
                 personal_tools=self._personal_tools,
-                priming_section="" if shrink <= 0.25 else priming_section,
+                priming_section=priming_section,
                 execution_mode=mode,
                 message=prompt,
                 retriever=self._get_retriever(),
                 trigger=trigger,
                 context_window=context_window,
                 system_budget=reduced_budget,
-                pending_human_notifications="" if shrink <= 0.25 else pending_human_notifications,
+                pending_human_notifications=pending_human_notifications,
                 thread_id=thread_id,
+                shortterm_text=shortterm_text,
             )
             best_prompt = build_result.system_prompt
-            new_sys_bytes = len(best_prompt.encode("utf-8"))
-            new_estimated = (new_sys_bytes + prompt_bytes) // self._BYTES_PER_TOKEN_ESTIMATE + tool_overhead
+            new_estimated = estimate_tokens(best_prompt) + prompt_tokens + tool_overhead
             if new_estimated <= max_input_tokens:
                 logger.warning(
-                    "Prompt budget shrunk: %d -> %d chars (estimated %d -> %d tokens, limit %d)",
-                    original_budget,
+                    "Prompt budget shrunk: %d -> %d tokens (estimated %d -> %d tokens, limit %d)",
+                    original_budget.target,
                     reduced_budget,
                     estimated_tokens,
                     new_estimated,
@@ -349,23 +368,22 @@ class PrimingMixin:
                 )
                 return best_prompt
 
-        max_sys_bytes = max(
-            (max_input_tokens - tool_overhead) * self._BYTES_PER_TOKEN_ESTIMATE - prompt_bytes,
-            2000,
-        )
-        if len(best_prompt.encode("utf-8")) > max_sys_bytes:
-            logger.error(
-                "Hard-truncating system prompt from %d to %d bytes to fit context window %d",
-                len(best_prompt.encode("utf-8")),
-                max_sys_bytes,
-                context_window,
-            )
-            best_prompt = best_prompt.encode("utf-8")[:max_sys_bytes].decode(
-                "utf-8",
-                errors="ignore",
-            )
+        from core.exceptions import ExecutionError
+        from core.i18n import t
 
-        return best_prompt
+        logger.error(
+            "Mandatory prompt context cannot safely fit: estimated=%d limit=%d context_window=%d",
+            new_estimated,
+            max_input_tokens,
+            context_window,
+        )
+        raise ExecutionError(
+            t(
+                "agent.context_cannot_fit_safely",
+                estimated=new_estimated,
+                limit=max_input_tokens,
+            )
+        )
 
     # ── Pre-flight prompt size check ─────────────────────────
 
@@ -382,6 +400,7 @@ class PrimingMixin:
         context_window: int = 200_000,
         pending_human_notifications: str = "",
         thread_id: str = "default",
+        shortterm_text: str = "",
     ) -> tuple[str, str, bool]:
         """Check combined prompt size and shrink if necessary.
 
@@ -420,6 +439,7 @@ class PrimingMixin:
                     context_window=context_window,
                     pending_human_notifications=pending_human_notifications,
                     thread_id=thread_id,
+                    shortterm_text=shortterm_text,
                 ).system_prompt
             except Exception:
                 logger.exception("Forced compression failed")

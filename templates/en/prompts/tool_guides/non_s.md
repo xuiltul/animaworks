@@ -37,7 +37,6 @@ You have a unified tool set available across all modes.
 
 ### Skills
 - **create_skill**: Create a new skill directory structure
-- Before creating a new skill, read `read_memory_file(path="common_skills/skill-creator/SKILL.md")`
 - For existing skill docs and CLI manuals, use **read_memory_file** with paths from the catalog
 
 

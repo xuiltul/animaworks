@@ -72,8 +72,8 @@ Mode A/B の統合スキーマでは **PascalCase 名**です。`ToolHandler` �
 
 禁止（いずれも終わりません）:
 
-- `glob.glob('/home/main/.animaworks/**/...', recursive=True)` — Python の `**` は symlink 先へも降りるため、実質無限に広がる
-- `os.walk('/home/main/.animaworks')` を上位から回す
+- `glob.glob('~/.animaworks/**/...', recursive=True)` — Python の `**` は symlink 先へも降りるため、実質無限に広がる
+- `os.walk('~/.animaworks')` を上位から回す
 - `find ~/.animaworks`、`du -sh ~/.animaworks`、`rg` をパス指定なしで `~/.animaworks` 直下から
 
 代わりに:
@@ -170,7 +170,6 @@ Mode A/B の統合スキーマでは **PascalCase 名**です。`ToolHandler` �
 | **google_tasks** | Google タスク |
 | **image_gen** | 画像・3D 等の生成パイプライン（長時間は `submit` 推奨） |
 | **local_llm** | ローカル LLM 呼び出し |
-| **machine** | 外部エージェント CLI を隔離環境で実行する「工作機械」ツール |
 | **notion** | Notion API |
 | **slack** | Slack |
 | **transcribe** | 音声文字起こし |

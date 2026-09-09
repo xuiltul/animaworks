@@ -46,10 +46,10 @@ def _facts_extraction_enabled() -> bool:
     try:
         from core.config import load_config
 
-        return bool(getattr(load_config().rag, "facts_extraction_enabled", True))
+        return bool(getattr(load_config().rag, "facts_extraction_enabled", False))
     except Exception:
-        logger.debug("Failed to load facts_extraction_enabled; defaulting to enabled", exc_info=True)
-        return True
+        logger.debug("Failed to load facts_extraction_enabled; leaving generation disabled", exc_info=True)
+        return False
 
 
 def _entity_registry_enabled() -> bool:

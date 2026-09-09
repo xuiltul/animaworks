@@ -1,4 +1,10 @@
-"""Tests for deadline validation in ToolHandler._handle_backlog_task()."""
+"""Tests for ToolHandler._handle_backlog_task() required-field validation.
+
+deadline was retired from backlog_task (A1 task-model teardown, 2026-09) —
+this file used to cover deadline validation exclusively; it now covers what
+remains: backlog_task no longer accepts/requires a deadline, and the other
+required fields are still enforced.
+"""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -6,14 +12,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from core.tooling.handler import ToolHandler
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -48,11 +52,11 @@ def handler(anima_dir: Path, memory: MagicMock) -> ToolHandler:
 # ── Tests ─────────────────────────────────────────────────────
 
 
-class TestHandlerDeadlineValidation:
-    """Tests that _handle_backlog_task returns errors for missing/invalid deadline."""
+class TestHandlerBacklogTaskValidation:
+    """Tests for _handle_backlog_task's required-field validation."""
 
-    def test_missing_deadline_returns_error(self, handler: ToolHandler):
-        """Handler should return a structured error when deadline is not provided."""
+    def test_no_deadline_needed_succeeds(self, handler: ToolHandler):
+        """backlog_task must succeed without a deadline (the param was removed)."""
         result = handler.handle(
             "backlog_task",
             {
@@ -60,67 +64,16 @@ class TestHandlerDeadlineValidation:
                 "original_instruction": "Do something",
                 "assignee": "rin",
                 "summary": "Test task",
-                # deadline intentionally omitted
+                # deadline intentionally omitted — no longer a parameter at all
             },
         )
         parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "InvalidArguments"
-        assert "deadline" in parsed["message"].lower()
+        assert parsed.get("status") != "error"
+        assert parsed["assignee"] == "rin"
+        assert "deadline" not in parsed
 
-    def test_empty_deadline_returns_error(self, handler: ToolHandler):
-        """Handler should return error for empty string deadline."""
-        result = handler.handle(
-            "backlog_task",
-            {
-                "source": "human",
-                "original_instruction": "Do something",
-                "assignee": "rin",
-                "summary": "Test task",
-                "deadline": "",
-            },
-        )
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "InvalidArguments"
-        assert "deadline" in parsed["message"].lower()
-
-    def test_none_deadline_returns_error(self, handler: ToolHandler):
-        """Handler should return error when deadline is None."""
-        result = handler.handle(
-            "backlog_task",
-            {
-                "source": "human",
-                "original_instruction": "Do something",
-                "assignee": "rin",
-                "summary": "Test task",
-                "deadline": None,
-            },
-        )
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "InvalidArguments"
-        assert "deadline" in parsed["message"].lower()
-
-    def test_invalid_deadline_format_returns_error(self, handler: ToolHandler):
-        """Handler should catch ValueError from _parse_deadline for bad formats."""
-        result = handler.handle(
-            "backlog_task",
-            {
-                "source": "human",
-                "original_instruction": "Do something",
-                "assignee": "rin",
-                "summary": "Test task",
-                "deadline": "not-a-valid-format",
-            },
-        )
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "InvalidArguments"
-        assert "invalid deadline format" in parsed["message"].lower()
-
-    def test_valid_relative_deadline_succeeds(self, handler: ToolHandler):
-        """Handler should successfully create a task with a relative deadline."""
+    def test_extra_deadline_argument_is_ignored(self, handler: ToolHandler):
+        """A caller still passing a stray 'deadline' arg must not break or persist it."""
         result = handler.handle(
             "backlog_task",
             {
@@ -132,33 +85,10 @@ class TestHandlerDeadlineValidation:
             },
         )
         parsed = json.loads(result)
-        # On success, the result is the TaskEntry JSON (no "status": "error")
-        assert "error" not in parsed.get("status", "")
-        assert parsed["assignee"] == "rin"
-        assert parsed["deadline"] is not None
-        # Verify the deadline was converted from relative to ISO8601
-        dt = datetime.fromisoformat(parsed["deadline"])
-        JST = timezone(timedelta(hours=9))
-        assert dt > datetime.now(tz=JST)
+        assert parsed.get("status") != "error"
+        assert "deadline" not in parsed
 
-    def test_valid_iso8601_deadline_succeeds(self, handler: ToolHandler):
-        """Handler should successfully create a task with an ISO8601 deadline."""
-        result = handler.handle(
-            "backlog_task",
-            {
-                "source": "human",
-                "original_instruction": "Do something",
-                "assignee": "rin",
-                "summary": "Test task",
-                "deadline": "2026-12-31T23:59:59",
-            },
-        )
-        parsed = json.loads(result)
-        assert "error" not in parsed.get("status", "")
-        assert parsed["deadline"] == "2026-12-31T23:59:59"
-
-    def test_missing_instruction_still_returns_error(self, handler: ToolHandler):
-        """Missing instruction should be caught before deadline validation."""
+    def test_missing_instruction_returns_error(self, handler: ToolHandler):
         result = handler.handle(
             "backlog_task",
             {
@@ -166,7 +96,6 @@ class TestHandlerDeadlineValidation:
                 "original_instruction": "",
                 "assignee": "rin",
                 "summary": "Test task",
-                "deadline": "1h",
             },
         )
         parsed = json.loads(result)
@@ -174,7 +103,6 @@ class TestHandlerDeadlineValidation:
         assert "original_instruction" in parsed["message"]
 
     def test_missing_assignee_returns_error(self, handler: ToolHandler):
-        """Missing assignee should be caught before deadline validation."""
         result = handler.handle(
             "backlog_task",
             {
@@ -182,7 +110,6 @@ class TestHandlerDeadlineValidation:
                 "original_instruction": "Do something",
                 "assignee": "",
                 "summary": "Test task",
-                "deadline": "1h",
             },
         )
         parsed = json.loads(result)

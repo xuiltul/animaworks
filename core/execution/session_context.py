@@ -68,12 +68,18 @@ class RuntimeSessionContext:
         )
 
     def to_env(self) -> dict[str, str]:
+        import json
+
+        from core.taskboard.tasks import current_attempt_identity
+
+        identity = current_attempt_identity()
         return {
             "ANIMAWORKS_REQUEST_ID": self.request_id,
             "ANIMAWORKS_SESSION_TYPE": self.session_type,
             "ANIMAWORKS_THREAD_ID": self.thread_id,
             "ANIMAWORKS_TRIGGER": self.trigger,
             "ANIMAWORKS_TOOL_SESSION_ID": self.tool_session_id,
+            "ANIMAWORKS_TASK_IDENTITY": json.dumps(identity) if identity else "",
         }
 
 

@@ -128,13 +128,14 @@ class TestCollectGraphContext:
         assert "Postgres" not in result
 
     async def test_truncates_to_budget(self) -> None:
+        from core.prompt.tokens import estimate_tokens
+
         long_facts = [_mem(f"Fact number {i} with some longer content here") for i in range(50)]
         backend = _make_backend(facts=long_facts)
 
         result = await collect_graph_context(backend, "test", budget_tokens=50)
 
-        chars_per_token = 4
-        assert len(result) <= 50 * chars_per_token + 100  # rough check
+        assert estimate_tokens(result) <= 50
 
     async def test_default_budget_matches_constant(self) -> None:
         assert _BUDGET_GRAPH_CONTEXT == 500
@@ -252,6 +253,7 @@ class TestPrimingEngineChannelG:
         from core.memory.priming.engine import PrimingEngine
 
         engine = PrimingEngine(tmp_path)
+        engine._memory_backend = _make_backend()
 
         with (
             patch.object(engine, "_channel_a_sender_profile", new_callable=AsyncMock, return_value=""),
@@ -267,6 +269,29 @@ class TestPrimingEngineChannelG:
             await engine.prime_memories("heartbeat check", channel="heartbeat")
 
         channel_g.assert_awaited_once_with("heartbeat check", trigger="heartbeat")
+
+    async def test_prime_memories_does_not_schedule_channel_g_for_legacy(self, tmp_path) -> None:
+        from core.memory.backend.legacy import LegacyRAGBackend
+        from core.memory.priming.engine import PrimingEngine
+
+        engine = PrimingEngine(tmp_path)
+        engine._memory_backend = LegacyRAGBackend(tmp_path)
+
+        with (
+            patch.object(engine, "_channel_a_sender_profile", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_b_recent_activity", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_c0_important_knowledge", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_c_related_knowledge", new_callable=AsyncMock, return_value=("", "")),
+            patch.object(engine, "_channel_e_pending_tasks", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_recent_outbound", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_f_episodes", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_collect_pending_human_notifications", new_callable=AsyncMock, return_value=""),
+            patch.object(engine, "_channel_g_graph_context", new_callable=AsyncMock, return_value="") as channel_g,
+        ):
+            result = await engine.prime_memories("test message")
+
+        assert result.graph_context == ""
+        channel_g.assert_not_called()
 
     async def test_channel_g_timeout_degrades_only_that_channel(self, tmp_path) -> None:
         from core.memory.priming.engine import PrimingEngine

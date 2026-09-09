@@ -6,12 +6,15 @@ from __future__ import annotations
 
 """Unit tests for POST /api/internal/delegate-task."""
 
+import errno
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+from core.memory.task_queue import TaskQueueManager
 
 
 def _make_test_app():
@@ -74,18 +77,92 @@ def anyio_backend() -> str:
 
 class TestInternalDelegateTask:
     @pytest.mark.anyio
+    async def test_sandbox_proxy_preserves_complete_execution_input(self, tmp_path, monkeypatch):
+        from core.tasks_dispatch import publish_delegation
+
+        animas = _setup_animas(tmp_path)
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+        monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
+        task = {
+            "task_type": "llm",
+            "task_id": "aabbccddeeff",
+            "title": "Full input",
+            "description": "Do not truncate this instruction. " * 500,
+            "context": "Authoritative original context",
+            "constraints": ["Do not send externally"],
+            "acceptance_criteria": ["Verify the current revision"],
+            "file_paths": ["src/important.py"],
+            "working_directory": str(tmp_path),
+            "submitted_by": "rin",
+            "submitted_at": "2026-09-08T00:00:00+00:00",
+            "reply_to": "rin",
+            "relay_chain": ["owner", "rin"],
+            "source": "delegation",
+            "model": "c:codex/gpt-6-astra",
+        }
+        with (
+            patch.object(
+                TaskQueueManager,
+                "store",
+                new_callable=PropertyMock,
+                side_effect=PermissionError(errno.EACCES, "denied"),
+            ),
+            patch("httpx.post") as post,
+            patch("core.config.model_catalog.validate_model_override", return_value=None),
+        ):
+            assert publish_delegation(animas / "natsume", task, delegator="rin", tracking_task_id="112233445566")
+        request = post.call_args.kwargs["json"]
+        assert request["execution_input"] == task
+        with (
+            patch("core.tooling.handler_delegation._record_taskboard_delegation"),
+            patch("core.config.model_catalog.validate_model_override", return_value=None),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_make_test_app()), base_url="http://test") as client:
+                response = await client.post("/api/internal/delegate-task", json=request)
+        assert response.status_code == 200, response.text
+        manager = TaskQueueManager(animas / "natsume")
+        assert manager.store.get_input("natsume", task["task_id"]) == task
+        assert manager.get_task_by_id(task["task_id"]).original_instruction == task["description"]
+        assert manager.store.get("rin", "112233445566").relay_chain == ["owner", "rin"]
+
+    @pytest.mark.anyio
+    async def test_complete_input_cannot_change_delegation_identity(self, tmp_path, monkeypatch):
+        animas = _setup_animas(tmp_path)
+        monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+        monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
+        async with AsyncClient(transport=ASGITransport(app=_make_test_app()), base_url="http://test") as client:
+            for override in ({"task_id": "other"}, {"submitted_by": "someone-else"}):
+                response = await client.post(
+                    "/api/internal/delegate-task",
+                    json=_base_payload(
+                        execution_input={
+                            "task_id": "aabbccddeeff",
+                            "title": "Task",
+                            "description": "Instruction",
+                            **override,
+                        }
+                    ),
+                )
+                assert response.status_code == 422
+        assert TaskQueueManager(animas / "natsume").list_tasks() == []
+        assert TaskQueueManager(animas / "rin").list_tasks() == []
+
+    @pytest.mark.anyio
     async def test_model_override_persisted_in_meta_and_pending(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """H-3: a per-task model must be stored in both the queue meta and the
-        pending task_desc (the fields the blocked-recovery path restores from)."""
+        """An accepted per-task model survives canonical metadata and input storage."""
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        with patch(
-            "core.tooling.handler_delegation._record_taskboard_delegation"
+        with (
+            patch("core.tooling.handler_delegation._record_taskboard_delegation"),
+            # Model availability must not depend on developer CLI logins or
+            # network discovery; exercise the real validator with fixed inputs.
+            patch("core.config.model_catalog.available_model_id_set", return_value={"codex/gpt-5.6-sol"}),
+            patch("core.config.model_config.can_build_model_override", return_value=True),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
@@ -93,32 +170,52 @@ class TestInternalDelegateTask:
                     json=_base_payload(model="c:codex/gpt-5.6-sol"),
                 )
 
-        assert resp.status_code == 200
+        assert resp.status_code == 200, resp.text
 
         sub_queue = animas / "natsume" / "state" / "task_queue.jsonl"
-        sub_entry = json.loads(sub_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        sub_entry = TaskQueueManager(animas / "natsume").get_task_by_id("aabbccddeeff").model_dump()
         assert sub_entry["meta"]["model"] == "c:codex/gpt-5.6-sol"
+        assert not sub_queue.exists()
 
         own_queue = animas / "rin" / "state" / "task_queue.jsonl"
-        own_entry = json.loads(own_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        own_entry = TaskQueueManager(animas / "rin").get_task_by_id("112233445566").model_dump()
         assert own_entry["meta"]["model"] == "c:codex/gpt-5.6-sol"
+        assert not own_queue.exists()
 
         pending = animas / "natsume" / "state" / "pending" / "aabbccddeeff.json"
-        pending_data = json.loads(pending.read_text(encoding="utf-8"))
+        pending_data = TaskQueueManager(animas / "natsume").store.get_input("natsume", "aabbccddeeff")
         assert pending_data["model"] == "c:codex/gpt-5.6-sol"
+        assert not pending.exists()
 
     @pytest.mark.anyio
-    async def test_success_writes_queues_and_pending(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_unavailable_model_rejected_before_any_task_is_published(self, tmp_path, monkeypatch) -> None:
+        animas = _setup_animas(tmp_path)
+        monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
+        with (
+            patch("core.config.model_catalog.available_model_id_set", return_value={"codex/gpt-5.6-sol"}),
+            patch("core.config.model_config.can_build_model_override", return_value=False),
+            patch("core.tooling.handler_delegation._record_taskboard_delegation") as record,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_make_test_app()), base_url="http://test") as client:
+                response = await client.post(
+                    "/api/internal/delegate-task", json=_base_payload(model="c:codex/gpt-5.6-sol")
+                )
+
+        assert response.status_code == 422, response.text
+        assert "no credential configured" in response.text
+        assert TaskQueueManager(animas / "natsume").list_tasks() == []
+        assert TaskQueueManager(animas / "rin").list_tasks() == []
+        assert TaskQueueManager(animas / "natsume").store.get_input("natsume", "aabbccddeeff") is None
+        record.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_success_writes_queues_and_pending(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        with patch(
-            "core.tooling.handler_delegation._record_taskboard_delegation"
-        ) as mock_tb:
+        with patch("core.tooling.handler_delegation._record_taskboard_delegation") as mock_tb:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.post(
                     "/api/internal/delegate-task",
@@ -132,24 +229,24 @@ class TestInternalDelegateTask:
         assert body["tracking_task_id"] == "112233445566"
 
         sub_queue = animas / "natsume" / "state" / "task_queue.jsonl"
-        assert sub_queue.exists()
-        sub_entry = json.loads(sub_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        assert not sub_queue.exists()
+        sub_entry = TaskQueueManager(animas / "natsume").get_task_by_id("aabbccddeeff").model_dump()
         assert sub_entry["task_id"] == "aabbccddeeff"
         assert sub_entry["status"] == "pending"
         assert sub_entry["assignee"] == "natsume"
         assert sub_entry["relay_chain"] == ["rin"]
 
         own_queue = animas / "rin" / "state" / "task_queue.jsonl"
-        assert own_queue.exists()
-        own_entry = json.loads(own_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
+        assert not own_queue.exists()
+        own_entry = TaskQueueManager(animas / "rin").get_task_by_id("112233445566").model_dump()
         assert own_entry["task_id"] == "112233445566"
         assert own_entry["status"] == "delegated"
         assert own_entry["meta"]["delegated_to"] == "natsume"
         assert own_entry["meta"]["delegated_task_id"] == "aabbccddeeff"
 
         pending = animas / "natsume" / "state" / "pending" / "aabbccddeeff.json"
-        assert pending.exists()
-        pending_data = json.loads(pending.read_text(encoding="utf-8"))
+        assert not pending.exists()
+        pending_data = TaskQueueManager(animas / "natsume").store.get_input("natsume", "aabbccddeeff")
         assert pending_data["task_type"] == "llm"
         assert pending_data["task_id"] == "aabbccddeeff"
         assert pending_data["submitted_by"] == "rin"
@@ -166,7 +263,7 @@ class TestInternalDelegateTask:
         assert kwargs["tracking_task_id"] == "112233445566"
 
     @pytest.mark.anyio
-    async def test_persist_sub_false_skips_subordinate_queue(
+    async def test_legacy_partial_flags_still_publish_whole_atomic_task(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         animas = _setup_animas(tmp_path)
@@ -185,14 +282,14 @@ class TestInternalDelegateTask:
         sub_queue = animas / "natsume" / "state" / "task_queue.jsonl"
         assert not sub_queue.exists()
         own_queue = animas / "rin" / "state" / "task_queue.jsonl"
-        assert own_queue.exists()
+        assert not own_queue.exists()
         pending = animas / "natsume" / "state" / "pending" / "aabbccddeeff.json"
-        assert pending.exists()
+        assert not pending.exists()
+        assert TaskQueueManager(animas / "natsume").get_task_by_id("aabbccddeeff") is not None
+        assert TaskQueueManager(animas / "rin").get_task_by_id("112233445566") is not None
 
     @pytest.mark.anyio
-    async def test_invalid_anima_name_returns_400(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_invalid_anima_name_returns_400(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
@@ -208,9 +305,7 @@ class TestInternalDelegateTask:
         assert "Invalid anima name" in resp.json()["detail"]
 
     @pytest.mark.anyio
-    async def test_missing_target_dir_returns_404(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_target_dir_returns_404(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(tmp_path)
         # remove target
         import shutil
@@ -248,31 +343,33 @@ class TestInternalDelegateTask:
 
         assert resp.status_code == 200
         pending = animas / "natsume" / "state" / "pending" / "aabbccddeeff.json"
-        pending_data = json.loads(pending.read_text(encoding="utf-8"))
+        pending_data = TaskQueueManager(animas / "natsume").store.get_input("natsume", "aabbccddeeff")
         assert pending_data["acceptance_criteria"] == criteria
+        assert not pending.exists()
 
     @pytest.mark.anyio
-    async def test_invalid_deadline_returns_422(
+    async def test_invalid_deadline_is_accepted_and_ignored(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """deadline was retired (A1 task-model teardown): the field is still
+        accepted for external-client compat but never validated or persisted."""
         animas = _setup_animas(tmp_path)
         monkeypatch.setattr("core.paths.get_animas_dir", lambda: animas)
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post(
-                "/api/internal/delegate-task",
-                json=_base_payload(deadline="not-a-deadline"),
-            )
+        with patch("core.tooling.handler_delegation._record_taskboard_delegation"):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/internal/delegate-task",
+                    json=_base_payload(deadline="not-a-deadline"),
+                )
 
-        assert resp.status_code == 422
-        assert "deadline" in resp.json()["detail"].lower() or "Invalid" in resp.json()["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
 
     @pytest.mark.anyio
-    async def test_cross_company_returns_403(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_cross_company_returns_403(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         animas = _setup_animas(
             tmp_path,
             delegator_company="alpha",

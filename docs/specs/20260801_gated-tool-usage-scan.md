@@ -1,6 +1,6 @@
 # Gated tool usage scan
 
-- data_dir: `/home/main/.animaworks`
+- data_dir: `~/.animaworks`
 - animas: 13
 - elapsed_s: 4.3
 

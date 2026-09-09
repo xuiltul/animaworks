@@ -116,10 +116,16 @@ from core.execution._sdk_stream import (  # noqa: F401
     process_stream_messages,
 )
 from core.execution.base import BaseExecutor, ExecutionResult, StreamDisconnectedError, TokenUsage, ToolCallRecord
-from core.execution.error_classifier import guard_key, provider_family_of
+from core.execution.error_classifier import (
+    classify_llm_error_message,
+    detect_cli_error_envelope,
+    guard_key,
+    provider_family_of,
+)
 from core.execution.rate_guard import get_rate_guard
 from core.memory.shortterm import ShortTermMemory
-from core.prompt.context import CHARS_PER_TOKEN, ContextTracker
+from core.prompt.context import ContextTracker
+from core.prompt.tokens import estimate_tokens
 from core.schemas import ImageData, ModelConfig
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
@@ -145,6 +151,36 @@ def _detect_sdk_auth_failure(text: str) -> str | None:
     if not any(marker in folded for marker in ("401", "api error", "unauthorized", "auth")):
         return None
     return body
+
+
+def _sdk_failure_text(result: Any, text: str, assistant_error: str | None = None) -> str | None:
+    """Recognize SDK failure envelopes, not error words in normal answers."""
+    result_text = getattr(result, "result", None)
+    errors = getattr(result, "errors", None)
+    details = [item for item in errors if isinstance(item, str)] if isinstance(errors, list) else []
+    if isinstance(result_text, str) and result_text.strip():
+        details.append(result_text.strip())
+    subtype = getattr(result, "subtype", "")
+    explicit_error = (
+        getattr(result, "is_error", False) is True
+        or (isinstance(subtype, str) and subtype.startswith("error_"))
+        or bool(assistant_error)
+    )
+    if explicit_error:
+        detail = "\n".join(details) or text.strip() or assistant_error or str(subtype) or "SDKError"
+        error_status = {
+            "authentication_failed": 401,
+            "billing_error": 402,
+            "rate_limit": 429,
+            "invalid_request": 400,
+            "server_error": 500,
+        }.get(assistant_error or "")
+        return f"API Error: {error_status} ({assistant_error})\n{detail}" if error_status else detail
+    # Some Claude CLI transports omit is_error and print a synthetic API error
+    # as assistant text. Restrict this compatibility path to their leading
+    # envelope + known transport/status signature; prose mentioning an error
+    # or a quoted log is still a successful model answer.
+    return detect_cli_error_envelope(text)
 
 
 # ── SDK subprocess PID tracking / cleanup ────────────
@@ -303,8 +339,8 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         return {
             "tool_call_count": 0,
             "total_result_bytes": 0,
-            "system_prompt_tokens": len(system_prompt) // CHARS_PER_TOKEN,
-            "user_prompt_tokens": len(prompt) // CHARS_PER_TOKEN,
+            "system_prompt_tokens": estimate_tokens(system_prompt),
+            "user_prompt_tokens": estimate_tokens(prompt),
             "force_chain": False,
             "trigger": trigger,
             "start_time": time.monotonic(),
@@ -390,6 +426,9 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     usage_acc.cache_read_tokens = u.get("cache_read_input_tokens", 0) or 0
                     usage_acc.cache_write_tokens = u.get("cache_creation_input_tokens", 0) or 0
             elif isinstance(message, AssistantMessage):
+                sdk_error = getattr(message, "error", None)
+                if isinstance(sdk_error, str) and sdk_error:
+                    session_stats["sdk_error"] = sdk_error
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         response_text.append(block.text)
@@ -508,36 +547,42 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                 except Exception as retry_exc:
                     logger.exception("Agent SDK execution error (fresh session retry)")
                     return ExecutionResult(
-                        text="\n".join(response_text) or f"[Agent SDK Error: {retry_exc}]",
+                        text=f"[Agent SDK Error: {retry_exc}]\n" + "\n".join(response_text),
                         tool_call_records=_finalize_pending_records(pending_records),
                         error=True,
+                        usage=usage_acc,
                     )
             else:
                 logger.exception("Agent SDK execution error")
                 return ExecutionResult(
-                    text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
+                    text=f"[Agent SDK Error: {e}]\n" + "\n".join(response_text),
                     tool_call_records=_finalize_pending_records(pending_records),
                     error=True,
+                    usage=usage_acc,
                 )
         except Exception as e:
             logger.exception("Agent SDK execution error")
             return ExecutionResult(
-                text="\n".join(response_text) or f"[Agent SDK Error: {e}]",
+                text=f"[Agent SDK Error: {e}]\n" + "\n".join(response_text),
                 tool_call_records=_finalize_pending_records(pending_records),
                 error=True,
+                usage=usage_acc,
             )
         finally:
             _kill_sdk_process(sdk_pid, sdk_pid_create_time)
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
 
-        auth_failure = _detect_sdk_auth_failure("\n".join(response_text))
+        auth_failure = _detect_sdk_auth_failure(
+            _sdk_failure_text(result_message, "\n".join(response_text), session_stats.get("sdk_error")) or ""
+        )
         if auth_failure and self._should_retry_sdk_auth_failure():
             logger.warning("Claude SDK returned auth failure text; retrying fresh session once")
             response_text.clear()
             pending_records.clear()
             result_message = None
             usage_acc = TokenUsage()
+            session_stats.pop("sdk_error", None)
             _msg_args["usage_acc"] = usage_acc
             if session_type in _RESUMABLE_SESSION_TYPES:
                 _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -558,6 +603,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     text=f"[Agent SDK Error: {retry_exc}]",
                     tool_call_records=[],
                     error=True,
+                    usage=usage_acc,
                 )
             finally:
                 _kill_sdk_process(sdk_pid, sdk_pid_create_time)
@@ -566,14 +612,15 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
 
         all_tool_records = _finalize_pending_records(pending_records)
         replied_to = self._read_replied_to_file()
+        failure = _sdk_failure_text(result_message, "\n".join(response_text), session_stats.get("sdk_error"))
         return ExecutionResult(
-            text="\n".join(response_text) or "(no response)",
+            text=failure or "\n".join(response_text) or "(no response)",
             result_message=result_message,
             replied_to_from_transcript=replied_to,
             tool_call_records=all_tool_records,
             force_chain=session_stats.get("force_chain", False),
             usage=usage_acc,
-            error=bool(getattr(result_message, "is_error", False)),
+            error=failure is not None,
         )
 
     # ── Streaming execution ──────────────────────────────────
@@ -750,7 +797,9 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
 
-        auth_failure = _detect_sdk_auth_failure("\n".join(state.response_text))
+        auth_failure = _detect_sdk_auth_failure(
+            _sdk_failure_text(state.result_message, "\n".join(state.response_text), state.sdk_error) or ""
+        )
         if auth_failure and self._should_retry_sdk_auth_failure() and not emitted_text_delta:
             logger.warning("Claude SDK returned auth failure text during streaming; retrying fresh session once")
             if session_type in _RESUMABLE_SESSION_TYPES:
@@ -776,6 +825,18 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
 
         all_tool_records = _finalize_pending_records(state.pending_records)
         full_text = "\n".join(state.response_text) or "(no response)"
+        failure = _sdk_failure_text(state.result_message, "\n".join(state.response_text), state.sdk_error)
+        if failure and not state.interrupted:
+            reason, _hint = classify_llm_error_message(failure)
+            yield {
+                "type": "error",
+                "terminal": True,
+                "message": failure,
+                "reason": reason.value,
+                "usage": state.usage_acc.to_dict(),
+                "tool_call_records": [asdict(r) for r in all_tool_records],
+            }
+            return
         replied_to = self._read_replied_to_file()
         yield {
             "type": "done",

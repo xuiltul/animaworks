@@ -115,6 +115,8 @@ export async function completeSetup(data) {
 
   const payload = {
     locale: data.language?.locale || "ja",
+    provider: data.environment?.provider || undefined,
+    ollama_url: data.environment?.ollama_url || "",
     credentials: {},
     anima: { name: data.leader?.name },
     image_style: data.environment?.image_style || "realistic",

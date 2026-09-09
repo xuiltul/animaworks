@@ -9,7 +9,7 @@ import { createImageInput, initLightbox } from "../../shared/image-input.js";
 import { initTextArtifactHandlers } from "../../shared/text-artifact.js";
 
 import { initHistory, renderConvMessages, loadAndRenderConvMessages, disconnectScrollObserver, refreshSentinel } from "./chat-history.js";
-import { initStreaming, submitConversation, addToQueue, resumeConversationStream, wsUpdateSendButton, wsHidePendingIndicator, updateStreamingBubble, initChatModelPicker } from "./chat-streaming.js";
+import { initStreaming, submitConversation, addToQueue, resumeConversationStream, wsUpdateSendButton, wsHidePendingIndicator, updateStreamingBubble, initChatModelPicker, wsRestoreModelSelect } from "./chat-streaming.js";
 import { initThreads, renderWsThreadTabs } from "./chat-thread.js";
 import {
   initMobile, setupMobileListeners, destroyMobile,
@@ -59,6 +59,7 @@ export async function openConversation(animaName) {
   wsSaveDraft();
   const wasVoiceActive = updateVoiceUIAnima(animaName);
   setState({ conversationOpen: true, conversationAnima: animaName, activeThreadId: "default" });
+  wsRestoreModelSelect();
 
   const { threads } = getState();
   if (!threads[animaName]) {

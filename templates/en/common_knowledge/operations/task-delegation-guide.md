@@ -1,141 +1,47 @@
-## How Task Execution Works
+# Task submission and delegation
 
-### How to Delegate Tasks
+## Choose an execution path
 
-> **Note**: Agent/Task tools (sub-agent spawning) are **disabled**. For task delegation, use `delegate_task`. `submit_tasks` is not shown in normal chat/Heartbeat/Inbox/TaskExec; use it only in explicit background execution workflows.
+Use the exposed task tools, not native Agent/Task subagent spawning.
+Finish ordinary chat work directly. Use `backlog_task` for durable tracking only,
+`submit_tasks` for your own background execution, and
+`delegate_task(name="worker", instruction="Original request and acceptance criteria", summary="Summary")`
+for an enabled direct subordinate. Respect tool availability and permissions; do not silently route
+work to an unavailable worker or another execution path. Heartbeat is for decisions and submission;
+long-running work belongs in TaskExec.
 
-**With subordinates** → Use `delegate_task` to delegate to a subordinate
-- Include a subordinate's name to assign them directly
-- If no name is given, the least-loaded subordinate with the best role match is auto-selected
+## Preserve the handoff
 
-**Without subordinates** → Usually execute directly in this session. Use `submit_tasks` only when an explicit background execution workflow is enabled
-- Written to state/pending/ and automatically executed by TaskExec in a separate session
-- The executor shares your identity, injection, behavior rules, memory guide, and org context
-- A task_id is returned. You will receive a DM notification when it completes
-- You can check task results in Heartbeat (state/task_results/)
+The executor does not automatically share the conversation history. Include the original request,
+purpose, relevant files and known locations, current state, acceptance criteria, approval conditions,
+and constraints. Do not invent paths or line numbers. Use `description`, `context`,
+`acceptance_criteria`, `constraints`, and `file_paths` as appropriate. Preserve model and registered
+workspace overrides. Do not direct a worker to write another Anima's personal directories.
 
-### Choosing the Right Task Tool
+`submit_tasks(batch_id="work", tasks=[{"task_id":"job","title":"Work","description":"Specific request"}])`
+publishes the task and execution input atomically. Re-delivery of the same ID is not a retry.
+`parallel:true` permits concurrency within the worker limit; `depends_on` waits for both predecessor
+completion and the end of its attempt. A cancelled or unfinished dependency needs review, not an
+invented success result.
 
-| Tool | Purpose | Execution Queue (Layer 1) | Tracking (Layer 2) | When to use |
-|------|---------|--------------------------|--------------------|----|
-| `submit_tasks` | Submit tasks for execution and registration | Creates in `state/pending/` | Registers in `task_queue.jsonl` | Explicit background execution workflow, handed to your own TaskExec |
-| `delegate_task` | Delegate to subordinates | Creates in subordinate's `state/pending/` | Registers in both `task_queue.jsonl` | When assigning to subordinates |
+## State, results, and explicit resume
 
-**Important**: Do not use `submit_tasks` in normal chat after receiving human instructions. Execute directly here, and when follow-up tracking is needed, record it with `update_task`, `state/current_state.md`, or an explicit background execution workflow.
+Inspect `list_tasks(detail=true)` and delegated work through `task_tracker()`. A tracking ID is an alias
+of the subordinate's canonical task; ledger synchronization and descriptor rescue are unnecessary.
+`task_tracker(status="all")` includes all tasks; `status="completed"` selects done/cancelled.
+The host owns claims and `in_progress`. Declare evidence-backed `done`, `pending` with a concrete
+waiting reason, or `cancelled` for an explicit cancellation.
 
-**[MUST] Do NOT manually create JSON files in `state/pending/`.** When an explicit background execution workflow exposes `submit_tasks`, submit through that tool.
+After an incomplete-attempt notification, check existing effects and results before deciding to
+continue. Use `submit_tasks(batch_id="resume-job", tasks=[{"task_id":"job","resume":true}])` to reuse
+the saved input. Active, done, and cancelled tasks cannot be resumed this way. Do not create endless
+resubmission loops. Result summaries live in `state/task_results/{task_id}/{attempt_token}.md`;
+the existence of a file is not proof of task completion.
 
-## submit_tasks in Explicit Background Execution
+## Duplicates and reporting
 
-Do not use `submit_tasks` in normal sessions. Use it only when the user or a skill explicitly requests background execution and `submit_tasks` is visible in the tool list. Even for one task, submit a tasks array with one item.
-
-### About the Executor (TaskExec)
-
-TaskExec runs as a sub-agent. It shares your identity, behavior guidelines, memory directories, and organization info, but **cannot access your conversation history, short-term memory, or Priming results**.
-
-Therefore, including sufficient information in the task's `description` and `context` is critical.
-
-### Description Writing Principles
-
-- **Always include file paths and line numbers**: The executor can search memory, but specifying exact locations ensures it reaches the right files
-- **Include current work state**: Copy relevant parts of current_state.md into the `context` field (auto-injected but explicit additions improve accuracy)
-- **State the "why"**: Without background and purpose, the executor may make incorrect decisions
-
-### What to Include in description
-
-- **What to do**: Concrete work (e.g., "Convert verify_token() in core/auth/manager.py to async" instead of "do refactoring")
-- **Why**: Background and purpose (1–2 sentences)
-- **Where to look**: Related file paths and line numbers (also set in `file_paths` field)
-- **Completion criteria**: What counts as "done" (also set in `acceptance_criteria` field)
-- **Constraints**: Prohibitions, compatibility requirements (also set in `constraints` field)
-
-### Examples
-
-Single task:
-
-```
-submit_tasks(batch_id="hb-20260301-api-fix", tasks=[
-  {{"task_id": "api-fix", "title": "Convert API auth to async",
-   "description": "Convert verify_token() in core/auth/manager.py (L45-60) to async. Blocking synchronous I/O is causing latency in FastAPI async handlers.",
-   "context": "current_state.md: Investigating API response delays. verify_token blocks with synchronous I/O",
-   "file_paths": ["core/auth/manager.py:45"],
-   "acceptance_criteria": ["verify_token is async def", "existing tests pass"],
-   "constraints": ["Do not change public API arguments or return values"]}}
-])
-```
-
-Parallel tasks:
-
-```
-submit_tasks(batch_id="deploy-20260301", tasks=[
-  {{"task_id": "lint", "title": "Run lint", "description": "Lint all files", "parallel": true}},
-  {{"task_id": "test", "title": "Run tests", "description": "Execute unit tests", "parallel": true}},
-  {{"task_id": "deploy", "title": "Deploy", "description": "Deploy after lint and test pass",
-   "parallel": false, "depends_on": ["lint", "test"]}}
-])
-```
-
-### Task Object
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `task_id` | MUST | Unique task ID within the batch |
-| `title` | MUST | Task title |
-| `description` | MUST | Concrete work content (follow the writing principles above) |
-| `parallel` | MAY | `true` for parallel execution (default: `false`) |
-| `depends_on` | MAY | Array of predecessor task IDs |
-| `context` | MAY | Background information (include relevant parts of current_state.md) |
-| `file_paths` | MAY | Related file paths |
-| `acceptance_criteria` | MAY | Completion criteria |
-| `constraints` | MAY | Constraints |
-| `reply_to` | MAY | Notification target on completion |
-
-### Execution Rules
-
-- Tasks with `parallel: true` and no pending dependencies run concurrently (within semaphore limit)
-- Tasks with `depends_on` wait until all predecessors succeed
-- Predecessor results are automatically injected into dependent task context
-- If a predecessor fails, dependent tasks are skipped
-- Cyclic dependencies are rejected at validation
-
-### Forbidden Patterns
-
-- ❌ "Refactor appropriately" (too vague)
-- ❌ "Continue from last time" (executor has no conversation history)
-- ❌ Instructions without file paths (executor would have to start by exploring)
-- ❌ Empty context (executor makes poor decisions without background info)
-- ❌ Trying to use `submit_tasks` in normal chat/Heartbeat/Inbox/TaskExec
-- ❌ Manually creating JSON in `state/pending/` (when explicit background execution is enabled, use `submit_tasks`)
-- ❌ Instructing writes to another Anima's directory (e.g. their `knowledge/`) — subordinates cannot write there. Use `common_knowledge/` for shared output
-
-### Task Results
-
-Completed task results are saved to `state/task_results/{task_id}.json`.
-Predecessor result summaries are automatically injected as context for dependent tasks.
-
-## Tracking Delegated Tasks
-
-Use `task_tracker` to check delegated task progress.
-It cross-checks the latest status from the subordinate's `task_queue.jsonl`.
-
-```
-task_tracker()                     # Active delegated tasks (default)
-task_tracker(status="all")         # All including completed
-task_tracker(status="completed")   # Completed only
-```
-
-| status | Meaning |
-|--------|---------|
-| `active` | In progress (anything other than done/cancelled/failed). Default |
-| `all` | Everything |
-| `completed` | Only done/cancelled/failed |
-
-### Auto-sync (sync_delegated)
-
-Runs automatically after each Heartbeat. Detects the following state changes in subordinate task queues and auto-updates the supervisor's tracking entries (`delegated` status):
-
-- Subordinate `done` or `cancelled` → supervisor entry updated to `done`
-- Subordinate `failed` → supervisor entry updated to `failed`
-- Archived tasks are also searched (`task_queue_archive.jsonl`)
-
-There is no need to manually call `task_tracker`, but it remains useful for immediate checks between Heartbeats.
+If unfinished work for the same request already exists, send additional context with its ID.
+Do not automatically cancel or replace older work based only on a suspected duplicate; check ownership
+and execution state. Keep required approvals and independent review. Report to the requester who
+needs the result; forwarding the same report through every hierarchy level or maintaining a second
+handwritten ledger is not mandatory. See `common_knowledge/anatomy/task-architecture.md`.

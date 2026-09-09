@@ -134,11 +134,8 @@ class TestBuildFullOrgTree:
         assert "kotoha" in all_text
 
         # aoi should be indented more than rin (child of rin)
-        rin_line = next(l for l in lines if "rin" in l)
-        aoi_line = next(l for l in lines if "aoi" in l)
-        # aoi has deeper indentation (more leading chars before name)
-        rin_indent = len(rin_line) - len(rin_line.lstrip())
-        aoi_indent = len(aoi_line) - len(aoi_line.lstrip())
+        rin_line = next(line for line in lines if "rin" in line)
+        aoi_line = next(line for line in lines if "aoi" in line)
         # aoi's prefix (including tree chars) should be longer than rin's
         assert len(aoi_line.split("aoi")[0]) > len(rin_line.split("rin")[0])
 

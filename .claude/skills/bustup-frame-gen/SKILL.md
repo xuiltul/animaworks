@@ -11,8 +11,7 @@ description: >-
 # Bustupアニメーションフレーム生成 — 疑似Live2D方式
 
 音声ポップアップ（animaタブ長押し）のbustupを、静止画フレーム切替+CSS/JSで動かすための
-アセット生成手順。2026-08-20にmeiで確立（セッションa5e708b0、動作サンプル:
-https://trserveru.a1str.net/mei-motion-lab.html）。
+アセット生成手順。2026-08-20にmeiで確立。
 
 方式: リギングなし。口3段階×瞬きのフレーム切替 + CSS呼吸/揺れ + lerp視線追従 +
 TTS音量(RMS)口パク。AI VTuberのデファクト（感情タグ→プリセット切替、Neuro-samaも同方式）。

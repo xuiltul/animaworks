@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import threading
 import uuid
@@ -30,6 +31,16 @@ def _store() -> MagicMock:
     ]
     store._get_by_ids_once.return_value = [Document("doc-1", "hello", metadata={"kind": "knowledge"})]
     return store
+
+
+def _staging_metadata(staging: Path, anima_dir: Path) -> None:
+    artifact = staging / ".rebuild"
+    artifact.mkdir()
+    (artifact / "index_meta.json").write_text("{}", encoding="utf-8")
+    (artifact / "sources.json").write_text(
+        json.dumps({"owner": str(anima_dir.resolve()), "sources": {}}),
+        encoding="utf-8",
+    )
 
 
 @pytest.mark.asyncio
@@ -473,6 +484,7 @@ async def test_root_repair_swaps_reopens_and_queries(tmp_path: Path, monkeypatch
     staging = anima_dir / "vectordb.staging-test"
     staging.mkdir()
     (staging / "new.bin").write_text("new", encoding="utf-8")
+    _staging_metadata(staging, anima_dir)
     old_store = _store()
     reopened = _store()
     reopened.verify_rebuilt_data.return_value = {"collections": 1, "chunks": 1, "query_results": 1}
@@ -481,7 +493,7 @@ async def test_root_repair_swaps_reopens_and_queries(tmp_path: Path, monkeypatch
     monkeypatch.setattr(service, "_rebuild_bm25_sync", lambda: None)
 
     await service.start()
-    result = await service.repair(include_shared=False)
+    result = await service.repair(include_shared=True)
 
     assert result["ok"] is True
     assert (live / "new.bin").read_text(encoding="utf-8") == "new"
@@ -505,6 +517,7 @@ async def test_root_repair_verification_failure_rolls_back_vector_and_bm25(tmp_p
     staging = anima_dir / "vectordb.staging-test"
     staging.mkdir()
     (staging / "new.bin").write_text("new", encoding="utf-8")
+    _staging_metadata(staging, anima_dir)
     reopened = _store()
     reopened.verify_rebuilt_data.side_effect = RuntimeError("query failed")
     service = MemoryService(
@@ -517,7 +530,7 @@ async def test_root_repair_verification_failure_rolls_back_vector_and_bm25(tmp_p
 
     await service.start()
     with pytest.raises(RuntimeError, match="query failed"):
-        await service.repair(include_shared=False)
+        await service.repair(include_shared=True)
 
     assert (live / "old.bin").read_text(encoding="utf-8") == "old"
     assert bm25.read_text(encoding="utf-8") == "old-bm25"
@@ -532,21 +545,29 @@ async def test_root_repair_swap_failure_reopens_untouched_store(tmp_path: Path, 
     live = anima_dir / "vectordb"
     live.mkdir()
     (live / "old.bin").write_text("old", encoding="utf-8")
-    missing_staging = anima_dir / "vectordb.staging-missing"
+    staging = anima_dir / "vectordb.staging-swap-failure"
+    staging.mkdir()
+    _staging_metadata(staging, anima_dir)
+    original = _store()
     reopened = _store()
     service = MemoryService(
         "sakura",
         anima_dir,
-        opener=MagicMock(side_effect=[_store(), reopened]),
+        opener=MagicMock(side_effect=[original, reopened]),
     )
-    service._build_staging_subprocess = AsyncMock(return_value=(missing_staging, 1, {}))  # type: ignore[method-assign]
+    service._build_staging_subprocess = AsyncMock(return_value=(staging, 1, {}))  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        service, "_promote_staging_sync", MagicMock(side_effect=FileNotFoundError("injected swap failure"))
+    )
     monkeypatch.setattr(service, "_rebuild_bm25_sync", lambda: None)
 
     await service.start()
     with pytest.raises(FileNotFoundError):
-        await service.repair(include_shared=False)
+        await service.repair(include_shared=True)
 
     assert (live / "old.bin").read_text(encoding="utf-8") == "old"
+    original.close.assert_called_once()
+    assert service._store is reopened
     assert await service.handle("memory.list_collections_checked", {}) == {"collections": ["sakura_knowledge"]}
     await service.close()
 
@@ -563,7 +584,7 @@ async def test_root_memory_is_explicitly_unavailable_during_repair(tmp_path: Pat
         raise RuntimeError("stop test repair")
 
     service._build_staging_subprocess = build  # type: ignore[method-assign]
-    repair = asyncio.create_task(service.repair(include_shared=False))
+    repair = asyncio.create_task(service.repair(include_shared=True))
     await entered.wait()
 
     with pytest.raises(MemoryServiceUnavailable, match="repair in progress"):
@@ -589,4 +610,60 @@ async def test_root_open_failure_marks_background_repair_without_failing_startup
     assert state["status"] == "requested"
     assert state["reason"] == "store_init_failed"
     assert state["source"] == "phase3_root_startup"
+    assert state["include_shared"] is True
     await service.close()
+
+
+@pytest.mark.asyncio
+async def test_root_repair_rejects_partial_db_swap_before_any_mutation(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "sakura"
+    live = anima_dir / "vectordb"
+    live.mkdir(parents=True)
+    (live / "shared.bin").write_bytes(b"existing shared collection")
+    opener = MagicMock()
+    service = MemoryService("sakura", anima_dir, opener=opener)
+    service._build_staging_subprocess = AsyncMock()  # type: ignore[method-assign]
+    try:
+        with pytest.raises(ValueError, match="include_shared=True"):
+            await service.repair(include_shared=False)
+        service._build_staging_subprocess.assert_not_awaited()
+        opener.assert_not_called()
+        assert (live / "shared.bin").read_bytes() == b"existing shared collection"
+        assert not service._repairing
+        assert not (anima_dir / "archive").exists()
+    finally:
+        await service.close()
+
+
+async def test_repeated_collection_initialization_is_idempotent_through_root(tmp_path: Path) -> None:
+    from core.memory.rag.store import ChromaVectorStore
+
+    store = ChromaVectorStore.__new__(ChromaVectorStore)
+    store.client = MagicMock()
+    store.client.create_collection.side_effect = RuntimeError("Collection [sakura_knowledge] already exists")
+    service = MemoryService("sakura", tmp_path / "sakura", opener=lambda: store)
+    try:
+        assert await service.handle("memory.create_collection", {"collection": "sakura_knowledge"}) == {"ok": True}
+        # Genuine failures still surface; only the already-existing case is benign.
+        store.client.create_collection.side_effect = RuntimeError("disk unavailable")
+        with pytest.raises(MemoryServiceUnavailable, match="disk unavailable"):
+            await service.handle("memory.create_collection", {"collection": "sakura_knowledge"})
+    finally:
+        await service.close()
+
+
+async def test_metadata_recall_before_initial_indexing_is_empty_through_root(tmp_path: Path) -> None:
+    from core.memory.rag.store import ChromaVectorStore
+
+    store = ChromaVectorStore.__new__(ChromaVectorStore)
+    store.client = MagicMock()
+    store.client.get_collection.side_effect = RuntimeError("Collection [shared_common_knowledge] does not exist")
+    service = MemoryService("sakura", tmp_path / "sakura", opener=lambda: store)
+    params = {"collection": "shared_common_knowledge", "where": {}}
+    try:
+        assert await service.handle("memory.get_by_metadata", params) == {"results": []}
+        store.client.get_collection.side_effect = RuntimeError("disk unavailable")
+        with pytest.raises(MemoryServiceUnavailable, match="disk unavailable"):
+            await service.handle("memory.get_by_metadata", params)
+    finally:
+        await service.close()

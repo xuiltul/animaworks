@@ -45,6 +45,63 @@ def _make_limiter(anima_dir: Path, *, name: str = "alice") -> InboxRateLimiter:
     return limiter
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("raises", [False, True])
+async def test_failed_external_inbox_keeps_unread_and_cannot_bypass_retry_delay(tmp_path, raises):
+    from core.schemas import CycleResult, Message
+
+    limiter = _make_limiter(tmp_path)
+    limiter._anima.messenger.receive.return_value = [
+        Message(from_person="human", to_person="alice", content="request", source="slack", intent="question")
+    ]
+    limiter._anima.messenger.has_unread.return_value = True
+    if raises:
+        limiter._anima.process_inbox_message.side_effect = ConnectionError("Connection refused")
+    else:
+        limiter._anima.process_inbox_message.return_value = CycleResult(
+            trigger="inbox", action="error", reason="network", summary="API Error: ConnectionRefused"
+        )
+    with patch("core.supervisor.inbox_rate_limiter.time.monotonic", return_value=100.0):
+        await limiter.message_triggered_inbox()
+        assert limiter._failure_retry_until >= 130.0
+        await limiter.message_triggered_inbox()
+        assert limiter._anima.process_inbox_message.await_count == 1
+        assert limiter._deferred_timer is not None
+        limiter._deferred_timer.cancel()
+        limiter._deferred_timer = None
+        await limiter.try_deferred_trigger()
+        assert limiter._anima.process_inbox_message.await_count == 1
+        limiter._deferred_timer.cancel()
+        limiter._deferred_timer = None
+    limiter._anima.messenger.archive_paths.assert_not_called()
+    limiter._anima.process_inbox_message.side_effect = None
+    limiter._anima.process_inbox_message.return_value = CycleResult(trigger="inbox", action="responded", summary="ok")
+    with patch("core.supervisor.inbox_rate_limiter.time.monotonic", return_value=131.0):
+        await limiter.message_triggered_inbox()
+        assert limiter._anima.process_inbox_message.await_count == 2
+        assert limiter._failure_retry_until == 0
+        # A healthy external inbox regains immediate handling after recovery.
+        await limiter.message_triggered_inbox()
+        assert limiter._anima.process_inbox_message.await_count == 3
+
+
+def test_inbox_failure_waits_for_all_provider_guards_to_expire(tmp_path):
+    from core.schemas import ModelConfig
+
+    limiter = _make_limiter(tmp_path)
+    config = ModelConfig(model="claude-sonnet-4-6", fallback_models=["c:codex/gpt-5.6-luna"])
+    limiter._anima.agent.model_config = config
+    with (
+        patch("core.config.model_config.resolve_effective_model_config", return_value=config),
+        patch("core.config.model_config._guard_key_for_model_config", return_value="test:blocked"),
+        patch("core.execution.rate_guard.get_rate_guard") as guard,
+        patch("core.supervisor.inbox_rate_limiter.time.monotonic", return_value=100.0),
+    ):
+        guard.return_value.blocked_remaining.return_value = 1800.0
+        limiter._record_processing_failure()
+    assert limiter._failure_retry_until == 1900.0
+
+
 class TestInboxWatcherEnabledGuard:
     @pytest.mark.asyncio
     async def test_disabled_skips_processing_and_keeps_inbox(

@@ -27,16 +27,6 @@ They can be uniquely referenced by a short name (alias) assigned by humans and t
 
 ## Using with Tools
 
-### machine_run (Machine Tool)
-
-`working_directory` accepts alias, full form, hash, or absolute path.
-
-```bash
-animaworks-tool machine run "Refactor the code" -d myproject
-animaworks-tool machine run "Run tests" -d myproject#3af4be6e
-animaworks-tool machine run "Build" -d /home/user/dev/myproject
-```
-
 ### submit_tasks
 
 Specify the alias in each task's `workspace` field.

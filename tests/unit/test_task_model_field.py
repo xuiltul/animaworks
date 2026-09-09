@@ -12,8 +12,6 @@ pending task_desc) must carry the model through.
 
 from __future__ import annotations
 
-import json
-
 from core.external_tasks.models import ExternalTask
 from core.schemas import TaskEntry
 from core.taskboard.models import AttentionVisibility, BoardColumn, BoardTask
@@ -75,46 +73,3 @@ class TestBoardTaskNoModelField:
     def test_model_is_not_a_schema_field(self):
         # SSoT is the pending task_desc + queue meta, not the TaskBoard row.
         assert "model" not in BoardTask.model_fields
-
-
-class TestTaskModelSSoT:
-    def test_regenerate_pending_json_restores_model_from_meta(self, tmp_path):
-        """blocked recovery must keep the per-task model override."""
-        from core.blocked_recovery import regenerate_pending_json
-
-        anima_dir = tmp_path
-        (anima_dir / "state" / "pending").mkdir(parents=True)
-        entry = _entry(meta={"model": "c:codex/gpt-5.6-sol"})
-        assert regenerate_pending_json(anima_dir, "anima", entry) is True
-
-        task_file = anima_dir / "state" / "pending" / "abc123.json"
-        task_desc = json.loads(task_file.read_text(encoding="utf-8"))
-        assert task_desc["model"] == "c:codex/gpt-5.6-sol"
-
-    def test_regenerate_pending_json_restores_model_from_task_desc(self, tmp_path):
-        """SSoT fallback: task_desc_meta.model is honoured when meta.model is empty."""
-        from core.blocked_recovery import regenerate_pending_json
-
-        anima_dir = tmp_path
-        (anima_dir / "state" / "pending").mkdir(parents=True)
-        entry = _entry(task_id="def456", meta={"task_desc": {"model": "g:gemini/gemini-2.5-flash"}})
-        assert regenerate_pending_json(anima_dir, "anima", entry) is True
-
-        task_desc = json.loads(
-            (anima_dir / "state" / "pending" / "def456.json").read_text(encoding="utf-8")
-        )
-        assert task_desc["model"] == "g:gemini/gemini-2.5-flash"
-
-    def test_regenerate_pending_json_without_model(self, tmp_path):
-        """No model anywhere must yield an empty model string (backward compatible)."""
-        from core.blocked_recovery import regenerate_pending_json
-
-        anima_dir = tmp_path
-        (anima_dir / "state" / "pending").mkdir(parents=True)
-        entry = _entry(task_id="ghi789", original_instruction="plain", summary="plain")
-        assert regenerate_pending_json(anima_dir, "anima", entry) is True
-
-        task_desc = json.loads(
-            (anima_dir / "state" / "pending" / "ghi789.json").read_text(encoding="utf-8")
-        )
-        assert task_desc["model"] == ""

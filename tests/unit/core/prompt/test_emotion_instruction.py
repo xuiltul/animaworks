@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 from core.prompt.builder import EMOTION_INSTRUCTION
 
 

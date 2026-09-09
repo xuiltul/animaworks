@@ -11,6 +11,7 @@ export class VoicePlayback {
     this._ctx = null;
     this._queue = [];
     this._playing = false;
+    this._paused = false;
     this._currentSource = null;
     this._gainNode = null;
     this._volume = 1.0;
@@ -45,7 +46,7 @@ export class VoicePlayback {
       this._gainNode.connect(this._ctx.destination);
       this._startAecLoopback();
     }
-    if (this._ctx.state === 'suspended') {
+    if (this._ctx.state === 'suspended' && !this._paused) {
       this._ctx.resume();
     }
   }
@@ -152,13 +153,14 @@ export class VoicePlayback {
     // audioData is ArrayBuffer (wav or mp3); caption is shown when this
     // buffer actually starts playing (playback-synced subtitle).
     this._ensureContext();
-    if (this._ctx.state === 'suspended') {
+    if (this._ctx.state === 'suspended' && !this._paused) {
       await this._ctx.resume();
     }
     try {
       const buffer = await this._ctx.decodeAudioData(audioData.slice(0));
       this._queue.push({ buffer, caption });
-      if (!this._playing) this._playNext();
+      // While paused (barge-in probe) nothing may start — resume() drains.
+      if (!this._playing && !this._paused) this._playNext();
     } catch (err) {
       console.warn('[VoicePlayback] Failed to decode audio:', err);
     }
@@ -189,6 +191,10 @@ export class VoicePlayback {
   }
 
   stop() {
+    this._paused = false;
+    if (this._ctx && this._ctx.state === 'suspended') {
+      this._ctx.resume().catch(() => {});
+    }
     this._queue = [];
     if (this._onCaption) this._onCaption(null);
     if (this._currentSource) {
@@ -202,6 +208,26 @@ export class VoicePlayback {
     this._playing = false;
   }
 
+  pause() {
+    this._paused = true;
+    if (this._ctx && this._ctx.state === 'running') {
+      return this._ctx.suspend().catch(() => {});
+    }
+    return Promise.resolve();
+  }
+
+  resume() {
+    this._paused = false;
+    const kick = () => {
+      if (!this._playing && this._queue.length > 0) this._playNext();
+    };
+    if (this._ctx && this._ctx.state === 'suspended') {
+      return this._ctx.resume().catch(() => {}).then(kick);
+    }
+    kick();
+    return Promise.resolve();
+  }
+
   setVolume(v) {
     this._volume = Math.max(0, Math.min(1, v));
     if (this._gainNode) this._gainNode.gain.value = this._volume;
@@ -211,12 +237,16 @@ export class VoicePlayback {
     return this._playing;
   }
 
+  get isPaused() {
+    return this._paused;
+  }
+
   /**
    * 正規化RMS(0..1) of the currently playing TTS output.
    * Returns 0 when the audio context is not available.
    */
   get rms() {
-    if (!this._ctx || !this._analyser || this._ctx.state !== "running") return 0;
+    if (this._paused || !this._ctx || !this._analyser || this._ctx.state !== "running") return 0;
     const data = new Float32Array(this._analyser.fftSize);
     this._analyser.getFloatTimeDomainData(data);
     let sum = 0;

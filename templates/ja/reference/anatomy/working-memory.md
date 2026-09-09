@@ -10,13 +10,8 @@ Anima の作業状態を管理する `state/` ディレクトリの詳細仕様�
 ```
 state/
 ├── current_state.md          # ワーキングメモリ（自由形式Markdown）
-├── task_queue.jsonl           # タスクレジストリ（append-only JSONL）
-├── pending/                   # LLMタスク実行キュー（JSON）
-│   ├── {task_id}.json         # 投入されたタスク
-│   ├── processing/            # 実行中（PendingTaskExecutorが移動）
-│   └── failed/                # 失敗タスク
 ├── task_results/              # TaskExec完了結果
-│   └── {task_id}.md           # 結果要約（最大2000文字、7日TTL）
+│   └── {task_id}/{attempt_token}.md
 ├── conversation.json          # 会話状態
 ├── conversations/             # スレッド別会話ファイル
 ├── recovery_note.md           # クラッシュ復旧ノート
@@ -32,7 +27,7 @@ state/
 
 Anima のワーキングメモリ。「今まさに何をしているか」「何を観察したか」「どんなブロッカーがあるか」を自由形式で記録する。タスク管理用ではなく、状況認識のための場所。
 
-タスクの公式な追跡・管理は `task_queue.jsonl`（Layer 2）が担う。
+タスクの追跡はホスト管理の正本 TaskStore が担う。確認は `list_tasks`、変更はタスクツールを使い、DB やキューファイルを直接編集しない。
 
 ### サイズ制御
 
@@ -46,7 +41,7 @@ Anima のワーキングメモリ。「今まさに何をしているか」「�
 
 - 通常の Heartbeat / cron / 会話最終化では `current_state.md` を保持する
 - セッション要約に現在状態が含まれる場合も、`current_state.md` が空/idle のときだけ書き込む
-- active な可視タスクがない古い state は TaskBoard housekeeping によりアーカイブされる場合がある
+- active なタスクがない古い state は TaskBoard housekeeping によりアーカイブされる場合がある。非表示でも active なタスクは state を保護する
 
 **Heartbeat 時の任意クリーンアップ**:
 
@@ -99,77 +94,17 @@ Anima のワーキングメモリ。「今まさに何をしているか」「�
 
 ---
 
-## task_queue.jsonl
+## 旧タスクファイル
 
-タスクレジストリ。詳細は `common_knowledge/anatomy/task-architecture.md`（Layer 2）を参照。
+`state/task_queue.jsonl` と `state/pending/` は移行・エクスポート用の証跡としてのみ保持する。稼働中のキューではない。運用者が旧書き込み処理を停止し、バックアップ付きで明示的にインポートしてから正本ランタイムを起動する。再開のためにファイルを削除・再投入・捏造しない。
 
-### エントリスキーマ（TaskEntry）
+## タスク実行と結果
 
-| フィールド | 型 | 説明 |
-|-----------|-----|------|
-| `task_id` | string | 一意ID |
-| `ts` | ISO8601 | 作成日時 |
-| `source` | `"human"` / `"anima"` | タスク元 |
-| `original_instruction` | string | 元の指示文 |
-| `assignee` | string | 担当Anima名 |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
-| `summary` | string | 1行要約 |
-| `deadline` | ISO8601 / null | 期限 |
-| `relay_chain` | array | 委譲チェーン |
-| `updated_at` | ISO8601 | 最終更新日時 |
-| `meta` | object | `executor`, `batch_id`, `task_desc`, `origin` 等 |
+ホストが原指示とタスクを一括保存し、実行可能な仕事を取得して各試行を記録する。`in_progress` はホスト管理。エージェントは `update_task` で `done` / `pending` / `cancelled` を宣言する。`list_tasks(detail=true)` で依存関係と要対応理由を確認する。pending は再試行を意味しない。原因の解消後、`submit_tasks(..., tasks=[{"task_id": "ID", "resume": true}])` で同じタスクを明示的に再開する。
 
----
+受理された結果要約は `state/task_results/{task_id}/{attempt_token}.md`（最大2000文字）に保存される。後続にはホストが選んだ受理済み結果を渡す。古いファイルの存在だけで完了と判断しない。原記録を保存し、結果を書いて成功した試行を装わない。
 
-## pending/ ディレクトリ
-
-LLM タスクの実行キュー。詳細は `common_knowledge/anatomy/task-architecture.md`（Layer 1）を参照。
-
-### ライフサイクル
-
-```
-pending/{task_id}.json → processing/{task_id}.json → 成功: 削除 / 失敗: failed/ に移動
-```
-
-- TTL: 24時間（`_LLM_TASK_TTL_HOURS`）。超過したタスクはスキップされる
-- ポーリング間隔: 3秒（`_PENDING_WATCHER_POLL_INTERVAL`）
-- `task_queue.jsonl` で `cancelled` のタスクは自動スキップ → `failed/` に移動
-
-### JSON スキーマ
-
-| フィールド | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| `task_type` | string | Yes | `"llm"` |
-| `task_id` | string | Yes | 一意ID |
-| `batch_id` | string | No | バッチID（submit_tasks） |
-| `title` | string | Yes | タイトル |
-| `description` | string | Yes | 指示内容 |
-| `parallel` | boolean | No | 並列実行可否 |
-| `depends_on` | array | No | 先行タスクID |
-| `context` | string | No | 追加コンテキスト |
-| `acceptance_criteria` | array | No | 完了条件 |
-| `constraints` | array | No | 制約 |
-| `file_paths` | array | No | 関連ファイル |
-| `workspace` | string | No | 作業ディレクトリ（エイリアス） |
-| `submitted_by` | string | Yes | 投入者 |
-| `submitted_at` | ISO8601 | Yes | 投入日時 |
-| `source` | string | No | `"delegation"` 等 |
-
----
-
-## task_results/ ディレクトリ
-
-TaskExec が完了したタスクの結果要約を保存する。
-
-| パラメータ | 値 |
-|-----------|-----|
-| ファイル名 | `{task_id}.md` |
-| 最大文字数 | 2000（`_TASK_RESULT_MAX_CHARS`） |
-| TTL | 7日（ハウスキーピングで自動削除） |
-
-依存タスク（`depends_on`）はこのファイルの内容をコンテキストとして自動的に受け取る。
-
----
+長時間コマンドツールは別経路のまま。`animaworks-tool submit` は `state/background_tasks/pending/` に投入し、BackgroundTaskManager がコマンド状態・通知を管理する。詳細は `operations/background-tasks.md` と `operations/task-management.md`。
 
 ## read_subordinate_state
 

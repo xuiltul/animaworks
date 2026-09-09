@@ -688,6 +688,7 @@ class TestConsolidationForgettingHooks:
         mock_config = MagicMock()
         mock_consolidation_cfg = MagicMock()
         mock_consolidation_cfg.daily_enabled = True
+        mock_consolidation_cfg.synaptic_downscaling_enabled = True
         mock_consolidation_cfg.min_episodes_threshold = 1
         mock_config.consolidation = mock_consolidation_cfg
 
@@ -703,6 +704,7 @@ class TestConsolidationForgettingHooks:
 
         with (
             patch("core.config.load_config", return_value=mock_config),
+            patch("core.lifecycle.system_consolidation.load_config", return_value=mock_config),
             patch("core.lifecycle.system_consolidation.should_skip_inactive_consolidation", return_value=False),
             patch("core.lifecycle.system_consolidation.evaluate_daily_consolidation_gate", return_value=gate),
             patch("core.lifecycle.system_consolidation.run_knowledge_self_correction_if_enabled", AsyncMock()),
@@ -718,6 +720,7 @@ class TestConsolidationForgettingHooks:
 
         # Verify downscaling was called
         mock_forgetter.synaptic_downscaling.assert_called_once()
+
 
 # ── Monthly Forgetting Hook Test ────────────────────────────────────
 

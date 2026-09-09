@@ -56,9 +56,7 @@ def test_migrates_personal_flat_skill_to_trusted_bundle_and_rewrites_refs(tmp_pa
         encoding="utf-8",
     )
     (anima_dir / "cron.md").write_text(
-        "skill: skills/legacy.md\n"
-        "skill_name: legacy\n"
-        'skills: ["skills/legacy.md", "legacy"]\n',
+        'skill: skills/legacy.md\nskill_name: legacy\nskills: ["skills/legacy.md", "legacy"]\n',
         encoding="utf-8",
     )
     (anima_dir / "state" / "taskboard.json").write_text(
@@ -113,9 +111,16 @@ def test_migrates_common_flat_skill_and_rewrites_common_refs_for_animas(tmp_path
     common_dir.mkdir()
     flat = common_dir / "shared.md"
     flat.write_text("# Shared\n\nA shared legacy skill.\n", encoding="utf-8")
-    (anima_dir / "state" / "task_queue.jsonl").write_text(
-        json.dumps({"title": "Use shared", "skills": ["common_skills/shared.md"]}) + "\n",
-        encoding="utf-8",
+    from core.memory.task_queue import TaskQueueManager
+
+    queue = TaskQueueManager(anima_dir)
+    queue.submit(
+        {
+            "task_id": "shared-skill",
+            "title": "Use shared",
+            "description": "Use the shared skill",
+            "skills": ["common_skills/shared.md"],
+        }
     )
 
     result = step_legacy_flat_skill_migration(data_dir, dry_run=False, verbose=True)
@@ -129,8 +134,10 @@ def test_migrates_common_flat_skill_and_rewrites_common_refs_for_animas(tmp_path
     assert meta.trust_level == SkillTrustLevel.trusted
     assert meta.source.identifier == "common_skills/shared.md"
     assert meta.source.owner_anima is None
-    task = json.loads((anima_dir / "state" / "task_queue.jsonl").read_text(encoding="utf-8"))
+    task = queue.store.get_input(anima_dir.name, "shared-skill")
     assert task["skills"] == ["common_skills/shared/SKILL.md"]
+    assert task["description"] == "Use the shared skill"
+    assert not queue.queue_path.exists()
 
 
 def test_destination_collision_keeps_existing_bundle_and_removes_flat_source(tmp_path: Path) -> None:
@@ -178,10 +185,7 @@ def test_no_frontmatter_flat_skill_gets_inferred_metadata(tmp_path: Path) -> Non
 
 def test_pointer_rewriter_updates_flat_paths_without_rewriting_names() -> None:
     text = (
-        "skill: skills/foo.md\n"
-        "skill_name: foo\n"
-        "skills: [skills/foo.md, foo]\n"
-        "other: keep skills/foo.md inside prose\n"
+        "skill: skills/foo.md\nskill_name: foo\nskills: [skills/foo.md, foo]\nother: keep skills/foo.md inside prose\n"
     )
 
     rewritten = rewrite_skill_pointers_in_text(text, {"skills/foo.md": "skills/foo/SKILL.md"})
@@ -193,12 +197,7 @@ def test_pointer_rewriter_updates_flat_paths_without_rewriting_names() -> None:
 
 
 def test_pointer_rewriter_preserves_unmatched_skill_line_formatting() -> None:
-    text = (
-        "skills: [unrelated]\n"
-        "skills: 'quoted-unrelated'\n"
-        "skills:\n"
-        "  - 'block-unrelated'\n"
-    )
+    text = "skills: [unrelated]\nskills: 'quoted-unrelated'\nskills:\n  - 'block-unrelated'\n"
 
     rewritten = rewrite_skill_pointers_in_text(text, {"skills/foo.md": "skills/foo/SKILL.md"})
 

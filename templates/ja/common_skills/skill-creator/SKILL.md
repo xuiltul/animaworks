@@ -33,6 +33,13 @@ description: >-
 
 `create_skill` が生成するのは上表の**スキル**（個人または共通）のみ。手続きは `write_memory_file` 等で `procedures/*.md` として別途作成する。
 
+### symlink を置かない（2026-09-04 ルール化）
+
+`common_skills/` や `skills/` の配下に、外部（`~/.claude/skills` など）へ向けた **symlink で「再掲」しない**。`read_memory_file` は実体の場所で境界を検査するため、symlink 先が外なら「Path traversal detected」で読めない。さらにカタログはその symlink を native スキルとして載せ、同名の external 候補を隠すので、Anima には読めないパスだけが提示される。
+
+- ホスト側スキル（`~/.claude/skills`, `~/.codex/skills` 等）は設定 `skills.external_roots` から自動で注入され、`external/<engine>/<name>/SKILL.md` で読める。共通スキルに再掲する必要はない。
+- どうしても共通スキルとして置きたいときは実体ファイルをコピーし、正本をどちらか一方に決める。
+
 ## read_memory_file でのスキル読み込み
 
 スキル・手続きの本文は **`read_memory_file(path="...")`** で記憶ツリー相対パスを指定して読む。システムプロンプトのスキルカタログに、利用可能なパス（例: `skills/foo/SKILL.md`, `common_skills/bar/SKILL.md`, `procedures/baz.md`）が示される。

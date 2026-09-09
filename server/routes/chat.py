@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from core.exceptions import AnimaNotFoundError  # noqa: F401
 from core.exceptions import IPCConnectionError as IPCConnError
@@ -35,11 +36,17 @@ from server.stream_registry import StreamRegistry
 
 logger = logging.getLogger("animaworks.routes.chat")
 
+
+class CompactRequest(BaseModel):
+    thread_id: str = "default"
+
+
 # Re-exports for tests and external consumers
 __all__ = [
     "AnimaNotFoundError",
     "ChatRequest",
     "ChatResponse",
+    "CompactRequest",
     "ImageAttachment",
     "MAX_CHAT_MESSAGE_SIZE",
     "MAX_IMAGE_PAYLOAD_SIZE",
@@ -341,6 +348,37 @@ def create_chat_router() -> APIRouter:
             "event_count": stream.event_count,
             "emotion": stream.emotion,
         }
+
+    @router.post("/animas/{name}/chat/compact")
+    async def compact_session(name: str, body: CompactRequest, request: Request):
+        """Manually compact a chat thread's context on demand."""
+        supervisor = request.app.state.supervisor
+        if name not in supervisor.processes:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
+
+        registry: StreamRegistry = request.app.state.stream_registry
+        if registry.get_active(name, thread_id=body.thread_id) is not None:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=409, detail="chat in progress")
+
+        try:
+            return await supervisor.send_request(
+                anima_name=name,
+                method="compact_session",
+                params={"thread_id": body.thread_id},
+                timeout=90.0,
+            )
+        except TimeoutError:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=504, detail="Request timed out") from None
+        except Exception as exc:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=500, detail=str(exc)) from None
 
     @router.get("/animas/{name}/stream/{response_id}/progress")
     async def get_stream_progress(name: str, response_id: str, request: Request):

@@ -27,8 +27,9 @@ from core.execution.session_context import RuntimeSessionContext, runtime_sessio
 from core.execution.session_types import is_clean_start_session, resolve_runtime_session_type, trigger_uses_chat_session
 from core.i18n import t
 from core.memory.shortterm import SessionState, ShortTermMemory
-from core.prompt.builder import build_system_prompt, inject_shortterm
-from core.prompt.context import CHARS_PER_TOKEN, ContextTracker
+from core.prompt.builder import build_system_prompt, inject_shortterm  # noqa: F401
+from core.prompt.context import ContextTracker
+from core.prompt.tokens import estimate_tokens
 from core.schemas import CycleResult, ImageData, ModelConfig
 from core.time_utils import now_iso, now_local
 
@@ -43,7 +44,7 @@ def _update_tracker_from_prompt_estimate(
     system_prompt: str,
     prompt: str,
 ) -> None:
-    estimated_tokens = (len(system_prompt) + len(prompt)) // CHARS_PER_TOKEN
+    estimated_tokens = estimate_tokens(system_prompt) + estimate_tokens(prompt)
     tracker.update({"input_tokens": estimated_tokens}, include_output_in_ratio=False)
 
 
@@ -158,7 +159,7 @@ class CycleMixin:
             return None
         if result.action != "error" and not result.reason:
             return None
-        from core.execution.fallback_activity import runtime_fallback_config
+        from core.execution.fallback_activity import has_partial_execution, runtime_fallback_config
 
         return runtime_fallback_config(
             self.anima_dir,
@@ -167,6 +168,7 @@ class CycleMixin:
             error_text=result.summary or "",
             reason=str(result.reason or ""),
             channel=self._cycle_fallback_channel(trigger),
+            partial_execution=has_partial_execution(result),
         )
 
     def _check_monthly_token_budget(
@@ -493,6 +495,10 @@ class CycleMixin:
             thread_id=thread_id,
             shortterm=shortterm,
         )
+        shortterm_text = ""
+        if uses_chat_session and shortterm.has_pending():
+            shortterm_text = shortterm.render_for_injection()
+            logger.info("Included short-term memory in system prompt allocation")
         tracker = ContextTracker(
             model=active_model_config.model,
             threshold=active_model_config.context_threshold,
@@ -511,6 +517,7 @@ class CycleMixin:
             context_window=_ctx_window,
             pending_human_notifications=pending_human_notifications,
             thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
         system_prompt = build_result.system_prompt
         logger.debug("System prompt assembled, length=%d tier=%s", len(system_prompt), _prompt_tier)
@@ -525,11 +532,8 @@ class CycleMixin:
             trigger=trigger,
             pending_human_notifications=pending_human_notifications,
             thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
-
-        if uses_chat_session and shortterm.has_pending():
-            system_prompt = inject_shortterm(system_prompt, shortterm)
-            logger.info("Injected short-term memory into system prompt")
 
         # ── Prompt log: save full payload for debugging ───
         from core.tooling.schemas import load_all_tool_schemas
@@ -604,14 +608,29 @@ class CycleMixin:
         # ── Mode C: Codex SDK ─────────────────────────────
         if mode == "c":
             _update_tracker_from_prompt_estimate(tracker, system_prompt, prompt)
-            result = await active_executor.execute(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                tracker=tracker,
-                trigger=trigger,
-                images=images,
-                thread_id=thread_id,
-            )
+            try:
+                result = await active_executor.execute(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    tracker=tracker,
+                    trigger=trigger,
+                    images=images,
+                    thread_id=thread_id,
+                )
+            except (Exception, asyncio.CancelledError) as exc:
+                # Blocking collectors attach the usage observed before an
+                # interruption. Cancellation must still propagate unchanged.
+                observed = getattr(exc, "usage", None)
+                if isinstance(observed, dict):
+                    _log_session_token_usage(
+                        self.anima_dir,
+                        model=active_model_config.model,
+                        mode=mode,
+                        trigger=trigger,
+                        usage=observed,
+                        duration_ms=int((time.monotonic() - start) * 1000),
+                    )
+                raise
             if result.replied_to_from_transcript:
                 self._tool_handler.merge_replied_to(result.replied_to_from_transcript)
             _save_prompt_log_end(
@@ -648,6 +667,8 @@ class CycleMixin:
                 len(result.text),
             )
             _c_usage = result.usage.to_dict() if result.usage else None
+            c_turns = getattr(result.result_message, "num_turns", 0)
+            c_turns = c_turns if isinstance(c_turns, int) else 0
             _log_session_token_usage(
                 self.anima_dir,
                 model=active_model_config.model,
@@ -655,10 +676,17 @@ class CycleMixin:
                 trigger=trigger,
                 usage=_c_usage,
                 duration_ms=duration_ms,
+                turns=c_turns,
             )
+            is_error = result.error is True
+            error_reason = result.reason if isinstance(result.reason, str) else ""
+            error_category = _resolve_error_category(error_reason, result.text) if is_error else None
             return CycleResult(
                 trigger=trigger,
-                action="responded",
+                action="error" if is_error else "responded",
+                stop_kind="stream_error" if is_error else "normal",
+                reason=(error_category or "unknown") if is_error else "",
+                error_category=error_category,
                 summary=result.text,
                 duration_ms=duration_ms,
                 context_usage_ratio=tracker.usage_ratio,
@@ -666,6 +694,7 @@ class CycleMixin:
                 context_threshold=tracker.threshold,
                 tool_call_records=_tool_records_to_dicts(result),
                 usage=_c_usage,
+                total_turns=c_turns,
                 truncated=result.truncated,
             )
 
@@ -897,6 +926,8 @@ class CycleMixin:
             trigger=trigger,
             context_window=_ctx_window,
             pending_human_notifications=pending_human_notifications,
+            thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
         if use_fallback:
             executor = self._create_fallback_executor(active_model_config)
@@ -942,7 +973,7 @@ class CycleMixin:
         accumulated_text = result.text
 
         if tracker.threshold_exceeded and uses_chat_session:
-            # Save shortterm for the next message to pick up via inject_shortterm.
+            # Save shortterm for the next system-prompt allocation.
             # Do NOT chain here — chaining mid-response causes the LLM to produce
             # unnatural "session handoff" messages.
             logger.info(
@@ -1181,6 +1212,10 @@ class CycleMixin:
             thread_id=thread_id,
             shortterm=shortterm,
         )
+        shortterm_text = ""
+        if uses_chat_session and shortterm.has_pending():
+            shortterm_text = shortterm.render_for_injection()
+            logger.info("Included short-term memory in system prompt allocation")
         tracker = ContextTracker(
             model=active_model_config.model,
             threshold=active_model_config.context_threshold,
@@ -1199,6 +1234,7 @@ class CycleMixin:
             context_window=_ctx_window_s,
             pending_human_notifications=pending_human_notifications,
             thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
         system_prompt = build_result.system_prompt
 
@@ -1211,10 +1247,9 @@ class CycleMixin:
             mode=mode,
             trigger=trigger,
             pending_human_notifications=pending_human_notifications,
+            thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
-
-        if uses_chat_session and shortterm.has_pending():
-            system_prompt = inject_shortterm(system_prompt, shortterm)
 
         # Pre-flight size check for streaming path
         conv_memory = None
@@ -1233,6 +1268,7 @@ class CycleMixin:
             context_window=_ctx_window_s,
             pending_human_notifications=pending_human_notifications,
             thread_id=thread_id,
+            shortterm_text=shortterm_text,
         )
         if use_fallback:
             logger.warning("Streaming fallback: using blocking S Fallback for oversized prompt")
@@ -1298,6 +1334,7 @@ class CycleMixin:
         terminal_error_reason = ""
         terminal_error_chunk: dict[str, Any] | None = None
         fallback_swapped = False
+        stream_started_work = False
         stream_stop_kind = "normal"
         stream_truncated = False
         current_prompt = prompt
@@ -1308,6 +1345,13 @@ class CycleMixin:
             completed_tools: list[dict[str, Any]] = []
             text_parts_this_attempt: list[str] = []
             stream_succeeded = False
+            attempt_usage: dict[str, int] = {}
+            attempt_started = time.monotonic()
+            attempt_turns = 0
+
+            def record_usage(usage: dict[str, int] | None, acc: dict[str, int] = attempt_usage) -> None:
+                _merge_stream_usage(_stream_usage, usage)
+                _merge_stream_usage(acc, usage)
 
             try:
                 self._active_streaming_executor = active_executor
@@ -1321,14 +1365,24 @@ class CycleMixin:
                         trigger=trigger,
                         thread_id=thread_id,
                     ):
+                        if chunk["type"] in {"tool_start", "tool_end"} or (
+                            chunk["type"] == "text_delta" and chunk.get("text")
+                        ):
+                            stream_started_work = True
                         if self._progress_callback:
                             self._progress_callback()
-                        if chunk["type"] == "done":
+                        if chunk["type"] == "usage":
+                            record_usage(chunk.get("usage"))
+                        elif chunk["type"] == "done":
                             full_text_parts.append(chunk["full_text"])
                             text_parts_this_attempt.append(chunk["full_text"])
                             result_message = chunk["result_message"]
                             all_tool_call_records.extend(chunk.get("tool_call_records", []))
-                            _merge_stream_usage(_stream_usage, chunk.get("usage"))
+                            if not chunk.get("usage_already_emitted"):
+                                record_usage(chunk.get("usage"))
+                            reported_turns = getattr(result_message, "num_turns", 0)
+                            if isinstance(reported_turns, int):
+                                attempt_turns = reported_turns
                             transcript_replied = chunk.get("replied_to_from_transcript", set())
                             if transcript_replied:
                                 self._tool_handler.merge_replied_to(transcript_replied)
@@ -1339,6 +1393,9 @@ class CycleMixin:
                             stream_stop_kind = str(chunk.get("stop_kind") or "normal")
                             stream_succeeded = True
                         elif chunk["type"] == "error" and chunk.get("terminal") is True:
+                            if not chunk.get("usage_already_emitted"):
+                                record_usage(chunk.get("usage"))
+                            all_tool_call_records.extend(chunk.get("tool_call_records", []))
                             terminal_error_message = chunk.get("message", "[Terminal LLM error]")
                             terminal_error_reason = str(chunk.get("reason") or "")
                             # Held back until the fallback decision below: a
@@ -1379,10 +1436,39 @@ class CycleMixin:
                     if self._active_streaming_executor is active_executor:
                         self._active_streaming_executor = None
 
+            except (asyncio.CancelledError, GeneratorExit) as exc:
+                observed = getattr(exc, "usage", None)
+                if isinstance(observed, dict) and not getattr(exc, "usage_already_emitted", False):
+                    record_usage(observed)
+                raise
             except Exception as e:
+                observed = getattr(e, "usage", None)
+                if isinstance(observed, dict) and not getattr(e, "usage_already_emitted", False):
+                    record_usage(observed)
+                records = getattr(e, "tool_call_records", None)
+                if isinstance(records, list):
+                    all_tool_call_records.extend(records)
                 from core.execution.base import StreamDisconnectedError
 
                 is_stream_error = isinstance(e, StreamDisconnectedError)
+                if is_stream_error:
+                    from core.execution.error_classifier import FailoverReason, classify_llm_error
+
+                    cause = e.__cause__ if isinstance(e.__cause__, Exception) else e
+                    classified, hint = classify_llm_error(cause)
+                    # API adapters wrap even a failed connection before the
+                    # first response as a stream disconnect. Their own API
+                    # retry budget is already exhausted: do not multiply it
+                    # by the stream retry budget or lose its provider reason.
+                    can_route = (
+                        hint.fallback_ok
+                        and getattr(primary_config, "fallback_models", None)
+                        and not stream_started_work
+                        and not all_tool_call_records
+                    )
+                    if classified != FailoverReason.UNKNOWN and (hint.is_terminal or can_route):
+                        is_stream_error = False
+                        terminal_error_reason = classified.value
                 if not is_stream_error:
                     # Non-stream errors: no stream-level retry, but still
                     # eligible for a model fallback swap (checked below).
@@ -1490,10 +1576,24 @@ class CycleMixin:
                         context_window=_ctx_window_s,
                         pending_human_notifications=pending_human_notifications,
                         thread_id=thread_id,
+                        shortterm_text=shortterm_text,
                     ).system_prompt
 
                     await asyncio.sleep(actual_delay)
                     continue
+            finally:
+                # Flush each execution attempt under its actual model/mode,
+                # including failures, cancellation and generator close. A
+                # fallback can use a different provider's token semantics.
+                _log_session_token_usage(
+                    self.anima_dir,
+                    model=active_model_config.model,
+                    mode=mode,
+                    trigger=trigger,
+                    usage=attempt_usage,
+                    duration_ms=int((time.monotonic() - attempt_started) * 1000),
+                    turns=attempt_turns,
+                )
 
             if terminal_error_message and not fallback_swapped and getattr(primary_config, "fallback_models", None):
                 from core.execution.fallback_activity import runtime_fallback_config
@@ -1505,6 +1605,7 @@ class CycleMixin:
                     error_text=terminal_error_message,
                     reason=terminal_error_reason,
                     channel=self._cycle_fallback_channel(trigger),
+                    partial_execution=stream_started_work or bool(all_tool_call_records),
                 )
                 if swap_config is not None:
                     logger.warning(
@@ -1533,6 +1634,7 @@ class CycleMixin:
                         context_window=_ctx_window_s,
                         pending_human_notifications=pending_human_notifications,
                         thread_id=thread_id,
+                        shortterm_text=shortterm_text,
                     ).system_prompt
                     yield {
                         "type": "retry_start",
@@ -1555,7 +1657,6 @@ class CycleMixin:
 
         session_chained = False
         total_turns = result_message.num_turns if result_message else 0
-        chain_count = 0
 
         # Session chaining — force_chain from mid-session auto-compact.
         if _stream_force_chain and not tracker.threshold_exceeded:
@@ -1563,7 +1664,7 @@ class CycleMixin:
             logger.info("Context auto-compact (stream): forcing threshold_exceeded")
 
         if tracker.threshold_exceeded and uses_chat_session:
-            # Save shortterm for the next message to pick up via inject_shortterm.
+            # Save shortterm for the next system-prompt allocation.
             # Do NOT chain here — chaining mid-response causes the LLM to produce
             # unnatural "session handoff" messages.
             logger.info(
@@ -1643,16 +1744,6 @@ class CycleMixin:
         )
 
         _final_usage = _stream_usage if any(_stream_usage.values()) else None
-        _log_session_token_usage(
-            self.anima_dir,
-            model=active_model_config.model,
-            mode=mode,
-            trigger=trigger,
-            usage=_final_usage,
-            duration_ms=duration_ms,
-            turns=total_turns,
-            chains=chain_count if session_chained else 0,
-        )
         yield {
             "type": "cycle_done",
             "cycle_result": CycleResult(
@@ -1671,6 +1762,11 @@ class CycleMixin:
                 session_chained=session_chained,
                 total_turns=total_turns,
                 tool_call_records=all_tool_call_records,
+                # Preserve the inner-cycle replay guard across IPC and the
+                # outer fallback wrapper, even if a failed stream never
+                # produced its final tool records. Text already delivered is
+                # also conservatively treated as started work, as above.
+                fallback_safe=not (stream_started_work or all_tool_call_records),
                 usage=_final_usage,
                 truncated=stream_truncated,
             ).model_dump(mode="json"),

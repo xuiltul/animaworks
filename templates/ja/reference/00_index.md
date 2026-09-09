@@ -10,6 +10,7 @@ RAG 検索対象外。必要なときに `read_memory_file(path="reference/...")
 | File | Title |
 |------|-------|
 | `anatomy/anima-anatomy.md` | Anima 構成ファイル完全ガイド |
+| `anatomy/environment-layout.md` | ランタイムディレクトリ構成と権限 |
 | `anatomy/memory-system.md` | 記憶システムガイド |
 | `anatomy/priming-channels.md` | Priming チャネル技術リファレンス |
 | `anatomy/working-memory.md` | ワーキングメモリ（state/）技術リファレンス |
@@ -35,6 +36,7 @@ RAG 検索対象外。必要なときに `read_memory_file(path="reference/...")
 |------|-------|
 | `operations/browser-automation-guide.md` | ブラウザ操作ガイド |
 | `operations/heartbeat-cron-guide.md` | 定期実行の設定と運用 |
+| `operations/memory-writing-guide.md` | 記憶の記録先と定期実行の選択 |
 | `operations/mode-s-auth-guide.md` | Mode S（Agent SDK）認証モード設定ガイド |
 | `operations/model-guide.md` | モデル選択・設定ガイド |
 | `operations/project-setup.md` | プロジェクト設定方法 |

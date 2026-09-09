@@ -87,11 +87,11 @@ def test_tool_handler_bind_runtime_session_clears_new_context_only(tmp_path):
     )
 
     handler.bind_runtime_session(ctx)
-    handler._replied_to["heartbeat"].add("taka")
+    handler._replied_to["heartbeat"].add("owner")
     handler._posted_channels["heartbeat"].add("ops")
 
     handler.bind_runtime_session(ctx)
-    assert handler._replied_to["heartbeat"] == {"taka"}
+    assert handler._replied_to["heartbeat"] == {"owner"}
     assert handler._posted_channels["heartbeat"] == {"ops"}
 
     new_ctx = RuntimeSessionContext.create(

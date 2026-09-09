@@ -27,9 +27,10 @@ _KO_DIR = _TEMPLATES_DIR / "ko"
 @pytest.mark.parametrize("locale", ["ja", "en", "ko"])
 def test_environment_enforces_worktree_and_credential_resolver(locale: str) -> None:
     content = (_TEMPLATES_DIR / locale / "prompts" / "environment.md").read_text(encoding="utf-8")
+    repo_rules = (_TEMPLATES_DIR / locale / "prompts" / "builder" / "repo_work_rules.md").read_text(encoding="utf-8")
 
-    assert "git worktree" in content
-    assert "main" in content and "clean" in content
+    assert "git worktree" in repo_rules
+    assert "main" in repo_rules and "clean" in repo_rules
     assert "shared/credentials.json" in content
     assert "parse" in content
 
@@ -46,19 +47,14 @@ _EXPECTED_FILES = [
     "bootstrap.md",
     "common_knowledge/00_index.md",
     "common_knowledge/anatomy/essentials.md",
-    "common_knowledge/anatomy/machine-tool-philosophy.md",
     "common_knowledge/anatomy/task-architecture.md",
     "common_knowledge/anatomy/what-is-anima.md",
     "common_knowledge/communication/board-guide.md",
     "common_knowledge/communication/call-human-guide.md",
     "common_knowledge/communication/sending-limits.md",
     "common_knowledge/operations/action-rules-guide.md",
+    "common_knowledge/operations/action-rule-memory-write-destination.md",
     "common_knowledge/operations/background-tasks.md",
-    "common_knowledge/operations/machine/tool-usage.md",
-    "common_knowledge/operations/machine/workflow-engineer.md",
-    "common_knowledge/operations/machine/workflow-pdm.md",
-    "common_knowledge/operations/machine/workflow-reviewer.md",
-    "common_knowledge/operations/machine/workflow-tester.md",
     "common_knowledge/operations/report-formats.md",
     "common_knowledge/operations/task-board-guide.md",
     "common_knowledge/operations/task-delegation-guide.md",
@@ -77,7 +73,6 @@ _EXPECTED_FILES = [
     "common_skills/image-gen-tool/SKILL.md",
     "common_skills/image-posting/SKILL.md",
     "common_skills/local-llm-tool/SKILL.md",
-    "common_skills/machine-tool/SKILL.md",
     "common_skills/notion-tool/SKILL.md",
     "common_skills/skill-creator/SKILL.md",
     "common_skills/skill-creator/references/description_guide.md",
@@ -105,18 +100,21 @@ _EXPECTED_FILES = [
     "prompts/builder/human_notification.md",
     "prompts/builder/human_notification_howto_other.md",
     "prompts/builder/human_notification_howto_s.md",
+    "prompts/builder/instruction_internalization.md",
     "prompts/builder/light_tier_org.md",
     "prompts/builder/org_context_toplevel.md",
     "prompts/builder/reference_hint.md",
+    "prompts/builder/repo_work_rules.md",
     "prompts/builder/resolution_registry.md",
     "prompts/builder/sections.md",
     "prompts/builder/task_in_progress.md",
     "prompts/builder/task_queue.md",
+    "prompts/builder/task_recording_chat.md",
+    "prompts/builder/task_recording_heartbeat.md",
     "prompts/character_design_guide.md",
     "prompts/chat_message.md",
     "prompts/chat_message_with_history.md",
     "prompts/communication_rules.md",
-    "prompts/communication_rules_s.md",
     "prompts/cron_task.md",
     "prompts/environment.md",
     "prompts/fragments/asset_synthesis_system.md",
@@ -185,6 +183,7 @@ _EXPECTED_FILES = [
     "prompts/unread_messages.md",
     "reference/00_index.md",
     "reference/anatomy/anima-anatomy.md",
+    "reference/anatomy/environment-layout.md",
     "reference/anatomy/memory-system.md",
     "reference/anatomy/priming-channels.md",
     "reference/anatomy/working-memory.md",
@@ -195,6 +194,7 @@ _EXPECTED_FILES = [
     "reference/internals/common-knowledge-access-paths.md",
     "reference/operations/browser-automation-guide.md",
     "reference/operations/heartbeat-cron-guide.md",
+    "reference/operations/memory-writing-guide.md",
     "reference/operations/mode-s-auth-guide.md",
     "reference/operations/model-guide.md",
     "reference/operations/project-setup.md",
@@ -358,9 +358,7 @@ class TestKoTemplateHeadings:
         [
             f
             for f in _EXPECTED_FILES
-            if f not in _HEADING_EXEMPT
-            and not f.startswith("prompts/tool_descriptions/")
-            and f.endswith(".md")
+            if f not in _HEADING_EXEMPT and not f.startswith("prompts/tool_descriptions/") and f.endswith(".md")
         ],
     )
     def test_file_has_headings(self, rel_path: str):

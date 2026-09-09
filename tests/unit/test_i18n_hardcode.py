@@ -74,6 +74,8 @@ _REGEX_METACHAR_RE = re.compile(
 # When you fix violations, lower the count so the ratchet tightens.
 
 KNOWN_VIOLATIONS: dict[str, int] = {
+    # guardrail note detection prefixes (NLP marker data, not user-facing text)
+    "core/memory/priming/format.py": 1,
     # bilingual empty-state placeholders for prompt injection (ja/en)
     "core/_anima_lifecycle.py": 2,
     # command templates with {返信内容} — borderline (platform-specific CLI syntax)
@@ -88,14 +90,11 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/config/migrate.py": 9,
     # model catalog "note" descriptions (最高性能・推奨, etc.)
     "core/config/model_mode.py": 30,
-    # multi-pass FRC review instruction/task templates (operational instructions,
-    # relocated from scripts/pr-review-dispatch.py which is outside the scan)
-    "core/review_multipass.py": 10,
     # cron instruction prompt to Anima
     "core/prompt/messaging.py": 2,
     "core/prompt/org_context.py": 3,
     "core/response_normalize.py": 15,
-    "core/supervisor/scheduler_manager.py": 1,
+    # orphan reaper — Japanese notification body sent to the owning anima (plan-specified wording)
     # label "個人ツール"
     "core/tooling/handler_memory.py": 1,
     # tool descriptions — already have ja/en dict structure
@@ -121,7 +120,7 @@ KNOWN_VIOLATIONS: dict[str, int] = {
     "core/voice/front.py": 2,
     # voice front lane — spoken ACK/error phrases voiced to the user via TTS
     # plus the proactive silence-turn system prompt fed to the front LLM
-    "core/voice/session.py": 9,
+    "core/voice/session.py": 8,
 }
 
 

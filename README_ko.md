@@ -69,8 +69,10 @@ macOS / Linux / WSL:
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
-uv run animaworks start     # 서버 시작 — 첫 실행 시 설정 마법사가 열림
+animaworks start            # 서버 시작 — 첫 실행 시 설정 마법사가 열림
 ```
+
+> **어느 디렉터리에서든 `animaworks`로 실행할 수 있습니다.** `setup.sh`가 CLI를 `~/.local/bin`에 심볼릭 링크로 걸어 두므로, 해당 디렉터리가 `PATH`에 있으면 `uv run` 접두사를 생략할 수 있습니다(없다면 셸 rc에 `export PATH="$HOME/.local/bin:$PATH"`를 추가하세요). 콘솔 스크립트는 이 리포지토리의 `.venv` 인터프리터를 절대 경로로 가리키므로 `animaworks`와 `uv run animaworks`는 항상 같은 환경에서 동작합니다. 수동 설치라면 직접 링크하세요: `ln -sfn "$PWD/.venv/bin/animaworks" ~/.local/bin/animaworks`
 
 Windows (PowerShell):
 
@@ -92,7 +94,7 @@ OpenAI Codex를 API 키 없이 쓰려면 첫 실행 전에 `codex login` 을 실
 
 `.env` 파일을 직접 편집할 필요는 없습니다. 설정 마법사가 `config.json`에 자동으로 저장해줍니다.
 
-설정 스크립트가 [uv](https://docs.astral.sh/uv/) 설치부터 리포지토리 클론, Python 3.12+ 및 모든 의존성 다운로드까지 알아서 처리합니다. **macOS, Linux, WSL**에서는 Python 사전 설치 없이 바로 동작합니다. **Windows**에서는 위의 PowerShell / 수동 설치 절차를 사용하세요.
+설정 스크립트가 [uv](https://docs.astral.sh/uv/) 설치부터 리포지토리 클론, Python 3.12+ 및 모든 의존성 다운로드, `animaworks` 명령의 `~/.local/bin` 링크 생성까지 알아서 처리합니다. **macOS, Linux, WSL**에서는 Python 사전 설치 없이 바로 동작합니다. **Windows**에서는 위의 PowerShell / 수동 설치 절차를 사용하세요.
 
 > **다른 LLM을 사용하고 싶다면?** AnimaWorks는 Claude, GPT, Gemini, 로컬 모델 등 다양한 LLM을 지원합니다. 설정 마법사에서 API 키를 입력하거나, OpenAI/Codex의 경우 **Codex Login** 도 사용할 수 있습니다. 나중에 대시보드의 **Settings**에서 변경할 수 있습니다. 자세한 내용은 [API 키 레퍼런스](#api-키-레퍼런스)를 참고하세요.
 

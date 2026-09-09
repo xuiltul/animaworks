@@ -172,6 +172,7 @@ class TokenUsageLogger:
         now = now_local()
         cost = self.estimate_cost(
             model,
+            mode=mode,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
@@ -188,6 +189,8 @@ class TokenUsageLogger:
             "turns": turns,
             "duration_ms": duration_ms,
             "estimated_cost_usd": round(cost, 6),
+            "pricing_status": "estimated" if self._resolve_pricing(model) is not None else "unknown",
+            "input_includes_cache": mode.lower() == "c" or model.startswith(("codex/", "openai-codex/")),
         }
         if auth:
             entry["auth"] = auth
@@ -237,13 +240,19 @@ class TokenUsageLogger:
         output_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
+        mode: str = "",
     ) -> float:
         """Return estimated cost in USD."""
         pricing = self._resolve_pricing(model)
         if not pricing:
             return 0.0
+        # Codex reports cached input as a subset of input_tokens. Anthropic
+        # reports cache reads/writes separately; preserve its existing math.
+        billable_input = input_tokens
+        if mode.lower() == "c" or model.startswith(("codex/", "openai-codex/")):
+            billable_input = max(0, input_tokens - cache_read_tokens - cache_write_tokens)
         cost = (
-            input_tokens * pricing.get("input", 0)
+            billable_input * pricing.get("input", 0)
             + output_tokens * pricing.get("output", 0)
             + cache_read_tokens * pricing.get("cache_read", 0)
             + cache_write_tokens * pricing.get("cache_write", 0)
@@ -260,7 +269,7 @@ class TokenUsageLogger:
             warn_rate_limited(
                 logger,
                 f"token_usage.unknown_pricing.{bare}",
-                "No pricing entry for model %r; cost will be estimated as 0.0. "
+                "No pricing entry for model %r; cost is unknown (numeric compatibility placeholder 0.0). "
                 "Add it to DEFAULT_PRICING or pricing.json.",
                 bare,
             )
@@ -419,6 +428,8 @@ class TokenUsageLogger:
                 "total_cache_write_tokens": 0,
                 "total_tokens": 0,
                 "total_estimated_cost_usd": 0.0,
+                "unknown_pricing_sessions": 0,
+                "cost_is_partial": False,
                 "by_model": {},
                 "by_trigger": {},
                 "by_date": {},
@@ -429,6 +440,7 @@ class TokenUsageLogger:
         total_cache_read = sum(e.get("cache_read_tokens", 0) for e in entries)
         total_cache_write = sum(e.get("cache_write_tokens", 0) for e in entries)
         total_cost = sum(e.get("estimated_cost_usd", 0) for e in entries)
+        unknown_pricing_sessions = 0
 
         by_model: dict[str, dict[str, Any]] = {}
         by_trigger: dict[str, dict[str, Any]] = {}
@@ -444,6 +456,9 @@ class TokenUsageLogger:
             out = e.get("output_tokens", 0)
             cache_r = e.get("cache_read_tokens", 0)
             cache_w = e.get("cache_write_tokens", 0)
+            status = e.get("pricing_status")
+            unknown_pricing = status == "unknown" or (status is None and self._resolve_pricing(model) is None)
+            unknown_pricing_sessions += int(unknown_pricing)
 
             for key, bucket in ((model, by_model), (trigger, by_trigger), (day, by_date)):
                 if key not in bucket:
@@ -454,6 +469,8 @@ class TokenUsageLogger:
                         "cache_read_tokens": 0,
                         "cache_write_tokens": 0,
                         "cost_usd": 0.0,
+                        "unknown_pricing_sessions": 0,
+                        "cost_is_partial": False,
                     }
                 bucket[key]["sessions"] += 1
                 bucket[key]["input_tokens"] += inp
@@ -461,6 +478,8 @@ class TokenUsageLogger:
                 bucket[key]["cache_read_tokens"] += cache_r
                 bucket[key]["cache_write_tokens"] += cache_w
                 bucket[key]["cost_usd"] = round(bucket[key]["cost_usd"] + cost, 6)
+                bucket[key]["unknown_pricing_sessions"] += int(unknown_pricing)
+                bucket[key]["cost_is_partial"] = bool(bucket[key]["unknown_pricing_sessions"])
 
         return {
             "period_days": days,
@@ -471,6 +490,8 @@ class TokenUsageLogger:
             "total_cache_write_tokens": total_cache_write,
             "total_tokens": total_input + total_output,
             "total_estimated_cost_usd": round(total_cost, 4),
+            "unknown_pricing_sessions": unknown_pricing_sessions,
+            "cost_is_partial": bool(unknown_pricing_sessions),
             "by_model": by_model,
             "by_trigger": by_trigger,
             "by_date": dict(sorted(by_date.items())),

@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from core.memory.activity import ActivityEntry
+
 
 def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
     """Create AgentCore with all external dependencies mocked."""
@@ -37,7 +39,36 @@ def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
 
 
 class TestGetRecentHumanMessagesInbox:
-    """_get_recent_human_messages should activate only for live chat triggers."""
+    """Inbox priming uses recent activity without leaking chat sessions."""
+
+    def test_inbox_returns_only_recent_human_senders_newest_first(self, tmp_path: Path):
+        anima_dir = tmp_path / "animas" / "mei"
+        anima_dir.mkdir(parents=True)
+        (anima_dir.parent / "sora").mkdir()
+        agent = _make_agent(anima_dir)
+        entries = [
+            ActivityEntry(ts="2026-09-08T10:00:00+09:00", type="message_received", content="old", from_person="alice"),
+            ActivityEntry(ts="2026-09-08T10:01:00+09:00", type="message_received", content="anima", from_person="sora"),
+            ActivityEntry(
+                ts="2026-09-08T10:02:00+09:00", type="message_received", content="system", from_person="system"
+            ),
+            ActivityEntry(ts="2026-09-08T10:03:00+09:00", type="message_received", content="middle", from_person="bob"),
+            ActivityEntry(
+                ts="2026-09-08T10:04:00+09:00",
+                type="message_received",
+                content="new" * 100,
+                from_person="carol",
+            ),
+            ActivityEntry(
+                ts="2026-09-08T10:05:00+09:00", type="message_received", content="latest", from_person="dave"
+            ),
+        ]
+
+        with patch("core.memory.activity.ActivityLogger.recent", return_value=entries) as recent:
+            result = agent._get_recent_human_messages("inbox:alice")
+
+        assert result == ["latest", ("new" * 100)[:200], "middle"]
+        recent.assert_called_once_with(days=2, types=["message_received"], limit=100)
 
     def test_inbox_trigger_does_not_load_chat_messages(self, tmp_path: Path):
         agent = _make_agent(tmp_path)
@@ -116,8 +147,14 @@ class TestGetRecentHumanMessagesInbox:
         assert result == []
         mock_conv_cls.assert_not_called()
 
-    async def test_run_priming_uses_inbox_channel_without_recent_chat_messages(self, tmp_path: Path):
+    async def test_run_priming_passes_inbox_human_activity_to_search_context(self, tmp_path: Path):
         agent = _make_agent(tmp_path)
+        inbox_entry = ActivityEntry(
+            ts="2026-09-08T10:00:00+09:00",
+            type="message_received",
+            content="human inbox context",
+            from_person="alice",
+        )
 
         mock_result = MagicMock()
         mock_result.pending_human_notifications = ""
@@ -136,6 +173,7 @@ class TestGetRecentHumanMessagesInbox:
             patch("core.memory.priming.PrimingEngine", return_value=mock_engine),
             patch("core.memory.priming.format_priming_section", return_value=""),
             patch("core.memory.conversation.ConversationMemory") as mock_conv_cls,
+            patch("core.memory.activity.ActivityLogger.recent", return_value=[inbox_entry]),
             patch("core.paths.get_shared_dir", return_value=tmp_path / "shared"),
         ):
             result = await agent._run_priming(
@@ -146,5 +184,5 @@ class TestGetRecentHumanMessagesInbox:
 
         assert result == ("", "")
         assert captured_kwargs["channel"] == "inbox"
-        assert captured_kwargs["recent_human_messages"] == []
+        assert captured_kwargs["recent_human_messages"] == ["human inbox context"]
         mock_conv_cls.assert_not_called()

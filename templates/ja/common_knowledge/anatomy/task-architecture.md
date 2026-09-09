@@ -1,126 +1,31 @@
-# タスクアーキテクチャ — 3層モデル
+# 正本タスクのアーキテクチャ
 
-AnimaWorks のタスク管理は3つの層で構成される。
-上位ほどシステムが厳格に管理し、下位ほど Anima の自由裁量に委ねられる。
+## 永続的な正本は一つ
 
-## 3層の概要
+LLM タスクの正本はホスト管理の TaskStore。タスク ID、完全な実行入力、依存関係、結果、実行試行、委譲エイリアス、永続的な起床通知を必要な単位で一括確定する。別々のファイル実行キューと上司台帳を突き合わせる構成ではない。
 
-```
-┌─────────────────────────────────────────────────┐
-│  Layer 1: 実行キュー（Execution Queue）            │  ← 最も厳格。機械的に処理
-│  state/pending/*.json                            │
-├─────────────────────────────────────────────────┤
-│  Layer 2: タスクレジストリ（Task Registry）         │  ← 構造化。ツール経由で管理
-│  state/task_queue.jsonl                          │
-├─────────────────────────────────────────────────┤
-│  Layer 3: ワーキングメモリ（Working Memory）        │  ← 自由形式。自己管理
-│  state/current_state.md                          │
-└─────────────────────────────────────────────────┘
-```
+確認は `list_tasks` / `task_tracker`、変更は `submit_tasks` / `delegate_task` / `update_task` を使う。DB やタスクファイルを直接編集しない。`backlog_task` は追跡のみの作業を登録し、実行権は取得しない。
 
-## Layer 1: 実行キュー（state/pending/*.json）
+## 実行契約
 
-メッセージキュー（SQS / RabbitMQ）に相当する。
+1. 新規 `submit_tasks` はタスクと完全な入力を原子的に公開する。原指示・制約・workspace・完了条件を保持する。
+2. ホストが依存関係を確認し、一意の試行トークンで実行権を取得する。`in_progress` を設定するのはホストだけ。
+3. エージェントは `update_task` で `done` / `pending` / `cancelled` を宣言する。古い試行は新しい試行の完了や受理済み結果を上書きできない。
+4. 依存先の完了と永続的な起床はホストが扱い、定期 Heartbeat を必要としない。取消・異常終了・中断は証跡と要対応理由を残す。
+5. 中断タスクは盲目的に再試行しない。既済操作を確認して原因を解消したら、`submit_tasks(..., tasks=[{"task_id": "ID", "resume": true}])` で同じ未終了タスクを明示的に再開する。入力と履歴は保持される。resume なしの再配信は冪等。
 
-| 特性 | 説明 |
-|------|------|
-| フォーマット | JSON（スキーマ固定） |
-| ライフサイクル | 投入 → 消費 → 削除（一時的） |
-| 管理主体 | システム（PendingTaskExecutor が自動消費） |
-| 書き込み元 | `submit_tasks`, `delegate_task` |
-| 読み取り元 | PendingTaskExecutor（3秒ポーリング） |
+上司の委譲ビューは部下の正本タスクへのエイリアス。別の可変台帳や Heartbeat 同期を介さず、双方に最新状態が反映される。依存先の終了が成功とは限らず、取消済みを done と見なして後続を動かさない。
 
-タスクの完全な記述（description, acceptance_criteria, constraints, depends_on, workspace 等）を含む。
-PendingTaskExecutor が検出すると `processing/` に移動して実行し、完了後に削除する。
-失敗時は `failed/` に移動する。
+## 作業文脈と証跡
 
-- **workspace**: タスクに `workspace` フィールドがある場合、レジストリで解決した絶対パスが `working_directory` として TaskExec のプロンプトに注入される。
-- **task_results**: 完了タスクの結果要約は `state/task_results/{task_id}.md` に保存される（最大2000文字）。依存タスクはこの結果をコンテキストとして自動受信。7日TTLで自動削除。
+`state/current_state.md` は簡潔な作業文脈で、タスクの正本ではない。観察・計画・ブロッカーを残し、通常のセッション境界では保持する。恒久知識と手順は専用の記憶領域に保存する。
 
-Anima はこの層を直接操作しない。ツール経由で間接的に書き込む。
+TaskExec の結果要約は `state/task_results/{task_id}/{attempt_token}.md` に置き、TaskStore が受理済み結果を選ぶ。ファイル名や古い要約だけで完了を証明できない。活動ログと原指示を証跡として保持する。
 
-## Layer 2: タスクレジストリ（state/task_queue.jsonl）
+## 旧保存先とコマンドタスク
 
-イシュートラッカー（Jira / GitHub Issues）に相当する。
+旧 `state/task_queue.jsonl` と `state/pending/` は移行・エクスポート用の証跡のみであり、保存する。移行は旧書き込み処理の停止とバックアップ後に運用者が明示的に行う。任意の読み取りで稼働中の旧データをインポートしない。
 
-| 特性 | 説明 |
-|------|------|
-| フォーマット | append-only JSONL（TaskEntry スキーマ） |
-| ライフサイクル | 登録 → ステータス遷移 → compact でアーカイブ（永続的） |
-| 管理主体 | Anima（ツール経由） + システム（Priming 注入、compact） |
-| 書き込み | `submit_tasks`, `update_task`, `delegate_task` |
-| 読み取り | `format_for_priming`, Heartbeat compact（一覧は CLI: animaworks-tool task list） |
+長時間コマンドツールは別。`animaworks-tool submit` は引き続き `state/background_tasks/pending/` を使い、BackgroundTaskManager がコマンド状態・通知を保存する。LLM タスクの変更を理由にこのファイル経路を撤去しない。
 
-タスクの要約情報（task_id, summary, status, deadline, assignee）を保持する。
-Priming の Channel E で pending / in_progress タスクがシステムプロンプトに注入される。
-「何をやるべきか」の公式記録であり、人間からのタスク（source=human）は必ずここに登録する。
-
-## Layer 3: ワーキングメモリ（state/current_state.md）
-
-個人ノート・付箋メモに相当する。
-
-| 特性 | 説明 |
-|------|------|
-| フォーマット | Markdown（自由形式） |
-| ライフサイクル | Anima が自由に作成・更新。通常境界では保持され、デフォルト8000文字で trim（`heartbeat.current_state_max_chars`、0 = 無効） |
-| 管理主体 | Anima（完全な裁量） |
-| 書き込み | Anima が直接ファイル操作 |
-| 読み取り | Anima 自身、Priming（current_state.md）、上司（read_subordinate_state） |
-
-`current_state.md` は「今まさに何をしているか」「何を観察したか」「どんなブロッカーがあるか」を記録するワーキングメモリ。
-タスクの追跡・管理は Layer 2（task_queue.jsonl）が担う。
-
-> **pending.md は廃止済み**: 以前存在した `state/pending.md` は `current_state.md` に統合された後、自動削除される。タスクのバックログ管理は Layer 2 に一本化されている。
-
-## 層間の関係
-
-### データの流れ
-
-```
-人間の指示 ─┬─► submit_tasks ─────────────────► Layer 2 (task_queue.jsonl)
-            └─► Anima が current_state.md に記録 ► Layer 3
-
-submit_tasks ─┬─► state/pending/*.json ──────► Layer 1 (実行キュー)
-            └─► task_queue.jsonl に登録 ────► Layer 2 (タスクレジストリ)
-
-delegate_task ─┬─► 部下の state/pending/ ──► Layer 1
-               ├─► 部下の task_queue.jsonl ► Layer 2
-               └─► 自分の task_queue.jsonl ► Layer 2 (status=delegated)
-
-PendingTaskExecutor ─┬─► 完了 → task_queue を done に更新
-                     └─► 失敗 → task_queue を failed に更新
-
-update_task(status="pending") ─► meta.task_desc から Layer 1 JSON 再生成 ► Layer 1 (リトライ)
-
-セッション終了 ─┬─► 解決済みタスク → task_queue.jsonl を done に更新
-               └─► 新規タスク検出 → task_queue.jsonl に自動登録
-```
-
-### 同期ルール
-
-| イベント | Layer 1 | Layer 2 | Layer 3 |
-|---------|---------|---------|---------|
-| submit_tasks 投入 | JSON 作成 | pending で登録 | — |
-| delegate_task 投入 | JSON 作成（部下） | 両者に登録 | — |
-| TaskExec 完了 | JSON 削除 | done に更新 | — |
-| TaskExec 失敗 | failed/ に移動 | failed に更新 | — |
-| TaskExec リトライ | JSON 再作成 | pending→in_progress | — |
-| セッション終了: 解決 | — | done に更新 | — |
-| セッション終了: 新規 | — | pending で登録 | — |
-| Anima が着手 | — | in_progress に更新 | current_state.md 更新 |
-| Anima が完了 | — | done に更新 | idle に戻す |
-| Heartbeat 後 | — | compact 実行 | — |
-
-### 各層が「知らなくてよい」こと
-
-- **Layer 1** は Layer 2/3 の存在を知らない（PendingTaskExecutor は JSON を消費するだけ）
-- **Layer 3** は Layer 1/2 の存在を知らなくてよい（Anima のワーキングメモリ）
-- **Layer 2** が Layer 1 と Layer 3 を橋渡しする中心的な追跡レイヤー
-
-## 設計原則
-
-1. **全てのタスクは Layer 2 に登録される**: submit_tasks, delegate_task いずれの経路でも task_queue.jsonl にエントリが存在する
-2. **Layer 1 は一時的**: 実行キューのファイルは消費されたら消える。永続的な記録は Layer 2 が担う
-3. **Layer 2 がSSoT**: タスクの「公式な状態」は task_queue.jsonl のステータスで判定する
-4. **Layer 3 は自由**: Anima のワーキングメモリであり、システムは制約を課さない
-5. **PendingTaskExecutor は Layer 2 を更新する**: 完了・失敗時に task_queue.jsonl のステータスを同期する
+ツール例は `reference/operations/task-management.md`、コマンド実行は `operations/background-tasks.md` を参照。

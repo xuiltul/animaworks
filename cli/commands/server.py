@@ -209,7 +209,7 @@ def _process_data_dir(pid: int, cmdline: list[str] | None) -> Path | None:
 
 
 def _stop_server(
-    timeout: int = 10,
+    timeout: int = 90,
     *,
     force: bool = False,
     extra_exclude_pids: set[int] | None = None,
@@ -221,7 +221,9 @@ def _stop_server(
     still be stopped even when the PID file was lost.
 
     Args:
-        timeout: Maximum seconds to wait before reporting failure.
+        timeout: Maximum seconds to wait before reporting failure. The default
+            covers HTTP drain, parallel worker shutdown and vector cleanup;
+            a worker's individual stop budget is not the server-wide budget.
         force: If True, escalate to SIGKILL after SIGTERM timeout.
         extra_exclude_pids: Additional PIDs to exclude from process
             scanning (e.g. the restart helper).
@@ -739,6 +741,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
 
     try:
         app = create_app(get_animas_dir(), get_shared_dir())
+        app.state.listen_port = args.port
         uvicorn.run(
             app,
             host=args.host,

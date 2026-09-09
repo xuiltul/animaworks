@@ -141,14 +141,53 @@ animaworks chat alice "こんにちは"
 animaworks chat alice "タスクの進捗を教えて" --from admin
 ```
 
+メッセージを省略すると、応答をストリーミング表示し、ツール呼び出し・思考・状態を
+リアルタイムに確認できる対話型ターミナル UI（TUI）が起動します。`Esc` で中断できます。
+
+TUI には組織の概観と操作ショートカットも用意されています。
+
+- **サイドバー**（`Ctrl+B` で開閉）に全 anima ・各状態・活動フィード
+  （ツール実行、heartbeat、board 投稿、通知）を表示します。- `/` を入力すると**コマンドパレット**が開き、組み込みスラッシュコマンドと現在の
+  anima が参照可能なスキルを補完します。スキルを選ぶと（例: `/skill <name>`）
+  現在のスレッドで有効化されます。
+- `/anima <name>` で anima 切替、`/animas` で一覧表示、`/skills` ・
+  `/skill <name> [--confirm] [--off]` でスキル管理ができます。
+- チャンネルは `/board [channel] [n]` で閲覧、`/post <channel> <text>` で投稿、
+  タスクは `/tasks [anima]` で一覧表示できます。
+- `call_human` 要求は選択肢付きの通知カードとして届き、クリックか `/approve <callback_id> [option]` で解決できます。
+
+TUI 内で `/help` を実行すると全コマンドが確認できます。
+
+```bash
+animaworks chat alice            # 対話型 TUI
+animaworks chat alice --no-tui   # stdin から本文を読んで一回返答
+animaworks chat --resume         # 直近の TUI セッションを再開
+animaworks chat --resume <id>    # 指定セッションを再開
+animaworks chat --sessions       # 保存済み TUI セッションを一覧して終了
+```
+
+セッションは `$ANIMAWORKS_TUI_DIR/sessions`（既定 `~/.animaworks/tui/sessions`）に保存されます。
+起動時、TUI は進行中のストリームに自動再接続します（`--no-reattach` で無効化）。
+トランスクリプトの最上部までスクロールすると古い履歴を遅延読み込みします。
+
 | 引数 | 型 | 必須 | 説明 |
 |------|-----|------|------|
-| `anima` | positional | 必須 | Anima名 |
-| `message` | positional | 必須 | 送信メッセージ |
+| `anima` | positional | 任意 | Anima名（`--resume` 時は省略可） |
+| `message` | positional | 任意 | 送信メッセージ（省略すると TUI が起動） |
 
 | オプション | 型 | デフォルト | 説明 |
 |-----------|-----|-----------|------|
-| `--from` | string | "human" | 送信者名 |
+| `--from`（別名 `--as`） | string | "human" | 送信者名 |
+| `--thread` | string | "default" | スレッド ID |
+| `--no-tui` | flag | - | TUI を開かず stdin から本文を読む |
+| `--resume` | string | - | 前回セッションを再開（SESSION_ID 省略時は直近） |
+| `--sessions` | flag | - | 保存済み TUI セッションを一覧して終了 |
+| `--user` | string | - | 認証ありゲートウェイのユーザー名 |
+| `--password` | string | - | 認証ありゲートウェイのパスワード（プロセス一覧に出る） |
+| `--no-reattach` | flag | - | 起動時のストリーム復帰を行わない |
+
+キーバインドは `$ANIMAWORKS_TUI_DIR/keybindings.json`（既定 `~/.animaworks/tui/keybindings.json`）で
+カスタマイズできます。現在のバインドは `/keys` で確認できます。
 
 ---
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""E2E coverage for signed GitHub webhooks and review dispatch."""
+"""E2E coverage for signed GitHub webhooks and the single-notification dispatch."""
 
 import hashlib
 import hmac
@@ -39,8 +39,8 @@ def _wait_until(predicate, *, timeout: float = 2.0) -> None:
     pytest.fail("GitHub webhook background dispatch did not finish in time")
 
 
-def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
-    """Signed synchronize event reaches sumire after the quiet period."""
+def test_signed_pr_webhook_notifies_dispatcher_after_quiet_period(data_dir, monkeypatch):
+    """Signed synchronize event reaches rin (dispatcher_anima) after the quiet period."""
     secret = secrets.token_hex(32)
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", secret)
 
@@ -50,7 +50,6 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
         config=GitHubWebhookConfig(
             enabled=True,
             repos=["example-org/example-repo"],
-            reviewer_anima="sumire",
             dispatcher_anima="rin",
             quiet_seconds=0.05,
         ),
@@ -84,6 +83,7 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
             "title": "Webhook-driven PR review dispatch",
             "draft": False,
             "html_url": "https://github.com/example-org/example-repo/pull/42",
+            "user": {"login": "animaworks-dev-team"},
             "head": {
                 "ref": "feat/webhook-dispatch",
                 "sha": sha,
@@ -92,7 +92,7 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
         "sender": {"login": "animaworks-dev-team", "type": "User"},
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    inbox_dir = shared_dir / "inbox" / "sumire"
+    inbox_dir = shared_dir / "inbox" / "rin"
 
     with TestClient(app) as client:
         invalid = client.post(
@@ -128,40 +128,39 @@ def test_signed_pr_webhook_dispatches_to_real_inbox(data_dir, monkeypatch):
             except (FileNotFoundError, json.JSONDecodeError):
                 return False
             entry = state.get("prs", {}).get("example-org/example-repo#42", {})
-            return entry.get("notified_sha") == sha
+            return entry.get("notified", {}).get("push") == sha
 
         _wait_until(_state_notified)
 
         files = list(inbox_dir.glob("*.json"))
         message = Message.model_validate_json(files[0].read_text(encoding="utf-8"))
-        assert message.to_person == "sumire"
+        assert message.to_person == "rin"
         assert message.source == "system"
         assert message.intent == "report"
-        assert "【PR新規コミット検出（push静穏確認済み）】" in message.content
+        assert "【GitHub通知】" in message.content
         assert "example-org/example-repo#42" in message.content
-        assert sha[:8] in message.content
+        assert "delegate_task" in message.content
 
         state = json.loads(state_file.read_text(encoding="utf-8"))
         entry = state["prs"]["example-org/example-repo#42"]
         assert entry["sha"] == sha
-        assert entry["notified_sha"] == sha
+        assert entry["notified"]["push"] == sha
 
     assert manager._started is False
     assert manager._event_tasks == set()
     assert manager._debounce_tasks == {}
 
 
-def test_signed_command_comment_creates_real_implementer_task(data_dir, make_anima, monkeypatch):
+def test_signed_command_comment_notifies_dispatcher_without_creating_tasks(data_dir, monkeypatch):
+    """A GitHub comment only produces one notification; the gateway creates no task."""
     secret = secrets.token_hex(32)
     monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", secret)
-    target_dir = make_anima("natsume")
     shared_dir = data_dir / "shared"
     manager = GitHubWebhookManager(
         config=GitHubWebhookConfig(
             enabled=True,
             repos=["example-org/example-repo"],
             dispatcher_anima="rin",
-            implementer_anima="natsume",
             bot_login="example-bot",
         ),
         shared_dir=shared_dir,
@@ -191,6 +190,7 @@ def test_signed_command_comment_creates_real_implementer_task(data_dir, make_ani
         },
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    inbox_dir = shared_dir / "inbox" / "rin"
 
     with TestClient(app) as client:
         response = client.post(
@@ -203,11 +203,10 @@ def test_signed_command_comment_creates_real_implementer_task(data_dir, make_ani
             },
         )
         assert response.status_code == 200
-        pending = target_dir / "state" / "pending" / "gh-cmd-123.json"
-        _wait_until(pending.exists)
+        _wait_until(lambda: len(list(inbox_dir.glob("*.json"))) == 1)
 
-        task = json.loads(pending.read_text(encoding="utf-8"))
-        assert task["task_id"] == "gh-cmd-123"
-        assert task["submitted_by"] == "github-event-dispatch"
-        assert "@example-bot resolve this conflict" in task["description"]
-        assert not (shared_dir / "inbox" / "rin").exists()
+        files = list(inbox_dir.glob("*.json"))
+        message = Message.model_validate_json(files[0].read_text(encoding="utf-8"))
+        assert message.to_person == "rin"
+        assert "@example-bot resolve this conflict" in message.content
+        assert not (shared_dir / "animas").exists()

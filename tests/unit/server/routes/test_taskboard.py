@@ -78,10 +78,9 @@ class TestTaskBoardList:
             visibility="snoozed",
             snoozed_until="2026-05-15T00:00:00+09:00",
         )
-        queue.queue_path.write_text(
-            queue.queue_path.read_text(encoding="utf-8") + "\n{bad-json\n",
-            encoding="utf-8",
-        )
+        # A stale legacy file cannot alter a canonical board or its diagnostics.
+        queue.queue_path.parent.mkdir(parents=True, exist_ok=True)
+        queue.queue_path.write_text("\n{bad-json\n", encoding="utf-8")
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -94,7 +93,7 @@ class TestTaskBoardList:
         assert default_resp.json()["tasks"][0]["column"] == "waiting"
         assert default_resp.json()["tasks"][0]["updated_at"] is not None
         assert default_resp.json()["columns"][0] == {"id": "todo", "title": "Todo", "count": 0}
-        assert default_resp.json()["meta"]["warnings"]["corrupt_task_queue_lines"] == 1
+        assert default_resp.json()["meta"]["warnings"]["corrupt_task_queue_lines"] == 0
 
         full_data = full_resp.json()
         assert {task["task_id"] for task in full_data["tasks"]} == {

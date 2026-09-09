@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import io
 import json
+import shlex
+import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -58,8 +61,8 @@ class TestCommandRunnerIdGeneration:
         assert CommandRunner._next_id() == "cmd_3"
 
     def test_custom_prefix(self):
-        assert CommandRunner._next_id("machine") == "machine_1"
-        assert CommandRunner._next_id("machine") == "machine_2"
+        assert CommandRunner._next_id("batch") == "batch_1"
+        assert CommandRunner._next_id("batch") == "batch_2"
 
 
 class TestCommandRunnerStart:
@@ -120,13 +123,44 @@ class TestCommandRunnerStart:
         assert "exit_code: 42" in content
 
     def test_background_removed_from_active_on_completion(self, tmp_path: Path):
-        runner = CommandRunner("echo fast", tmp_path, timeout=10)
         output_dir = tmp_path / "state" / "cmd_output"
-        cmd_id = runner.start(output_dir)
-        assert cmd_id in CommandRunner._active
+        # The child cannot finish until the test explicitly releases it. An
+        # immediate `echo` may legitimately finish before start() returns.
+        with socket.socket() as gate:
+            gate.bind(("127.0.0.1", 0))
+            gate.listen(1)
+            gate.settimeout(2)
+            child_code = (
+                "import socket; "
+                f"s = socket.create_connection({gate.getsockname()!r}, timeout=2); "
+                "s.sendall(b'ready'); "
+                "assert s.recv(1) == b'!'; "
+                "s.close(); print('fast', flush=True)"
+            )
+            runner = CommandRunner(shlex.join([sys.executable, "-c", child_code]), tmp_path, timeout=10)
+            cmd_id = runner.start(output_dir)
+            waiter = next(t for t in threading.enumerate() if t.name == f"cmd-wait-{cmd_id}")
+            try:
+                connection, _ = gate.accept()
+                with connection:
+                    connection.settimeout(2)
+                    try:
+                        with connection.makefile("rb") as signal:
+                            assert signal.read(5) == b"ready"
+                        assert runner.process is not None
+                        assert runner.process.poll() is None
+                        assert CommandRunner._active[cmd_id] is runner
+                    finally:
+                        connection.sendall(b"!")
+            finally:
+                waiter.join(timeout=3)
 
-        time.sleep(2)
+        assert not waiter.is_alive()
         assert cmd_id not in CommandRunner._active
+        content = (output_dir / f"{cmd_id}.txt").read_text()
+        assert "\nfast\n" in content
+        assert "--- FINISHED ---" in content
+        assert "exit_code: 0" in content
 
     def test_creates_output_dir_if_missing(self, tmp_path: Path):
         runner = CommandRunner("echo test", tmp_path, timeout=10)

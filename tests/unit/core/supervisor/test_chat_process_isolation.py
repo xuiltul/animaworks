@@ -258,7 +258,7 @@ async def test_child_stream_contract_keeps_existing_double_json(tmp_path: Path) 
     ]
 
 
-def test_chat_journal_recovery_persists_once_after_child_crash(tmp_path: Path) -> None:
+async def test_chat_journal_recovery_persists_once_after_child_crash(tmp_path: Path) -> None:
     anima_dir = tmp_path / "animas" / "sakura"
     anima_dir.mkdir(parents=True)
     journal = StreamingJournal(anima_dir, thread_id="default")
@@ -268,8 +268,8 @@ def test_chat_journal_recovery_persists_once_after_child_crash(tmp_path: Path) -
     owner = SimpleNamespace(model_config=ModelConfig(model="claude-sonnet-4-6", max_tokens=4096))
     supervisor = TaskRunnerSupervisor("sakura", anima_dir, tmp_path / "shared", busy_status_owner=owner)
 
-    supervisor._recover_task_journals(("chat",))
-    supervisor._recover_task_journals(("chat",))
+    await supervisor._recover_task_journals(("chat",))
+    await supervisor._recover_task_journals(("chat",))
 
     turns = ConversationMemory(anima_dir, owner.model_config).load().turns
     assistant_turns = [turn for turn in turns if turn.role == "assistant"]

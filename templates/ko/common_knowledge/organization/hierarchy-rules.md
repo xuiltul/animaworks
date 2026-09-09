@@ -66,26 +66,24 @@ To alice: 캐싱 전략에 대한 판단을 부탁드립니다.
 | `org_dashboard` | 전체 배하(재귀) | 배하 전체의 프로세스 상태, 최종 활동, 현재 태스크, 태스크 수를 트리로 표시 | 없음 |
 | `ping_subordinate` | 전체 배하(재귀) | 배하의 생존 확인. `name` 생략 시 전원 일괄, 지정 시 단일 Anima | `name` (선택) |
 | `read_subordinate_state` | 전체 배하(재귀) | 배하의 `state/current_state.md` 읽기 | `name` (필수) |
-| `delegate_task` | 전체 배하(재귀) | 태스크 위임 (배하 큐 추가 + DM 전송 + 자신 측 추적 엔트리 생성) | `name`, `instruction`, `deadline` (필수), `summary` (선택) |
+| `delegate_task` | 직속 부하만 | 완전한 실행 입력과 추적 참조를 원자적으로 등록하고 부하에게 통지 | `name`, `instruction` (필수), `summary`, `acceptance_criteria`, `workspace`, `model` (선택) |
 | `task_tracker` | 자신의 위임 태스크 | `delegate_task`로 위임한 태스크의 진행 상황을 배하 측 큐에서 추적 | `status` (선택: "all"/"active"/"completed", 기본값 "active") |
 | `audit_subordinate` | 전체 배하(재귀) | 활동 타임라인 또는 통계 요약을 생성. `name` 생략 시 전체 배하를 일괄 감사 (통합 타임라인) | `name` (선택), `mode` (선택: `"report"`/`"summary"`, 기본값 `"report"`), `hours` (선택: 1~168, 기본값 24), `direct_only` (선택: boolean), `since` (선택: `"HH:MM"` 오늘의 시작 시각, 지정 시 hours보다 우선) |
 | `disable_subordinate` | 전체 배하(재귀) | 배하를 정지 (status.json enabled=false, 약 30초 후 프로세스 정지) | `name` (필수), `reason` (선택) |
 | `enable_subordinate` | 전체 배하(재귀) | 정지된 배하를 재개 | `name` (필수) |
 | `set_subordinate_model` | 전체 배하(재귀) | 배하의 모델을 변경 (status.json 업데이트. 반영에는 `restart_subordinate`가 필요) | `name`, `model` (필수), `reason` (선택) |
-| `set_subordinate_background_model` | 전체 배하(재귀) | 배하의 백그라운드 모델(Heartbeat/Inbox/Cron용)을 변경. 빈 문자열로 초기화. 반영에는 `restart_subordinate`가 필요 | `name`, `model` (필수), `credential`, `reason` (선택) |
+| `set_subordinate_background_model` | 전체 배하(재귀) | 배하의 백그라운드 모델(Heartbeat/Cron용, Inbox는 메인)을 변경. 빈 문자열로 초기화. 반영에는 `restart_subordinate`가 필요 | `name`, `model` (필수), `credential`, `reason` (선택) |
 | `restart_subordinate` | 전체 배하(재귀) | 배하 프로세스를 재시작 (restart_requested 플래그, 약 30초 후 재시작) | `name` (필수), `reason` (선택) |
 
 `check_permissions`는 모든 Anima가 사용 가능합니다 (자신의 권한 목록을 확인).
 
 ### 태스크 위임 플로우
 
-1. `delegate_task(name="dave", instruction="...", deadline="...")`를 실행
-   - `deadline`은 상대 형식(`30m`, `2h`, `1d`) 또는 ISO8601 형식(예: `2026-02-20`)
-   - `summary`는 선택 (생략 시 instruction의 처음 100자)
-2. dave의 태스크 큐(`state/task_queue.jsonl`)에 태스크가 자동 추가됩니다
-3. dave의 `state/pending/`에 태스크 JSON이 기록되어 즉시 실행됩니다
-4. dave에게 DM이 자동 전송됩니다
-5. 자신의 큐에 추적 엔트리가 생성됩니다 (status="delegated")
+1. `delegate_task(name="dave", instruction="목적, 결과물, 제약, 기한과 필요한 문맥", acceptance_criteria=["검증 가능한 완료 조건"])`를 실행합니다.
+2. 완전한 입력과 추적 참조가 정규 태스크 저장소에 원자적으로 등록됩니다.
+3. 워커가 의존 관계와 가용 용량을 확인한 후 실행 가능한 태스크를 획득합니다.
+4. dave에게 DM으로 통지합니다. DM은 실행 입력이 아니며 누락 태스크를 재생성하는 데 쓰지 않습니다.
+5. 자신의 위임 추적 엔트리는 같은 태스크의 참조이며 별도의 변경 가능한 복사본이 아닙니다.
 6. `task_tracker(status="active")`로 진행 중인 위임 태스크를 추적합니다 (`status="all"`로 전체, `status="completed"`로 완료분만)
 
 ### 배하 상태 확인 (정기적으로 수행해야 함)

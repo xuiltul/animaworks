@@ -40,7 +40,7 @@ async def _collect(agent, thread_id):
     from core._agent_cycle import CycleMixin
 
     run = types.MethodType(CycleMixin.run_cycle_streaming, agent)
-    return [chunk async for chunk in run("prompt", "message:taka", thread_id=thread_id)]
+    return [chunk async for chunk in run("prompt", "message:owner", thread_id=thread_id)]
 
 
 @pytest.mark.asyncio
@@ -52,7 +52,7 @@ async def test_streaming_cycle_result_thread_id_follows_request_thread():
     """
     from core.schemas import CycleResult
 
-    inner = CycleResult(trigger="message:taka", action="respond", summary="hi").model_dump(mode="json")
+    inner = CycleResult(trigger="message:owner", action="respond", summary="hi").model_dump(mode="json")
     assert inner["thread_id"] == "default"
 
     agent = _DummyAgent([{"type": "cycle_done", "cycle_result": inner}])

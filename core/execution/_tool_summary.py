@@ -8,13 +8,40 @@ so the UI can show *what* a tool is doing while it runs.
 
 from typing import Any
 
+_GENERIC_VALUE_LIMIT = 60
+_GENERIC_LIMIT = 120
+
+
+def _generic_summary(args: dict[str, Any]) -> str:
+    """Return a ``key=value`` one-liner for tools without a dedicated case.
+
+    Keeps every tool call readable in the UI — MCP tools and newly added
+    tools included — instead of showing the bare tool name.
+    """
+    parts: list[str] = []
+    for key, value in args.items():
+        if value is None or value == "" or value == [] or value == {}:
+            continue
+        text = " ".join(str(value).split())
+        if len(text) > _GENERIC_VALUE_LIMIT:
+            text = text[:_GENERIC_VALUE_LIMIT] + "…"
+        parts.append(f"{key}={text}")
+    return ", ".join(parts)[:_GENERIC_LIMIT]
+
 
 def summarize_tool_args(tool_name: str, args: dict[str, Any]) -> str:
     """Return a concise human-readable summary of *args* for *tool_name*.
 
-    Returns empty string for unknown tools (caller should skip
-    emitting ``tool_detail`` in that case).
+    Tools without a dedicated case — and dedicated cases whose keys are
+    absent — fall back to a generic ``key=value`` line; an empty string
+    means there is nothing worth showing (caller should skip emitting
+    ``tool_detail`` in that case).
     """
+    return _known_summary(tool_name, args) or _generic_summary(args)
+
+
+def _known_summary(tool_name: str, args: dict[str, Any]) -> str:
+    """Return the per-tool summary, or "" when the tool has no case."""
     match tool_name:
         case "Bash" | "execute_command":
             return (args.get("command") or "")[:120]
@@ -55,7 +82,7 @@ def summarize_tool_args(tool_name: str, args: dict[str, Any]) -> str:
         case "manage_channel":
             return f"{args.get('action', '')} #{args.get('channel', '')}"
         case _:
-            return ""
+            return _generic_summary(args)
 
 
 def make_tool_detail_chunk(

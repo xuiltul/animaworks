@@ -17,6 +17,7 @@ read_memory_file(path="reference/anatomy/anima-anatomy.md")  # 예시
 | 파일 | 내용 |
 |------|------|
 | `anatomy/anima-anatomy.md` | Anima 구성 파일 완전 가이드 (전체 파일의 역할, 변경 규칙, 캡슐화) |
+| `anatomy/environment-layout.md` | 런타임 디렉토리 구성과 권한 |
 | `anatomy/memory-system.md` | 기억 시스템 가이드 |
 | `anatomy/priming-channels.md` | Priming 채널 기술 레퍼런스 |
 | `anatomy/working-memory.md` | Working Memory(state/) 기술 레퍼런스 |
@@ -42,6 +43,7 @@ read_memory_file(path="reference/anatomy/anima-anatomy.md")  # 예시
 |------|------|
 | `operations/browser-automation-guide.md` | agent-browser를 이용한 헤드리스 브라우저 자동화 |
 | `operations/heartbeat-cron-guide.md` | 정기 실행 설정 및 운영 |
+| `operations/memory-writing-guide.md` | 기억 기록 위치와 정기 실행 선택 |
 | `operations/mode-s-auth-guide.md` | Mode S 인증 모드 설정 (API/Bedrock/Vertex/Max) |
 | `operations/model-guide.md` | 모델 선택, 실행 모드, 컨텍스트 윈도우 기술 상세 |
 | `operations/project-setup.md` | 프로젝트 초기 설정 (`animaworks init`, 디렉토리 구조) |

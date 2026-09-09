@@ -46,8 +46,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("animaworks.tool_handler")
 
-_SEARCH_MAX_TOKENS = 25_000
-_SEARCH_MAX_LINES = 2_000
+_SEARCH_MAX_TOKENS = 8_000
+_SEARCH_MAX_LINES = 600
 _SEARCH_CONTEXT_BASE = 128_000
 _SEARCH_MIN_RESULTS = 3
 _PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")

@@ -16,14 +16,13 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 
 import pytest
 
 # ── Skip if playwright not available ─────────────────────────
 
 try:
-    from playwright.sync_api import sync_playwright, Browser, Page
+    from playwright.sync_api import Browser, Page, sync_playwright
     HAS_PLAYWRIGHT = True
 except ImportError:
     HAS_PLAYWRIGHT = False
@@ -49,42 +48,9 @@ BASE_URL = f"{SERVER_HOST}:{SERVER_PORT}"
 # ── Test App (ASGI) approach for static file serving ─────────
 
 def _create_static_app():
-    """Create a minimal ASGI app that serves static files only.
+    from tests.e2e._static_app import create_static_app
 
-    This avoids needing the full AnimaWorks server with ProcessSupervisor.
-    Serves the entire server/static/ directory including workspace/.
-    """
-    try:
-        from fastapi import FastAPI
-        from fastapi.staticfiles import StaticFiles
-
-        project_root = Path(__file__).resolve().parents[2]
-        static_dir = project_root / "server" / "static"
-
-        if not static_dir.exists():
-            return None
-
-        app = FastAPI()
-
-        # Mount workspace first (nested path must come before root)
-        workspace_dir = static_dir / "workspace"
-        if workspace_dir.exists():
-            app.mount(
-                "/workspace",
-                StaticFiles(directory=str(workspace_dir), html=True),
-                name="workspace",
-            )
-
-        # Mount root static directory — serves index.html, styles/, modules/
-        app.mount(
-            "/",
-            StaticFiles(directory=str(static_dir), html=True),
-            name="static",
-        )
-
-        return app
-    except ImportError:
-        return None
+    return create_static_app()
 
 
 # ── Fixtures ─────────────────────────────────────────────────
@@ -122,6 +88,7 @@ def static_server():
         return
 
     import threading
+
     import uvicorn
 
     server = uvicorn.Server(

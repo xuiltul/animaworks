@@ -12,17 +12,16 @@ write and reuse exactly the same mapping when resuming an interrupted merge.
 """
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from core.memory._io import atomic_write_text
-from core.memory.task_queue import TaskQueueManager
-from core.schemas import TaskEntry
+from core.taskboard.tasks import TaskStore, task_database_path
 
 from .taskboard_refs import rewrite_taskboard, taskboard_ids
 
-_ACTIVE_STATUSES = frozenset({"pending", "in_progress", "blocked", "delegated"})
 _NAME_FIELDS = frozenset(
     {
         "anima",
@@ -38,14 +37,7 @@ _NAME_FIELDS = frozenset(
     }
 )
 _LOCAL_TASK_ID_FIELDS = frozenset({"task_id", "tracking_task_id"})
-_PENDING_ROOTS = (
-    Path("state/pending"),
-    Path("state/background_tasks/pending"),
-)
-
-
-def _json_line(value: dict[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+_PENDING_ROOTS = (Path("state/background_tasks/pending"),)
 
 
 def _read_json_object(path: Path) -> dict[str, Any] | None:
@@ -57,8 +49,28 @@ def _read_json_object(path: Path) -> dict[str, Any] | None:
 
 
 def _queue_ids(anima_dir: Path) -> set[str]:
+    # Read-only planning must not trigger a migration or create a database.
+    database = task_database_path(anima_dir)
+    if database.is_file():
+        with sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True) as db:
+            tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "tasks" in tables:
+                result = {row[0] for row in db.execute("SELECT task_id FROM tasks WHERE anima=?", (anima_dir.name,))}
+                result.update(
+                    row[0] for row in db.execute("SELECT alias FROM task_aliases WHERE viewer=?", (anima_dir.name,))
+                )
+                if db.execute("SELECT 1 FROM task_imports WHERE anima=?", (anima_dir.name,)).fetchone():
+                    return result
+            else:
+                result = set()
+    else:
+        result = set()
+    # Unmigrated JSONL is only an import-planning surface, never runtime authority.
+    for descriptor in (anima_dir / "state" / "pending").rglob("*.json"):
+        payload = _read_json_object(descriptor)
+        if payload and payload.get("task_type") == "llm" and isinstance(payload.get("task_id"), str):
+            result.add(payload["task_id"])
     path = anima_dir / "state" / "task_queue.jsonl"
-    result: set[str] = set()
     if not path.is_file():
         return result
     try:
@@ -94,7 +106,9 @@ def _result_ids(anima_dir: Path) -> set[str]:
     root = anima_dir / "state" / "task_results"
     if not root.is_dir():
         return set()
-    return {path.stem for path in root.glob("*.md") if path.is_file()}
+    return {
+        path.name if path.is_dir() else path.stem for path in root.iterdir() if path.is_dir() or path.suffix == ".md"
+    }
 
 
 def _all_owned_ids(anima_dir: Path, db_path: Path, anima_name: str) -> set[str]:
@@ -198,91 +212,20 @@ class TaskReferenceRewriter:
             "taskboard": taskboard_artifacts,
         }
 
-    def _active_source_tasks(self, mapping: dict[str, str]) -> list[dict[str, Any]]:
-        current = _replay_queue(self.source_dir / "state" / "task_queue.jsonl")
-        migrated: list[dict[str, Any]] = []
-        for old_id, entry in sorted(current.items()):
-            if entry.status not in _ACTIVE_STATUSES or old_id not in mapping:
-                continue
-            raw = entry.model_dump(mode="json")
-            rewritten = _rewrite_value(
-                raw,
-                source=self.source,
-                target=self.target,
-                mapping=mapping,
-                owner_is_source=True,
-            )
-            rewritten = _rewrite_anima_paths(rewritten, self.source_dir, self.target_dir)
-            migrated.append(rewritten)
-        return migrated
-
     def _rewrite_queues(self, mapping: dict[str, str]) -> dict[str, Any]:
-        updated: list[str] = []
-        recreated: list[str] = []
-        active_source = self._active_source_tasks(mapping)
+        # Import each legacy source once before the atomic ownership transfer.
+        store = TaskStore(task_database_path(self.source_dir))
+        for anima_dir in sorted(self.animas_dir.iterdir()):
+            if anima_dir.is_dir():
+                store.import_legacy(anima_dir)
 
-        for anima_dir in sorted(self.animas_dir.iterdir()) if self.animas_dir.is_dir() else []:
-            if not anima_dir.is_dir() or anima_dir.name == self.source:
-                continue
-            path = anima_dir / "state" / "task_queue.jsonl"
-            manager = TaskQueueManager(anima_dir)
-            with manager._locked_queue():  # noqa: SLF001 - same lock as runtime appends
-                changed, recreated_here = self._rewrite_queue_file(
-                    path,
-                    mapping,
-                    active_source if anima_dir.name == self.target else [],
-                )
-            recreated.extend(recreated_here)
-            if changed:
-                updated.append(path.relative_to(self.data_dir).as_posix())
-
-        return {
-            "task_queue_files_updated": updated,
-            "source_tasks_recreated": sorted(recreated),
-        }
-
-    def _rewrite_queue_file(
-        self,
-        path: Path,
-        mapping: dict[str, str],
-        active_source: list[dict[str, Any]],
-    ) -> tuple[bool, list[str]]:
-        original = path.read_text(encoding="utf-8") if path.is_file() else ""
-        rewritten_lines: list[str] = []
-        changed = False
-        for line in original.splitlines():
-            try:
-                raw = json.loads(line)
-            except json.JSONDecodeError:
-                rewritten_lines.append(line)
-                continue
-            if not isinstance(raw, dict):
-                rewritten_lines.append(line)
-                continue
+        def transform(owner: str, value: Any) -> Any:
             rewritten = _rewrite_value(
-                raw,
-                source=self.source,
-                target=self.target,
-                mapping=mapping,
-                owner_is_source=False,
+                value, source=self.source, target=self.target, mapping=mapping, owner_is_source=owner == self.source
             )
-            rewritten_lines.append(_json_line(rewritten) if rewritten != raw else line)
-            changed = changed or rewritten != raw
+            return _rewrite_anima_paths(rewritten, self.source_dir, self.target_dir)
 
-        recreated: list[str] = []
-        current_ids = set(_replay_queue_lines(rewritten_lines))
-        for migrated in active_source:
-            new_id = str(migrated["task_id"])
-            if new_id in current_ids:
-                continue
-            rewritten_lines.append(_json_line(migrated))
-            current_ids.add(new_id)
-            recreated.append(new_id)
-            changed = True
-        if changed:
-            content = "\n".join(rewritten_lines) + ("\n" if rewritten_lines else "")
-            atomic_write_text(path, content)
-        return changed, recreated
+        return store.transfer_anima_tasks(self.source, self.target, mapping, transform)
 
     def _copy_pending_descriptors(self, mapping: dict[str, str]) -> dict[str, Any]:
         copied: list[dict[str, str]] = []
@@ -330,12 +273,17 @@ class TaskReferenceRewriter:
         copied: list[dict[str, str]] = []
         if not source_root.is_dir():
             return {"task_results_copied": copied}
-        for source_path in sorted(source_root.glob("*.md")):
-            old_id = source_path.stem
+        for source_path in sorted(source_root.rglob("*.md")):
+            relative = source_path.relative_to(source_root)
+            old_id = relative.parts[0] if len(relative.parts) > 1 else source_path.stem
             if old_id not in mapping:
                 continue
             new_id = _safe_filename_id(mapping[old_id])
-            destination = target_root / f"{new_id}.md"
+            destination = (
+                target_root / new_id / Path(*relative.parts[1:])
+                if len(relative.parts) > 1
+                else target_root / f"{new_id}.md"
+            )
             content = source_path.read_text(encoding="utf-8")
             if destination.exists():
                 if destination.read_text(encoding="utf-8") != content:
@@ -349,44 +297,6 @@ class TaskReferenceRewriter:
                 }
             )
         return {"task_results_copied": copied}
-
-
-def _replay_queue(path: Path) -> dict[str, TaskEntry]:
-    if not path.is_file():
-        return {}
-    return _replay_queue_lines(path.read_text(encoding="utf-8").splitlines())
-
-
-def _replay_queue_lines(lines: list[str]) -> dict[str, TaskEntry]:
-    tasks: dict[str, TaskEntry] = {}
-    for line in lines:
-        try:
-            raw = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(raw, dict):
-            continue
-        task_id = raw.get("task_id")
-        if not isinstance(task_id, str) or not task_id:
-            continue
-        if raw.get("_event") == "update":
-            existing = tasks.get(task_id)
-            if existing is None:
-                continue
-            if "status" in raw:
-                existing.status = raw["status"]
-            if "summary" in raw:
-                existing.summary = raw["summary"]
-            if "updated_at" in raw:
-                existing.updated_at = raw["updated_at"]
-            if isinstance(raw.get("meta"), dict):
-                existing.meta = raw["meta"]
-            continue
-        try:
-            tasks[task_id] = TaskEntry(**raw)
-        except Exception:
-            continue
-    return tasks
 
 
 def _rewrite_value(

@@ -216,6 +216,9 @@ class CycleResult(BaseModel):
     total_turns: int = 0
     truncated: bool = False
     tool_call_records: list[ToolCallRecordDict] = Field(default_factory=list)
+    # Older stored results omit this field; their tool records remain an
+    # independent replay guard. Streaming may start work before records exist.
+    fallback_safe: bool = True
     images: list[dict[str, str]] = Field(default_factory=list)
     meeting_redirects: list[dict[str, str]] = Field(default_factory=list)
     cron_skill_rejections: list[dict[str, str]] = Field(default_factory=list)
@@ -241,9 +244,8 @@ class TaskEntry(BaseModel):
     source: Literal["human", "anima"]
     original_instruction: str  # 原文（委任時は引用を含む）
     assignee: str  # 担当Anima名
-    status: str  # "pending" | "in_progress" | "done" | "cancelled" | "blocked" | "delegated"
+    status: str  # "pending" | "in_progress" | "delegated" | "done" | "cancelled"
     summary: str  # 1行要約
-    deadline: str | None = None  # ISO8601 期限（任意）
     relay_chain: list[str] = Field(default_factory=list)  # 委任経路
     updated_at: str  # ISO8601 最終更新日時
     meta: dict[str, Any] = Field(default_factory=dict)  # 追加メタデータ（委譲追跡等）

@@ -136,7 +136,7 @@ MEMORY_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Recipient name. Can be an anima name (e.g. 'sakura') "
-                        "or a human alias (e.g. 'user', 'taka'). "
+                        "or a human alias (e.g. 'user', 'owner'). "
                         "Messages to human aliases are automatically delivered "
                         "via the configured external channel."
                     ),

@@ -221,11 +221,12 @@ def test_hygiene_prompt_section_lists_items_caps_at_twenty_and_localizes() -> No
             assert MEMORY_STRINGS[key][locale]
 
 
-def test_weekly_templates_place_hygiene_section_before_step_one() -> None:
+def test_weekly_templates_only_request_explicit_candidates() -> None:
     repository_root = Path(__file__).parents[4]
     for locale in ("ja", "en", "ko"):
         template = (
             repository_root / "templates" / locale / "prompts" / "memory" / "weekly_consolidation_instruction.md"
         ).read_text(encoding="utf-8")
-        assert template.count("{hygiene_section}") == 1
-        assert template.index("{hygiene_section}") < template.index("### Step 1:")
+        assert "{hygiene_section}" not in template
+        assert "{knowledge_files_list}" not in template
+        assert template.count("{merge_candidates}") == 1

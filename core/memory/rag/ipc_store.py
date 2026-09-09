@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import threading
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.memory.rag.http_store import (
@@ -18,6 +20,34 @@ from core.memory.rag.store import Document
 logger = logging.getLogger(__name__)
 
 MemoryRequester = Callable[[str, dict[str, Any]], dict[str, Any]]
+
+
+def root_memory_requester(
+    handler: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]],
+) -> MemoryRequester:
+    """Bridge root-local off-loop callers to the existing owner memory queue.
+
+    Capture the owning loop explicitly: tool threads can have their own event
+    loops. Never block the owner loop, nor silently switch to a different DB
+    when its lifecycle has ended.
+    """
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.get_ident()
+
+    def request(method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if threading.get_ident() == loop_thread:
+            raise RuntimeError("synchronous memory operation attempted on the root event loop")
+        if loop.is_closed() or not loop.is_running():
+            raise RuntimeError("root memory event loop is unavailable")
+        future = asyncio.run_coroutine_threadsafe(handler(method, params), loop)
+        try:
+            return future.result(timeout=125.0)
+        except TimeoutError:
+            future.cancel()
+            raise
+
+    return request
+
 
 # Cap matches plan: never sleep longer than 500ms on a single retry.
 _MAX_RETRY_AFTER_MS = 500

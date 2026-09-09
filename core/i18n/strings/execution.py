@@ -10,6 +10,11 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "agent.context_cannot_fit_safely": {
+        "ja": "必須の指示・権限・タスク文脈を保持すると入力上限を超えるため実行を停止しました（推定 {estimated} / 上限 {limit} トークン）。入力を短くするか、より大きなコンテキストのモデルを設定してください。",
+        "en": "Execution stopped because required instructions, permissions, and task context cannot fit safely ({estimated} estimated tokens / {limit} limit). Shorten the input or configure a model with a larger context window.",
+        "ko": "필수 지시, 권한, 태스크 맥락을 보존하면 입력 한도를 초과하여 실행을 중지했습니다(추정 {estimated} / 한도 {limit} 토큰). 입력을 줄이거나 컨텍스트가 더 큰 모델을 설정하세요.",
+    },
     "agent.omitted_rest": {
         "ja": ("\n\n（以降省略）"),
         "en": ("\n\n(omitted)"),
@@ -164,6 +169,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "<action-rule>\n{rule_content}\n</action-rule>\n\n"
             "Please review the rule above, take any required pre-actions, then retry."
         ),
+    },
+    "executor.unavailable_no_configured_fallback": {
+        "ja": "実行方式 {mode}（{model}）を利用できません。利用可能な fallback_models を設定してください。",
+        "en": "Execution mode {mode} ({model}) is unavailable. Configure an available fallback_models route.",
+        "ko": "실행 모드 {mode} ({model})를 사용할 수 없습니다. 사용 가능한 fallback_models 경로를 설정하세요.",
     },
     "executor.codex_unavailable_no_openai_cred": {
         "ja": (

@@ -24,7 +24,7 @@ def _update_state_from_summary(
     memory_mgr: Any,
     parsed: ParsedSessionSummary,
 ) -> None:
-    """Route session summary outcomes to task_queue.jsonl.
+    """Route session summary outcomes through the canonical task API.
 
     New tasks are registered in the persistent task queue instead of
     appending free-form markers to current_state.md.  Resolved items

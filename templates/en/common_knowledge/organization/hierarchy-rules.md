@@ -66,26 +66,24 @@ Anima with subordinates have dedicated tools for organizational management autom
 | `org_dashboard` | All subordinates (recursive) | Display process status, last activity, current tasks, and task count for all subordinates in a tree | None |
 | `ping_subordinate` | All subordinates (recursive) | Liveness check for subordinates. Omit `name` for all at once, specify for a single Anima | `name` (optional) |
 | `read_subordinate_state` | All subordinates (recursive) | Read subordinate's `state/current_state.md` | `name` (required) |
-| `delegate_task` | Direct subordinates only | Delegate task (add to subordinate queue + send DM + create tracking entry on your side) | `name`, `instruction`, `deadline` (required), `summary` (optional) |
+| `delegate_task` | Direct subordinates only | Atomically publish complete execution input and a tracking reference; notify the subordinate | `name`, `instruction` (required), `summary`, `acceptance_criteria`, `workspace`, `model` (optional) |
 | `task_tracker` | Your delegated tasks | Track progress of tasks delegated via `delegate_task` from descendant queue | `status` (optional: "all"/"active"/"completed", default "active") |
 | `audit_subordinate` | All descendants (recursive) | Generate activity timeline or statistics summary. Omit `name` to audit all descendants at once (merged timeline) | `name` (optional), `mode` (optional: `"report"`/`"summary"`, default `"report"`), `hours` (optional: 1–168, default 24), `direct_only` (optional: boolean), `since` (optional: `"HH:MM"` start time today, takes precedence over hours) |
 | `disable_subordinate` | All descendants (recursive) | Disable descendant (status.json enabled=false, process stops in ~30 seconds) | `name` (required), `reason` (optional) |
 | `enable_subordinate` | All descendants (recursive) | Re-enable a disabled descendant | `name` (required) |
 | `set_subordinate_model` | All descendants (recursive) | Change descendant's model (updates status.json; `restart_subordinate` required to apply) | `name`, `model` (required), `reason` (optional) |
-| `set_subordinate_background_model` | All descendants (recursive) | Change descendant's background model (Heartbeat/Inbox/Cron). Empty string to clear. `restart_subordinate` required to apply | `name`, `model` (required), `credential`, `reason` (optional) |
+| `set_subordinate_background_model` | All descendants (recursive) | Change descendant's background model (Heartbeat/Cron; Inbox uses main). Empty string to clear. `restart_subordinate` required to apply | `name`, `model` (required), `credential`, `reason` (optional) |
 | `restart_subordinate` | All descendants (recursive) | Restart descendant process (restart_requested flag, restarts in ~30 seconds) | `name` (required), `reason` (optional) |
 
 `check_permissions` is available to all Anima (view your permission list).
 
 ### Task Delegation Flow
 
-1. Execute `delegate_task(name="dave", instruction="...", deadline="...")`
-   - `deadline` can be relative format (`30m`, `2h`, `1d`) or ISO8601 format (e.g., `2026-02-20`)
-   - `summary` is optional (first 100 characters of instruction when omitted)
-2. Task is automatically added to dave's task queue (`state/task_queue.jsonl`)
-3. Task JSON is written to dave's `state/pending/` for immediate execution
-4. DM is automatically sent to dave
-5. Tracking entry is created in your queue (status="delegated")
+1. Execute `delegate_task(name="dave", instruction="Purpose, deliverable, constraints, deadline and context", acceptance_criteria=["Verifiable completion condition"])`.
+2. Complete input and a tracking reference are published atomically to the canonical task store.
+3. The worker claims the runnable task subject to dependencies and available capacity.
+4. A DM notifies dave; it is not execution input and must not reconstruct a missing task.
+5. Your delegated tracking entry refers to the same task, not a second mutable copy.
 6. Use `task_tracker(status="active")` to track in-progress delegated tasks (`status="all"` for all, `status="completed"` for completed only)
 
 ### Regular Status Checks (Should Be Done Periodically)

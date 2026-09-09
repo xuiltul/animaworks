@@ -18,8 +18,6 @@
 ├── cron.md              # 정기 작업 설정
 ├── state/               # 작업 상태
 │   ├── current_state.md
-│   ├── task_queue.jsonl
-│   ├── pending/         # 실행 큐
 │   └── task_results/   # 태스크 실행 결과
 ├── episodes/            # 에피소드 기억
 ├── knowledge/           # 의미 기억
@@ -252,22 +250,15 @@ command: /usr/local/bin/backup.sh
 지금 바로 진행 중인 작업이나 관찰한 상황을 기록합니다(1건). 작업의 목표, 진행 상황, 차단 요소를 기록합니다.
 일반 Heartbeat / cron / 대화 경계에서 유지됩니다. 프롬프트 주입은 3000자로 제한되며, 디스크 trim은 기본값 8000자로 실행됩니다 (`heartbeat.current_state_max_chars`, 0 = 비활성).
 
-> **레거시 `pending.md`에 대해**: 이전의 `state/pending.md` (백로그)는 폐지되었습니다. 내용은 `current_state.md`에 통합되고 파일은 삭제됩니다 (자동 마이그레이션). 백로그 관리는 `task_queue.jsonl` (Layer 2)로 일원화되었습니다.
+> **기존 태스크 저장소**: `state/task_queue.jsonl`과 `state/pending/`은 마이그레이션·내보내기 증거로만 유지합니다. 실행 큐로 사용하거나 수정하지 말고 정본 태스크 도구를 사용하세요.
 
-### state/task_queue.jsonl — 태스크 큐
+### 정본 태스크
 
-구조화된 작업 추적입니다. `submit_tasks` / `update_task`로 조작합니다. 목록은 `animaworks-tool task list` (CLI)로 확인합니다.
-`source: human` 작업은 최우선으로 처리해야 합니다 (MUST).
-
-### state/pending/ — 실행 큐
-
-`submit_tasks` / `delegate_task` 도구를 통해 제출된 작업의 실행 큐입니다.
-TaskExec이 3초 간격으로 폴링하여 자동으로 가져와 실행합니다. 직접 JSON 파일을 만들면 안 됩니다.
+`list_tasks` / `submit_tasks` / `update_task`를 사용하세요. 호스트가 지시, 의존 관계, 실행 시도, 위임 별칭을 하나의 TaskStore에 저장합니다. 사람의 요청이 최우선입니다. `in_progress`는 호스트만 설정하며 결과는 `done`, `pending`, `cancelled`로 선언합니다. 명시적 재개는 같은 ID에 `resume: true`를 지정하여 원본 입력과 이력을 보존합니다.
 
 ### state/task_results/ — 태스크 실행 결과
 
-TaskExec이 완료한 태스크의 결과 요약을 저장하는 디렉토리입니다 (`{task_id}.md`, 최대 2000자).
-의존 태스크는 이 결과를 컨텍스트로 자동 수신합니다. 7일 TTL로 자동 삭제됩니다.
+TaskExec의 수락된 결과 요약은 `{task_id}/{attempt_token}.md`에 저장됩니다(최대 2000자). 후속 태스크에는 호스트가 선택한 수락된 결과를 전달하며 파일 존재만으로 완료를 판단하지 않습니다.
 
 | 항목 | 값 |
 |------|-----|

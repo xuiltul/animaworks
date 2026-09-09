@@ -28,7 +28,7 @@ Anima は以下の5つのパスで稼働する。Chat 以外はすべて自動�
 | **Inbox** | 他 Anima から DM が来たとき | 組織内メッセージへの即時応答 | Anima → Anima |
 | **Heartbeat** | 定期自動起動（デフォルト30分） | 観察 → 計画 → 振り返り。**実行はしない** | 自動 |
 | **Cron** | cron.md のスケジュール（例: 毎朝9:00） | 決まった時間の確定タスク実行 | 自動 |
-| **TaskExec** | `state/pending/` にタスクが出現したとき | LLM セッションで実作業を実行 | 自動（Heartbeat や submit_tasks から投入） |
+| **TaskExec** | 正規タスクが実行可能で依存先が完了したとき | 保存済み入力を取得済みのLLM試行で実行 | submit_tasks または delegate_task で登録 |
 
 Chat と Heartbeat は**別ロック**で動くため、巡回中でも人間の会話に即座に応答できる。
 
@@ -128,7 +128,7 @@ command: /usr/local/bin/health-check.sh
 | **誰が実行するか** | **自分自身**の TaskExec パス | **直属の部下** |
 | **使う場面** | 自分でやるべきタスクを非同期実行したい | 部下に委任したい |
 | **DAG/並列** | `parallel: true` で並列、`depends_on` で依存 | 1件ずつ委任 |
-| **進捗追跡** | task_queue.jsonl + Priming 表示 | `task_tracker` で追跡 |
+| **進捗追跡** | 正規タスクストアを参照する `list_tasks` / TaskBoard | `task_tracker` で追跡 |
 | **典型例** | Heartbeat で発見したタスクを自分で実行 | 上司が部下に作業を委任 |
 
 **判断フロー**:
@@ -183,7 +183,7 @@ command: /usr/local/bin/health-check.sh
 
 **Priming（自動想起）** が会話や巡回のたびに関連する記憶を自動で想起し、必要な文脈をシステムプロンプトに注入する。加えて `search_memory` で能動的に検索もできる。
 
-**Consolidation（記憶統合）** が日次で activity_log からエピソードを抽出し、知識に昇華する。使わなくなった記憶は **Forgetting（能動的忘却）** で自動整理される。
+**Consolidation（記憶統合）** は新しい活動チャンクだけをエピソード化し、変化のない再実行では生成しない。知識の自動変更・週次月次整理・スキル自動学習は既定で無効。記憶保存と必要時の検索は残る。
 
 → 詳細: `anatomy/memory-system.md`
 
@@ -193,12 +193,12 @@ command: /usr/local/bin/health-check.sh
 
 ### background_model
 
-Heartbeat / Inbox / Cron は、メインモデルとは別の軽量モデルで実行できる。
+Heartbeat / Cron は明示設定された background_model を使える。Inbox はメインモデルを使い、タスク固有のモデル指定はそのタスクで優先される。安価という理由だけで自動選択しない。
 
 | 区分 | 使用モデル | 対象 |
 |------|-----------|------|
-| foreground | メインモデル（例: claude-opus-4-6） | Chat（人間との対話）、TaskExec |
-| background | background_model（例: claude-sonnet-4-6） | Heartbeat、Inbox、Cron |
+| foreground | メインモデル、または明示されたタスク固有モデル | Chat、Inbox、TaskExec |
+| background | 明示設定の background_model、未設定ならメインモデル | Heartbeat、Cron |
 
 設定: `animaworks anima set-background-model {名前} claude-sonnet-4-6`
 
@@ -242,7 +242,7 @@ Anima は `status.json` の `supervisor` フィールドで階層が決まる。
 | 操作方法がわからない | `search_memory(query="キーワード", scope="common_knowledge")` |
 | タスクがブロックされた | `troubleshooting/escalation-flowchart.md` を参照 |
 | ツールが動かない | `troubleshooting/common-issues.md` を参照 |
-| 何をすべかわからない | Heartbeat チェックリストを実行。current_state.md と task_queue を確認 |
+| 何をすべかわからない | current_state.md と `list_tasks` を確認。必要なら設定済みのHeartbeatチェックリストを参照 |
 | 判断に迷う | 上司に `send_message(intent="question")` で相談 |
 
 → 全ドキュメント目次: `common_knowledge/00_index.md`

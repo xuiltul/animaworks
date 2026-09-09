@@ -62,6 +62,14 @@ def collect_reference_rewrite_changes(
 ) -> list[ReferenceRewriteChange]:
     """Return proposed text changes without modifying source files."""
     changes: list[ReferenceRewriteChange] = []
+    from core.memory.task_queue import TaskQueueManager
+
+    store = TaskQueueManager(anima_dir).store
+    for task_id, record in store.reference_records(anima_dir.name).items():
+        before = json.dumps(record, ensure_ascii=False, indent=2)
+        after = rewrite_skill_references_in_text(before, skill_name, absorbed_into=absorbed_into)
+        if json.loads(after) != record:
+            changes.append(ReferenceRewriteChange(path=f"task_store/{task_id}", before=before, after=after))
     for path in _candidate_files(anima_dir):
         if not path.is_file():
             continue
@@ -85,6 +93,23 @@ def apply_skill_pointer_rewrites(anima_dir: Path, pointer_map: dict[str, str]) -
         return []
 
     changes: list[ReferenceRewriteChange] = []
+    from core.memory.task_queue import TaskQueueManager
+
+    def transform(record: dict[str, Any]) -> dict[str, Any]:
+        rewritten = json.loads(rewrite_skill_pointers_in_text(json.dumps(record, ensure_ascii=False), normalized))
+        # Original user text is evidence, not a mutable reference field.
+        rewritten["entry"]["original_instruction"] = record["entry"]["original_instruction"]
+        return rewritten
+
+    store = TaskQueueManager(anima_dir).store
+    for change in store.rewrite_references(anima_dir.name, transform):
+        changes.append(
+            ReferenceRewriteChange(
+                path=f"task_store/{change['task_id']}",
+                before=json.dumps(change["before"], ensure_ascii=False),
+                after=json.dumps(change["after"], ensure_ascii=False),
+            )
+        )
     for path in _candidate_files(anima_dir):
         if not path.is_file():
             continue
@@ -148,7 +173,6 @@ def _candidate_files(anima_dir: Path) -> list[Path]:
     candidates.extend(
         path
         for path in [
-            state_dir / "task_queue.jsonl",
             state_dir / "goal_state.jsonl",
             state_dir / "taskboard.json",
             state_dir / "taskboard.jsonl",

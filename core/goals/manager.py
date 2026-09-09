@@ -188,30 +188,19 @@ class GoalManager:
                 "submitted_at": now_iso(),
                 "reply_to": source_task_desc.get("reply_to", self.anima_dir.name),
                 "working_directory": source_task_desc.get("working_directory", ""),
+                "model": source_task_desc.get("model", ""),
             }
-            pending_dir = self.anima_dir / "state" / "pending"
-            pending_dir.mkdir(parents=True, exist_ok=True)
-            (pending_dir / f"{task_id}.json").write_text(
-                json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            from core.tasks_dispatch import publish_tasks
 
-            entry = queue.add_task(
-                source="anima",
-                original_instruction=description[:5000],
-                assignee=self.anima_dir.name,
-                summary=title,
-                task_id=task_id,
-                status="in_progress",
+            entry = publish_tasks(
+                self.anima_dir,
+                [task_desc],
                 meta={
-                    "executor": "taskexec",
-                    "batch_id": f"goal:{goal_id}",
                     "goal_id": goal_id,
                     "goal_iteration": next_iteration,
                     "skills": list(state.skill_refs),
-                    "task_desc": task_desc,
                 },
-            )
+            )[0]
             self._record_taskboard_link(task_id, goal_id)
             self._append_event(
                 "continuation_created",

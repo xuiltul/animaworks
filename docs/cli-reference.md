@@ -137,14 +137,56 @@ animaworks chat alice "Hello"
 animaworks chat alice "How's the task going?" --from admin
 ```
 
+Omitting the message opens an interactive terminal chat UI (TUI) that streams the
+response, shows tools/thinking in real time, and lets you interrupt with `Esc`.
+
+The TUI also provides an organization overview and operation shortcuts:
+
+- A **sidebar** (toggle with `Ctrl+B`) lists every anima, its live status and a
+  rolling activity feed (tool usage, heartbeats, board posts, notifications).
+- Typing `/` opens a **command palette** that completes built-in slash commands
+  and the current anima's skills. Selecting a skill (e.g. `/skill <name>`)
+  activates it for the current thread.
+- Switch animas with `/anima <name>`; view animas with `/animas`; manage
+  skills with `/skills` / `/skill <name> [--confirm] [--off]`.
+- Browse channels with `/board [channel] [n]`, post with `/post <channel> <text>`,
+  and list tasks with `/tasks [anima]`.
+- `call_human` requests arrive as notification cards with clickable options, or
+  resolve them from the keyboard with `/approve <callback_id> [option]`.
+
+Run `/help` inside the TUI for the full command list.
+
+```bash
+animaworks chat alice            # interactive TUI
+animaworks chat alice --no-tui   # read the message from stdin, one-shot reply
+animaworks chat --resume         # resume the most recent TUI session
+animaworks chat --resume <id>    # resume a specific TUI session
+animaworks chat --sessions       # list saved TUI sessions and exit
+```
+
+Sessions are persisted under `$ANIMAWORKS_TUI_DIR/sessions` (default
+`~/.animaworks/tui/sessions`). On startup the TUI re-attaches to any
+in-flight stream (`--no-reattach` disables this), and scrolling to the top of
+the transcript lazily loads older history.
+
 | Argument | Type | Required | Description |
 |----------|------|----------|-------------|
-| `anima` | positional | Required | Anima name |
-| `message` | positional | Required | Message to send |
+| `anima` | positional | Optional | Anima name (optional when `--resume` is given) |
+| `message` | positional | Optional | Message to send (omit to open the TUI) |
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `--from` | string | "human" | Sender name |
+| `--from` (alias `--as`) | string | "human" | Sender name |
+| `--thread` | string | "default" | Thread ID |
+| `--no-tui` | flag | - | Do not open the TUI; read the message from stdin |
+| `--resume` | string | - | Resume a previous session (optional SESSION_ID, default latest) |
+| `--sessions` | flag | - | List saved TUI sessions and exit |
+| `--user` | string | - | Username for authenticated gateways |
+| `--password` | string | - | Password for authenticated gateways (visible in process list) |
+| `--no-reattach` | flag | - | Do not re-attach to an in-flight stream on startup |
+
+Keybindings can be customized in `$ANIMAWORKS_TUI_DIR/keybindings.json` (default
+`~/.animaworks/tui/keybindings.json`). Show the active bindings with `/keys`.
 
 ---
 

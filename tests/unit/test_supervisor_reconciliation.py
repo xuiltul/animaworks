@@ -38,7 +38,7 @@ def temp_dirs():
 @pytest.fixture
 def supervisor(temp_dirs):
     """Create a ProcessSupervisor instance."""
-    return ProcessSupervisor(
+    supervisor = ProcessSupervisor(
         animas_dir=temp_dirs["animas_dir"],
         shared_dir=temp_dirs["shared_dir"],
         run_dir=temp_dirs["run_dir"],
@@ -54,6 +54,10 @@ def supervisor(temp_dirs):
             startup_grace_sec=0.5,
         ),
     )
+
+    # Asset generation has its own tests and must not call an LLM here.
+    supervisor._reconcile_assets = AsyncMock()
+    return supervisor
 
 
 # ── read_anima_enabled ──────────────────────────────────────────

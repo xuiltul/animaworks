@@ -91,8 +91,24 @@ class TestSummarizeToolArgs:
     def test_glob_files_mode_a(self):
         assert summarize_tool_args("glob_files", {"glob_pattern": "**/*.py"}) == "**/*.py"
 
-    def test_unknown_tool_returns_empty(self):
-        assert summarize_tool_args("SomeUnknownTool", {"arg": "value"}) == ""
+    def test_unknown_tool_falls_back_to_key_value(self):
+        result = summarize_tool_args("SomeUnknownTool", {"arg": "value", "n": 3})
+        assert result == "arg=value, n=3"
+
+    def test_unknown_tool_skips_empty_values(self):
+        result = summarize_tool_args("SomeUnknownTool", {"a": "x", "b": "", "c": None})
+        assert result == "a=x"
+
+    def test_unknown_tool_truncates_long_value(self):
+        result = summarize_tool_args("SomeUnknownTool", {"body": "y" * 200})
+        assert result == "body=" + "y" * 60 + "…"
+
+    def test_unknown_tool_collapses_newlines(self):
+        result = summarize_tool_args("SomeUnknownTool", {"text": "a\n  b"})
+        assert result == "text=a b"
+
+    def test_known_tool_falls_back_when_key_absent(self):
+        assert summarize_tool_args("Read", {"notebook_path": "/n.ipynb"}) == "notebook_path=/n.ipynb"
 
     def test_empty_args(self):
         assert summarize_tool_args("Read", {}) == ""
@@ -111,9 +127,13 @@ class TestMakeToolDetailChunk:
         assert chunk["tool_name"] == "Read"
         assert chunk["detail"] == "/x.py"
 
-    def test_returns_none_for_unknown_tool(self):
+    def test_returns_generic_chunk_for_unknown_tool(self):
         chunk = make_tool_detail_chunk("UnknownTool", "tool_2", {"a": "b"})
-        assert chunk is None
+        assert chunk is not None
+        assert chunk["detail"] == "a=b"
+
+    def test_returns_none_for_unknown_tool_without_args(self):
+        assert make_tool_detail_chunk("UnknownTool", "tool_4", {}) is None
 
     def test_returns_none_for_empty_summary(self):
         chunk = make_tool_detail_chunk("Read", "tool_3", {})

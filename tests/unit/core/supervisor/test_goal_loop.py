@@ -57,7 +57,9 @@ async def test_taskexec_completion_continues_goal_without_duplicates(tmp_path: P
     active = TaskQueueManager(anima_dir).get_active_goal_task(goal.goal_id)
     assert active is not None
     assert active.meta["goal_id"] == goal.goal_id
-    assert len(list((anima_dir / "state" / "pending").glob("*.json"))) == 1
+    assert len(queue.store.pending("alice")) == 1
+    assert queue.store.get_input("alice", active.task_id)["description"]
+    assert not (anima_dir / "state" / "pending").exists()
 
 
 async def test_paused_goal_does_not_auto_continue(tmp_path: Path, monkeypatch) -> None:

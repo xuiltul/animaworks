@@ -10,13 +10,8 @@ Includes prompt injection logic, size control, migration, and lock control.
 ```
 state/
 ├── current_state.md          # Working memory (free-form Markdown)
-├── task_queue.jsonl           # Task registry (append-only JSONL)
-├── pending/                   # LLM task execution queue (JSON)
-│   ├── {task_id}.json         # Submitted tasks
-│   ├── processing/            # In progress (moved by PendingTaskExecutor)
-│   └── failed/                # Failed tasks
 ├── task_results/              # TaskExec completion results
-│   └── {task_id}.md           # Result summary (max 2000 chars, 7-day TTL)
+│   └── {task_id}/{attempt_token}.md
 ├── conversation.json          # Conversation state
 ├── conversations/             # Per-thread conversation files
 ├── recovery_note.md           # Crash recovery note
@@ -32,7 +27,7 @@ state/
 
 Anima's working memory. Records in free form "what I'm doing right now," "what I observed," and "what blockers exist." It is for situational awareness, not task management.
 
-Official task tracking and management is handled by `task_queue.jsonl` (Layer 2).
+Task tracking is owned by the host's canonical TaskStore. Inspect it with `list_tasks`; use task tools, never direct database or queue-file writes.
 
 ### Size Control
 
@@ -46,7 +41,7 @@ Official task tracking and management is handled by `task_queue.jsonl` (Layer 2)
 
 - Normal heartbeat, cron, and conversation finalization preserve `current_state.md`
 - If the session summary contains a current status, it is written only when `current_state.md` is empty/idle
-- Stale state with no active visible task may still be archived by TaskBoard housekeeping
+- Stale state with no active task may still be archived by TaskBoard housekeeping; hidden active tasks also protect state
 
 **Optional cleanup during Heartbeat**:
 
@@ -99,77 +94,17 @@ When `state/current_task.md` is specified in `read_memory_file` / `write_memory_
 
 ---
 
-## task_queue.jsonl
+## Legacy task files
 
-Task registry. See `common_knowledge/anatomy/task-architecture.md` (Layer 2) for details.
+`state/task_queue.jsonl` and `state/pending/` are retained only as migration/export evidence. They are not live queues. An operator must stop the old writers and explicitly import legacy tasks with a backup before activating the canonical runtime. Do not delete, replay, or fabricate these files to resume work.
 
-### Entry Schema (TaskEntry)
+## Task execution and results
 
-| Field | Type | Description |
-|-----------|-----|------|
-| `task_id` | string | Unique ID |
-| `ts` | ISO8601 | Creation timestamp |
-| `source` | `"human"` / `"anima"` | Task origin |
-| `original_instruction` | string | Original instruction text |
-| `assignee` | string | Assignee Anima name |
-| `status` | string | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `delegated` / `failed` |
-| `summary` | string | One-line summary |
-| `deadline` | ISO8601 / null | Deadline |
-| `relay_chain` | array | Delegation chain |
-| `updated_at` | ISO8601 | Last update timestamp |
-| `meta` | object | `executor`, `batch_id`, `task_desc`, `origin`, etc. |
+The host atomically stores instructions with the task, claims eligible work, and records every attempt. `in_progress` is host-owned; agents declare `done`, `pending`, or `cancelled` through `update_task`. Use `list_tasks(detail=true)` to inspect dependencies and attention reasons. Pending does not imply retry: after resolving the cause, explicitly resume the same task with `submit_tasks(..., tasks=[{"task_id": "ID", "resume": true}])`.
 
----
+Accepted results are stored under `state/task_results/{task_id}/{attempt_token}.md` (summaries up to 2,000 characters). Dependents receive the host-selected accepted result; a stale file alone is not evidence of completion. Preserve raw records and do not write results to impersonate a successful attempt.
 
-## pending/ Directory
-
-LLM task execution queue. See `common_knowledge/anatomy/task-architecture.md` (Layer 1) for details.
-
-### Lifecycle
-
-```
-pending/{task_id}.json → processing/{task_id}.json → Success: deleted / Failure: moved to failed/
-```
-
-- TTL: 24 hours (`_LLM_TASK_TTL_HOURS`). Tasks exceeding this are skipped
-- Polling interval: 3 seconds (`_PENDING_WATCHER_POLL_INTERVAL`)
-- Tasks with `cancelled` in `task_queue.jsonl` are automatically skipped → moved to `failed/`
-
-### JSON Schema
-
-| Field | Type | Required | Description |
-|-----------|-----|------|------|
-| `task_type` | string | Yes | `"llm"` |
-| `task_id` | string | Yes | Unique ID |
-| `batch_id` | string | No | Batch ID (submit_tasks) |
-| `title` | string | Yes | Title |
-| `description` | string | Yes | Instruction content |
-| `parallel` | boolean | No | Whether parallel execution is allowed |
-| `depends_on` | array | No | Preceding task IDs |
-| `context` | string | No | Additional context |
-| `acceptance_criteria` | array | No | Completion criteria |
-| `constraints` | array | No | Constraints |
-| `file_paths` | array | No | Related files |
-| `workspace` | string | No | Working directory (alias) |
-| `submitted_by` | string | Yes | Submitter |
-| `submitted_at` | ISO8601 | Yes | Submission timestamp |
-| `source` | string | No | `"delegation"`, etc. |
-
----
-
-## task_results/ Directory
-
-Stores result summaries of tasks completed by TaskExec.
-
-| Parameter | Value |
-|-----------|-----|
-| File name | `{task_id}.md` |
-| Max chars | 2000 (`_TASK_RESULT_MAX_CHARS`) |
-| TTL | 7 days (auto-deleted by housekeeping) |
-
-Dependent tasks (`depends_on`) automatically receive this file's content as context.
-
----
+Long-running command tools remain a separate pipeline: `animaworks-tool submit` writes `state/background_tasks/pending/` and BackgroundTaskManager owns command status and notifications. See `operations/background-tasks.md` and `operations/task-management.md`.
 
 ## read_subordinate_state
 

@@ -23,12 +23,12 @@ _MOCK_SECTIONS = (
     "[group1_header]: 1. 動作環境と行動ルール\n"
     "[current_time_label]: **現在時刻**:\n"
     "[group2_header]: 2. あなた自身\n"
-    "[group3_header]: 3. 現在の状況\n"
+    "[group3_header]: 6. 現在の状況\n"
     "[current_state_header]: ## 現在の状態\n"
     "[pending_tasks_header]: ## 未完了タスク\n"
-    "[group4_header]: 4. 記憶と能力\n"
-    "[group5_header]: 5. 組織とコミュニケーション\n"
-    "[group6_header]: 6. メタ設定\n"
+    "[group4_header]: 3. 記憶と能力\n"
+    "[group5_header]: 4. 組織とコミュニケーション\n"
+    "[group6_header]: 5. メタ設定\n"
     "[you_marker]:   ← あなた\n"
     "[common_label]: (共通スキル)\n"
     "[recent_tool_results_header]: ## Recent Tool Results\n"
@@ -373,7 +373,7 @@ class TestBuildSystemPrompt:
         memory.list_common_skill_metas.return_value = []
         memory.list_procedure_metas.return_value = []
         memory.common_skills_dir = data_dir / "common_skills"
-        memory.list_shared_users.return_value = ["taka"]
+        memory.list_shared_users.return_value = ["owner"]
 
         captured_calls: list[dict] = []
 
@@ -524,7 +524,7 @@ class TestBuildSystemPrompt:
             assert "External Tools" in result
             assert "call it directly by tool name" in result
             assert "slack_channel_post" in result
-            assert "Prefer direct tools" in result
+            assert "Use `animaworks-tool <tool> <subcommand>` via Bash" not in result
 
     def test_b_mode_injects_external_tools_hint_with_bash_cli(self, tmp_path, data_dir):
         """B mode injects External Tools hint mentioning Bash + animaworks-tool."""

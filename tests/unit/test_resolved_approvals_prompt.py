@@ -56,8 +56,7 @@ class TestBuildResolvedApprovalsSection:
             "resolved_approvals_header": "## 解決済み承認（直近{hours}h）",
             "resolved_approvals_intro": "以下の承認依頼は既に人間が回答済み。",
             "resolved_approvals_item": (
-                "- callback_id: {callback_id} — 「{decision}」 by {actor} "
-                "({source}, {resolved_at})"
+                "- callback_id: {callback_id} — 「{decision}」 by {actor} ({source}, {resolved_at})"
             ),
         }
         mock_cfg = MagicMock()
@@ -165,8 +164,7 @@ class TestResolvedApprovalsInGroup3:
             "resolved_approvals_header": "## 解決済み承認（直近{hours}h）",
             "resolved_approvals_intro": "以下の承認依頼は既に人間が回答済み。call_humanしない。",
             "resolved_approvals_item": (
-                "- callback_id: {callback_id} — 「{decision}」 by {actor} "
-                "({source}, {resolved_at})"
+                "- callback_id: {callback_id} — 「{decision}」 by {actor} ({source}, {resolved_at})"
             ),
         }
         _fs = {"truncated": "(truncated)"}
@@ -184,9 +182,7 @@ class TestResolvedApprovalsInGroup3:
             patch(
                 "core.prompt.builder.load_prompt",
                 side_effect=lambda name, **kw: (
-                    f"## Task\n{kw.get('state', '')}"
-                    if name == "builder/task_in_progress"
-                    else ""
+                    f"## Task\n{kw.get('state', '')}" if name == "builder/task_in_progress" else ""
                 ),
             ),
         ):
@@ -209,8 +205,8 @@ class TestResolvedApprovalsInGroup3:
         content = by_id["resolved_approvals"].content
         assert "解決済み承認" in content
         assert "cb-test-1" in content
-        assert by_id["resolved_approvals"].priority == 2
-        assert by_id["resolved_approvals"].kind == "elastic"
+        assert by_id["resolved_approvals"].priority == 1
+        assert by_id["resolved_approvals"].kind == "rigid"
 
     def test_group3_omits_section_when_empty(self, tmp_path: Path):
         from core.prompt.builder import _build_group3

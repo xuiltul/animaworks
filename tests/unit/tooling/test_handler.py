@@ -772,6 +772,9 @@ class TestExecuteCommand:
         assert parsed["error_type"] == "PermissionDenied"
 
     def test_injection_semicolon_rejected(self, handler: ToolHandler):
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         with patch("core.tooling.handler_perms.load_permissions") as mock_load:
             mock_load.return_value = _perms_config_from_md("## コマンド実行\n- ls: OK")
             result = handler.handle("execute_command", {"command": "ls; rm -rf /"})
@@ -1038,10 +1041,22 @@ class TestCommandPermissions:
         assert "Empty" in parsed["message"]
 
     def test_injection_semicolon(self, handler: ToolHandler):
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         result = handler._check_command_permission("ls; echo hi")
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
         assert "injection" in parsed["message"].lower()
+
+    def test_injection_semicolon_log_mode_passes(self, handler: ToolHandler):
+        """Default ``log`` mode must not block — same rollout switch as the SDK path."""
+        from core.config.global_permissions import GlobalPermissionsCache
+
+        assert GlobalPermissionsCache.get().config.sdk_bash_injection.mode == "log"
+        with patch("core.tooling.handler_perms.load_permissions") as mock_load:
+            mock_load.return_value = _perms_config_from_md("## コマンド実行\n全般的なコマンド")
+            assert handler._check_command_permission("ls; echo hi") is None
 
     def test_backtick_allowed(self, handler: ToolHandler):
         with patch("core.tooling.handler_perms.load_permissions") as mock_load:
@@ -2621,3 +2636,176 @@ class TestDeniedCommandEnforcement:
             parsed_d = json.loads(result_denied)
             assert parsed_d["error_type"] == "PermissionDenied"
             assert "denied list" in parsed_d["message"]
+
+
+# ── list_tasks compact output ─────────────────────────────────
+
+
+class TestListTasksCompact:
+    def test_detail_default_drops_verbose_fields(self, anima_dir: Path, memory: MagicMock):
+        from core.memory.task_queue import TaskQueueManager
+
+        tqm = TaskQueueManager(anima_dir)
+        tqm.add_task(
+            source="human",
+            original_instruction="x" * 300,
+            assignee="self",
+            summary="summary",
+            task_id="task1",
+            meta={
+                "last_run_stop_kind": "normal",
+                "last_run_note": "note",
+                "depends_on": ["a"],
+                "batch_id": "batch",
+                "task_desc": "drop me",
+            },
+        )
+        h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        result = h._handle_list_tasks({})
+        data = json.loads(result)
+        assert len(data) == 1
+        item = data[0]
+        assert item["task_id"] == "task1"
+        assert item["status"] == "pending"
+        assert item["summary"] == "summary"
+        assert item["assignee"] == "self"
+        assert item["source"] == "human"
+        assert "executable" in item
+        assert "relay_chain" not in item
+        assert "ts" not in item
+        assert "executable_note" in item
+        assert item["original_instruction"].endswith("...")
+        assert len(item["original_instruction"]) == 123
+        assert item["meta"]["last_run_stop_kind"] == "normal"
+        assert item["meta"]["last_run_note"] == "note"
+        assert item["meta"]["depends_on"] == ["a"]
+        assert item["meta"]["batch_id"] == "batch"
+        assert "task_desc" not in item["meta"]
+
+    def test_detail_true_returns_all_fields(self, anima_dir: Path, memory: MagicMock):
+        from core.memory.task_queue import TaskQueueManager
+
+        tqm = TaskQueueManager(anima_dir)
+        tqm.add_task(
+            source="human",
+            original_instruction="instr",
+            assignee="self",
+            summary="s",
+            task_id="t1",
+            relay_chain=["boss"],
+        )
+        h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        result = h._handle_list_tasks({"detail": True})
+        data = json.loads(result)
+        assert len(data) == 1
+        item = data[0]
+        assert item["relay_chain"] == ["boss"]
+        assert "ts" in item
+        assert item["original_instruction"] == "instr"
+        assert item["task_id"] == "t1"
+
+    def test_short_instruction_not_truncated(self, anima_dir: Path, memory: MagicMock):
+        from core.memory.task_queue import TaskQueueManager
+
+        tqm = TaskQueueManager(anima_dir)
+        tqm.add_task(
+            source="human",
+            original_instruction="short",
+            assignee="self",
+            summary="s",
+            task_id="t2",
+        )
+        h = ToolHandler(anima_dir=anima_dir, memory=memory, tool_registry=[])
+        result = h._handle_list_tasks({})
+        item = json.loads(result)[0]
+        assert item["original_instruction"] == "short"
+
+
+# ── delegate_task DM config (delegation_dm_enabled) ──────────
+
+
+class TestDelegateTaskDmConfig:
+    def _setup(self, tmp_path: Path):
+        from types import SimpleNamespace
+
+        from core.config.models import AnimaModelConfig, AnimaWorksConfig
+
+        animas_dir = tmp_path / "animas"
+        boss_dir = animas_dir / "boss"
+        alice_dir = animas_dir / "alice"
+        (boss_dir / "state").mkdir(parents=True)
+        (alice_dir / "state").mkdir(parents=True)
+        (boss_dir / "status.json").write_text("{}", encoding="utf-8")
+        (alice_dir / "status.json").write_text("{}", encoding="utf-8")
+
+        messenger = MagicMock()
+        handler = ToolHandler(
+            anima_dir=boss_dir,
+            memory=MagicMock(),
+            messenger=messenger,
+            tool_registry=[],
+        )
+        handler._org_context = SimpleNamespace(subordinates=["alice"], descendants=["alice"])
+        cfg = AnimaWorksConfig()
+        cfg.animas = {
+            "boss": AnimaModelConfig(supervisor=None),
+            "alice": AnimaModelConfig(supervisor="boss"),
+        }
+        return handler, animas_dir, cfg, messenger
+
+    def test_disabled_skips_send_and_publishes_canonical_input(self, tmp_path: Path):
+        handler, animas_dir, cfg, messenger = self._setup(tmp_path)
+        cfg.heartbeat.delegation_dm_enabled = False
+        with (
+            patch("core.paths.get_animas_dir", return_value=animas_dir),
+            patch("core.config.models.load_config", return_value=cfg),
+            patch(
+                "core.tooling.handler_delegation.build_outgoing_origin_chain",
+                return_value=["anima"],
+            ),
+        ):
+            result = handler.handle(
+                "delegate_task",
+                {
+                    "name": "alice",
+                    "instruction": "Do the thing",
+                    "summary": "Thing",
+                    "deadline": "1d",
+                },
+            )
+        messenger.send.assert_not_called()
+        from core.memory.task_queue import TaskQueueManager
+
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
+        assert len(pending) == 1, result
+        from core.i18n import t
+
+        assert t("handler.delegation_dm_skipped") in result
+
+    def test_default_enabled_sends_dm(self, tmp_path: Path):
+        handler, animas_dir, cfg, messenger = self._setup(tmp_path)
+        with (
+            patch("core.paths.get_animas_dir", return_value=animas_dir),
+            patch("core.config.models.load_config", return_value=cfg),
+            patch(
+                "core.tooling.handler_delegation.build_outgoing_origin_chain",
+                return_value=["anima"],
+            ),
+        ):
+            result = handler.handle(
+                "delegate_task",
+                {
+                    "name": "alice",
+                    "instruction": "Do the thing",
+                    "summary": "Thing",
+                    "deadline": "1d",
+                },
+            )
+        assert messenger.send.call_count == 1
+        from core.memory.task_queue import TaskQueueManager
+
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
+        assert len(pending) == 1, result
+        from core.i18n import t
+
+        assert t("handler.dm_sent") in result

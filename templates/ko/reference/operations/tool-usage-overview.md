@@ -33,8 +33,8 @@ description: "도구 체계 개요 및 사용 가이드"
 
 금지 (어느 것도 끝나지 않습니다):
 
-- `glob.glob('/home/main/.animaworks/**/...', recursive=True)` — Python의 `**`는 심볼릭 링크까지 따라 내려가므로 사실상 무한히 확장됩니다
-- 최상위에서 시작하는 `os.walk('/home/main/.animaworks')`
+- `glob.glob('~/.animaworks/**/...', recursive=True)` — Python의 `**`는 심볼릭 링크까지 따라 내려가므로 사실상 무한히 확장됩니다
+- 최상위에서 시작하는 `os.walk('~/.animaworks')`
 - 경로를 좁히지 않은 `find ~/.animaworks`, `du -sh ~/.animaworks`, `~/.animaworks` 기준의 `rg`
 
 대신:
@@ -99,7 +99,7 @@ Bash: animaworks-tool <도구> <서브커맨드> [인수]
 | 백그라운드 | `animaworks-tool bg check <task_id>`, `animaworks-tool bg list` |
 | 외부 도구 | `animaworks-tool slack send ...`, `animaworks-tool chatwork send ...` |
 
-CLI 상세 사용법은 `read_memory_file(path="common_skills/machine-tool/SKILL.md")` 등으로 해당 스킬 파일을 읽어 확인할 수 있습니다.
+CLI 상세 사용법은 해당 스킬 파일을 `read_memory_file`로 읽어 확인할 수 있습니다.
 
 ## 신뢰 수준
 

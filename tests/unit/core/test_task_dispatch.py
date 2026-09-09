@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -28,9 +28,7 @@ def test_dispatch_direct_task_queues_and_publishes_pending(tmp_path: Path) -> No
     assert task.meta["origin"] == "github-event"
     assert task.meta["executor"] == "taskexec"
     assert task.meta["repo"] == "o/r"
-    pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-cmd-101.json").read_text(encoding="utf-8")
-    )
+    pending = TaskQueueManager(target_dir).store.get_input(target_dir.name, "gh-cmd-101")
     assert pending == {
         "task_type": "llm",
         "task_id": "gh-cmd-101",
@@ -45,7 +43,6 @@ def test_dispatch_direct_task_queues_and_publishes_pending(tmp_path: Path) -> No
         "reply_to": "",
         "source": "delegation",
         "working_directory": "",
-        "exclusive_key": "",
     }
 
 
@@ -61,7 +58,7 @@ def test_dispatch_direct_task_skips_active_duplicate_without_pending(tmp_path: P
     }
     assert dispatch_direct_task(**kwargs)
     pending = target_dir / "state" / "pending" / "gh-ci-o-r#1-aaaaaaaa.json"
-    pending.unlink()
+    assert not pending.exists()
 
     assert dispatch_direct_task(**kwargs) is False
     assert not pending.exists()
@@ -71,23 +68,21 @@ def test_dispatch_direct_task_stores_model_in_task_and_pending(tmp_path: Path) -
     target_dir = tmp_path / "sumire"
     target_dir.mkdir()
 
-    assert dispatch_direct_task(
-        target="sumire",
-        task_id="gh-ci-o-r#1-m-grok-grok-4-5",
-        summary="Multi-pass review",
-        instruction="Review it.",
-        model="x:grok/grok-4.5",
-        animas_dir=tmp_path,
-    )
+    with patch("core.config.model_catalog.validate_model_override", return_value=None) as validate:
+        assert dispatch_direct_task(
+            target="sumire",
+            task_id="gh-ci-o-r#1-m-grok-grok-4-5",
+            summary="Multi-pass review",
+            instruction="Review it.",
+            model="x:grok/grok-4.5",
+            animas_dir=tmp_path,
+        )
+    validate.assert_called_with("sumire", "x:grok/grok-4.5")
 
     task = TaskQueueManager(target_dir).get_task_by_id("gh-ci-o-r#1-m-grok-grok-4-5")
     assert task is not None
     assert task.meta["model"] == "x:grok/grok-4.5"
-    pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-ci-o-r#1-m-grok-grok-4-5.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    pending = TaskQueueManager(target_dir).store.get_input(target_dir.name, "gh-ci-o-r#1-m-grok-grok-4-5")
     assert pending["model"] == "x:grok/grok-4.5"
 
 
@@ -101,11 +96,7 @@ def test_dispatch_direct_task_without_model_omits_key(tmp_path: Path) -> None:
         instruction="Review it.",
         animas_dir=tmp_path,
     )
-    pending = json.loads(
-        (target_dir / "state" / "pending" / "gh-ci-o-r#1-aaaaaaaa.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    pending = TaskQueueManager(target_dir).store.get_input(target_dir.name, "gh-ci-o-r#1-aaaaaaaa")
     assert "model" not in pending
 
 

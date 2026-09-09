@@ -132,3 +132,40 @@ async def test_terminal_error_surfaces_when_no_fallback_available(make_agent_cor
     assert errors and errors[0]["terminal"] is True
     cycle_done = [e for e in events if e["type"] == "cycle_done"][0]["cycle_result"]
     assert cycle_done["action"] == "error"
+
+
+async def test_partial_tool_work_is_not_replayed_on_another_engine(make_agent_core, monkeypatch):
+    from unittest.mock import MagicMock
+
+    with patch_agent_sdk_streaming():
+        agent = make_agent_core(name="fallback-partial-e2e", model="claude-sonnet-4-6")
+    agent.model_config = agent.model_config.model_copy(update={"fallback_models": ["x:grok/grok-4.5"]})
+    deliveries = []
+
+    async def partial_stream(*args, **kwargs):
+        yield {"type": "tool_start", "tool_name": "send_message", "tool_id": "sent-once"}
+        deliveries.append("report")
+        yield {
+            "type": "error",
+            "terminal": True,
+            "reason": "quota_exhausted",
+            "message": "You've hit your usage limit.",
+        }
+
+    agent._executor = _terminal_quota_executor()
+    agent._executor.execute_streaming = partial_stream
+    create_executor = MagicMock(return_value=_success_executor("would replay the original request"))
+    monkeypatch.setattr(agent, "_create_executor", create_executor)
+    monkeypatch.setattr(agent, "_run_priming", AsyncMock(return_value=("", "")))
+    monkeypatch.setattr(
+        "core._agent_cycle.build_system_prompt",
+        lambda *args, **kwargs: BuildResult(system_prompt="mock system prompt"),
+    )
+    monkeypatch.setattr("core._agent_cycle.inject_shortterm", lambda sp, st: sp)
+    monkeypatch.setattr("core.execution.fallback_activity.preflight_fallback_config", lambda anima_dir, cfg, **kw: cfg)
+
+    events = [chunk async for chunk in agent.run_cycle_streaming("send the report", trigger="task:delivery")]
+    create_executor.assert_not_called()
+    assert deliveries == ["report"]
+    assert not any(event["type"] == "retry_start" for event in events)
+    assert any(event["type"] == "error" for event in events)

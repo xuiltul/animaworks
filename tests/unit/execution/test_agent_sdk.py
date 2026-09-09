@@ -294,6 +294,7 @@ class TestAgentSDKExecutor:
             result = await executor.execute("test", system_prompt="sys")
 
         assert auth_text in result.text
+        assert result.error is True
 
     async def test_execute_with_tracker(self, model_config, anima_dir):
         from core.prompt.context import ContextTracker
@@ -616,6 +617,113 @@ class TestAgentSDKExecutorStreaming:
 
 
 # ── Image input (multimodal) ──────────────────────────────────
+
+
+@pytest.mark.parametrize("signal", ["result_error", "result_subtype", "assistant_error", "cli_envelope"])
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_sdk_provider_failures_are_not_successful_answers(model_config, anima_dir, signal, streaming):
+    from core.execution.agent_sdk import AgentSDKExecutor
+    from core.prompt.context import ContextTracker
+
+    text = "API Error: ConnectionRefused: Unable to connect to the API"
+    assistant = MockAssistantMessage([MockTextBlock(text)])
+    result = MockResultMessage(usage={"input_tokens": 17, "output_tokens": 3})
+    if signal == "result_error":
+        result.is_error = True
+        result.errors = [text]
+        assistant.content = [MockTextBlock("Partial provider diagnostic")]
+    elif signal == "result_subtype":
+        result.subtype = "error_during_execution"
+        result.result = text
+    elif signal == "assistant_error":
+        assistant.error = "server_error"
+        assistant.content = [MockTextBlock("Provider cannot fulfill the request")]
+    with _patch_agent_sdk_sequences([[assistant, result]]):
+        executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+        if streaming:
+            events = [
+                event
+                async for event in executor.execute_streaming("sys", "test", ContextTracker(model=model_config.model))
+            ]
+            assert not any(event["type"] == "done" for event in events)
+            failure = events[-1]
+            assert failure["type"] == "error" and failure["terminal"] is True
+            assert failure["usage"]["input_tokens"] == 17
+            if signal != "assistant_error":
+                assert failure["reason"] == "network"
+        else:
+            output = await executor.execute("test")
+            assert output.error is True
+            assert output.usage.input_tokens == 17
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The logs show API Error: ConnectionRefused; the application itself is healthy.",
+        "The resource is forbidden for ordinary users; that is the intended permission rule.",
+        'Example: "API Error: 503" is the message to look for.',
+        "No error occurred.",
+        "The log says Failed to authenticate. API Error: 401 authentication_error; update the application's credential.",
+    ],
+)
+async def test_normal_sdk_answers_mentioning_errors_stay_successful(model_config, anima_dir, text):
+    from core.execution.agent_sdk import AgentSDKExecutor
+    from core.prompt.context import ContextTracker
+
+    sequence = [MockAssistantMessage([MockTextBlock(text)]), MockResultMessage()]
+    with _patch_agent_sdk_sequences([sequence, sequence]):
+        executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+        result = await executor.execute("test", trigger="heartbeat")
+        assert result.error is False
+        events = [
+            event
+            async for event in executor.execute_streaming(
+                "sys", "test", ContextTracker(model=model_config.model), trigger="heartbeat"
+            )
+        ]
+        assert events[-1]["type"] == "done"
+        assert events[-1]["full_text"] == text
+
+
+async def test_structured_sdk_failure_without_assistant_text_uses_error_details(model_config, anima_dir):
+    from core.execution.agent_sdk import AgentSDKExecutor
+
+    result = MockResultMessage()
+    result.is_error = True
+    result.errors = ["API Error: ConnectionRefused"]
+    with _patch_agent_sdk_sequences([[result]]):
+        output = await AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir).execute("test")
+    assert output.error is True
+    assert output.text == "API Error: ConnectionRefused"
+
+
+@pytest.mark.parametrize(
+    "error,reason",
+    [
+        ("authentication_failed", "auth"),
+        ("billing_error", "billing"),
+        ("rate_limit", "rate_limit"),
+        ("invalid_request", "invalid_request"),
+        ("server_error", "server_error"),
+    ],
+)
+async def test_structured_assistant_error_preserves_provider_reason(model_config, anima_dir, error, reason):
+    from core.execution.agent_sdk import AgentSDKExecutor
+    from core.prompt.context import ContextTracker
+
+    assistant = MockAssistantMessage([MockTextBlock("Provider request failed")])
+    assistant.error = error
+    with _patch_agent_sdk_sequences([[assistant, MockResultMessage()]]):
+        executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+        events = [
+            event
+            async for event in executor.execute_streaming(
+                "sys", "test", ContextTracker(model=model_config.model), trigger="heartbeat"
+            )
+        ]
+    assert events[-1]["type"] == "error"
+    assert events[-1]["reason"] == reason
 
 
 class TestAgentSDKImageInput:

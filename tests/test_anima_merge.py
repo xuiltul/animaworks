@@ -145,8 +145,7 @@ def _add_memory_fixture(source: Path, target: Path) -> None:
     )
     _write(
         source / "transcripts" / "2026-07-01.jsonl",
-        json.dumps({"ts": "2026-07-01T10:00:00+09:00", "role": "user", "content": "Remember this"})
-        + "\n",
+        json.dumps({"ts": "2026-07-01T10:00:00+09:00", "role": "user", "content": "Remember this"}) + "\n",
     )
     _write(source / "activity_log" / "2026-07-01.jsonl", '{"event":"audit"}\n')
     _write(source / "token_usage" / "2026-07-01.jsonl", '{"tokens":10}\n')
@@ -166,8 +165,7 @@ def _add_memory_fixture(source: Path, target: Path) -> None:
     )
     _write(
         source / "shortterm" / "streaming_journal_chat.jsonl",
-        '{"ev":"start","trigger":"chat","session_id":"source-session"}\n'
-        '{"ev":"text","t":"Recovered stream text"}\n',
+        '{"ev":"start","trigger":"chat","session_id":"source-session"}\n{"ev":"text","t":"Recovered stream text"}\n',
     )
 
 
@@ -205,8 +203,7 @@ def _add_rewrite_refs_fixture(data_dir: Path, source: Path, target: Path) -> Non
     )
     _write(
         target / "knowledge" / "qualified.md",
-        "[qualified](/api/animas/source/attachments/photo.png)\n"
-        "[unique](/api/animas/source/attachments/unique.png)\n",
+        "[qualified](/api/animas/source/attachments/photo.png)\n[unique](/api/animas/source/attachments/unique.png)\n",
     )
     _write(source / "attachments" / "photo.png", "source-photo")
     _write(source / "attachments" / "unique.png", "source-unique")
@@ -330,6 +327,8 @@ def _add_rewrite_refs_fixture(data_dir: Path, source: Path, target: Path) -> Non
         json.dumps(
             {
                 "task_id": "collision-task",
+                "task_type": "llm",
+                "description": "execute the imported task",
                 "submitted_by": "source",
                 "reply_to": "source",
                 "depends_on": ["unique-task"],
@@ -404,9 +403,7 @@ def test_anima_merge_dry_run_manifest_reports_collisions_and_references(tmp_path
     assert manifest["collisions"]["attachments"][0]["basename"] == "photo.png"
     assert manifest["task_id_collisions"] == ["collision-task"]
     assert manifest["thread_id_collisions"] == ["thread-a"]
-    assert manifest["external_references"]["supervisors"] == [
-        {"anima": "other", "path": "animas/other/status.json"}
-    ]
+    assert manifest["external_references"]["supervisors"] == [{"anima": "other", "path": "animas/other/status.json"}]
     mapping_paths = {item["path"] for item in manifest["external_references"]["external_messaging"]}
     assert "external_messaging.slack.anima_mapping.C1" in mapping_paths
     assert "external_messaging.discord.channel_members.D1[0]" in mapping_paths
@@ -442,9 +439,7 @@ def test_anima_merge_execute_merges_canonical_memory_and_journals_mappings(
     assert (target / "episodes" / "2026-07-01.md").read_text(encoding="utf-8") == "target episode\n"
     assert (target / "episodes" / "2026-07-01_source.md").read_text(encoding="utf-8") == "source episode\n"
     assert (target / "knowledge" / "topic.md").read_text(encoding="utf-8").endswith("target knowledge\n")
-    assert (target / "knowledge" / "topic__from_source.md").read_text(encoding="utf-8").endswith(
-        "source knowledge\n"
-    )
+    assert (target / "knowledge" / "topic__from_source.md").read_text(encoding="utf-8").endswith("source knowledge\n")
     assert not (target / "knowledge" / "same__from_source.md").exists()
     assert not (target / "procedures" / "deploy__from_source.md").exists()
     assert (target / "skills" / "writer__from_source" / "SKILL.md").is_file()
@@ -1080,18 +1075,9 @@ def test_anima_merge_verify_scans_nonempty_taskboard_rows(tmp_path: Path) -> Non
     report = source_reference_report(data_dir, "source")
 
     assert "shared/taskboard.sqlite3" in report["surfaces_checked"]
-    assert any(
-        location.endswith("taskboard_metadata[1].source_ref")
-        for location in report["residual_references"]
-    )
-    assert any(
-        ":taskboard_events[1].payload_json" in location
-        for location in report["residual_references"]
-    )
-    assert any(
-        ":taskboard_events[2].payload_json.created_by" in location
-        for location in report["references_allowed"]
-    )
+    assert any(location.endswith("taskboard_metadata[1].source_ref") for location in report["residual_references"])
+    assert any(":taskboard_events[1].payload_json" in location for location in report["residual_references"])
+    assert any(":taskboard_events[2].payload_json.created_by" in location for location in report["references_allowed"])
 
 
 def test_anima_merge_verify_rejects_empty_probe_content(
@@ -1189,11 +1175,7 @@ def test_anima_merge_finalize_rejects_active_rollback_window(
         AnimaMergeFinalizeService(data_dir, "source", "target").run(execute=True)
 
     assert (data_dir / "animas" / "source").is_dir()
-    failed = json.loads(
-        (data_dir / "state" / "merge_finalize_journal_source_target.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    failed = json.loads((data_dir / "state" / "merge_finalize_journal_source_target.json").read_text(encoding="utf-8"))
     assert failed["status"] == "failed"
     assert failed["phases"][FinalizePhase.PREFLIGHT.value]["status"] == "failed"
 
@@ -1261,9 +1243,7 @@ def test_anima_merge_to_finalize_e2e_is_dry_run_safe_and_resume_idempotent(
     assert merge_journal["phases"][MergePhase.DONE.value]["status"] == "completed"
 
     source_before = {
-        path.relative_to(source).as_posix(): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
+        path.relative_to(source).as_posix(): path.read_bytes() for path in source.rglob("*") if path.is_file()
     }
     config_before = (data_dir / "config.json").read_bytes()
     finalize = AnimaMergeFinalizeService(data_dir, "source", "target")
@@ -1272,9 +1252,7 @@ def test_anima_merge_to_finalize_e2e_is_dry_run_safe_and_resume_idempotent(
     assert dry_run.plan is not None
     assert dry_run.plan["rollback_ready"] is False
     assert source_before == {
-        path.relative_to(source).as_posix(): path.read_bytes()
-        for path in source.rglob("*")
-        if path.is_file()
+        path.relative_to(source).as_posix(): path.read_bytes() for path in source.rglob("*") if path.is_file()
     }
     assert (data_dir / "config.json").read_bytes() == config_before
     assert not finalize.journal_path.exists()
@@ -1387,11 +1365,7 @@ def test_merge_episodes_records_identical_files_as_deduplicated(tmp_path: Path) 
     assert deduped == ["episodes/00_registry.md"]
     assert mapping["episodes/00_registry.md"] == "episodes/00_registry.md"
     # 非mdのprobe除外: 選定ロジックの条件を直接確認
-    selected = [
-        s
-        for s in mapping
-        if s.startswith("episodes/") and s not in set(deduped) and s.lower().endswith(".md")
-    ]
+    selected = [s for s in mapping if s.startswith("episodes/") and s not in set(deduped) and s.lower().endswith(".md")]
     assert selected == []
 
 

@@ -34,7 +34,12 @@ class TestLifecycleConsolidationIntegration:
             run_dir=tmp_path / "run",
         )
         supervisor.scheduler = AsyncIOScheduler(timezone=get_app_timezone())
-        supervisor._setup_system_crons()
+        from core.config.models import AnimaWorksConfig
+
+        config = AnimaWorksConfig()
+        config.consolidation.weekly_enabled = True
+        with patch("core.config.load_config", return_value=config):
+            supervisor._setup_system_crons()
 
         jobs = supervisor.scheduler.get_jobs()
         job_ids = [job.id for job in jobs]

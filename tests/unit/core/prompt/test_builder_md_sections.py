@@ -19,6 +19,7 @@ def test_group1_uses_file_backed_environment_and_behavior_rules(tmp_path: Path) 
     ):
         load.side_effect = lambda name, **kwargs: {
             "environment": "file environment",
+            "builder/instruction_internalization": "file instruction rules",
             "tool_data_interpretation": "tool data",
         }[name]
         sections = _build_group1(tmp_path / "anima", tmp_path, memory, False, {})
@@ -28,7 +29,7 @@ def test_group1_uses_file_backed_environment_and_behavior_rules(tmp_path: Path) 
     assert contents["behavior_rules"] == "file rules"
 
 
-def test_group6_loads_reflection_and_emotion_from_markdown() -> None:
+def test_group6_keeps_emotion_without_redundant_reflection() -> None:
     with (
         patch("core.prompt.builder._build_emotion_instruction", return_value="file emotion"),
         patch("core.prompt.builder._load_a_reflection", return_value="file reflection"),
@@ -37,7 +38,7 @@ def test_group6_loads_reflection_and_emotion_from_markdown() -> None:
 
     contents = {section.id: section.content for section in sections}
     assert contents["emotion_instruction"] == "file emotion"
-    assert contents["a_reflection"] == "file reflection"
+    assert "a_reflection" not in contents
 
 
 @pytest.mark.parametrize(

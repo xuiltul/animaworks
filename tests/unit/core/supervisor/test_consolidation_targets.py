@@ -273,7 +273,7 @@ async def test_daily_consolidation_timeout_logs_once_and_continues(
     assert handle.calls == ["run_consolidation", "interrupt"]
     assert "consolidation_timeout anima=mio phase=phase_b type=daily" in caplog.text
     assert "Daily consolidation failed for mio" not in caplog.text
-    mock_forgetter.synaptic_downscaling.assert_called_once()
+    mock_forgetter.synaptic_downscaling.assert_not_called()
     assert _RecentEpisodesEngine.rebuild_calls == [("mio", str(sup.animas_dir / "mio"))]
     assert _RecentEpisodesEngine.ingest_calls == [("mio", 48)]
 

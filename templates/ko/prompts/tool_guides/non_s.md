@@ -37,7 +37,6 @@
 
 ### 스킬
 - **create_skill**: 새 스킬 디렉터리 생성
-- 새 스킬을 만들기 전에 `read_memory_file(path="common_skills/skill-creator/SKILL.md")`를 읽기
 - 기존 스킬 문서·CLI 매뉴얼은 **read_memory_file**로 카탈로그 경로를 지정해 읽기
 
 

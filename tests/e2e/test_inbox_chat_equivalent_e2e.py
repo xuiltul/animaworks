@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.config.models import AnimaWorksConfig
 from core.prompt.builder import build_system_prompt
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -48,13 +49,15 @@ def _make_mock_memory(tmp_path: Path, *, specialty: str = "", current_state: str
     return memory
 
 
-def _build_with_trigger(tmp_path: Path, trigger: str, **kwargs) -> str:
+def _build_with_trigger(tmp_path: Path, trigger: str, *, framework_target_tokens: int = 6000, **kwargs) -> str:
     """Build system prompt for a given trigger and return the prompt text."""
     memory = _make_mock_memory(tmp_path, **kwargs)
     data_dir = tmp_path / "data"
     data_dir.mkdir(exist_ok=True)
+    config = AnimaWorksConfig(prompt={"system_prompt_target_tokens": framework_target_tokens})
 
     with (
+        patch("core.config.load_config", return_value=config),
         patch("core.prompt.builder.get_data_dir", return_value=data_dir),
         patch("core.prompt.builder._discover_other_animas", return_value=[]),
     ):
@@ -85,15 +88,19 @@ class TestInboxChatEquivalentE2E:
         assert "Kubernetes cluster management" in inbox_prompt
 
     def test_inbox_and_chat_both_include_full_state(self, tmp_path):
-        """Both should include full current_state without 500-char cap."""
+        """Neither trigger imposes a 500-char cap when the state fits its budget."""
         long_state = "Resolved ECS migration issue. " * 30  # ~900 chars
 
-        chat_prompt = _build_with_trigger(tmp_path, trigger="", current_state=long_state)
-        inbox_prompt = _build_with_trigger(tmp_path, trigger="inbox:alice", current_state=long_state)
+        chat_prompt = _build_with_trigger(
+            tmp_path, trigger="", current_state=long_state, framework_target_tokens=20_000
+        )
+        inbox_prompt = _build_with_trigger(
+            tmp_path, trigger="inbox:alice", current_state=long_state, framework_target_tokens=20_000
+        )
 
         chat_resolved_count = chat_prompt.count("Resolved ECS")
         inbox_resolved_count = inbox_prompt.count("Resolved ECS")
-        assert inbox_resolved_count == chat_resolved_count
+        assert inbox_resolved_count == chat_resolved_count == 30
 
     def test_heartbeat_still_excludes_specialty(self, tmp_path):
         """Heartbeat should NOT include specialty (regression check)."""
@@ -102,17 +109,22 @@ class TestInboxChatEquivalentE2E:
         hb_prompt = _build_with_trigger(tmp_path, trigger="heartbeat", specialty=sp)
         assert "Kubernetes" not in hb_prompt
 
-    def test_inbox_includes_emotion_section(self, tmp_path):
-        """Inbox should include emotion instruction (group 6)."""
+    def test_only_chat_includes_emotion_section(self, tmp_path):
+        """Emotion rendering belongs to human chat, not inter-anima inbox work."""
         inbox_prompt = _build_with_trigger(tmp_path, trigger="inbox:alice")
-        assert "6. メタ設定" in inbox_prompt or "Meta" in inbox_prompt
+        chat_prompt = _build_with_trigger(tmp_path, trigger="")
+        assert '<section name="emotion_instruction">' not in inbox_prompt
+        assert '<section name="emotion_instruction">' in chat_prompt
 
-    def test_inbox_and_chat_prompt_length_parity(self, tmp_path):
-        """Inbox prompt should be similar length to chat (not drastically shorter)."""
+    def test_inbox_and_chat_keep_shared_context_under_compact_budget(self, tmp_path):
+        """Keep useful shared sections without forcing equal prompt lengths."""
         sp = "## Specialty\nDevOps expert."
 
         chat_prompt = _build_with_trigger(tmp_path, trigger="", specialty=sp)
         inbox_prompt = _build_with_trigger(tmp_path, trigger="inbox:alice", specialty=sp)
 
-        ratio = len(inbox_prompt) / len(chat_prompt) if len(chat_prompt) > 0 else 0
-        assert ratio > 0.9, f"Inbox prompt is only {ratio:.0%} of chat prompt length"
+        for prompt in (chat_prompt, inbox_prompt):
+            assert '<section name="identity">' in prompt
+            assert "I am test_anima." in prompt
+            assert '<section name="specialty">' in prompt
+            assert "DevOps expert." in prompt

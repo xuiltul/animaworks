@@ -6,10 +6,16 @@ from __future__ import annotations
 
 """CLI subcommand for vault key-value storage.
 
+Values live in two kinds of sections of ``vault.json``: the Anima-scoped
+section (named after ``ANIMAWORKS_ANIMA_DIR``) and the ``shared`` section
+that credential resolution reads from.  ``get`` and ``list`` cover both so
+that a value written with ``store --shared`` stays visible afterwards.
+
 Usage via animaworks-tool:
-    animaworks-tool vault get KEY
+    animaworks-tool vault get KEY [--shared]
     animaworks-tool vault store KEY VALUE
-    animaworks-tool vault list
+    animaworks-tool vault list [--shared]
+    animaworks-tool vault delete KEY [--shared]
     animaworks vault status
     animaworks vault init
     printf 'VALUE' | animaworks vault store --shared KEY
@@ -22,6 +28,8 @@ import os
 import sys
 from pathlib import Path
 
+SHARED_SECTION = "shared"
+
 
 def cmd_vault(args: argparse.Namespace) -> None:
     """Dispatch vault subcommand."""
@@ -29,24 +37,24 @@ def cmd_vault(args: argparse.Namespace) -> None:
 
     vm = get_vault_manager()
     sub = getattr(args, "vault_command", None)
+    shared = bool(getattr(args, "shared", False))
 
     if sub == "status":
         _cmd_status(vm)
     elif sub == "init":
         _cmd_init(vm)
-    elif sub == "store" and getattr(args, "shared", False):
-        _cmd_store(args, vm, "shared")
-    elif sub == "get":
-        namespace = _get_anima_namespace()
-        _cmd_get(args, vm, namespace)
     elif sub == "store":
-        namespace = _get_anima_namespace()
+        namespace = SHARED_SECTION if shared else _get_anima_namespace()
         _cmd_store(args, vm, namespace)
+    elif sub == "get":
+        _cmd_get(args, vm, shared)
     elif sub == "list":
-        namespace = _get_anima_namespace()
-        _cmd_list(vm, namespace)
+        _cmd_list(vm, shared)
+    elif sub == "delete":
+        namespace = SHARED_SECTION if shared else _get_anima_namespace()
+        _cmd_delete(args, vm, namespace)
     else:
-        print("Usage: animaworks vault {status|init|get|store|list}", file=sys.stderr)
+        print("Usage: animaworks vault {status|init|get|store|list|delete}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -63,19 +71,33 @@ def _get_anima_namespace() -> str:
     return anima_dir.name
 
 
-def _cmd_get(args: argparse.Namespace, vm, namespace: str) -> None:
+def _search_sections(shared_only: bool) -> list[str]:
+    """Return the sections to search, Anima-scoped first then ``shared``."""
+    if shared_only:
+        return [SHARED_SECTION]
+    return [_get_anima_namespace(), SHARED_SECTION]
+
+
+def _cmd_get(args: argparse.Namespace, vm, shared_only: bool) -> None:
     key = getattr(args, "key", "")
     if not key:
         print("Error: key is required", file=sys.stderr)
         sys.exit(1)
 
-    value = vm.get(namespace, key)
-    if value is None:
-        print(f"Error: key not found: {key}", file=sys.stderr)
-        sys.exit(1)
+    sections = _search_sections(shared_only)
+    for section in sections:
+        value = vm.get(section, key)
+        if value is None:
+            continue
+        result = {"key": key, "section": section, "value": value}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
 
-    result = {"key": key, "value": value}
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(
+        f"Error: key not found: {key} (searched sections: {', '.join(sections)})",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def _cmd_store(args: argparse.Namespace, vm, namespace: str) -> None:
@@ -90,19 +112,56 @@ def _cmd_store(args: argparse.Namespace, vm, namespace: str) -> None:
             print("Error: --shared values must be supplied through stdin or interactive input", file=sys.stderr)
             sys.exit(1)
         value = getpass.getpass("Value: ") if sys.stdin.isatty() else sys.stdin.read().rstrip("\r\n")
+        if not value:
+            print("Error: empty value received; nothing was stored", file=sys.stderr)
+            sys.exit(1)
     elif value is None:
         print("Error: value is required", file=sys.stderr)
         sys.exit(1)
 
     vm.store(namespace, key, value)
-    result = {"key": key, "stored": True}
+    result = {"key": key, "section": namespace, "stored": True}
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-def _cmd_list(vm, namespace: str) -> None:
+def _cmd_delete(args: argparse.Namespace, vm, namespace: str) -> None:
+    """Remove a key from exactly one section.
+
+    Unlike ``get``, this never cascades into ``shared``: an Anima deleting its
+    own key must not take out a credential the rest of the fleet depends on.
+    """
+    key = getattr(args, "key", "")
+    if not key:
+        print("Error: key is required", file=sys.stderr)
+        sys.exit(1)
+
+    if not vm.delete(namespace, key):
+        print(f"Error: key not found in section '{namespace}': {key}", file=sys.stderr)
+        sys.exit(1)
+
+    result = {"key": key, "section": namespace, "deleted": True}
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _section_keys(data: dict, section: str) -> list[str]:
+    entries = data.get(section)
+    if not isinstance(entries, dict):
+        return []
+    return sorted(entries)
+
+
+def _cmd_list(vm, shared_only: bool) -> None:
     data = vm.load_vault()
-    keys = sorted(data.get(namespace, {}).keys())
-    print(json.dumps(keys, ensure_ascii=False, indent=2))
+    if shared_only:
+        result: dict = {"namespace": SHARED_SECTION, "keys": _section_keys(data, SHARED_SECTION)}
+    else:
+        namespace = _get_anima_namespace()
+        result = {
+            "namespace": namespace,
+            "keys": _section_keys(data, namespace),
+            "shared": _section_keys(data, SHARED_SECTION),
+        }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def _cmd_status(vm) -> None:
@@ -155,6 +214,11 @@ def register_vault_command(subparsers) -> None:
 
     p_get = vault_sub.add_parser("get", help="Get a value by key")
     p_get.add_argument("key", help="Key to retrieve")
+    p_get.add_argument(
+        "--shared",
+        action="store_true",
+        help="Look only in the shared section (default: Anima namespace, then shared)",
+    )
 
     p_store = vault_sub.add_parser("store", help="Store a key-value pair")
     p_store.add_argument("key", help="Key to store")
@@ -165,6 +229,19 @@ def register_vault_command(subparsers) -> None:
         help="Store in the shared section, reading the value from stdin or a hidden prompt",
     )
 
-    vault_sub.add_parser("list", help="List all keys in anima namespace")
+    p_list = vault_sub.add_parser("list", help="List keys in the anima namespace and the shared section")
+    p_list.add_argument(
+        "--shared",
+        action="store_true",
+        help="List only the shared section (does not require ANIMAWORKS_ANIMA_DIR)",
+    )
+
+    p_delete = vault_sub.add_parser("delete", help="Remove a key from one section")
+    p_delete.add_argument("key", help="Key to remove")
+    p_delete.add_argument(
+        "--shared",
+        action="store_true",
+        help="Delete from the shared section instead of the Anima namespace (never cascades)",
+    )
 
     p_vault.set_defaults(func=cmd_vault)

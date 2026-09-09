@@ -128,27 +128,16 @@ def _check_model_change(base_dir: Path, full: bool) -> str:
     meta_path = base_dir / "index_meta.json"
 
     if meta_path.is_file():
+        from core.i18n import t
+        from core.memory.rag.index_signature import index_signature_error
+
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            previous_model = meta.get("embedding_model")
-            previous_e5_prefix = bool(meta.get("embedding_e5_prefix", False))
+            signature_error = index_signature_error(meta, current_model, current_e5_prefix)
         except (json.JSONDecodeError, OSError):
-            previous_model = None
-            previous_e5_prefix = current_e5_prefix
-
-        if previous_model and previous_model != current_model and not full:
-            logger.error(
-                "Embedding model changed: %s → %s.  Run 'animaworks index --full' to rebuild the index.",
-                previous_model,
-                current_model,
-            )
-            sys.exit(1)
-        if previous_e5_prefix != current_e5_prefix and not full:
-            logger.error(
-                "Embedding E5 prefix setting changed: %s → %s.  Run 'animaworks index --full' to rebuild the index.",
-                previous_e5_prefix,
-                current_e5_prefix,
-            )
+            signature_error = t("rag.signature_unreadable")
+        if signature_error and not full:
+            logger.error(t("rag.indexing_blocked", reason=signature_error))
             sys.exit(1)
 
     return current_model

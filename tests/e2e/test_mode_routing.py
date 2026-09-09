@@ -10,9 +10,27 @@ No API calls are made in these tests.
 
 from __future__ import annotations
 
+import pytest
+
+from core.exceptions import ExecutorUnavailableError
+
+_OPTIONAL_ADAPTERS = (
+    ("core.execution.codex_sdk.is_codex_sdk_available", "codex/o4-mini"),
+    ("core.execution.cursor_agent.is_cursor_agent_available", "cursor/auto"),
+    ("core.execution.gemini_cli.is_gemini_cli_available", "gemini/gemini-2.5-pro"),
+    ("core.execution.grok_cli.is_grok_cli_available", "grok/grok-4.5"),
+)
+
 
 class TestModeRouting:
     """Mode detection: _resolve_execution_mode()."""
+
+    @pytest.fixture(autouse=True)
+    def _optional_adapters_available(self, monkeypatch):
+        # These tests select a mode, not discover locally installed CLIs.
+        # Missing adapters are tested separately without this fixture.
+        for availability, _ in _OPTIONAL_ADAPTERS:
+            monkeypatch.setattr(availability, lambda: True)
 
     def test_claude_model_with_sdk_routes_to_s(self, make_agent_core):
         """Claude model + SDK available → Mode S."""
@@ -131,3 +149,12 @@ class TestModeRouting:
             execution_mode="A",
         )
         assert agent._resolve_execution_mode() == "a"
+
+
+@pytest.mark.parametrize("availability,model", _OPTIONAL_ADAPTERS)
+def test_missing_optional_adapter_without_configured_fallback_fails_closed(
+    availability, model, make_agent_core, monkeypatch
+):
+    monkeypatch.setattr(availability, lambda: False)
+    with pytest.raises(ExecutorUnavailableError):
+        make_agent_core(name="missing-adapter", model=model)

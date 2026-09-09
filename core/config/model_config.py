@@ -14,6 +14,7 @@ import importlib.util
 import json
 import logging
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -128,10 +129,11 @@ def _guard_key_for_model_config(model_config: ModelConfig, config: AnimaWorksCon
         realm = "grok"
     else:
         realm = litellm_realm_of(model_config.model)
-    return guard_key(provider_family_of(model_config.model), realm)
+    family = {"S": "anthropic", "C": "openai", "G": "google", "X": "grok"}.get(mode)
+    return guard_key(family or provider_family_of(model_config.model), realm)
 
 
-def _fallback_credential_name(model: str) -> str | None:
+def _fallback_credential_name(model: str, config: AnimaWorksConfig | None = None) -> str | None:
     """Resolve the configured credential name for a fallback model family.
 
     DeepSeek GPT-format models (``openai/deepseek-*``) are served behind an
@@ -142,6 +144,9 @@ def _fallback_credential_name(model: str) -> str | None:
     """
     from core.execution.error_classifier import provider_family_of
 
+    entry = _match_models_json(model)
+    if entry and isinstance(entry.get("credential"), str):
+        return entry["credential"]
     model_family = _model_family(model)
     if model_family == "openai" and model.split("/", 1)[-1].startswith("deepseek-"):
         dedicated = _FAMILY_CREDENTIAL_MAP.get("deepseek")
@@ -149,7 +154,7 @@ def _fallback_credential_name(model: str) -> str | None:
             return dedicated
         from core.config.io import load_config
 
-        cfg = load_config()
+        cfg = config if config is not None else load_config()
         bg_cred = getattr(getattr(cfg, "anima_defaults", None), "background_credential", None)
         if isinstance(bg_cred, str) and bg_cred:
             return bg_cred
@@ -157,11 +162,59 @@ def _fallback_credential_name(model: str) -> str | None:
     return _FAMILY_CREDENTIAL_MAP.get(model_family) or _FAMILY_CREDENTIAL_MAP.get(provider_family_of(model))
 
 
+# Engines that authenticate through their own CLI credential store and so
+# need no entry in ``config.credentials``.
+_CLI_AUTH_MODES = frozenset({"C", "D", "G", "X"})
+
+
+def _credential_supports_mode(credential: Any, mode: str) -> bool:
+    """Reject explicitly foreign provider credentials, not opaque API keys.
+
+    Legacy ``api_key`` credentials can describe a deliberate Anthropic proxy.
+    An OpenAI gateway or Codex login, however, cannot authenticate Claude SDK
+    requests. Inherited background defaults must not cross that boundary.
+    """
+    return not (mode.upper() == "S" and getattr(credential, "type", None) in {"openai", "codex_login"})
+
+
+def _mode_s_default_credential(resolved_mode: str) -> str | None:
+    """Credential for a Mode S model whose family cannot be read off the name.
+
+    The model picker offers the Claude CLI's own aliases (``opus``,
+    ``sonnet``, ``fable`` — whatever ``claude --help`` lists), which carry
+    no ``provider/`` prefix and do not start with ``claude-``, so family
+    detection finds nothing and the override used to be dropped for the
+    entire Claude group.  Mode S *is* the Claude CLI / Agent SDK, so
+    Anthropic is the right credential for any name it accepts.
+    """
+    if resolved_mode != "S":
+        return None
+    return _FAMILY_CREDENTIAL_MAP.get("claude")
+
+
+def can_build_model_override(mode: str, model: str, config: AnimaWorksConfig) -> bool:
+    """Whether an override for *mode*/*model* would resolve to a credential.
+
+    The same decision :func:`build_model_override_config` makes, without a
+    base config, so a request carrying an unusable override can be rejected
+    at the wall instead of being dropped deep inside the anima where only a
+    log line records it.
+    """
+    resolved_mode = mode.upper()
+    if resolved_mode in _CLI_AUTH_MODES:
+        return True
+    name = _fallback_credential_name(model, config) or _mode_s_default_credential(resolved_mode)
+    credential = config.credentials.get(name) if name else None
+    return credential is not None and _credential_supports_mode(credential, resolved_mode)
+
+
 def build_model_override_config(
     base: ModelConfig,
     mode: str,
     model: str,
     config: AnimaWorksConfig,
+    *,
+    credential_name: str | None = None,
 ) -> ModelConfig | None:
     """Build a ModelConfig for a requested model, resolving credential by mode.
 
@@ -176,7 +229,7 @@ def build_model_override_config(
     back to the base config rather than risk an auth error).
     """
     resolved_mode = mode.upper()
-    if resolved_mode in {"C", "D", "G", "X"}:
+    if resolved_mode in _CLI_AUTH_MODES and credential_name is None:
         # CLI-auth engines (codex/cursor/gemini/grok) authenticate via their own
         # CLI credential stores, so the base credential fields are stale here.
         # Clear them explicitly: e.g. an Anthropic-credential anima using a
@@ -196,15 +249,26 @@ def build_model_override_config(
                 "api_key_env": "",
                 "api_base_url": None,
                 "extra_keys": {},
+                "mode_s_auth": None,
             },
         )
-    credential_name = _fallback_credential_name(model)
+    credential_name = (
+        credential_name or _fallback_credential_name(model, config) or _mode_s_default_credential(resolved_mode)
+    )
     credential = config.credentials.get(credential_name) if credential_name else None
     if credential is None:
         logger.warning(
             "build_model_override_config: no credential configured for model %r (family=%r)",
             model,
             credential_name,
+        )
+        return None
+    if not _credential_supports_mode(credential, resolved_mode):
+        logger.warning(
+            "Credential %s (type=%s) is incompatible with execution mode %s",
+            credential_name,
+            credential.type,
+            resolved_mode,
         )
         return None
     credential_type = getattr(credential, "type", None)
@@ -235,7 +299,12 @@ def build_model_override_config(
     )
 
 
-def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
+def resolve_effective_model_config(
+    model_config: ModelConfig,
+    *,
+    config: AnimaWorksConfig | None = None,
+    unavailable_modes: frozenset[str] = frozenset(),
+) -> ModelConfig:
     """Select the first usable fallback while the primary realm is blocked.
 
     The returned copy is ephemeral and never writes ``status.json``.  The
@@ -253,7 +322,7 @@ def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
     from core.config.model_mode import parse_fallback_entry
     from core.execution.rate_guard import get_rate_guard
 
-    config = load_config()
+    config = config if config is not None else load_config()
     guard = get_rate_guard()
     primary_key = _guard_key_for_model_config(model_config, config)
     primary_remaining = guard.blocked_remaining(primary_key)
@@ -269,6 +338,8 @@ def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
             continue
         mode, model = parsed
         resolved_mode = mode.upper()
+        if resolved_mode in unavailable_modes:
+            continue
 
         if resolved_mode == "X" and shutil.which("grok") is None:
             logger.debug("Skipping fallback %s:%s: grok CLI is unavailable", mode, model)
@@ -316,6 +387,153 @@ def resolve_effective_model_config(model_config: ModelConfig) -> ModelConfig:
             earliest_remaining,
         )
     return earliest_config
+
+
+@dataclass(frozen=True)
+class ModelSelection:
+    """Ephemeral route decision; contains no engine-native session identity."""
+
+    primary: ModelConfig
+    effective: ModelConfig
+    mode: str
+    credential: str | None
+    reason: str
+    guard_key: str
+
+
+def resolve_model_selection(
+    base: ModelConfig,
+    *,
+    lane: str = "chat",
+    requested_model: str | None = None,
+    config: AnimaWorksConfig | None = None,
+    apply_fallback: bool = True,
+) -> ModelSelection:
+    """Resolve explicit request, lane default, then permitted fallback.
+
+    Credential ownership changes with the route, never with the shape of an
+    API key. A same-provider background model preserves custom credentials;
+    an explicit background credential takes precedence over that inheritance.
+    Explicit requests are rejected when unusable instead of silently answered
+    by the default model. All copies are request-local.
+    """
+    from core.config.io import load_config
+    from core.config.model_mode import parse_fallback_entry
+
+    config = config if config is not None else load_config()
+    primary = base
+    reason = "anima_default"
+    if lane in {"background", "heartbeat", "cron"}:
+        background = base.background_model or config.heartbeat.default_model
+        credential_name = base.background_credential
+        background_mode = _resolved_mode_for_config(base, config)
+        if background:
+            parsed_background = parse_fallback_entry(background, config)
+            if parsed_background is None:
+                raise ValueError(f"Invalid background model: {background!r}")
+            background_mode = parsed_background[0]
+        background_credential = config.credentials.get(credential_name) if credential_name else None
+        if background_credential is not None and not _credential_supports_mode(background_credential, background_mode):
+            logger.warning(
+                "Ignoring incompatible background credential %s (type=%s) for mode %s; keeping provider auth",
+                credential_name,
+                background_credential.type,
+                background_mode,
+            )
+            credential_name = None
+        if background and background != base.model:
+            parsed = parse_fallback_entry(background, config)
+            if parsed is None:
+                raise ValueError(f"Invalid background model: {background!r}")
+            mode, model = parsed
+            if (
+                not credential_name
+                and mode.upper() == _resolved_mode_for_config(base, config)
+                and _model_family(model) == _model_family(base.model)
+            ):
+                primary = base.model_copy(
+                    update={"model": model, "execution_mode": mode.upper(), "resolved_mode": mode.upper()}
+                )
+            else:
+                primary = build_model_override_config(base, mode, model, config, credential_name=credential_name)
+                if primary is None:
+                    raise ValueError(f"No credential configured for background model: {background!r}")
+                if primary.credential:
+                    primary = primary.model_copy(update={"background_credential": primary.credential})
+            reason = "background_model" if base.background_model else "heartbeat_default"
+        elif credential_name:
+            primary = build_model_override_config(
+                base,
+                _resolved_mode_for_config(base, config),
+                base.model,
+                config,
+                credential_name=credential_name,
+            )
+            if primary is None:
+                raise ValueError(f"Unknown background credential: {base.background_credential!r}")
+            reason = "background_credential"
+        if base.background_thinking_effort and base.background_thinking_effort != primary.thinking_effort:
+            primary = primary.model_copy(update={"thinking_effort": base.background_thinking_effort})
+    if requested_model:
+        parsed = parse_fallback_entry(requested_model, config)
+        if parsed is None:
+            raise ValueError(f"Invalid model override: {requested_model!r}")
+        mode, model = parsed
+        # An explicit request for the current route must keep its configured
+        # auth realm, including custom gateways and CLI API authentication.
+        if model != primary.model or mode.upper() != _resolved_mode_for_config(primary, config):
+            candidate = build_model_override_config(primary, mode, model, config)
+            if candidate is None:
+                raise ValueError(f"No credential configured for model override: {requested_model!r}")
+            primary = candidate
+        reason = "explicit_override"
+    if lane == "voice":
+        primary = primary.model_copy(update={"thinking_effort": base.voice_thinking_effort or "low"})
+    effective = resolve_effective_model_config(primary, config=config) if apply_fallback else primary
+    if effective is not primary:
+        reason = "rate_guard_fallback"
+    mode = _resolved_mode_for_config(effective, config)
+    key = _guard_key_for_model_config(effective, config)
+    logger.info(
+        "model_selected lane=%s requested=%s primary=%s effective=%s mode=%s credential=%s realm=%s reason=%s",
+        lane,
+        requested_model or "",
+        primary.model,
+        effective.model,
+        mode,
+        effective.credential,
+        key,
+        reason,
+    )
+    return ModelSelection(primary, effective, mode, effective.credential, reason, key)
+
+
+def resolve_unavailable_model_config(
+    base: ModelConfig,
+    *,
+    unavailable_modes: frozenset[str],
+) -> ModelConfig | None:
+    """Select only explicitly configured alternatives to a missing engine."""
+    from core.config.io import load_config
+    from core.execution.rate_guard import get_rate_guard
+
+    config = load_config()
+    guard = get_rate_guard()
+    guard.report_block(
+        _guard_key_for_model_config(base, config), guard.config.default_block_seconds, "executor_unavailable"
+    )
+    entries = list(base.fallback_models)
+    # Legacy singular fallback remains an explicit choice, behind the ordered
+    # list; it is never synthesized from a provider prefix or an API key.
+    if base.fallback_model and base.fallback_model not in entries:
+        entries.append(base.fallback_model)
+    if not entries:
+        return None
+    primary = base.model_copy(update={"fallback_models": entries})
+    effective = resolve_effective_model_config(primary, config=config, unavailable_modes=unavailable_modes)
+    if _resolved_mode_for_config(effective, config) in unavailable_modes:
+        return None
+    return effective
 
 
 def fallback_event_meta(
@@ -496,6 +714,7 @@ def _model_family(model: str) -> str:
 
 
 _FAMILY_CREDENTIAL_MAP: dict[str, str] = {
+    "anthropic": "anthropic",
     "claude": "anthropic",
     "openai": "openai",
     "ollama": "ollama",
@@ -506,6 +725,8 @@ _FAMILY_CREDENTIAL_MAP: dict[str, str] = {
     "bedrock": "anthropic",
     "cursor": "anthropic",
     "grok": "grok",
+    "xai": "grok",
+    "azure": "azure",
 }
 
 
@@ -636,6 +857,9 @@ def smart_update_model(
 
 
 __all__ = [
+    "ModelSelection",
+    "resolve_model_selection",
+    "resolve_unavailable_model_config",
     "load_model_config",
     "resolve_effective_model_config",
     "fallback_event_meta",

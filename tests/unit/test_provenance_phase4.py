@@ -335,7 +335,8 @@ class TestFormatPrimingSectionTrustSeparation:
         )
         output = format_priming_section(r)
         assert 'origin="consolidation"' in output
-        assert 'origin="external_platform"' in output
+        # The untrusted bucket mixes platform/web chunks, so it is labelled mixed.
+        assert 'origin="mixed"' in output
 
     def test_medium_block_no_origin_when_untrusted_absent(self) -> None:
         """When no untrusted, medium block does not include origin attribute."""

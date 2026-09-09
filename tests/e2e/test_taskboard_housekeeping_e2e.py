@@ -25,7 +25,7 @@ def _write_json(path: Path, payload: dict[str, object], *, age_hours: int = 0) -
     return path
 
 
-async def test_taskboard_housekeeping_remediates_stale_runtime_artifacts_end_to_end(tmp_path: Path) -> None:
+async def test_housekeeping_preserves_legacy_llm_evidence_and_cleans_unrelated_artifacts(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     anima_dir = data_dir / "animas" / "sakura"
     idle_anima_dir = data_dir / "animas" / "mei"
@@ -79,18 +79,20 @@ async def test_taskboard_housekeeping_remediates_stale_runtime_artifacts_end_to_
     )
 
     taskboard = results["taskboard_stale"]
-    assert taskboard["processing_recovered"] == 1
-    assert taskboard["processing_queue_synced"] == 1
-    assert taskboard["deferred_woken"] == 1
-    assert taskboard["suppressed_deleted"] == 1
+    assert all(
+        key not in taskboard
+        for key in ("processing_recovered", "processing_queue_synced", "deferred_woken", "suppressed_deleted")
+    )
     assert taskboard["background_running_deleted"] == 1
     assert taskboard["current_state_archived"] == 1
 
-    assert (anima_dir / "state" / "pending" / "failed" / "recover-task.json").exists()
-    assert (anima_dir / "state" / "pending" / "wake-task.json").exists()
-    assert not (anima_dir / "state" / "pending" / "suppressed" / "old-hidden.json").exists()
+    assert (anima_dir / "state" / "pending" / "processing" / "recover-task.json").exists()
+    assert (anima_dir / "state" / "pending" / "deferred" / "wake-task.json").exists()
+    assert (anima_dir / "state" / "pending" / "suppressed" / "old-hidden.json").exists()
+    assert not (anima_dir / "state" / "pending" / "wake-task.json").exists()
     assert not (anima_dir / "state" / "background_tasks" / "stale-running.json").exists()
-    assert queue.get_task_by_id("recover-task").status == "failed"
+    assert queue.get_task_by_id("recover-task").status == "in_progress"
+    assert queue.store.pending("sakura") == []
     assert state_path.read_text(encoding="utf-8") == "status: idle\n"
     assert "stale idle notes" in next((idle_anima_dir / "episodes").glob("*.md")).read_text(encoding="utf-8")
 
@@ -98,7 +100,7 @@ async def test_taskboard_housekeeping_remediates_stale_runtime_artifacts_end_to_
         anima_name="sakura",
         task_id="recover-task",
     )
-    assert events[-1]["event_type"] == "stale_processing_recovered"
+    assert not any(event["event_type"] == "stale_processing_recovered" for event in events)
 
 
 async def test_taskboard_housekeeping_archives_orphan_metadata_and_purges_stale(tmp_path: Path) -> None:

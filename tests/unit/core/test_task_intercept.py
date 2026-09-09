@@ -5,12 +5,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
+from core.memory.task_queue import TaskQueueManager
 
 # ── _intercept_task_to_pending ───────────────────────────────
 
@@ -34,10 +34,11 @@ class TestInterceptTaskToPending:
             task_id = _intercept_task_to_pending(anima_dir, tool_input, "tool-123")
 
         pending_dir = anima_dir / "state" / "pending"
-        task_files = list(pending_dir.glob("*.json"))
-        assert len(task_files) == 1
+        assert not list(pending_dir.glob("*.json"))
+        task_inputs = TaskQueueManager(anima_dir).store.pending(anima_dir.name)
+        assert len(task_inputs) == 1
 
-        task_desc = json.loads(task_files[0].read_text(encoding="utf-8"))
+        task_desc = task_inputs[0]
         assert task_desc["task_type"] == "llm"
         assert task_desc["task_id"] == task_id
         assert task_desc["title"] == "Implement feature X"
@@ -57,10 +58,7 @@ class TestInterceptTaskToPending:
         with patch("core.execution._sdk_hooks._log_tool_use"):
             _intercept_task_to_pending(anima_dir, tool_input, None)
 
-        pending_dir = anima_dir / "state" / "pending"
-        task_desc = json.loads(
-            next(pending_dir.glob("*.json")).read_text(encoding="utf-8"),
-        )
+        task_desc = TaskQueueManager(anima_dir).store.pending(anima_dir.name)[0]
         assert task_desc["description"] == "Quick background check"
 
     def test_logs_activity(self, tmp_path: Path) -> None:
@@ -94,16 +92,19 @@ class TestInterceptTaskToPending:
         with patch("core.execution._sdk_hooks._log_tool_use"):
             _intercept_task_to_pending(anima_dir, tool_input, None)
 
-        task_desc = json.loads(
-            next((anima_dir / "state" / "pending").glob("*.json")).read_text(
-                encoding="utf-8",
-            ),
-        )
+        task_desc = TaskQueueManager(anima_dir).store.pending(anima_dir.name)[0]
 
         required_keys = {
-            "task_type", "task_id", "title", "description",
-            "context", "acceptance_criteria", "constraints",
-            "file_paths", "submitted_by", "submitted_at",
+            "task_type",
+            "task_id",
+            "title",
+            "description",
+            "context",
+            "acceptance_criteria",
+            "constraints",
+            "file_paths",
+            "submitted_by",
+            "submitted_at",
         }
         assert required_keys <= set(task_desc.keys())
 
@@ -208,9 +209,11 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"file_path": "/tmp/test.txt"},
         }
 
-        with patch("core.execution._sdk_hooks._log_tool_use"), \
-             patch("core.execution._sdk_hooks._check_a1_file_access", return_value=None), \
-             patch("core.execution._sdk_hooks._build_output_guard", return_value=None):
+        with (
+            patch("core.execution._sdk_hooks._log_tool_use"),
+            patch("core.execution._sdk_hooks._check_a1_file_access", return_value=None),
+            patch("core.execution._sdk_hooks._build_output_guard", return_value=None),
+        ):
             result = await hook(input_data, "tool-id-4", {})
 
         output = result.get("hookSpecificOutput", {})
@@ -223,9 +226,11 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"command": "echo hello"},
         }
 
-        with patch("core.execution._sdk_hooks._log_tool_use"), \
-             patch("core.execution._sdk_hooks._check_a1_bash_command", return_value=None), \
-             patch("core.execution._sdk_hooks._build_output_guard", return_value=None):
+        with (
+            patch("core.execution._sdk_hooks._log_tool_use"),
+            patch("core.execution._sdk_hooks._check_a1_bash_command", return_value=None),
+            patch("core.execution._sdk_hooks._build_output_guard", return_value=None),
+        ):
             result = await hook(input_data, "tool-id-5", {})
 
         output = result.get("hookSpecificOutput", {})
@@ -237,9 +242,11 @@ class TestPreToolHookTaskBranch:
             "tool_input": {"command": "echo safe; echo injected"},
         }
 
-        with patch("core.execution._sdk_hooks._log_tool_use") as log_tool, \
-             patch("core.execution._sdk_hooks._check_a1_bash_command", return_value="injection") as check, \
-             patch("core.execution._sdk_hooks._build_output_guard", return_value=None):
+        with (
+            patch("core.execution._sdk_hooks._log_tool_use") as log_tool,
+            patch("core.execution._sdk_hooks._check_a1_bash_command", return_value="injection") as check,
+            patch("core.execution._sdk_hooks._build_output_guard", return_value=None),
+        ):
             result = await hook(input_data, "tool-id-injection", {})
 
         output = result.get("hookSpecificOutput", {})

@@ -30,8 +30,7 @@ def _prepare_anima_dirs(tmp_path: Path) -> tuple[Path, Path]:
     # Keep a single background worker so AgentCore is created once per lane
     # (chat / background / inbox) and the legacy lane mock wiring stays valid.
     (anima_dir / "status.json").write_text(
-        '{"enabled": true, "role": "general", "model": "claude-sonnet-4-6",'
-        ' "background_worker_pool_size": 1}',
+        '{"enabled": true, "role": "general", "model": "claude-sonnet-4-6", "background_worker_pool_size": 1}',
         encoding="utf-8",
     )
     return anima_dir, shared_dir
@@ -83,10 +82,6 @@ async def test_taskexec_runs_on_background_lane_while_chat_session_lock_is_held(
     with (
         patch("core.paths.load_prompt", return_value="task prompt"),
         patch("core.memory.activity.ActivityLogger") as mock_activity,
-        patch(
-            "core.supervisor.pending_executor._completion_declaration_required",
-            return_value=False,
-        ),
     ):
         mock_activity.return_value.log = MagicMock()
         async with anima._agent_session_context("chat"):

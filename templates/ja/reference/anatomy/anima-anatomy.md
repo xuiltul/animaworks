@@ -18,8 +18,6 @@
 ├── cron.md              # 定時タスクの設定
 ├── state/               # 作業状態
 │   ├── current_state.md
-│   ├── task_queue.jsonl
-│   ├── pending/         # 実行キュー
 │   └── task_results/    # タスク実行結果
 ├── episodes/            # エピソード記憶
 ├── knowledge/           # 意味記憶
@@ -252,22 +250,15 @@ command: /usr/local/bin/backup.sh
 今まさに取り組んでいるタスクや状況（1つ）。タスクの目標・進捗・ブロッカーを記録する。
 通常の Heartbeat / cron / 会話境界では保持される。プロンプト注入は3000文字で制限され、ディスク trim はデフォルト8000文字で実行される（`heartbeat.current_state_max_chars`、0 = 無効）。
 
-> **旧 `pending.md` について**: 以前存在した `state/pending.md`（バックログ）は廃止済み。内容は `current_state.md` に統合された後、ファイルが削除される（自動マイグレーション）。タスクのバックログ管理は `task_queue.jsonl`（Layer 2）に一本化されている。
+> **旧タスク保存先**: `state/task_queue.jsonl` と `state/pending/` は移行・エクスポート用の証跡のみ。稼働中のキューとして使わず編集しない。正本タスクツールを使う。
 
-### state/task_queue.jsonl — タスクキュー
+### 正本タスク
 
-構造化されたタスクの追跡。`submit_tasks` / `update_task` で操作する。一覧は `animaworks-tool task list`（CLI）。
-`source: human` のタスクは最優先で処理すること（MUST）。
-
-### state/pending/ — 実行キュー
-
-`submit_tasks` / `delegate_task` ツール経由で投入されたタスクの実行キュー。
-TaskExec が3秒間隔でポーリングし、自動的に取得・実行する。手動でJSONを作成してはならない。
+`list_tasks` / `submit_tasks` / `update_task` を使う。ホストが指示・依存関係・実行試行・委譲エイリアスを一つの TaskStore に保存する。人間由来タスクを最優先にする。`in_progress` はホストだけが設定し、結果は `done` / `pending` / `cancelled` で宣言する。明示的な再開は同じ ID に `resume: true` を指定し、原入力と履歴を保つ。
 
 ### state/task_results/ — タスク実行結果
 
-TaskExec が完了したタスクの結果要約を保存するディレクトリ（`{task_id}.md`、最大2000文字）。
-依存タスクはこの結果をコンテキストとして自動的に受け取る。7日間のTTLで自動削除される。
+TaskExec の受理済み結果要約は `{task_id}/{attempt_token}.md`（最大2000文字）。後続にはホストが選んだ受理済み結果を渡し、ファイルの存在だけで完了と判断しない。
 
 | 項目 | 値 |
 |------|-----|

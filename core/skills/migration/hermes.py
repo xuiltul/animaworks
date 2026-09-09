@@ -71,6 +71,13 @@ def import_hermes(options: HermesImportOptions) -> MigrationReport:
 
     if options.apply:
         backup_targets = _planned_backup_targets(source, options, migration_dir)
+        if options.target_anima:
+            from core.taskboard.tasks import TaskStore, task_database_path
+
+            task_store = TaskStore(task_database_path(_anima_dir(options)))
+            task_backup = migration_dir / f"{batch_id}_taskboard.sqlite3"
+            task_store.backup(task_backup)
+            backup_targets.append(task_backup)
         backup_path = migration_dir / f"{batch_id}_backup_manifest.json"
         write_backup_manifest(backup_path, data_dir=options.data_dir, targets=backup_targets, batch_id=batch_id)
         report.backup_manifest_path = rel_to(backup_path, options.data_dir)
@@ -337,8 +344,10 @@ def _migrate_tasks(
         for index, task in enumerate(tasks):
             summary = str(task.get("summary") or task.get("title") or task.get("name") or f"Hermes task {index + 1}")
             task_id = f"hermes_{source_fingerprint('hermes_task_id', path, summary, extra=str(index))[:12]}"
-            target_path = rel_to(_anima_dir(options) / "state" / "task_queue.jsonl", options.data_dir)
-            fp = source_fingerprint("hermes_task", path, target_path, extra=f"{index}:{summary}")
+            target_path = f"shared/taskboard.sqlite3#tasks/{options.target_anima}/{task_id}"
+            # Keep the import identity stable across the storage migration.
+            legacy_target = rel_to(_anima_dir(options) / "state" / "task_queue.jsonl", options.data_dir)
+            fp = source_fingerprint("hermes_task", path, legacy_target, extra=f"{index}:{summary}")
             if fp in seen and not options.replace:
                 report.add_item(MigrationItem("hermes_task", str(path), target_path, "taskboard_import", "skipped", fp))
                 continue
@@ -453,7 +462,6 @@ def _planned_backup_targets(source: Path, options: HermesImportOptions, migratio
         targets.extend(
             [
                 _anima_dir(options) / "state" / "skill_usage.jsonl",
-                _anima_dir(options) / "state" / "task_queue.jsonl",
                 _anima_dir(options) / "state" / "skill_hub_lock.jsonl",
             ]
         )

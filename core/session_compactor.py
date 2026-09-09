@@ -435,12 +435,13 @@ async def _compact_mode_c(anima: DigitalAnima, thread_id: str) -> dict[str, Any]
 # ── Public API ────────────────────────────────────────────────
 
 
-async def run_idle_compaction(anima: DigitalAnima, thread_id: str) -> None:
+async def run_idle_compaction(anima: DigitalAnima, thread_id: str) -> bool:
     """Run mode-specific idle compaction for the given anima and thread.
 
     Acquires the thread lock with a 30-second timeout. If the lock cannot
-    be acquired, compaction is skipped. Logs an "idle_compaction" activity
-    event on success.
+    be acquired (or compaction otherwise fails), compaction is skipped and
+    ``False`` is returned. On success logs an "idle_compaction" activity
+    event and returns ``True``.
     """
     mode = anima.agent.execution_mode
     logger.info(
@@ -459,7 +460,7 @@ async def run_idle_compaction(anima: DigitalAnima, thread_id: str) -> None:
             anima.name,
             thread_id,
         )
-        return
+        return False
 
     try:
         compaction_meta: dict[str, Any] = {
@@ -494,7 +495,7 @@ async def run_idle_compaction(anima: DigitalAnima, thread_id: str) -> None:
             _record_result(await _compact_mode_a(anima, thread_id))
     except Exception:
         logger.exception("Idle compaction failed for %s/%s", anima.name, thread_id)
-        return
+        return False
     finally:
         lock.release()
 
@@ -515,3 +516,4 @@ async def run_idle_compaction(anima: DigitalAnima, thread_id: str) -> None:
         )
     except Exception:
         logger.warning("Failed to log idle_compaction activity", exc_info=True)
+    return True

@@ -10,14 +10,14 @@
 
 ### 重要: ハートビートは「確認と計画」のみ
 
-ハートビートの役割は **Observe（観察）→ Plan（計画）→ Reflect（振り返り）** の3フェーズに限定される。
+Heartbeat は意味のある変化を確認し、必要な次の対応を判断する。儀式的な振り返り報告は不要。
 
-- MUST: ハートビート内では状況確認・計画立案・振り返りのみを行う
+- MUST: Heartbeat は状況確認と判断に絞る
 - MUST NOT: ハートビート内で長時間の実行タスク（コーディング、大量のツール呼び出し等）を行わない
 - MUST: 実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`submit_tasks` でタスク投入する
 
-書き出されたタスクは **TaskExec パス**（`PendingTaskExecutor`）がポーリングで取得・実行する。
-`submit_tasks` が書く LLM タスクは `state/pending/` を監視し、最大約3秒の間隔で拾われる（同一ループが `state/background_tasks/pending/` の CLI 投入タスクも処理する）。
+投入済みタスクは **TaskExec パス**が、定期 Heartbeat とは独立に実行する。
+TaskExec は正本 TaskStore から実行可能な永続タスクを取得する。起床通知と復旧はホストが管理し、旧 LLM JSON ファイルは監視しない。
 
 ### ハートビートと会話の並行動作
 
@@ -35,12 +35,12 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ])
 ```
 
-`submit_tasks` は Layer 1（実行キュー `state/pending/`）と Layer 2（タスクレジストリ `task_queue.jsonl`）の両方に同時登録する。
-TaskExec が JSON を `processing/` へ移動したうえで LLM セッションで実行する。失敗時は `state/pending/failed/` に退避される。
+`submit_tasks` は検証後、タスクと完全な実行入力を一つの正本 TaskStore に一括保存する。
+実行権の取得と試行履歴はホストが管理する。`in_progress` は閲覧用で、エージェントは `update_task` で `done` / `pending` / `cancelled` を宣言する。中断した pending タスクは同じ ID に `resume: true` を指定して明示的に再開し、別タスクで置き換えない。
 
 **長時間 CLI ツール**（`animaworks-tool submit …`）は別経路で `state/background_tasks/pending/` に書かれ、`BackgroundTaskManager`（`core/background.py`）がバックグラウンド実行する。詳細は `operations/background-tasks.md` を参照。
 
-**注意**: `state/pending/` に手動で JSON を置くのは非推奨。`submit_tasks` ツール経由で投入すること（バリデーションとキュー同期が省略されるため）。
+**注意**: 保存先を直接編集しない。旧 `state/task_queue.jsonl` と `state/pending/` は移行・エクスポート用の証跡として保存し、稼働中の投入先にしない。
 
 単一タスクでも `submit_tasks`（tasks配列1件）を使う。
 複数の独立タスクは `parallel: true` で並列実行、依存関係がある場合は `depends_on` を指定する。
@@ -171,7 +171,7 @@ Chat（人間との対話）と TaskExec（実作業）はメインモデルを�
 - **完了コールバック**: `on_complete` に渡した非同期関数は、タスク保存後に呼ばれる。コールバック内で例外が出てもタスク結果は保持され、ログに記録されるのみ（典型的には `state/background_notifications/` への書き込みと組み合わせ、**次回ハートビート**で読み取り・削除され会話コンテキストへ取り込まれる経路）。
 - **候補判定 `is_eligible(tool_name)`**: マップにキーが存在すればバックグラウンド対象。キーは次の両方を受け付ける。(1) **スキーマ名**（例: `generate_3d_model`）— Mode A の外部ツールディスパッチなど。(2) **`ツール名:サブコマンド`**（例: `image_gen:pipeline`）— 各ツールモジュールの `EXECUTION_PROFILE` で `background_eligible: true` のエントリが `get_eligible_tools_from_profiles()` によりこの形式で登録される（Mode S の `submit` 経路など）。
 - **候補ツールマップの構築 `from_profiles()`**: 次の 3 層を dict の `update` でマージし、**後勝ち**で上書きする。(1) `_DEFAULT_ELIGIBLE_TOOLS`（コード既定）(2) 引数 `profiles`（`EXECUTION_PROFILE` 集約）(3) 引数 `config_eligible`（通常は `config.json` の `background_task.eligible_tools` から `threshold_s` を展開した `名前 → 秒`）。値はプロファイル連携用の期待秒（整数）。
-- **コード既定 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**: `generate_character_assets` 30、`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各 30、`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各 30、`local_llm` 60、`run_command` 60、`machine_run` 600。
+- **コード既定 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**: `generate_character_assets` 30、`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各 30、`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各 30、`local_llm` 60、`run_command` 60。
 - **掃除 `cleanup_old_tasks(max_age_hours=24)`**: `status` が `completed` / `failed` で `completed_at` が **引数で指定した時間（デフォルト 24 時間）より古い** JSON を削除する。加えて `running` のまま `created_at` から **48 時間超**経過したファイルはクラッシュ孤児として削除する。戻り値は削除件数。
 - **`result_retention_hours` について**: `config.json` の `background_task.result_retention_hours` はスキーマ上あるが、**`BackgroundTaskManager.cleanup_old_tasks` はこの値を読まない**（デフォルトはメソッド引数 `max_age_hours=24`）。運用で保持時間を変える場合は、呼び出し側が `max_age_hours` に合わせる想定。
 
@@ -343,7 +343,7 @@ type: llm
 昨日の episodes/ を読み返し、今日のタスクを計画する。
 優先順位は理念と目標に照らして判断する。
 結果は state/current_state.md に書き出す。
-task_queue.jsonl の未着手タスクも確認し、必要なら優先度を見直す。
+正本タスク一覧（`list_tasks`） の未着手タスクも確認し、必要なら優先度を見直す。
 ```
 
 description（`type:` 行の後の本文）には以下を含めるべき（SHOULD）:
@@ -480,7 +480,7 @@ LLM 型タスクの結果は `CycleResult` として記録され、以下の情�
 ## 毎朝の業務計画
 schedule: 0 9 * * *
 type: llm
-episodes/ から昨日の行動を確認し、task_queue.jsonl の未着手タスクを見直す。
+episodes/ から昨日の行動を確認し、正本タスク一覧（`list_tasks`） の未着手タスクを見直す。
 今日の優先タスクを決め、state/current_state.md を更新する。
 
 ## 週次振り返り

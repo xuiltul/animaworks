@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-
 class TestParserCommands:
     """Test that argparse correctly parses all subcommands."""
 
@@ -30,7 +29,9 @@ class TestParserCommands:
         ):
             # Build the parser by importing and parsing
             import importlib
+
             import cli.parser as parser_mod
+
             importlib.reload(parser_mod)
             # We need to intercept parse_args
             # Instead, let's just test individual parse scenarios
@@ -120,13 +121,127 @@ class TestParserCommands:
         sub = parser.add_subparsers(dest="command")
         p_chat = sub.add_parser("chat")
         p_chat.add_argument("anima")
-        p_chat.add_argument("message")
+        p_chat.add_argument("message", nargs="?", default=None)
         p_chat.add_argument("--local", action="store_true")
-        p_chat.add_argument("--from", dest="from_person", default="human")
+        p_chat.add_argument("--from", "--as", dest="from_person", default="human")
+        p_chat.add_argument("--thread", dest="thread_id", default="default")
+        p_chat.add_argument("--no-tui", action="store_true")
 
         args = parser.parse_args(["chat", "alice", "Hi", "--local", "--from", "bob"])
         assert args.local is True
         assert args.from_person == "bob"
+
+    def test_chat_message_optional(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_chat = sub.add_parser("chat")
+        p_chat.add_argument("anima")
+        p_chat.add_argument("message", nargs="?", default=None)
+        p_chat.add_argument("--from", "--as", dest="from_person", default="human")
+        p_chat.add_argument("--thread", dest="thread_id", default="default")
+        p_chat.add_argument("--no-tui", action="store_true")
+
+        args = parser.parse_args(["chat", "sora"])
+        assert args.anima == "sora"
+        assert args.message is None
+
+    def test_chat_thread_flag(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_chat = sub.add_parser("chat")
+        p_chat.add_argument("anima")
+        p_chat.add_argument("message", nargs="?", default=None)
+        p_chat.add_argument("--from", "--as", dest="from_person", default="human")
+        p_chat.add_argument("--thread", dest="thread_id", default="default")
+        p_chat.add_argument("--no-tui", action="store_true")
+
+        args = parser.parse_args(["chat", "sora", "hi", "--thread", "t1"])
+        assert args.thread_id == "t1"
+
+    def test_chat_as_alias(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_chat = sub.add_parser("chat")
+        p_chat.add_argument("anima")
+        p_chat.add_argument("message", nargs="?", default=None)
+        p_chat.add_argument("--from", "--as", dest="from_person", default="human")
+
+        args = parser.parse_args(["chat", "sora", "hi", "--as", "me"])
+        assert args.from_person == "me"
+
+    def test_chat_no_tui_flag(self):
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_chat = sub.add_parser("chat")
+        p_chat.add_argument("anima", nargs="?")
+        p_chat.add_argument("message", nargs="?", default=None)
+        p_chat.add_argument("--no-tui", action="store_true")
+
+        args = parser.parse_args(["chat", "sora", "--no-tui"])
+        assert args.message is None
+        assert args.no_tui is True
+
+    def test_chat_resume_latest(self):
+        parser = self._chat_parser()
+        args = parser.parse_args(["chat", "--resume"])
+        assert args.resume == "latest"
+        assert args.anima is None
+
+    def test_chat_resume_with_id(self):
+        parser = self._chat_parser()
+        args = parser.parse_args(["chat", "--resume", "sess-123"])
+        assert args.resume == "sess-123"
+        assert args.anima is None
+
+    def test_chat_resume_with_anima_positional(self):
+        parser = self._chat_parser()
+        args = parser.parse_args(["chat", "sora", "--resume", "sess-123"])
+        assert args.resume == "sess-123"
+        assert args.anima == "sora"
+
+    def test_chat_sessions_flag(self):
+        parser = self._chat_parser()
+        args = parser.parse_args(["chat", "--sessions"])
+        assert args.sessions is True
+        assert args.anima is None
+
+    def test_chat_user_password_no_reattach(self):
+        parser = self._chat_parser()
+        args = parser.parse_args(["chat", "sora", "--user", "taka", "--password", "pw", "--no-reattach"])
+        assert args.user == "taka"
+        assert args.password == "pw"
+        assert args.no_reattach is True
+
+    def test_chat_no_args_exits_2(self):
+        from cli.commands.anima import cmd_chat
+
+        ns = argparse.Namespace(
+            anima=None,
+            resume=None,
+            sessions=False,
+            thread_id="default",
+        )
+        with pytest.raises(SystemExit) as exc:
+            cmd_chat(ns)
+        assert exc.value.code == 2
+
+    @staticmethod
+    def _chat_parser() -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser()
+        sub = parser.add_subparsers(dest="command")
+        p_chat = sub.add_parser("chat")
+        p_chat.add_argument("anima", nargs="?", default=None)
+        p_chat.add_argument("message", nargs="?", default=None)
+        p_chat.add_argument("--local", action="store_true")
+        p_chat.add_argument("--from", "--as", dest="from_person", default="human")
+        p_chat.add_argument("--thread", dest="thread_id", default="default")
+        p_chat.add_argument("--no-tui", action="store_true")
+        p_chat.add_argument("--resume", nargs="?", const="latest", default=None, metavar="SESSION_ID")
+        p_chat.add_argument("--sessions", action="store_true")
+        p_chat.add_argument("--user", default=None)
+        p_chat.add_argument("--password", default=None)
+        p_chat.add_argument("--no-reattach", action="store_true")
+        return parser
 
     def test_send_command(self):
         parser = argparse.ArgumentParser()
@@ -397,6 +512,7 @@ class TestDeprecationWarnings:
     @patch("cli.commands.anima.cmd_create_anima")
     def test_create_anima_deprecation(self, mock_cmd, capsys):
         from cli.parser import _lazy_create_anima
+
         args = MagicMock()
         _lazy_create_anima(args)
         captured = capsys.readouterr()
@@ -407,6 +523,7 @@ class TestDeprecationWarnings:
     @patch("cli.commands.messaging.cmd_list")
     def test_list_deprecation(self, mock_cmd, capsys):
         from cli.parser import _lazy_list
+
         args = MagicMock()
         _lazy_list(args)
         captured = capsys.readouterr()
@@ -421,6 +538,7 @@ class TestNewLazyWrappers:
     @patch("cli.commands.anima.cmd_create_anima")
     def test_lazy_anima_create(self, mock_cmd):
         from cli.parser import _lazy_anima_create
+
         args = MagicMock()
         _lazy_anima_create(args)
         mock_cmd.assert_called_once_with(args)
@@ -428,6 +546,7 @@ class TestNewLazyWrappers:
     @patch("cli.commands.anima_mgmt.cmd_anima_delete")
     def test_lazy_anima_delete(self, mock_cmd):
         from cli.parser import _lazy_anima_delete
+
         args = MagicMock()
         _lazy_anima_delete(args)
         mock_cmd.assert_called_once_with(args)
@@ -435,6 +554,7 @@ class TestNewLazyWrappers:
     @patch("cli.commands.anima_mgmt.cmd_anima_disable")
     def test_lazy_anima_disable(self, mock_cmd):
         from cli.parser import _lazy_anima_disable
+
         args = MagicMock()
         _lazy_anima_disable(args)
         mock_cmd.assert_called_once_with(args)
@@ -442,6 +562,7 @@ class TestNewLazyWrappers:
     @patch("cli.commands.anima_mgmt.cmd_anima_enable")
     def test_lazy_anima_enable(self, mock_cmd):
         from cli.parser import _lazy_anima_enable
+
         args = MagicMock()
         _lazy_anima_enable(args)
         mock_cmd.assert_called_once_with(args)
@@ -449,6 +570,7 @@ class TestNewLazyWrappers:
     @patch("cli.commands.anima_mgmt.cmd_anima_list")
     def test_lazy_anima_list(self, mock_cmd):
         from cli.parser import _lazy_anima_list
+
         args = MagicMock()
         _lazy_anima_list(args)
         mock_cmd.assert_called_once_with(args)
@@ -465,11 +587,14 @@ class TestCliMainToolFallback:
         import sys
 
         mock_dispatch = MagicMock()
-        with patch.object(sys, "argv", ["animaworks", "slack", "send", "#general", "hello"]):
-            with patch("core.tools.cli_dispatch", mock_dispatch):
-                with patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}):
-                    from cli.parser import cli_main
-                    cli_main()
+        with (
+            patch.object(sys, "argv", ["animaworks", "slack", "send", "#general", "hello"]),
+            patch("core.tools.cli_dispatch", mock_dispatch),
+            patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}),
+        ):
+            from cli.parser import cli_main
+
+            cli_main()
         mock_dispatch.assert_called_once()
 
     def test_forwards_submit_to_cli_dispatch(self, data_dir):
@@ -477,11 +602,14 @@ class TestCliMainToolFallback:
         import sys
 
         mock_dispatch = MagicMock()
-        with patch.object(sys, "argv", ["animaworks", "submit", "image_gen", "pipeline"]):
-            with patch("core.tools.cli_dispatch", mock_dispatch):
-                with patch("core.tools.TOOL_MODULES", {"image_gen": "core.tools.image_gen"}):
-                    from cli.parser import cli_main
-                    cli_main()
+        with (
+            patch.object(sys, "argv", ["animaworks", "submit", "image_gen", "pipeline"]),
+            patch("core.tools.cli_dispatch", mock_dispatch),
+            patch("core.tools.TOOL_MODULES", {"image_gen": "core.tools.image_gen"}),
+        ):
+            from cli.parser import cli_main
+
+            cli_main()
         mock_dispatch.assert_called_once()
 
     def test_does_not_forward_known_subcommands(self, data_dir):
@@ -490,12 +618,15 @@ class TestCliMainToolFallback:
 
         mock_dispatch = MagicMock()
         mock_func = MagicMock()
-        with patch.object(sys, "argv", ["animaworks", "anima", "list"]):
-            with patch("core.tools.cli_dispatch", mock_dispatch):
-                with patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}):
-                    from cli.parser import cli_main
-                    with patch("cli.commands.anima_mgmt.cmd_anima_list", mock_func):
-                        cli_main()
+        with (
+            patch.object(sys, "argv", ["animaworks", "anima", "list"]),
+            patch("core.tools.cli_dispatch", mock_dispatch),
+            patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}),
+        ):
+            from cli.parser import cli_main
+
+            with patch("cli.commands.anima_mgmt.cmd_anima_list", mock_func):
+                cli_main()
         mock_dispatch.assert_not_called()
 
     def test_does_not_forward_flags(self, data_dir):
@@ -503,10 +634,13 @@ class TestCliMainToolFallback:
         import sys
 
         mock_dispatch = MagicMock()
-        with patch.object(sys, "argv", ["animaworks", "--help"]):
-            with patch("core.tools.cli_dispatch", mock_dispatch):
-                with patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}):
-                    from cli.parser import cli_main
-                    with pytest.raises(SystemExit):
-                        cli_main()
+        with (
+            patch.object(sys, "argv", ["animaworks", "--help"]),
+            patch("core.tools.cli_dispatch", mock_dispatch),
+            patch("core.tools.TOOL_MODULES", {"slack": "core.tools.slack"}),
+        ):
+            from cli.parser import cli_main
+
+            with pytest.raises(SystemExit):
+                cli_main()
         mock_dispatch.assert_not_called()

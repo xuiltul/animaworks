@@ -45,10 +45,7 @@ def test_extract_required_memory_paths_normalizes_absolute_and_shared_paths(
     monkeypatch.setattr("core.paths.get_reference_dir", lambda: tmp_path / "shared" / "reference")
     monkeypatch.setattr("core.paths.get_common_skills_dir", lambda: tmp_path / "shared" / "common_skills")
 
-    content = (
-        f'read_memory_file(path="{own_file}")\n'
-        f'read_memory_file(path="{common_file}")\n'
-    )
+    content = f'read_memory_file(path="{own_file}")\nread_memory_file(path="{common_file}")\n'
 
     assert extract_required_memory_paths(content, anima_dir) == [
         "procedures/check.md",
@@ -223,18 +220,19 @@ def test_cli_argv_mapping() -> None:
 def test_handler_action_tool_names_are_current() -> None:
     from core.memory.action_gate import ACTION_TOOL_NAMES, action_tool_name_for_handler
 
-    assert ACTION_TOOL_NAMES == {
+    assert {
         "call_human",
         "send_message",
         "post_channel",
         "write_memory_file",
+        "create_skill",
         "gmail_draft",
         "gmail_draft_update",
         "gmail_send",
         "chatwork_send",
         "slack_send",
         "discord_send",
-    }
+    } == ACTION_TOOL_NAMES
     assert action_tool_name_for_handler("slack_post") is None
 
 

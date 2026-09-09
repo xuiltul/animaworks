@@ -60,9 +60,11 @@ class AgentCore(
 
     Delegates actual LLM execution to an appropriate Executor:
       - S  (SDK, Claude):             ``AgentSDKExecutor``
-      - S  fallback (no Agent SDK):   ``AnthropicFallbackExecutor``
+      - C/D/G/X:                     engine-specific native CLI/SDK adapters
       - A  (autonomous, non-Claude):   ``LiteLLMExecutor``
       - B  (basic):                    ``AssistedExecutor``
+
+    Missing engines use only an explicitly configured fallback route.
     """
 
     _MAX_AGENT_LOCKS = 20
@@ -305,21 +307,12 @@ class AgentCore(
         return self._resolve_execution_mode()
 
     def _resolve_execution_mode(self, model_config: ModelConfig | None = None) -> str:
-        """Determine the effective execution mode: ``s``, ``c``, ``a``, or ``b``.
+        """Use the shared mode precedence for all seven execution adapters."""
+        from core.config.io import load_config
+        from core.config.model_config import _resolved_mode_for_config
 
-        Uses ``resolved_mode`` from config when available.
-        Falls back to auto-detection for legacy config.md paths.
-        """
         cfg = model_config or self.model_config
-        rm = cfg.resolved_mode
-        if rm:
-            mode = rm.lower()  # "S" → "s"
-            return mode
-
-        # Fallback (resolved_mode absent = legacy config.md path)
-        if self._is_claude_model(cfg) and self._sdk_available:
-            return "s"
-        return "a"
+        return _resolved_mode_for_config(cfg, load_config()).lower()
 
     @staticmethod
     def _check_sdk() -> bool:
@@ -328,7 +321,7 @@ class AgentCore(
 
             return True
         except ImportError:
-            logger.warning("claude-agent-sdk not available, falling back to anthropic SDK")
+            logger.warning("claude-agent-sdk not available; Mode S requires a configured fallback")
             return False
 
     def _is_debug_superuser(self) -> bool:

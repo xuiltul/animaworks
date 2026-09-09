@@ -5,11 +5,23 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from cli.commands.cost_cmd import cmd_cost
+from cli.commands.cost_cmd import _fmt_cost, cmd_cost
+from core.i18n import t
 
 
 def _args(*, anima: str | None = None, json_output: bool = False) -> argparse.Namespace:
     return argparse.Namespace(anima=anima, days=30, today=False, json_output=json_output)
+
+
+def test_unknown_pricing_is_not_displayed_as_free() -> None:
+    text = _fmt_cost(0.0, 5, 5)
+    assert text == t("cost.unknown_pricing", count=5)
+    assert "$0.0000" not in text
+
+
+def test_mixed_pricing_explicitly_marks_incomplete_total() -> None:
+    assert _fmt_cost(1.25, 2, 5) == t("cost.partial_pricing", cost="$1.2500", count=2)
+    assert _fmt_cost(1.25, 0, 5) == "$1.2500"
 
 
 def test_cost_json_includes_monthly_budget_fields_for_every_anima(tmp_path, capsys) -> None:

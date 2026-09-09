@@ -4,24 +4,16 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Persistent task queue manager.
+"""Task API backed by the runtime SQLite store; JSONL is an interchange format."""
 
-Implements append-only JSONL task queue at ``{anima_dir}/state/task_queue.jsonl``.
-Each line represents either a task creation or a status update event.
-The current state is reconstructed by replaying the log (latest status wins).
-"""
-
-import json
 import logging
-import os
-import re
-import threading
+import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from core.exceptions import TaskPersistenceError as TaskPersistenceError  # noqa: F401
 from core.i18n import t
@@ -30,61 +22,26 @@ from core.time_utils import ensure_aware, now_iso, now_local
 
 logger = logging.getLogger("animaworks.task_queue")
 
-# Valid task statuses
-_VALID_STATUSES = frozenset({"pending", "in_progress", "done", "cancelled", "blocked", "delegated", "failed"})
-_TERMINAL_STATUSES = frozenset({"done", "cancelled", "failed"})
-_ACTIVE_STATUSES = frozenset({"pending", "in_progress", "blocked", "delegated"})
+if TYPE_CHECKING:
+    from core.taskboard.tasks import TaskStore
+
+# Valid task statuses. "blocked" and "unblock_check" were retired: an anima
+# that cannot proceed uses "cancelled" and messages the requester with the
+# reason instead of parking itself. "failed" was retired: process-exit
+# failures are re-queued to "pending" so the task stays visible to its owner.
+_VALID_STATUSES = frozenset({"pending", "in_progress", "delegated", "done", "cancelled"})
+# Statuses that can no longer be set, but may still appear in old jsonl rows
+# written before this teardown. _load_all() remaps them to "pending" on read.
+_RETIRED_STATUSES = frozenset({"blocked", "failed"})
+_TERMINAL_STATUSES = frozenset({"done", "cancelled"})
+_ARCHIVE_SYNC_STATUSES = frozenset({"done", "cancelled"})
+_REACTIVATE_SYNC_STATUSES = frozenset({"pending", "in_progress"})
+_ACTIVE_STATUSES = frozenset({"pending", "in_progress", "delegated"})
 
 # Valid task sources
 _VALID_SOURCES = frozenset({"human", "anima"})
-# Maximum characters for original_instruction
-_MAX_INSTRUCTION_CHARS = 10_000
 # Stale task threshold: 30 minutes (one heartbeat cycle)
 _STALE_TASK_THRESHOLD_SEC = 1800
-# Relative deadline pattern: digits + unit (m=minutes, h=hours, d=days)
-_RELATIVE_DEADLINE_RE = re.compile(r"^(\d+)([mhd])$")
-_QUEUE_LOCKS: dict[Path, threading.RLock] = {}
-_QUEUE_LOCKS_GUARD = threading.Lock()
-
-
-def _process_lock(path: Path) -> threading.RLock:
-    resolved = path.resolve()
-    with _QUEUE_LOCKS_GUARD:
-        if resolved not in _QUEUE_LOCKS:
-            _QUEUE_LOCKS[resolved] = threading.RLock()
-        return _QUEUE_LOCKS[resolved]
-
-
-def _parse_deadline(value: str) -> str:
-    """Parse deadline string into ISO8601 format.
-
-    Accepts relative formats ("30m", "2h", "1d") or ISO8601 absolute format.
-    Relative formats are resolved to absolute ISO8601 from current time.
-
-    Raises:
-        ValueError: If the format is not recognized.
-    """
-    value = value.strip()
-    m = _RELATIVE_DEADLINE_RE.match(value)
-    if m:
-        amount = int(m.group(1))
-        unit = m.group(2)
-        if unit == "m":
-            delta = timedelta(minutes=amount)
-        elif unit == "h":
-            delta = timedelta(hours=amount)
-        else:  # "d"
-            delta = timedelta(days=amount)
-        return (now_local() + delta).isoformat()
-
-    # Try parsing as ISO8601
-    try:
-        datetime.fromisoformat(value)
-        return value
-    except (ValueError, TypeError):
-        raise ValueError(
-            f"Invalid deadline format: {value!r}. Use relative format ('30m', '2h', '1d') or ISO8601."
-        ) from None
 
 
 def _elapsed_seconds(updated_at: str, now: datetime) -> float | None:
@@ -114,24 +71,38 @@ def _format_elapsed_from_sec(elapsed_sec: float | None) -> str:
     return t("task_queue.elapsed_hours", hours=hours)
 
 
-def _format_deadline_display(deadline: str, now: datetime) -> str:
-    """Format deadline for display. Returns OVERDUE marker if past."""
+def _descriptor_ids(anima_dir: Path) -> set[str]:
+    """Compatibility name: IDs with saved execution input, never a file scan."""
     try:
-        dl = ensure_aware(datetime.fromisoformat(deadline))
-    except (ValueError, TypeError):
-        return ""
-    if now >= dl:
-        return t("task_queue.overdue", time=dl.strftime("%H:%M"))
-    return t("task_queue.deadline_by", time=dl.strftime("%H:%M"))
+        return TaskQueueManager(anima_dir).store.executable_ids(anima_dir.name)
+    except (OSError, sqlite3.OperationalError) as exc:
+        from core.tasks_dispatch import is_task_permission_error, read_executable_ids_via_server
+
+        if not is_task_permission_error(exc):
+            raise
+        return read_executable_ids_via_server(anima_dir.name)
 
 
-def _is_overdue(deadline: str, now: datetime) -> bool:
-    """Return True if the deadline has passed."""
-    try:
-        dl = ensure_aware(datetime.fromisoformat(deadline))
-        return now >= dl
-    except (ValueError, TypeError):
-        return False
+def descriptor_exists(anima_dir: Path, task_id: str) -> bool:
+    """Compatibility facade for saved execution-input availability."""
+    return task_id in _descriptor_ids(anima_dir)
+
+
+_NOT_EXECUTABLE_NOTE = "This is a backlog task without execution input. Submit it once when ready to execute."
+
+
+def mark_executability(items: list[dict[str, Any]], anima_dir: Path) -> None:
+    """Project input availability for own tasks using one DB/snapshot lookup."""
+    descriptor_set = _descriptor_ids(anima_dir)
+    for item in items:
+        if item.get("status") not in ("pending", "in_progress"):
+            continue
+        tid = item.get("task_id", "")
+        if tid in descriptor_set:
+            item["executable"] = True
+        else:
+            item["executable"] = False
+            item["executable_note"] = _NOT_EXECUTABLE_NOTE
 
 
 def _metadata_expired(expires_at: str | None) -> bool:
@@ -145,14 +116,47 @@ def _metadata_expired(expires_at: str | None) -> bool:
 
 
 class TaskQueueManager:
-    """Manages a persistent task queue backed by JSONL.
-
-    The queue file is an append-only log at ``state/task_queue.jsonl``.
-    """
+    """Stable task API over one durable task/attempt store."""
 
     def __init__(self, anima_dir: Path) -> None:
         self.anima_dir = anima_dir
         self._queue_path = anima_dir / "state" / "task_queue.jsonl"
+        self._store: TaskStore | None = None
+
+    @property
+    def store(self) -> TaskStore:
+        from core.taskboard.tasks import TaskStore, task_database_path
+
+        if self._store is None:
+            from core.taskboard.readiness import require_task_store_ready
+
+            require_task_store_ready(self.anima_dir)
+            candidate = TaskStore(task_database_path(self.anima_dir))
+            candidate.import_legacy(self.anima_dir)
+            self._store = candidate
+        return self._store
+
+    def submit(
+        self,
+        payload: dict[str, Any],
+        *,
+        source: Literal["human", "anima"] = "anima",
+        meta: dict[str, Any] | None = None,
+        resume: bool = False,
+    ) -> TaskEntry:
+        """Publish complete execution input atomically, idempotent by task ID."""
+        task_id = str(payload["task_id"])
+        entry = self._build_task_entry(
+            source=source,
+            task_id=task_id,
+            original_instruction=str(payload.get("description", "")),
+            assignee=self.anima_dir.name,
+            summary=str(payload.get("title", task_id)),
+            relay_chain=list(payload.get("relay_chain") or []),
+            meta={"executor": "taskexec", **(meta or {})},
+        )
+        self.store.submit(self.anima_dir.name, entry, payload, resume=resume)
+        return self.store.read(self.anima_dir.name, archived=True)[task_id]
 
     @property
     def queue_path(self) -> Path:
@@ -171,7 +175,6 @@ class TaskQueueManager:
         original_instruction: str,
         assignee: str,
         summary: str,
-        deadline: str | None = None,
         relay_chain: list[str] | None = None,
         task_id: str | None = None,
         meta: dict[str, Any] | None = None,
@@ -181,15 +184,6 @@ class TaskQueueManager:
             raise ValueError(f"Invalid source: {source!r} (must be 'human' or 'anima')")
         if status not in ("pending", "in_progress"):
             raise ValueError(f"Invalid status: {status!r} (must be 'pending' or 'in_progress')")
-        if deadline is not None and deadline != "":
-            parsed_deadline: str | None = _parse_deadline(deadline)
-        elif deadline == "":
-            raise ValueError("deadline is required when provided. Use relative format ('30m', '2h', '1d') or ISO8601.")
-        else:
-            parsed_deadline = None
-        if len(original_instruction) > _MAX_INSTRUCTION_CHARS:
-            original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
-            logger.warning("original_instruction truncated to %d chars", _MAX_INSTRUCTION_CHARS)
         now = now_iso()
         return TaskEntry(
             task_id=task_id if task_id else uuid.uuid4().hex[:12],
@@ -199,7 +193,6 @@ class TaskQueueManager:
             assignee=assignee,
             status=status,
             summary=summary,
-            deadline=parsed_deadline,
             relay_chain=relay_chain or [],
             updated_at=now,
             meta=meta or {},
@@ -212,7 +205,6 @@ class TaskQueueManager:
         original_instruction: str,
         assignee: str,
         summary: str,
-        deadline: str | None = None,
         relay_chain: list[str] | None = None,
         task_id: str | None = None,
         meta: dict[str, Any] | None = None,
@@ -227,8 +219,6 @@ class TaskQueueManager:
             original_instruction: Full instruction text.
             assignee: Anima name responsible for the task.
             summary: One-line summary.
-            deadline: Optional. Relative ('30m', '2h', '1d') or ISO8601.
-                None for tasks without deadline (e.g. submit_tasks).
             relay_chain: Optional delegation path.
             task_id: Optional. Use LLM-specified ID (e.g. from submit_tasks).
                 If None, a UUID-based ID is generated.
@@ -240,15 +230,13 @@ class TaskQueueManager:
             The created TaskEntry.
 
         Raises:
-            ValueError: If source is invalid or deadline format is invalid
-                when deadline is explicitly provided (non-empty).
+            ValueError: If source is invalid.
         """
         entry = self._build_task_entry(
             source=source,
             original_instruction=original_instruction,
             assignee=assignee,
             summary=summary,
-            deadline=deadline,
             relay_chain=relay_chain,
             meta=meta,
             task_id=task_id,
@@ -272,7 +260,6 @@ class TaskQueueManager:
         original_instruction: str,
         assignee: str,
         summary: str,
-        deadline: str | None = None,
         relay_chain: list[str] | None = None,
         task_id: str | None = None,
         meta: dict[str, Any] | None = None,
@@ -288,7 +275,6 @@ class TaskQueueManager:
                 original_instruction=original_instruction,
                 assignee=assignee,
                 summary=summary,
-                deadline=deadline,
                 relay_chain=relay_chain,
                 task_id=task_id,
                 meta=meta,
@@ -310,7 +296,6 @@ class TaskQueueManager:
         original_instruction: str,
         assignee: str,
         summary: str,
-        deadline: str,
         relay_chain: list[str] | None = None,
         meta: dict[str, Any] | None = None,
         task_id: str | None = None,
@@ -320,11 +305,6 @@ class TaskQueueManager:
         Used by the delegating supervisor to record that a task was sent
         to a subordinate. The meta field stores delegated_to and delegated_task_id.
         """
-        if not deadline:
-            raise ValueError("deadline is required")
-        parsed_deadline = _parse_deadline(deadline)
-        if len(original_instruction) > _MAX_INSTRUCTION_CHARS:
-            original_instruction = original_instruction[:_MAX_INSTRUCTION_CHARS]
         now = now_iso()
         entry = TaskEntry(
             task_id=task_id if task_id else uuid.uuid4().hex[:12],
@@ -334,7 +314,6 @@ class TaskQueueManager:
             assignee=assignee,
             status="delegated",
             summary=summary,
-            deadline=parsed_deadline,
             relay_chain=relay_chain or [],
             updated_at=now,
             meta=meta or {},
@@ -357,9 +336,13 @@ class TaskQueueManager:
     ) -> TaskEntry | None:
         """Update the status of an existing task.
 
-        Appends an update event to the JSONL log.
+        Applies the update atomically to the canonical task record.
         Returns the updated task or None if not found.
         """
+        if status in _RETIRED_STATUSES:
+            raise ValueError(
+                f"Status {status!r} was retired: use 'cancelled' and message the requester with the reason."
+            )
         if status not in _VALID_STATUSES:
             logger.warning("Invalid task status: %s", status)
             return None
@@ -368,6 +351,12 @@ class TaskQueueManager:
         task = tasks.get(task_id)
         if task is None:
             logger.warning("Task not found: %s", task_id)
+            return None
+        # A cancel must stick: a runner that was still executing when the
+        # cancel landed must not flip the task to done/blocked afterwards.
+        # Only an explicit re-queue (pending) may leave cancelled.
+        if task.status == "cancelled" and status not in ("cancelled", "pending"):
+            logger.warning("Task %s is cancelled; refusing status=%s", task_id, status)
             return None
 
         now = now_iso()
@@ -382,14 +371,15 @@ class TaskQueueManager:
         self._append(update)
 
         # Return reconstructed entry
-        task.status = status
-        task.updated_at = now
-        if summary is not None:
-            task.summary = summary
+        task = self.get_task_by_id(task_id)
+        if task is None or task.status != status:
+            return None
         logger.info("Task updated: id=%s status=%s", task_id, status)
 
-        if status in _TERMINAL_STATUSES:
-            self._sync_taskboard_archived(task_id)
+        if status in _ARCHIVE_SYNC_STATUSES:
+            self.store.after_commit(lambda: self._sync_taskboard_archived(task_id))
+        elif status in _REACTIVATE_SYNC_STATUSES:
+            self.store.after_commit(lambda: self._sync_taskboard_reactivated(task_id))
 
         return task
 
@@ -429,6 +419,36 @@ class TaskQueueManager:
                 exc_info=True,
             )
 
+    def _sync_taskboard_reactivated(self, task_id: str) -> None:
+        """Best-effort: revive an archived TaskBoard card when a task re-enters
+        an active status, so the pending attention gate does not cancel the
+        revived task as "archived by TaskBoard". Tombstoned/expired cards are
+        deliberate suppressions and stay untouched.
+        """
+        try:
+            from core.taskboard.models import AttentionVisibility
+            from core.taskboard.store import TaskBoardStore
+
+            anima_name = self.anima_dir.name
+            store = TaskBoardStore()
+            metadata = store.get_metadata(anima_name, task_id)
+            if metadata is None or metadata.visibility != AttentionVisibility.ARCHIVED:
+                return
+            store.upsert_metadata(
+                anima_name=anima_name,
+                task_id=task_id,
+                actor=anima_name,
+                event_type="visibility_changed",
+                visibility="active",
+                column="todo",
+            )
+        except Exception:
+            logger.debug(
+                "Failed to reactivate TaskBoard metadata for task %s",
+                task_id,
+                exc_info=True,
+            )
+
     def update_meta(
         self,
         task_id: str,
@@ -448,7 +468,7 @@ class TaskQueueManager:
         merged_meta.update(meta_patch)
         update: dict[str, Any] = {
             "task_id": task_id,
-            "meta": merged_meta,
+            "meta": meta_patch,
             "updated_at": now,
             "_event": "update",
         }
@@ -456,15 +476,12 @@ class TaskQueueManager:
             update["summary"] = summary
         self._append(update)
 
-        task.meta = merged_meta
-        task.updated_at = now
-        if summary is not None:
-            task.summary = summary
+        task = self.get_task_by_id(task_id)
         logger.info("Task metadata updated: id=%s keys=%s", task_id, sorted(meta_patch))
         return task
 
     def load_active_tasks(self) -> dict[str, TaskEntry]:
-        """Load all non-terminal tasks (single JSONL replay).
+        """Load all non-terminal tasks from a consistent database snapshot.
 
         Use this for batch operations to avoid repeated file reads.
         """
@@ -472,52 +489,16 @@ class TaskQueueManager:
 
     # ── Read operations ──────────────────────────────────────
 
-    def _load_all(self) -> dict[str, TaskEntry]:
-        """Replay the JSONL log and return current task states.
+    def _load_all(self, *, include_archived: bool = False) -> dict[str, TaskEntry]:
+        """Read canonical records; no replay or filesystem descriptor scan."""
+        try:
+            return self.store.read(self.anima_dir.name, archived=include_archived)
+        except (OSError, sqlite3.OperationalError) as exc:
+            from core.tasks_dispatch import is_task_permission_error, read_tasks_via_server
 
-        Returns dict mapping task_id to latest TaskEntry.
-        Corrupted lines are skipped with a warning.
-        """
-        tasks: dict[str, TaskEntry] = {}
-        if not self._queue_path.exists():
-            return tasks
-
-        for line in self._queue_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                raw = json.loads(line)
-            except json.JSONDecodeError:
-                logger.warning("Skipping corrupted task_queue line: %s", line[:80])
-                continue
-
-            task_id = raw.get("task_id", "")
-            if not task_id:
-                continue
-
-            if raw.get("_event") == "update":
-                # Status update event
-                existing = tasks.get(task_id)
-                if existing:
-                    if "status" in raw:
-                        existing.status = raw["status"]
-                    if "summary" in raw:
-                        existing.summary = raw["summary"]
-                    if "updated_at" in raw:
-                        existing.updated_at = raw["updated_at"]
-                    if "meta" in raw and isinstance(raw["meta"], dict):
-                        existing.meta = raw["meta"]
-            else:
-                # Task creation event — strip internal fields
-                raw.pop("_event", None)
-                try:
-                    tasks[task_id] = TaskEntry(**raw)
-                except Exception:
-                    logger.warning("Skipping invalid task entry: %s", task_id)
-                    continue
-
-        return tasks
+            if not is_task_permission_error(exc):
+                raise
+            return read_tasks_via_server(self.anima_dir.name, include_archived=include_archived)
 
     def get_pending(self) -> list[TaskEntry]:
         """Return tasks with status 'pending' or 'in_progress'."""
@@ -529,15 +510,15 @@ class TaskQueueManager:
         return [t for t in self.get_pending() if t.source == "human"]
 
     def get_all_active(self) -> list[TaskEntry]:
-        """Return all non-terminal tasks (pending, in_progress, blocked)."""
+        """Return all non-terminal tasks (pending, in_progress)."""
         tasks = self._load_all()
-        return [t for t in tasks.values() if t.status in ("pending", "in_progress", "blocked")]
+        return [t for t in tasks.values() if t.status in ("pending", "in_progress")]
 
     def list_tasks(self, status: str | None = None) -> list[TaskEntry]:
         """List tasks, optionally filtered by status.
 
         When status is omitted, returns only active tasks
-        (pending, in_progress, blocked, delegated).
+        (pending, in_progress, delegated).
         """
         tasks = self._load_all()
         if status:
@@ -549,17 +530,16 @@ class TaskQueueManager:
         tasks = self._load_all()
         return [t for t in tasks.values() if t.status == "delegated"]
 
-    def get_failed_taskexec(self) -> list[TaskEntry]:
-        """Return failed tasks executed by TaskExec (meta.executor == 'taskexec').
-
-        Used for format_for_priming to show tasks that need human attention.
-        """
-        tasks = self._load_all()
-        return [t for t in tasks.values() if t.status == "failed" and t.meta.get("executor") == "taskexec"]
-
     def get_task_by_id(self, task_id: str) -> TaskEntry | None:
         """Look up a single task by its ID."""
-        return self._load_all().get(task_id)
+        try:
+            return self.store.get(self.anima_dir.name, task_id)
+        except (OSError, sqlite3.OperationalError) as exc:
+            from core.tasks_dispatch import is_task_permission_error, read_tasks_via_server
+
+            if not is_task_permission_error(exc):
+                raise
+            return read_tasks_via_server(self.anima_dir.name, include_archived=True, task_id=task_id).get(task_id)
 
     def get_active_goal_task(self, goal_id: str) -> TaskEntry | None:
         """Return an active task linked to a persistent goal, ignoring suppressed board rows.
@@ -610,12 +590,7 @@ class TaskQueueManager:
     # ── Formatting ───────────────────────────────────────────
 
     def format_for_priming(self, budget_tokens: int = 400) -> str:
-        """Format pending tasks for system prompt injection.
-
-        Active (non-OVERDUE) tasks are shown first with full detail.
-        OVERDUE tasks are aggregated into a compact summary line.
-        Failed TaskExec tasks are shown in a separate section.
-        """
+        """Format pending tasks for system prompt injection."""
         tasks = self.get_pending()
         now = now_local()
         chars_per_token = 4
@@ -624,15 +599,8 @@ class TaskQueueManager:
         total = 0
 
         if tasks:
-            active: list[TaskEntry] = []
-            overdue: list[TaskEntry] = []
-            for task in tasks:
-                if task.deadline and _is_overdue(task.deadline, now):
-                    overdue.append(task)
-                else:
-                    active.append(task)
-
-            active.sort(
+            active = sorted(
+                tasks,
                 key=lambda t: (
                     0 if t.source == "human" else 1,
                     t.updated_at or t.ts,
@@ -657,45 +625,10 @@ class TaskQueueManager:
                 if elapsed_sec is not None and elapsed_sec >= _STALE_TASK_THRESHOLD_SEC:
                     line += " ⚠️ STALE"
 
-                if task.deadline:
-                    deadline_str = _format_deadline_display(task.deadline, now)
-                    if deadline_str:
-                        line += f" {deadline_str}"
-
                 if total + len(line) > max_chars:
                     break
                 lines.append(line)
                 total += len(line) + 1
-
-            if overdue:
-                summaries_str = ", ".join(f"[{task.task_id[:8]}] {task.summary[:20]}" for task in overdue)
-                aggregate_line = t(
-                    "task_queue.overdue_aggregate",
-                    count=len(overdue),
-                    summaries=summaries_str,
-                )
-                if total + len(aggregate_line) + 1 <= max_chars:
-                    lines.append(aggregate_line)
-                    total += len(aggregate_line) + 1
-
-        # Failed TaskExec tasks (within remaining budget)
-        failed = self.get_failed_taskexec()
-        if failed and total < max_chars:
-            header = t("task_queue.failed_section_header")
-            if total + len(header) <= max_chars:
-                lines.append(header)
-                total += len(header) + 1
-            for task in failed:
-                if total >= max_chars:
-                    break
-                line = t(
-                    "task_queue.failed_line",
-                    task_id=task.task_id[:8],
-                    summary=task.summary,
-                )
-                if total + len(line) <= max_chars:
-                    lines.append(line)
-                    total += len(line) + 1
 
         # Delegated tasks (within remaining budget)
         delegated = self.get_delegated_tasks()
@@ -725,142 +658,14 @@ class TaskQueueManager:
     # ── Delegation sync ─────────────────────────────────────────
 
     def sync_delegated(self, animas_dir: Path) -> int:
-        """Sync delegated tasks with subordinate completion status.
-
-        For each task in ``delegated`` status, reads the subordinate's
-        queue (with archive fallback) and transitions:
-        - subordinate done + ``meta.completed_by == "agent_declaration"``
-          → own entry ``done``
-        - subordinate done without declaration meta → own entry ``done``
-          with ``meta.acceptance = "legacy_unverified"`` (compat)
-        - subordinate cancelled → own entry ``failed``
-        - subordinate failed → own entry ``failed``
-
-        Returns the number of tasks synced.
-        """
-        delegated = self.get_delegated_tasks()
-        synced = 0
-        for task in delegated:
-            meta = task.meta or {}
-            target = meta.get("delegated_to", "")
-            child_id = meta.get("delegated_task_id", "")
-            if not target or not child_id:
-                continue
-            target_dir = animas_dir / target
-            if not target_dir.is_dir():
-                logger.debug("sync_delegated: target dir missing for %s", target)
-                continue
-            outcome = self._resolve_subordinate_outcome(target_dir, child_id)
-            if outcome is None:
-                continue
-            sub_status, sub_meta, sub_summary = outcome
-            if sub_status == "done":
-                done_summary = t(
-                    "task_queue.sync_done",
-                    orig=task.summary,
-                    target=target,
-                )
-                snip = (sub_summary or "")[:200]
-                if snip:
-                    done_summary = f"{done_summary} {snip}"
-                if sub_meta.get("completed_by") == "agent_declaration":
-                    self.update_status(
-                        task.task_id,
-                        "done",
-                        summary=done_summary,
-                    )
-                else:
-                    self.update_status(
-                        task.task_id,
-                        "done",
-                        summary=done_summary,
-                    )
-                    self.update_meta(
-                        task.task_id,
-                        {"acceptance": "legacy_unverified"},
-                    )
-                    logger.warning(
-                        "sync_delegated: legacy unverified completion task_id=%s target=%s child_id=%s",
-                        task.task_id,
-                        target,
-                        child_id,
-                    )
-                synced += 1
-            elif sub_status == "cancelled":
-                self.update_status(
-                    task.task_id,
-                    "failed",
-                    summary=t(
-                        "task_queue.sync_cancelled",
-                        orig=task.summary,
-                        target=target,
-                    ),
-                )
-                synced += 1
-            elif sub_status == "failed":
-                self.update_status(
-                    task.task_id,
-                    "failed",
-                    summary=t("task_queue.sync_failed", orig=task.summary, target=target),
-                )
-                synced += 1
-        return synced
-
-    def _resolve_subordinate_status(self, target_dir: Path, child_id: str) -> str | None:
-        """Look up subordinate task status, falling back to archive."""
-        outcome = self._resolve_subordinate_outcome(target_dir, child_id)
-        return outcome[0] if outcome is not None else None
-
-    def _resolve_subordinate_outcome(
-        self,
-        target_dir: Path,
-        child_id: str,
-    ) -> tuple[str, dict[str, Any], str] | None:
-        """Look up subordinate terminal status with meta and summary.
-
-        Returns ``(status, meta, summary)`` or None when not terminal / missing.
-        Archive fallback returns empty meta/summary (legacy path).
-        """
-        try:
-            sub_tqm = TaskQueueManager(target_dir)
-            sub_task = sub_tqm.get_task_by_id(child_id)
-            if sub_task:
-                if sub_task.status not in _TERMINAL_STATUSES:
-                    return None
-                return (
-                    sub_task.status,
-                    dict(sub_task.meta or {}),
-                    sub_task.summary or "",
-                )
-            archived = self._search_archive(target_dir, child_id)
-            if archived is None:
-                return None
-            return archived, {}, ""
-        except Exception:
-            logger.debug(
-                "sync_delegated: failed to read subordinate queue at %s",
-                target_dir,
-                exc_info=True,
-            )
-            return None
+        """Compatibility facade: aliases read the assignee's canonical record."""
+        return 0
 
     @staticmethod
     def _search_archive(target_dir: Path, child_id: str) -> str | None:
-        """Search task_queue_archive.jsonl for a terminal task entry."""
-        archive = target_dir / "state" / "task_queue_archive.jsonl"
-        if not archive.exists():
-            return None
-        try:
-            for line in reversed(archive.read_text(encoding="utf-8").strip().splitlines()):
-                try:
-                    data = json.loads(line)
-                    if data.get("task_id") == child_id and data.get("status") in _TERMINAL_STATUSES:
-                        return data["status"]
-                except (json.JSONDecodeError, KeyError):
-                    continue
-        except OSError:
-            logger.debug("sync_delegated: archive unreadable at %s", archive, exc_info=True)
-        return None
+        """Compatibility facade over archived canonical records, not JSONL."""
+        entry = TaskQueueManager(target_dir).get_task_by_id(child_id)
+        return entry.status if entry and entry.status in _TERMINAL_STATUSES else None
 
     def format_delegated_for_priming(self, animas_dir: Path, budget_chars: int = 400) -> str:
         """Format delegated tasks with subordinate status for Priming display."""
@@ -870,15 +675,12 @@ class TaskQueueManager:
         now = now_local()
         lines: list[str] = []
         total = 0
-        _status_icons = {"done": "✅", "failed": "❌", "cancelled": "🚫"}
+        _status_icons = {"done": "✅", "cancelled": "🚫"}
         unknown_label = t("task_queue.delegated_unknown")
         for task in delegated[:5]:
             meta = task.meta or {}
             target = meta.get("delegated_to", unknown_label)
-            child_id = meta.get("delegated_task_id", "")
-            sub_status = "?"
-            if child_id and target != unknown_label:
-                sub_status = self._resolve_subordinate_display(animas_dir / target, child_id)
+            sub_status = str(meta.get("delegated_status", "?"))
             icon = _status_icons.get(sub_status, "⏳")
             elapsed_sec = _elapsed_seconds(task.updated_at, now)
             elapsed_str = _format_elapsed_from_sec(elapsed_sec) or ""
@@ -905,97 +707,29 @@ class TaskQueueManager:
 
     # ── Maintenance ────────────────────────────────────────────
 
-    def _archive(self, tasks: dict[str, TaskEntry]) -> None:
-        """Append terminal tasks to archive file before removal."""
-        with self.archive_path.open("a", encoding="utf-8") as f:
-            for entry in tasks.values():
-                f.write(json.dumps(entry.model_dump(), ensure_ascii=False) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-
     def compact(self) -> int:
-        """Rewrite JSONL file with only active (non-terminal) tasks.
-
-        Terminal statuses (done, cancelled, failed) are archived first,
-        then removed from the queue.
-        Returns the number of tasks removed.
-        """
-        tasks = self._load_all()
-        active: dict[str, TaskEntry] = {}
-        terminal: dict[str, TaskEntry] = {}
-        for tid, entry in tasks.items():
-            if entry.status in _TERMINAL_STATUSES:
-                terminal[tid] = entry
-            else:
-                active[tid] = entry
-        removed = len(terminal)
-        if removed == 0:
-            return 0
-        # Archive first, then rewrite
-        self._archive(terminal)
-        tmp_path = self._queue_path.with_suffix(".tmp")
-        try:
-            with tmp_path.open("w", encoding="utf-8") as f:
-                for entry in active.values():
-                    f.write(json.dumps(entry.model_dump(), ensure_ascii=False) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-            tmp_path.replace(self._queue_path)
-            logger.info("Task queue compacted: removed %d terminal tasks (archived)", removed)
-        except Exception:
-            logger.exception("Failed to compact task queue")
-            tmp_path.unlink(missing_ok=True)
-            removed = 0
-        return removed
+        """Archive terminal records without discarding attempt history."""
+        return self.store.compact(self.anima_dir.name)
 
     # ── Internal ─────────────────────────────────────────────────
 
     @contextmanager
     def _locked_queue(self) -> Iterator[None]:
-        self._queue_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = self._queue_path.with_suffix(self._queue_path.suffix + ".lock")
-        thread_lock = _process_lock(lock_path)
-        with thread_lock:
-            try:
-                lock_file = lock_path.open("a+", encoding="utf-8")
-            except OSError:
-                logger.debug("Task queue lock file unavailable for %s", lock_path, exc_info=True)
-                yield
-                return
-            with lock_file:
-                locked = False
-                try:
-                    from core.platform.locks import acquire_file_lock
-
-                    acquire_file_lock(lock_file, exclusive=True)
-                    locked = True
-                except OSError:
-                    logger.debug("OS file lock unavailable for %s", lock_path, exc_info=True)
-                try:
-                    yield
-                finally:
-                    if locked:
-                        try:
-                            from core.platform.locks import release_file_lock
-
-                            release_file_lock(lock_file)
-                        except OSError:
-                            logger.debug("Failed to release task queue lock %s", lock_path, exc_info=True)
+        with self.store.transaction():
+            yield
 
     def _append(self, data: dict[str, Any]) -> None:
-        """Append a JSON line to the queue file with fsync."""
-        with self._locked_queue():
-            self._append_unlocked(data)
+        """Apply a durable update, preserving the persistence-error contract."""
+        try:
+            with self._locked_queue():
+                self._append_unlocked(data)
+        except (OSError, sqlite3.Error) as exc:
+            raise TaskPersistenceError(str(exc)) from exc
 
     def _append_unlocked(self, data: dict[str, Any]) -> None:
-        """Append a JSON line while the queue lock is already held."""
+        """Apply an update inside the current SQLite transaction."""
         try:
-            self._queue_path.parent.mkdir(parents=True, exist_ok=True)
-            line = json.dumps(data, ensure_ascii=False)
-            with self._queue_path.open("a", encoding="utf-8") as f:
-                f.write(line + "\n")
-                f.flush()
-                os.fsync(f.fileno())
+            self.store.apply(self.anima_dir.name, data)
         except OSError as exc:
             logger.exception("Failed to append to task queue")
             raise TaskPersistenceError(str(exc)) from exc

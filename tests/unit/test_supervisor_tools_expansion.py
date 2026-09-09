@@ -11,9 +11,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-
 from core.tooling.handler import ToolHandler
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -129,7 +127,7 @@ class TestGetAllDescendants:
             tmp_path,
             {
                 "sakura": {},
-                "mio": {"supervisor": "taka"},
+                "mio": {"supervisor": "owner"},
             },
         )
         with patch("core.config.models.load_config", return_value=mock_cfg):
@@ -160,7 +158,7 @@ class TestCheckDescendant:
             tmp_path,
             {
                 "sakura": {},
-                "mio": {"supervisor": "taka"},
+                "mio": {"supervisor": "owner"},
             },
         )
         with patch("core.config.models.load_config", return_value=mock_cfg):
@@ -253,7 +251,7 @@ class TestPingSubordinate:
             tmp_path,
             {
                 "sakura": {},
-                "mio": {"supervisor": "taka"},
+                "mio": {"supervisor": "owner"},
             },
         )
 
@@ -410,17 +408,15 @@ class TestDelegateTask:
         assert "委譲しました" in result
         assert "hinata" in result
 
-        # Check subordinate's task queue was created
-        sub_queue = tmp_path / "animas" / "hinata" / "state" / "task_queue.jsonl"
-        assert sub_queue.exists()
+        from core.memory.task_queue import TaskQueueManager
 
-        # Check own tracking entry
-        own_queue = tmp_path / "animas" / "sakura" / "state" / "task_queue.jsonl"
-        assert own_queue.exists()
-        lines = own_queue.read_text(encoding="utf-8").strip().split("\n")
-        own_task = json.loads(lines[-1])
+        subordinate_tasks = TaskQueueManager(tmp_path / "animas" / "hinata").list_tasks()
+        own_tasks = TaskQueueManager(tmp_path / "animas" / "sakura").list_tasks()
+        assert len(subordinate_tasks) == len(own_tasks) == 1
+        own_task = own_tasks[0].model_dump()
         assert own_task["status"] == "delegated"
         assert own_task["meta"]["delegated_to"] == "hinata"
+        assert own_task["meta"]["delegated_task_id"] == subordinate_tasks[0].task_id
 
     def test_delegate_to_non_descendant(self, tmp_path):
         handler = _make_handler(tmp_path, "sakura")
@@ -428,7 +424,7 @@ class TestDelegateTask:
             tmp_path,
             {
                 "sakura": {},
-                "mio": {"supervisor": "taka"},
+                "mio": {"supervisor": "owner"},
             },
         )
 
@@ -475,11 +471,12 @@ class TestDelegateTask:
             )
 
         assert "メッセンジャー未設定" in result
-        # Task should still be added to queues
-        sub_queue = tmp_path / "animas" / "hinata" / "state" / "task_queue.jsonl"
-        assert sub_queue.exists()
+        from core.memory.task_queue import TaskQueueManager
 
-    def test_disable_subordinate_surfaces_open_delegation(self, tmp_path):
+        assert len(TaskQueueManager(tmp_path / "animas" / "hinata").list_tasks()) == 1
+
+    def test_disable_subordinate_no_longer_reassigns_open_delegations(self, tmp_path):
+        """Disabling a subordinate is a plain state change; nothing is re-filed."""
         messenger = MagicMock()
         msg_mock = MagicMock()
         msg_mock.id = "msg1"
@@ -507,15 +504,18 @@ class TestDelegateTask:
                     "name": "hinata",
                     "instruction": "Prepare the monthly report",
                     "summary": "Monthly report",
-                    "deadline": "2h",
                 },
             )
             result = handler.handle("disable_subordinate", {"name": "hinata", "reason": "maintenance"})
 
-        assert "再割当" in result or "reassignment" in result
-        own_queue = tmp_path / "animas" / "sakura" / "state" / "task_queue.jsonl"
-        records = [json.loads(line) for line in own_queue.read_text(encoding="utf-8").splitlines()]
-        assert any(record.get("meta", {}).get("kind") == "disabled_delegation_reassignment" for record in records)
+        assert "maintenance" in result
+        from core.memory.task_queue import TaskQueueManager
+
+        records = [entry.model_dump() for entry in TaskQueueManager(tmp_path / "animas" / "sakura").list_tasks()]
+        assert len(records) == 1
+        assert records[0]["status"] == "delegated"
+        assert records[0]["meta"]["delegated_to"] == "hinata"
+        assert not any(record.get("meta", {}).get("kind") == "disabled_delegation_reassignment" for record in records)
 
 
 # ── task_tracker tests ─────────────────────────────────────
@@ -867,14 +867,14 @@ class TestDescendantOrgToolPermission:
     def test_non_descendant_still_blocked(self, tmp_path):
         """Org tools should still block non-descendant targets."""
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        _setup_subordinate(tmp_path, "mio", supervisor="taka")
+        _setup_subordinate(tmp_path, "mio", supervisor="owner")
         mock_cfg = _mock_config(
             tmp_path,
             {
                 "sakura": {},
                 "hinata": {"supervisor": "sakura"},
                 "natsume": {"supervisor": "hinata"},
-                "mio": {"supervisor": "taka"},
+                "mio": {"supervisor": "owner"},
             },
         )
         with patch("core.config.models.load_config", return_value=mock_cfg):

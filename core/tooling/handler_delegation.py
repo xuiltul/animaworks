@@ -8,15 +8,12 @@ from __future__ import annotations
 
 import json as _json
 import logging
-import os
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from core.exceptions import MemoryWriteError, TaskPersistenceError
 from core.i18n import t
-from core.memory._io import atomic_write_text
 from core.tooling.handler_base import _error_result, build_outgoing_origin_chain
 from core.tooling.org_helpers import OrgHelpersMixin
 
@@ -27,10 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger("animaworks.tool_handler")
 
 
-def _server_base_url() -> str:
-    return os.environ.get("ANIMAWORKS_SERVER_URL", "http://localhost:18500").rstrip("/")
-
-
 def _record_taskboard_delegation(
     *,
     delegated_to: str,
@@ -38,7 +31,7 @@ def _record_taskboard_delegation(
     delegator: str,
     tracking_task_id: str | None = None,
 ) -> None:
-    """Record delegation rows in TaskBoard before legacy queue compatibility writes."""
+    """Record optional TaskBoard presentation metadata after canonical publication."""
     from core.taskboard.models import AttentionVisibility, BoardColumn
     from core.taskboard.store import TaskBoardStore
 
@@ -75,83 +68,6 @@ class DelegationMixin(OrgHelpersMixin):
     _session_origin: str
     _session_origin_chain: list[str]
 
-    def _persist_delegation_via_server(
-        self,
-        *,
-        target_name: str,
-        instruction: str,
-        summary: str,
-        deadline: str,
-        sub_task_id: str,
-        tracking_task_id: str,
-        workspace: str,
-        exclusive_key: str,
-        acceptance_criteria: list[str],
-        persist_sub: bool,
-        persist_tracking: bool,
-        persist_pending: bool,
-        model: str = "",
-    ) -> str | None:
-        """Persist delegation via /api/internal/delegate-task when local FS is read-only.
-
-        Returns None on success, or an error string on failure.
-        """
-        try:
-            import httpx
-        except ImportError as exc:
-            return f"httpx unavailable: {exc}"
-
-        payload: dict[str, Any] = {
-            "delegator": self._anima_name,
-            "target": target_name,
-            "instruction": instruction,
-            "summary": summary,
-            "deadline": deadline,
-            "sub_task_id": sub_task_id,
-            "tracking_task_id": tracking_task_id,
-            "workspace": workspace,
-            "exclusive_key": exclusive_key,
-            "acceptance_criteria": acceptance_criteria,
-            "persist_sub": persist_sub,
-            "persist_tracking": persist_tracking,
-            "persist_pending": persist_pending,
-            "model": model,
-        }
-        timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
-        url = f"{_server_base_url()}/api/internal/delegate-task"
-        last_err: str | None = None
-        for attempt in range(2):
-            try:
-                resp = httpx.post(url, json=payload, timeout=timeout)
-            except Exception as exc:
-                last_err = f"server unreachable: {exc}"
-            else:
-                if resp.status_code >= 400:
-                    detail = _extract_detail(resp)
-                    last_err = f"HTTP {resp.status_code}: {detail}"
-                else:
-                    try:
-                        data = resp.json()
-                    except Exception:
-                        data = {}
-                    if isinstance(data, dict) and data.get("ok"):
-                        if attempt > 0:
-                            logger.info(
-                                "delegate_task server fallback succeeded on retry (attempt=%s) delegator=%s target=%s",
-                                attempt + 1,
-                                self._anima_name,
-                                target_name,
-                            )
-                        return None
-                    last_err = f"unexpected response: {data!r}"
-
-            if attempt == 0:
-                import time
-
-                time.sleep(2.0)
-
-        return last_err
-
     def _handle_delegate_task(self, args: dict[str, Any]) -> str:
         """Delegate a task to a direct subordinate."""
         from core.tooling.org_helpers import resolve_anima_name
@@ -159,8 +75,6 @@ class DelegationMixin(OrgHelpersMixin):
         target_name = resolve_anima_name(args.get("name", ""))
         instruction = args.get("instruction", "")
         summary = args.get("summary", "") or instruction[:100]
-        deadline = args.get("deadline", "")
-        exclusive_key = args.get("exclusive_key", "")
         raw_criteria = args.get("acceptance_criteria")
         acceptance_criteria: list[str] = (
             [c for c in raw_criteria if isinstance(c, str)] if isinstance(raw_criteria, list) else []
@@ -189,11 +103,6 @@ class DelegationMixin(OrgHelpersMixin):
             return _error_result("InvalidArguments", "name is required")
         if not instruction:
             return _error_result("InvalidArguments", "instruction is required")
-        if not deadline:
-            return _error_result(
-                "InvalidArguments",
-                "deadline is required. Use relative format ('30m', '2h', '1d') or ISO8601.",
-            )
 
         err = self._check_subordinate(target_name)
         if err:
@@ -210,7 +119,6 @@ class DelegationMixin(OrgHelpersMixin):
                 )
 
         from core.company import check_company_boundary
-        from core.memory.task_queue import TaskQueueManager
         from core.paths import get_animas_dir
 
         animas_dir = get_animas_dir()
@@ -231,113 +139,37 @@ class DelegationMixin(OrgHelpersMixin):
 
         sub_task_id = uuid.uuid4().hex[:12]
         tracking_task_id = uuid.uuid4().hex[:12]
-        sub_tqm = TaskQueueManager(target_dir)
-        own_tqm = TaskQueueManager(self._anima_dir)
+        from core.tasks_dispatch import publish_delegation
 
-        persisted_sub = persisted_tracking = persisted_pending = False
+        task_desc = {
+            "task_type": "llm",
+            "task_id": sub_task_id,
+            "title": summary,
+            "description": instruction,
+            "context": "",
+            "acceptance_criteria": acceptance_criteria,
+            "constraints": [],
+            "file_paths": [],
+            "submitted_by": self._anima_name,
+            "submitted_at": datetime.now(UTC).isoformat(),
+            "reply_to": self._anima_name,
+            "source": "delegation",
+            "working_directory": resolved_wd,
+            "model": model,
+        }
         used_server_fallback = False
         try:
-            sub_tqm.add_task(
-                source="anima",
-                original_instruction=instruction,
-                assignee=target_name,
-                summary=summary,
-                deadline=deadline,
-                relay_chain=[self._anima_name],
-                task_id=sub_task_id,
-                meta={"model": model} if model else None,
-            )
-            persisted_sub = True
-            own_tqm.add_delegated_task(
-                original_instruction=instruction,
-                assignee=target_name,
-                summary=t("handler.delegation_summary", summary=summary),
-                deadline=deadline,
-                relay_chain=[self._anima_name, target_name],
-                task_id=tracking_task_id,
-                meta={
-                    "delegated_to": target_name,
-                    "delegated_task_id": sub_task_id,
-                    **({"model": model} if model else {}),
-                },
-            )
-            persisted_tracking = True
-            # Write pending task JSON so PendingTaskExecutor picks it up
-            task_desc = {
-                "task_type": "llm",
-                "task_id": sub_task_id,
-                "title": summary,
-                "description": instruction,
-                "context": "",
-                "acceptance_criteria": acceptance_criteria,
-                "constraints": [],
-                "file_paths": [],
-                "submitted_by": self._anima_name,
-                "submitted_at": datetime.now(UTC).isoformat(),
-                "reply_to": self._anima_name,
-                "source": "delegation",
-                "working_directory": resolved_wd,
-                "exclusive_key": exclusive_key,
-                "model": model,
-            }
-            pending_dir = target_dir / "state" / "pending"
-            pending_dir.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(
-                pending_dir / f"{sub_task_id}.json",
-                _json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
-            )
-            persisted_pending = True
-        except ValueError as e:
-            return _error_result("InvalidArguments", str(e))
-        except (OSError, TaskPersistenceError, MemoryWriteError) as e:
-            # sandbox EROFS/EACCES: fall back to server internal API.
-            # TaskQueueManager wraps OSError in TaskPersistenceError (not an
-            # OSError subclass); atomic_write_text wraps OSError in
-            # MemoryWriteError — both must be caught here.
-            fb_err = self._persist_delegation_via_server(
-                target_name=target_name,
-                instruction=instruction,
-                summary=summary,
-                deadline=deadline,
-                sub_task_id=sub_task_id,
+            used_server_fallback = publish_delegation(
+                target_dir,
+                task_desc,
+                delegator=self._anima_name,
                 tracking_task_id=tracking_task_id,
-                workspace=resolved_wd,
-                exclusive_key=exclusive_key,
-                acceptance_criteria=acceptance_criteria,
-                persist_sub=not persisted_sub,
-                persist_tracking=not persisted_tracking,
-                persist_pending=not persisted_pending,
-                model=model,
             )
-            if fb_err is not None:
-                logger.error(
-                    "delegate_task persistence failed (direct=%s, fallback=%s)",
-                    e,
-                    fb_err,
-                )
-                return _error_result(
-                    "PersistenceFailed",
-                    f"Failed to persist task to subordinate queue: {e}; server fallback failed: {fb_err}",
-                )
-            used_server_fallback = True
-            logger.info(
-                "delegate_task: persisted via server API (EROFS fallback) "
-                "delegator=%s target=%s sub_task_id=%s tracking_task_id=%s "
-                "persist_sub=%s persist_tracking=%s persist_pending=%s",
-                self._anima_name,
-                target_name,
-                sub_task_id,
-                tracking_task_id,
-                not persisted_sub,
-                not persisted_tracking,
-                not persisted_pending,
-            )
-        except Exception as e:
-            logger.error("Task persistence failed in delegate_task: %s", e)
-            return _error_result(
-                "PersistenceFailed",
-                f"Failed to persist task to subordinate queue: {e}",
-            )
+        except ValueError as exc:
+            return _error_result("InvalidArguments", str(exc))
+        except Exception as exc:
+            logger.exception("delegate_task persistence failed")
+            return _error_result("PersistenceFailed", str(exc))
 
         if not used_server_fallback:
             try:
@@ -361,23 +193,33 @@ class DelegationMixin(OrgHelpersMixin):
 
         dm_result = ""
         if self._messenger:
+            dm_enabled = True
             try:
-                self._messenger.send(
-                    to=target_name,
-                    content=t(
-                        "handler.delegation_dm_content",
-                        instruction=instruction,
-                        deadline=deadline,
-                        task_id=sub_task_id,
-                    ),
-                    intent="delegation",
-                    origin_chain=outgoing_chain,
-                    meta={"task_id": sub_task_id},
-                )
-                dm_result = t("handler.dm_sent")
+                from core.config.models import load_config
+
+                dm_enabled = load_config().heartbeat.delegation_dm_enabled
             except Exception as e:
-                dm_result = t("handler.dm_send_failed", e=e)
-                logger.warning("delegate_task DM failed: %s -> %s: %s", self._anima_name, target_name, e)
+                dm_enabled = True
+                logger.warning("Could not read delegation_dm_enabled config: %s", e)
+            if not dm_enabled:
+                dm_result = t("handler.delegation_dm_skipped")
+            else:
+                try:
+                    self._messenger.send(
+                        to=target_name,
+                        content=t(
+                            "handler.delegation_dm_content",
+                            instruction=instruction,
+                            task_id=sub_task_id,
+                        ),
+                        intent="delegation",
+                        origin_chain=outgoing_chain,
+                        meta={"task_id": sub_task_id},
+                    )
+                    dm_result = t("handler.dm_sent")
+                except Exception as e:
+                    dm_result = t("handler.dm_send_failed", e=e)
+                    logger.warning("delegate_task DM failed: %s -> %s: %s", self._anima_name, target_name, e)
         else:
             dm_result = t("handler.messenger_not_set")
 
@@ -420,45 +262,32 @@ class DelegationMixin(OrgHelpersMixin):
         status_filter = args.get("status", "active")
 
         from core.memory.task_queue import TaskQueueManager
-        from core.paths import get_animas_dir
 
         own_tqm = TaskQueueManager(self._anima_dir)
-        delegated = own_tqm.get_delegated_tasks()
+        delegated = [
+            task for task in own_tqm._load_all(include_archived=True).values() if task.meta.get("delegated_to")
+        ]
 
         if not delegated:
             return t("handler.no_delegated_tasks")
 
-        animas_dir = get_animas_dir()
         results: list[dict[str, Any]] = []
 
         for task in delegated:
             meta = task.meta or {}
             delegated_to = meta.get("delegated_to", "")
-            delegated_task_id = meta.get("delegated_task_id", "")
 
             entry: dict[str, Any] = {
                 "my_task_id": task.task_id,
                 "delegated_to": delegated_to,
                 "summary": task.summary,
                 "delegated_at": task.ts,
-                "deadline": task.deadline or "",
-                "subordinate_status": "unknown",
-                "last_updated": "",
+                "subordinate_status": meta.get("delegated_status", task.status),
+                "last_updated": task.updated_at,
             }
 
-            if delegated_to and delegated_task_id:
-                target_dir = animas_dir / delegated_to
-                try:
-                    sub_tqm = TaskQueueManager(target_dir)
-                    sub_task = sub_tqm.get_task_by_id(delegated_task_id)
-                    if sub_task:
-                        entry["subordinate_status"] = sub_task.status
-                        entry["last_updated"] = sub_task.updated_at
-                except Exception:
-                    entry["subordinate_status"] = "unknown"
-
             sub_status = entry["subordinate_status"]
-            _terminal = {"done", "cancelled", "failed"}
+            _terminal = {"done", "cancelled"}
             if status_filter == "active" and sub_status in _terminal:
                 continue
             if status_filter == "completed" and sub_status not in _terminal:
@@ -476,17 +305,3 @@ class DelegationMixin(OrgHelpersMixin):
             return t("handler.no_matching_delegated", status=status_filter)
 
         return _json.dumps(results, ensure_ascii=False, indent=2)
-
-
-def _extract_detail(resp: Any) -> str:
-    try:
-        data = resp.json()
-        if isinstance(data, dict):
-            detail = data.get("detail", data)
-            return str(detail)
-    except Exception:
-        logger.debug(
-            "delegate_task: failed to parse error response JSON",
-            exc_info=True,
-        )
-    return getattr(resp, "text", None) or f"HTTP {getattr(resp, 'status_code', '?')}"

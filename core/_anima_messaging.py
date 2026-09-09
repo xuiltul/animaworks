@@ -142,30 +142,48 @@ def _apply_chat_model_override(
     """
     if not requested_model or not isinstance(base_config, ModelConfig):
         return base_config
+
+    def _dropped(reason: str) -> Any:
+        """Record a dropped override where a reader can see it.
+
+        A dropped override is invisible from the outside — the reply simply
+        comes back on the old model — so it goes into the activity feed next
+        to the successful case rather than only into the anima's log file.
+        """
+        logger.warning(
+            "[%s] Ignoring chat model override %r: %s",
+            owner.name,
+            requested_model,
+            reason,
+        )
+        try:
+            owner._activity.log(
+                "model_override_failed",
+                summary=(f"Chat model override ignored ({reason}); still on {base_config.model}"),
+                channel="chat",
+                meta={
+                    "requested": requested_model,
+                    "reason": reason,
+                    "model": base_config.model,
+                    "thread_id": thread_id,
+                },
+                safe=True,
+            )
+        except Exception:
+            logger.debug("[%s] Failed to log model_override_failed activity", owner.name, exc_info=True)
+        return base_config
+
     try:
         from core.config.io import load_config
-        from core.config.model_config import build_model_override_config
-        from core.config.model_mode import parse_fallback_entry
+        from core.config.model_config import resolve_model_selection
 
         config = load_config()
-        parsed = parse_fallback_entry(requested_model, config)
-        if parsed is None:
-            logger.warning(
-                "[%s] Ignoring chat model override: unparseable %r",
-                owner.name,
-                requested_model,
-            )
-            return base_config
-        mode, model = parsed
-        override = build_model_override_config(base_config, mode, model, config)
-        if override is None:
-            logger.warning(
-                "[%s] Ignoring chat model override: no resolvable credential for %r (mode=%s)",
-                owner.name,
-                model,
-                mode,
-            )
-            return base_config
+        override = resolve_model_selection(
+            base_config,
+            requested_model=requested_model,
+            config=config,
+            apply_fallback=False,
+        ).effective
         owner._activity.log(
             "model_override",
             summary=(f"Chat model override: {base_config.model} -> {override.resolved_mode}:{override.model}"),
@@ -185,6 +203,8 @@ def _apply_chat_model_override(
             override.model,
         )
         return override
+    except ValueError as exc:
+        return _dropped(str(exc))
     except Exception:
         logger.warning(
             "[%s] Ignoring chat model override for %r",
@@ -192,7 +212,7 @@ def _apply_chat_model_override(
             requested_model,
             exc_info=True,
         )
-        return base_config
+        return _dropped("resolution error")
 
 
 def _resolve_chat_retry_config(

@@ -28,6 +28,7 @@ import math
 import os  # noqa: F401  — kept at module level for mock.patch compat
 import threading
 import time
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -186,7 +187,7 @@ class ActivityLogger(
         self.anima_dir = anima_dir
         self._log_dir = anima_dir / "activity_log"
         self._anima_name = anima_dir.name
-        self._ctx = ""
+        self._ctx: ContextVar[str] = ContextVar("activity_logger_context", default="")
         self._start_event_exporter()
 
     def _start_event_exporter(self) -> None:
@@ -202,20 +203,18 @@ class ActivityLogger(
 
     def bind_runtime_session(self, ctx: RuntimeSessionContext) -> None:
         """Bind the execution context used by subsequent activity entries."""
-        self._ctx = activity_context_from_trigger(ctx.trigger, ctx.session_type)
+        self._ctx.set(activity_context_from_trigger(ctx.trigger, ctx.session_type))
 
     def _resolve_context(self, ctx: str | None) -> str:
-        """Resolve an explicit, bound, or context-local execution label."""
+        """Prefer the active invocation over a context-local bound fallback."""
         if ctx is not None:
             return ctx
-        if self._ctx:
-            return self._ctx
         from core.execution.session_context import current_runtime_session
 
         runtime_ctx = current_runtime_session()
-        if runtime_ctx is None:
-            return ""
-        return activity_context_from_trigger(runtime_ctx.trigger, runtime_ctx.session_type)
+        if runtime_ctx is not None:
+            return activity_context_from_trigger(runtime_ctx.trigger, runtime_ctx.session_type)
+        return self._ctx.get()
 
     # ── Recording ─────────────────────────────────────────────
 
@@ -248,8 +247,8 @@ class ActivityLogger(
             channel: Channel name (``chat``, ``general``, etc.).
             tool: Tool name (for ``tool_use`` events).
             via: Delivery channel (for ``human_notify`` events).
-            ctx: Execution context override.  When omitted, the context bound
-                by :meth:`bind_runtime_session` is used.
+            ctx: Execution context override. When omitted, use the active
+                runtime scope, then the context-local bound session fallback.
             meta: Arbitrary metadata dict.
             origin: Origin category (e.g. ``"human"``, ``"external_platform"``).
             origin_chain: Intermediate origins the data traversed.

@@ -35,7 +35,7 @@ from core.time_utils import now_jst
 @pytest.fixture
 def supervisor(tmp_path: Path) -> ProcessSupervisor:
     """Create a ProcessSupervisor with fast timeouts for testing."""
-    return ProcessSupervisor(
+    supervisor = ProcessSupervisor(
         animas_dir=tmp_path / "animas",
         shared_dir=tmp_path / "shared",
         run_dir=tmp_path / "run",
@@ -51,6 +51,10 @@ def supervisor(tmp_path: Path) -> ProcessSupervisor:
             startup_grace_sec=0.5,
         ),
     )
+
+    # Asset generation is covered separately; process tests must not call an LLM.
+    supervisor._reconcile_assets = AsyncMock()
+    return supervisor
 
 
 @pytest.fixture

@@ -340,8 +340,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
             ),
         ]
         if any(name in all_animas and name != anima_name for name in other_animas):
-            cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
-            _cr = load_prompt_text(cr_key)
+            _cr = load_prompt_text("communication_rules")
             if _cr:
                 parts.append(_cr)
         return "\n\n".join(parts)
@@ -399,8 +398,7 @@ def _build_org_context(anima_name: str, other_animas: list[str], execution_mode:
 
     # Communication rules: only when there are other animas
     if any(name in all_animas and name != anima_name for name in other_animas):
-        cr_key = "communication_rules_s" if _is_mcp_mode(execution_mode) else "communication_rules"
-        _cr = load_prompt_text(cr_key)
+        _cr = load_prompt_text("communication_rules")
         if _cr:
             parts.append(_cr)
 

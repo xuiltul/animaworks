@@ -11,6 +11,7 @@ import os
 import sqlite3
 import time
 from collections.abc import Callable
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -128,7 +129,9 @@ def bootstrap_chroma_sqlite_wal(
     try:
         persist_dir.mkdir(parents=True, exist_ok=True)
         # URI mode=rw refuses to create a missing file; use plain connect for bootstrap.
-        with sqlite3.connect(db_path, timeout=timeout_seconds) as conn:
+        # A Connection context manager commits/rolls back but does not close.
+        # Finish RW ownership here, before a Rust client can create its WAL.
+        with closing(sqlite3.connect(db_path, timeout=timeout_seconds)) as conn, conn:
             journal_mode = str(conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]).lower()
             conn.execute(f"PRAGMA busy_timeout = {int(timeout_seconds * 1000)}")
             conn.execute("PRAGMA synchronous=NORMAL")
@@ -180,7 +183,7 @@ def configure_chroma_sqlite_pragmas(
         return SQLiteHealthResult(db_path=db_path, ok=True, status="missing")
 
     try:
-        with _connect(db_path, timeout_seconds) as conn:
+        with closing(_connect(db_path, timeout_seconds)) as conn, conn:
             current_journal_mode = str(conn.execute("PRAGMA journal_mode").fetchone()[0]).lower()
             conn.execute(f"PRAGMA busy_timeout = {int(timeout_seconds * 1000)}")
             journal_mode = current_journal_mode
@@ -364,7 +367,7 @@ def _run_quick_check(db_path: Path, timeout_seconds: float) -> tuple[str, ...]:
     # close when it believes it is the last connection (chroma's Rust-side
     # SQLite locks are invisible to it), leaving live chroma connections on
     # stale deleted-WAL fds → "file is not a database" storms (2026-08-11).
-    with _connect(db_path, timeout_seconds, mode="ro") as conn:
+    with closing(_connect(db_path, timeout_seconds, mode="ro")) as conn, conn:
         conn.execute(f"PRAGMA busy_timeout = {int(timeout_seconds * 1000)}")
         deadline = time.monotonic() + timeout_seconds
         timed_out = False

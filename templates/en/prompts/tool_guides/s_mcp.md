@@ -1,6 +1,8 @@
 ## AnimaWorks Tools
 
-These tools are your core AnimaWorks capabilities, available alongside Claude Code built-in tools (Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch).
+These tools are your core AnimaWorks capabilities, available alongside the host CLI's built-in `Bash` / `Read` / `Write` / `Edit`.
+
+Search, counting, listing and file manipulation go through `Bash` (`rg`, `grep`, `find`, `ls`, `wc`). Reach for `Bash` first; use `Read` / `Write` / `Edit` for reading and writing files.
 
 ### Memory
 - **search_memory**: Search long-term memory (knowledge, episodes, procedures, facts), activity_log (recent action logs), and recent tool results by keyword
@@ -22,12 +24,11 @@ Targets: `call_human`, `send_message`, `post_channel`, `write_memory_file`, `gma
 - **delegate_task**: Delegate task to a subordinate (**subordinate executes it**; when you have subordinates)
 - **update_task**: Update task status in the task queue
 
-> **Note**: Agent/Task tools (sub-agent spawning) are **disabled**. In normal chat, do the work directly with Read/Bash/Grep etc. For delegation, use `delegate_task`.
+> Use `delegate_task` to delegate to a subordinate. Work you do yourself runs directly through `Bash`.
 
 ### Skills
 - **create_skill**: Create a new skill directory structure
-- Before creating a new skill, read `read_memory_file(path="common_skills/skill-creator/SKILL.md")`
-- For existing skill docs and CLI manuals, use **read_memory_file** with the path from the catalog (e.g. `animaworks-tool --help`)
+- For existing skill docs and CLI manuals, use **read_memory_file** with the path from the catalog
 
 ### Other Tools via CLI
 For supervisor management, vault, channel management, background tasks, and external tools (Slack, Chatwork, Gmail, GitHub, etc.), use:
@@ -37,5 +38,5 @@ Bash: animaworks-tool <tool> <subcommand> [args]
 Run `animaworks-tool --help` to see available CLI commands.
 
 ### Background Command Output
-Long-running commands like machine_run write output to `state/cmd_output/`.
+Long-running commands write output to `state/cmd_output/`.
 Use `Read(path="state/cmd_output/{id}.txt")` to check intermediate output.

@@ -88,7 +88,7 @@ class TestReconciliationStatusJsonGuard:
             RestartPolicy,
         )
 
-        return ProcessSupervisor(
+        supervisor = ProcessSupervisor(
             animas_dir=temp_dirs["animas_dir"],
             shared_dir=temp_dirs["shared_dir"],
             run_dir=temp_dirs["run_dir"],
@@ -104,6 +104,10 @@ class TestReconciliationStatusJsonGuard:
                 startup_grace_sec=0.5,
             ),
         )
+
+        # Asset generation is covered separately; process tests must not call an LLM.
+        supervisor._reconcile_assets = AsyncMock()
+        return supervisor
 
     @pytest.mark.asyncio
     async def test_reconcile_skips_anima_without_status_json(

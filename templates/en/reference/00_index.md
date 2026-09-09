@@ -10,6 +10,7 @@ These files are outside the RAG search target; read them directly with `read_mem
 | File | Title |
 |------|-------|
 | `anatomy/anima-anatomy.md` | Anima Anatomy — Complete File Reference |
+| `anatomy/environment-layout.md` | Runtime directory layout and permissions |
 | `anatomy/memory-system.md` | Memory System Guide |
 | `anatomy/priming-channels.md` | Priming Channels Technical Reference |
 | `anatomy/working-memory.md` | Working Memory (state/) Technical Reference |
@@ -35,6 +36,7 @@ These files are outside the RAG search target; read them directly with `read_mem
 |------|-------|
 | `operations/browser-automation-guide.md` | Browser Automation Guide |
 | `operations/heartbeat-cron-guide.md` | Scheduled execution: configuration and operations |
+| `operations/memory-writing-guide.md` | Memory destinations and scheduled execution choices |
 | `operations/mode-s-auth-guide.md` | Mode S (Agent SDK) Authentication Mode Configuration Guide |
 | `operations/model-guide.md` | Model Selection and Configuration Guide |
 | `operations/project-setup.md` | Project Setup |

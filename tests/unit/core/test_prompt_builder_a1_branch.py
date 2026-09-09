@@ -55,15 +55,15 @@ class TestMessagingSectionBranching:
 
 
 class TestOrgContextCommunicationRules:
-    """Verify _build_org_context selects the correct communication_rules template."""
+    """Verify _build_org_context uses the shared communication_rules template."""
 
     @patch("core.config.load_config")
     @patch("core.prompt.org_context.load_prompt_text", return_value="mocked prompt")
     @patch("core.prompt.org_context.load_prompt", return_value="mocked prompt")
-    def test_s_mode_loads_communication_rules_s(
+    def test_s_mode_loads_communication_rules(
         self, mock_load: MagicMock, mock_load_text: MagicMock, mock_config: MagicMock
     ) -> None:
-        """When execution_mode='s' and other_animas exist, communication_rules_s is loaded."""
+        """S mode shares the same communication_rules template as other modes."""
         from core.prompt.builder import _build_org_context
 
         # Set up a minimal config with animas that have supervisor relationships
@@ -83,8 +83,7 @@ class TestOrgContextCommunicationRules:
         _build_org_context("test_anima", ["peer1"], execution_mode="s")
 
         template_names = [c.args[0] for c in mock_load_text.call_args_list]
-        assert "communication_rules_s" in template_names
-        assert "communication_rules" not in template_names
+        assert template_names.count("communication_rules") == 1
 
     @patch("core.config.load_config")
     @patch("core.prompt.org_context.load_prompt_text", return_value="mocked prompt")
@@ -112,7 +111,6 @@ class TestOrgContextCommunicationRules:
 
         template_names = [c.args[0] for c in mock_load_text.call_args_list]
         assert "communication_rules" in template_names
-        assert "communication_rules_s" not in template_names
 
     @patch("core.config.load_config")
     @patch("core.prompt.org_context.load_prompt_text", return_value="mocked prompt")
@@ -134,7 +132,6 @@ class TestOrgContextCommunicationRules:
         _build_org_context("test_anima", [], execution_mode="s")
 
         template_names = [c.args[0] for c in mock_load_text.call_args_list]
-        assert "communication_rules_s" not in template_names
         assert "communication_rules" not in template_names
 
 
@@ -205,7 +202,7 @@ class TestSTemplateContent:
         content = (TEMPLATES_DIR / "ja" / "prompts" / "messaging_s.md").read_text(encoding="utf-8")
         assert "bash send" not in content
 
-    def test_communication_rules_s_has_routing_rules(self) -> None:
-        """communication_rules_s.md must contain routing rules (compressed format)."""
-        content = (TEMPLATES_DIR / "ja" / "prompts" / "communication_rules_s.md").read_text(encoding="utf-8")
+    def test_communication_rules_has_routing_rules(self) -> None:
+        """The shared communication_rules.md contains routing rules."""
+        content = (TEMPLATES_DIR / "ja" / "prompts" / "communication_rules.md").read_text(encoding="utf-8")
         assert "経路" in content

@@ -54,16 +54,16 @@ identity와 injection을 충실히 하고, heartbeat과 cron을 설계합니다.
 | **Inbox** | 다른 Anima의 DM | 조직 내 메시지에 대한 즉시 응답 |
 | **Heartbeat** | 정기 자동 기동 | 관찰 → 계획 → 되돌아보기. **확인과 계획만, 실행하지 않음** |
 | **Cron** | cron.md 스케줄 | 정해진 시간의 확정 태스크 실행 |
-| **TaskExec** | state/pending/에 태스크 출현 | Heartbeat이 `submit_tasks`로 투입한 태스크 실행 |
+| **TaskExec** | 등록된 정규 태스크가 실행 가능해짐 | submit_tasks/delegate_task로 저장한 완전한 입력을 의존 관계와 워커 용량에 따라 실행하고 시도 결과를 영속화 |
 
 Chat과 Heartbeat은 **별도 잠금**으로 동작하므로, Heartbeat 실행 중에도 사람의 대화에 즉시 응답할 수 있습니다.
 
 ### 4. 성장
 
 일상 활동을 통해 기억이 축적됩니다:
-- 일화 기억 (무엇을 했는지)이 매일 지식 (무엇을 배웠는지)으로 정제됨
-- 문제 해결 경험이 절차서로 자동 기록됨
-- 사용하지 않게 된 기억은 능동적으로 망각 및 정리됨
+- 일간 통합은 새로운 활동 청크만 에피소드로 기록하고 원본 증거를 보존합니다.
+- 지식과 절차 변경은 명시적인 작업이나 검토된 설정으로 수행하며 자동 변경은 기본적으로 비활성화됩니다.
+- 기억 저장과 필요시 검색은 유지됩니다. 주간·월간 자동 정리와 스킬 자동 학습은 기본적으로 비활성화됩니다.
 
 ## 당신을 구성하는 요소
 
@@ -76,7 +76,7 @@ Chat과 Heartbeat은 **별도 잠금**으로 동작하므로, Heartbeat 실행 �
 | **권한 및 설정** | permissions.json, status.json | 무엇을 할 수 있는지, 어떻게 동작하는지 |
 | **정기 행동** | heartbeat.md, cron.md | 언제 확인하고, 언제 실행하는지 |
 | **기억** | episodes/, knowledge/, procedures/, skills/, shortterm/ | 과거 경험, 배움, 절차, 능력 |
-| **작업 상태** | state/ | 현재 진행 중인 작업 |
+| **작업 상태** | 정규 태스크 저장소와 state/ | 영속 태스크·시도, 현재 작업, 결과 및 커맨드형 도구 기록 |
 
 각 파일의 상세 역할과 변경 규칙은 `reference/anatomy/anima-anatomy.md`를 참조하세요.
 기억 시스템의 구조는 `anatomy/memory-system.md`를 참조하세요.

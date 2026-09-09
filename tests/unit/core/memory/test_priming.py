@@ -16,6 +16,15 @@ from core.memory.priming import PrimingEngine, format_priming_section
 from core.time_utils import today_local
 
 
+@pytest.fixture(autouse=True)
+def isolated_retrieval(monkeypatch):
+    """This unit module tests channel wiring, not a live embedding backend."""
+    from core.memory.retrieval.unified_search import UnifiedMemorySearch
+
+    monkeypatch.setattr(PrimingEngine, "_get_retriever", lambda self: None)
+    monkeypatch.setattr(UnifiedMemorySearch, "search_many", lambda self, *args, **kwargs: [])
+
+
 @pytest.fixture
 def temp_anima_dir():
     """Create a temporary anima directory with sample memory files."""

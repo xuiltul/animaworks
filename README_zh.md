@@ -69,8 +69,10 @@ macOS / Linux / WSL:
 ```bash
 curl -sSL https://raw.githubusercontent.com/xuiltul/animaworks/main/scripts/setup.sh | bash
 cd animaworks
-uv run animaworks start     # 启动服务器 — 首次运行时会打开设置向导
+animaworks start            # 启动服务器 — 首次运行时会打开设置向导
 ```
+
+> **可以在任意目录下用 `animaworks` 启动。** `setup.sh` 会把 CLI 软链接到 `~/.local/bin`，只要该目录在 `PATH` 中，就可以省略 `uv run` 前缀（若不在，请在 shell 的 rc 文件中加入 `export PATH="$HOME/.local/bin:$PATH"`）。控制台脚本以绝对路径指向本仓库的 `.venv` 解释器，因此 `animaworks` 与 `uv run animaworks` 始终使用同一环境。手动安装时可自行创建链接：`ln -sfn "$PWD/.venv/bin/animaworks" ~/.local/bin/animaworks`
 
 Windows (PowerShell):
 
@@ -92,7 +94,7 @@ uv run animaworks start
 
 无需手动编辑 `.env`。向导会自动将所有内容保存到 `config.json`。
 
-安装脚本会自动安装 [uv](https://docs.astral.sh/uv/)、克隆仓库，并下载 Python 3.12+ 及所有依赖项。它覆盖 **macOS、Linux 和 WSL**，无需预先安装 Python。**Windows** 请使用上面的 PowerShell / 手动安装步骤。
+安装脚本会自动安装 [uv](https://docs.astral.sh/uv/)、克隆仓库、下载 Python 3.12+ 及所有依赖项，并把 `animaworks` 命令软链接到 `~/.local/bin`。它覆盖 **macOS、Linux 和 WSL**，无需预先安装 Python。**Windows** 请使用上面的 PowerShell / 手动安装步骤。
 
 > **想使用其他大语言模型？** AnimaWorks 支持 Claude、GPT、Gemini、本地模型等。你可以在设置向导中输入 API 密钥，或在 OpenAI/Codex 场景下使用 **Codex Login**。之后也可以在仪表盘的**设置**中修改。详见下方 [API 密钥参考](#api-密钥参考)。
 

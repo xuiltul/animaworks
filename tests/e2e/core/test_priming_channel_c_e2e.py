@@ -11,6 +11,7 @@ ensuring that single-char kanji keywords propagate through to
 Channel C and that message context improves retrieval relevance.
 """
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -31,11 +32,7 @@ def rich_anima_dir(tmp_path: Path) -> Path:
     (anima_dir / "activity_log").mkdir(parents=True)
 
     (anima_dir / "knowledge" / "background-implementation-workflow.md").write_text(
-        "# 「裏で実装」ワークフロー\n\n"
-        "## 手順\n"
-        "1. Issue を読む\n"
-        "2. worktree を作成\n"
-        "3. 裏側で自動実装する\n",
+        "# 「裏で実装」ワークフロー\n\n## 手順\n1. Issue を読む\n2. worktree を作成\n3. 裏側で自動実装する\n",
         encoding="utf-8",
     )
     (anima_dir / "knowledge" / "chatwork-policy.md").write_text(
@@ -47,8 +44,7 @@ def rich_anima_dir(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (anima_dir / "knowledge" / "type-hints-guide.md").write_text(
-        "# 型ヒントガイド\n\n型ヒントは全ファイル必須。\n"
-        "Pydanticモデルで型安全を担保する。\n",
+        "# 型ヒントガイド\n\n型ヒントは全ファイル必須。\nPydanticモデルで型安全を担保する。\n",
         encoding="utf-8",
     )
     (anima_dir / "knowledge" / "money-management.md").write_text(
@@ -87,12 +83,30 @@ async def test_single_char_kanji_reaches_channel_c(rich_anima_dir: Path):
     assert len(captured_queries) >= 2, "Channel C dual query should include message and keyword queries"
     msg_query = captured_queries[0]
     kw_query = captured_queries[1]
-    assert msg_query.startswith(msg), (
-        f"First query (message-context) should start with original message: {msg_query}"
-    )
-    assert "裏" in kw_query or "裏" in msg_query, (
-        f"'裏' not found in either query: msg={msg_query}, kw={kw_query}"
-    )
+    assert msg_query.startswith(msg), f"First query (message-context) should start with original message: {msg_query}"
+    assert "裏" in kw_query or "裏" in msg_query, f"'裏' not found in either query: msg={msg_query}, kw={kw_query}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("concurrent", [False, True])
+async def test_identical_prime_calls_do_not_share_search_results(rich_anima_dir: Path, concurrent: bool):
+    """Deduplicate within a turn, never across sequential or concurrent turns."""
+    engine = PrimingEngine(rich_anima_dir)
+    mock_searcher = SimpleNamespace(last_search_meta={}, search_many=MagicMock(return_value=[]))
+    with (
+        patch("core.memory.priming.channel_c.UnifiedMemorySearch", return_value=mock_searcher),
+        patch("core.paths.get_shared_dir", return_value=rich_anima_dir.parent / "shared"),
+    ):
+        if concurrent:
+            await asyncio.gather(
+                engine.prime_memories(message="型ヒントについて教えて", sender_name="human"),
+                engine.prime_memories(message="型ヒントについて教えて", sender_name="human"),
+            )
+        else:
+            await engine.prime_memories(message="型ヒントについて教えて", sender_name="human")
+            await engine.prime_memories(message="型ヒントについて教えて", sender_name="human")
+
+    assert mock_searcher.search_many.call_count == 2
 
 
 @pytest.mark.asyncio

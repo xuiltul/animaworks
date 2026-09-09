@@ -93,6 +93,12 @@ DEFAULT_MODEL_MODES = DEFAULT_MODEL_MODE_PATTERNS
 # Mode is determined by DEFAULT_MODEL_MODE_PATTERNS at runtime; this list is
 # informational and does NOT restrict which models can be used.
 KNOWN_MODELS: list[dict[str, str]] = [
+    # Compatibility picker IDs live here, not in a second provider catalog.
+    {"name": "claude-haiku-4-5", "mode": "S", "note": ""},
+    {"name": "openai/gpt-4o-mini", "mode": "A", "note": ""},
+    {"name": "openai/o3", "mode": "A", "note": ""},
+    {"name": "openai/o4-mini", "mode": "A", "note": ""},
+    {"name": "gemini/gemini-2.5-flash", "mode": "G", "note": ""},
     # ── Claude / Anthropic (Mode S) ──────────────────────────────────────────
     {"name": "claude-opus-4-6", "mode": "S", "note": "最高性能・推奨"},
     {"name": "claude-sonnet-4-6", "mode": "S", "note": "バランス型・推奨"},

@@ -3,6 +3,7 @@ import {
   isTabOpen, refreshAnimaUnread,
   clearUnreadForActiveThread, loadDraft, saveDraft, chatInputMaxHeight,
   fetchChatUiState, scheduleSaveChatUiState, mergeThreadsFromSessions,
+  syncModelSelect,
 } from "./ctx.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { companyColor } from "../../shared/avatar-utils.js";
@@ -241,6 +242,7 @@ export function createAnimaController(ctx) {
     ctx.controllers.streaming.showPendingIndicator();
     ctx.controllers.streaming.updateSendButton();
     ctx.controllers.streaming.restoreContextRing(name);
+    syncModelSelect(ctx);
 
     const tid = state.selectedThreadId;
 
@@ -335,6 +337,7 @@ export function createAnimaController(ctx) {
     state.threads = {};
     state.activeThreadByAnima = {};
     state.animaLastAccess = {};
+    state.modelByThread = {};
 
     const tabs = Array.isArray(uiState.anima_tabs) ? uiState.anima_tabs : [];
     const threadState = uiState.thread_state && typeof uiState.thread_state === "object" ? uiState.thread_state : {};
@@ -359,6 +362,9 @@ export function createAnimaController(ctx) {
             unread: Boolean(th.unread),
           };
           if (th.archived) o.archived = true;
+          if (typeof th.model === "string" && th.model) {
+            state.modelByThread[`${name}|${th.id}`] = th.model;
+          }
           return o;
         });
       if (!normalized.some(th => th.id === "default")) {

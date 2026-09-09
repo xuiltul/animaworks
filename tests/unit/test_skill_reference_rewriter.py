@@ -13,15 +13,7 @@ from core.skills.reference_rewriter import collect_reference_rewrite_changes, re
 
 
 def test_absorbed_into_replaces_cron_skill_pointer_without_duplicates() -> None:
-    text = (
-        "## Daily\n"
-        "schedule: 0 9 * * *\n"
-        "skills:\n"
-        "  - old-skill\n"
-        "  - umbrella-skill\n"
-        "  - other-skill\n"
-        "Run daily.\n"
-    )
+    text = "## Daily\nschedule: 0 9 * * *\nskills:\n  - old-skill\n  - umbrella-skill\n  - other-skill\nRun daily.\n"
 
     rewritten = rewrite_skill_references_in_text(text, "old-skill", absorbed_into="umbrella-skill")
 
@@ -76,11 +68,7 @@ def test_json_array_and_scalar_skill_rewrites() -> None:
 
 
 def test_scalar_comma_and_pointer_skill_refs_rewrite() -> None:
-    text = (
-        "## Daily\n"
-        "skills: old-skill, skills/old-skill/SKILL.md, common_skills/community/kept/SKILL.md\n"
-        "Do work.\n"
-    )
+    text = "## Daily\nskills: old-skill, skills/old-skill/SKILL.md, common_skills/community/kept/SKILL.md\nDo work.\n"
 
     rewritten = rewrite_skill_references_in_text(text, "old-skill", absorbed_into="new-skill")
 
@@ -89,13 +77,7 @@ def test_scalar_comma_and_pointer_skill_refs_rewrite() -> None:
 
 
 def test_block_pointer_skill_ref_removed() -> None:
-    text = (
-        "## Daily\n"
-        "skills:\n"
-        "  - common_skills/community/old-skill/SKILL.md\n"
-        "  - kept\n"
-        "Do work.\n"
-    )
+    text = "## Daily\nskills:\n  - common_skills/community/old-skill/SKILL.md\n  - kept\nDo work.\n"
 
     rewritten = rewrite_skill_references_in_text(text, "old-skill", absorbed_into=None)
 
@@ -117,9 +99,15 @@ def test_collect_reference_rewrite_changes_covers_allowed_metadata_paths(tmp_pat
     (anima_dir / "state").mkdir(parents=True)
     (anima_dir / "goals").mkdir()
     (anima_dir / "cron.md").write_text("## Daily\nskills: [old-skill, kept]\n", encoding="utf-8")
-    (anima_dir / "state" / "task_queue.jsonl").write_text(
-        json.dumps({"task_id": "t1", "meta": {"skills": ["old-skill"]}}) + "\n",
-        encoding="utf-8",
+    from core.memory.task_queue import TaskQueueManager
+
+    TaskQueueManager(anima_dir).add_task(
+        source="human",
+        original_instruction="Review skill references",
+        assignee="alice",
+        summary="Review",
+        task_id="t1",
+        meta={"skills": ["old-skill"]},
     )
     (anima_dir / "state" / "taskboard.json").write_text(
         json.dumps({"skill_pointer": "old-skill"}),
@@ -141,7 +129,7 @@ def test_collect_reference_rewrite_changes_covers_allowed_metadata_paths(tmp_pat
         "cron.md",
         "goals/rollout.yaml",
         "state/goal_state.jsonl",
-        "state/task_queue.jsonl",
+        "task_store/t1",
         "state/taskboard.json",
     }
     assert all("old-skill" in change.before for change in changes)

@@ -182,5 +182,6 @@ def is_action_gated(tool_name: str, action: str, permitted: set[str]) -> bool:
     if action_info.get("gated") is not True:
         return False
 
-    action_key = f"{tool_name}_{profile_action}"
+    # ``gated_as`` lets an action gate under another permission key (e.g. upload → send).
+    action_key = f"{tool_name}_{action_info.get('gated_as', profile_action)}"
     return action_key not in permitted

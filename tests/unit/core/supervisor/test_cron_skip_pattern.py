@@ -287,8 +287,8 @@ class TestSkipPatternFiltering:
         mgr._anima.run_cron_task.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_nonzero_exit_code_no_heartbeat(self):
-        """Non-zero exit code does not trigger heartbeat regardless of stdout."""
+    async def test_nonzero_exit_code_triggers_failure_review(self):
+        """A failed command must reach follow-up even with normal-looking stdout."""
         mgr = _make_scheduler_mgr()
         mgr._anima.run_cron_command.return_value = {
             "task": "test_task",
@@ -302,4 +302,5 @@ class TestSkipPatternFiltering:
 
         await mgr._run_cron_task(task)
 
-        mgr._anima.run_cron_task.assert_not_called()
+        mgr._anima.run_cron_task.assert_called_once()
+        assert "some error" in mgr._anima.run_cron_task.call_args.kwargs["command_output"]

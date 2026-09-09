@@ -58,7 +58,7 @@ def skill_dirs(tmp_path: Path) -> tuple[Path, Path, Path]:
 
     _write_skill(skills, "web-search", desc="Search the web")
     _write_skill(skills, "code-review", desc="Code review tool")
-    _write_skill(common, "machine-tool", trust_level="builtin", desc="Machine tool CLI")
+    _write_skill(common, "sample-tool", trust_level="builtin", desc="Sample tool CLI")
     _write_skill(common, "blocked-skill", trust_level="blocked", desc="This is blocked")
     _write_skill(common, "quarantined", trust_level="quarantine", desc="Quarantined skill")
 
@@ -82,7 +82,7 @@ class TestSkillIndexBuild:
         names = [m.name for m in results]
         assert "web-search" in names
         assert "code-review" in names
-        assert "machine-tool" in names
+        assert "sample-tool" in names
         assert "official-tool" in names
         assert "deploy-checklist" in names
         assert "incident-response" in names
@@ -124,7 +124,7 @@ class TestSkillIndexBuild:
         personal = [m for m in results if not m.is_common and not m.is_procedure]
         common_metas = [m for m in results if m.is_common]
         assert len(personal) == 2
-        assert len(common_metas) == 2  # machine-tool + official-tool
+        assert len(common_metas) == 2  # sample-tool + official-tool
 
     def test_is_procedure_flag(self, skill_dirs: tuple[Path, Path, Path]):
         skills, common, procs = skill_dirs
@@ -212,9 +212,9 @@ class TestSkillIndexSearch:
     def test_search_case_insensitive(self, skill_dirs: tuple[Path, Path, Path]):
         skills, common, procs = skill_dirs
         idx = SkillIndex(skills, common, procs)
-        results = idx.search("MACHINE")
+        results = idx.search("SAMPLE")
         assert len(results) == 1
-        assert results[0].name == "machine-tool"
+        assert results[0].name == "sample-tool"
 
     def test_search_include_blocked(self, skill_dirs: tuple[Path, Path, Path]):
         skills, common, procs = skill_dirs

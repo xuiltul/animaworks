@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -19,9 +20,7 @@ from pathlib import Path
 import pytest
 
 # Skip the entire module if ChromaDB or sentence-transformers are missing
-chromadb = pytest.importorskip(
-    "chromadb", reason="ChromaDB not installed. Install with: pip install 'animaworks[rag]'"
-)
+chromadb = pytest.importorskip("chromadb", reason="ChromaDB not installed. Install with: pip install 'animaworks[rag]'")
 pytest.importorskip(
     "sentence_transformers",
     reason="sentence-transformers not installed. Install with: pip install 'animaworks[rag]'",
@@ -154,10 +153,13 @@ def test_shared_knowledge_indexing_and_retrieval(temp_dirs, vector_store):
 
     # 1. Index personal knowledge
     personal_indexer = MemoryIndexer(
-        vector_store, "test_anima", anima_dir,
+        vector_store,
+        "test_anima",
+        anima_dir,
     )
     personal_chunks = personal_indexer.index_directory(
-        anima_dir / "knowledge", "knowledge",
+        anima_dir / "knowledge",
+        "knowledge",
     ).chunks_indexed
     assert personal_chunks > 0, "Personal knowledge should produce chunks"
 
@@ -170,18 +172,15 @@ def test_shared_knowledge_indexing_and_retrieval(temp_dirs, vector_store):
         collection_prefix="shared",
     )
     shared_chunks = shared_indexer.index_directory(
-        common_knowledge_dir, "common_knowledge",
+        common_knowledge_dir,
+        "common_knowledge",
     ).chunks_indexed
     assert shared_chunks > 0, "Common knowledge should produce chunks"
 
     # 3. Verify shared_common_knowledge collection was created
     collections = vector_store.list_collections()
-    assert "shared_common_knowledge" in collections, (
-        f"Expected 'shared_common_knowledge' in {collections}"
-    )
-    assert "test_anima_knowledge" in collections, (
-        f"Expected 'test_anima_knowledge' in {collections}"
-    )
+    assert "shared_common_knowledge" in collections, f"Expected 'shared_common_knowledge' in {collections}"
+    assert "test_anima_knowledge" in collections, f"Expected 'test_anima_knowledge' in {collections}"
 
     # 4. Create retriever and search with include_shared=True
     retriever = MemoryRetriever(
@@ -201,13 +200,8 @@ def test_shared_knowledge_indexing_and_retrieval(temp_dirs, vector_store):
     assert len(results) > 0, "Search should return results"
 
     # 5. Verify shared results appear in results (check metadata anima=shared)
-    shared_results = [
-        r for r in results
-        if r.metadata.get("anima") == "shared"
-    ]
-    assert len(shared_results) > 0, (
-        "Shared common_knowledge results should appear in merged results"
-    )
+    shared_results = [r for r in results if r.metadata.get("anima") == "shared"]
+    assert len(shared_results) > 0, "Shared common_knowledge results should appear in merged results"
 
 
 # ── Test 2: Hybrid Search (keyword + vector) ───────────────────────
@@ -257,15 +251,13 @@ def test_hybrid_search_common_knowledge(temp_dirs, vector_store, monkeypatch):
 
     # Keyword search with scope="common_knowledge"
     results = mm.search_memory_text("勤怠ルール", scope="common_knowledge")
-    assert len(results) > 0, (
-        "Keyword search for '勤怠ルール' should find matches in common_knowledge"
-    )
+    assert len(results) > 0, "Keyword search for '勤怠ルール' should find matches in common_knowledge"
 
     # Verify results come from common_knowledge files
     filenames = [r["source_file"] for r in results]
-    assert any(
-        "company-handbook" in fname for fname in filenames
-    ), f"Expected company-handbook.md in results, got: {filenames}"
+    assert any("company-handbook" in fname for fname in filenames), (
+        f"Expected company-handbook.md in results, got: {filenames}"
+    )
 
 
 def test_hybrid_search_scope_all_includes_common(temp_dirs, vector_store, monkeypatch):
@@ -307,9 +299,7 @@ def test_hybrid_search_scope_all_includes_common(temp_dirs, vector_store, monkey
 
     # Search with scope="all" — should include common_knowledge
     results = mm.search_memory_text("経費精算", scope="all")
-    assert len(results) > 0, (
-        "Scope 'all' should find '経費精算' in common_knowledge"
-    )
+    assert len(results) > 0, "Scope 'all' should find '経費精算' in common_knowledge"
 
     filenames = [r["source_file"] for r in results]
     assert any("company-handbook" in fname for fname in filenames)
@@ -329,13 +319,15 @@ async def test_priming_with_shared_knowledge(temp_dirs, vector_store, monkeypatc
     """
     anima_dir, common_knowledge_dir, data_dir = temp_dirs
 
+    from core.memory.priming import PrimingEngine, format_priming_section
     from core.memory.rag.indexer import MemoryIndexer
     from core.memory.rag.retriever import MemoryRetriever
-    from core.memory.priming import PrimingEngine, format_priming_section
 
     # Index personal knowledge
     personal_indexer = MemoryIndexer(
-        vector_store, "test_anima", anima_dir,
+        vector_store,
+        "test_anima",
+        anima_dir,
     )
     personal_indexer.index_directory(anima_dir / "knowledge", "knowledge")
 
@@ -379,13 +371,11 @@ async def test_priming_with_shared_knowledge(temp_dirs, vector_store, monkeypatc
     # related_knowledge or related_knowledge_untrusted may contain shared results
     # (indexed without origin = untrusted)
     combined = result.related_knowledge + result.related_knowledge_untrusted
-    assert combined, (
-        "Priming should return related knowledge from shared collection"
-    )
+    assert combined, "Priming should return related knowledge from shared collection"
 
-    # Check that [shared] label appears in the output
-    assert "[shared]" in combined, (
-        f"Expected [shared] label in knowledge, got:\n{combined}"
+    # Pointer-first recall keeps the readable shared scope in the path.
+    assert 'read_memory_file(path="common_knowledge/' in combined, (
+        f"Expected a readable shared knowledge pointer, got:\n{combined}"
     )
 
     # Format the priming section and verify structure
@@ -402,13 +392,15 @@ async def test_priming_personal_and_shared_merged(temp_dirs, vector_store, monke
     """
     anima_dir, common_knowledge_dir, data_dir = temp_dirs
 
+    from core.memory.priming import PrimingEngine
     from core.memory.rag.indexer import MemoryIndexer
     from core.memory.rag.retriever import MemoryRetriever
-    from core.memory.priming import PrimingEngine
 
     # Index personal knowledge
     personal_indexer = MemoryIndexer(
-        vector_store, "test_anima", anima_dir,
+        vector_store,
+        "test_anima",
+        anima_dir,
     )
     personal_indexer.index_directory(anima_dir / "knowledge", "knowledge")
 
@@ -449,12 +441,11 @@ async def test_priming_personal_and_shared_merged(temp_dirs, vector_store, monke
     combined = result.related_knowledge + result.related_knowledge_untrusted
     assert combined, "Priming should return related knowledge"
 
-    # Verify both [personal] and [shared] labels appear
-    has_personal = "[personal]" in combined
-    has_shared = "[shared]" in combined
-    assert has_personal or has_shared, (
-        "Priming output should contain at least one labeled result. "
-        f"Got:\n{combined}"
+    # Both scopes must retain usable pointers without relying on old labels.
+    has_personal = 'read_memory_file(path="knowledge/' in combined
+    has_shared = 'read_memory_file(path="common_knowledge/' in combined
+    assert has_personal and has_shared, (
+        f"Priming output should contain both personal and shared pointers. Got:\n{combined}"
     )
 
 
@@ -510,9 +501,7 @@ def test_read_memory_file_common_knowledge_prefix(temp_dirs, monkeypatch):
         {"path": "common_knowledge/test-file.md"},
     )
 
-    assert "Test File" in result, (
-        f"Expected 'Test File' in result, got: {result}"
-    )
+    assert "Test File" in result, f"Expected 'Test File' in result, got: {result}"
     assert "sample content for verification" in result
 
     # Read a file via common_knowledge/ prefix — company handbook
@@ -527,9 +516,7 @@ def test_read_memory_file_common_knowledge_prefix(temp_dirs, monkeypatch):
         "read_memory_file",
         {"path": "common_knowledge/nonexistent.md"},
     )
-    assert "not found" in result3.lower(), (
-        f"Expected 'not found' for missing file, got: {result3}"
-    )
+    assert "not found" in result3.lower(), f"Expected 'not found' for missing file, got: {result3}"
 
 
 def test_read_memory_file_personal_path_still_works(temp_dirs, monkeypatch):
@@ -573,6 +560,4 @@ def test_read_memory_file_personal_path_still_works(temp_dirs, monkeypatch):
         {"path": "knowledge/internal-policy.md"},
     )
 
-    assert "社内ポリシー" in result, (
-        f"Expected personal knowledge content, got: {result}"
-    )
+    assert "社内ポリシー" in result, f"Expected personal knowledge content, got: {result}"

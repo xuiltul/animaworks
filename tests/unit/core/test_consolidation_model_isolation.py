@@ -37,7 +37,13 @@ class _FakeEngine:
         self.chunks = chunks or []
         self.existing_episode = existing_episode
         self.recent_episodes = recent_episodes or []
-        self.carryover_items: list[dict[str, str]] = []
+        self.carryover_items: list[dict[str, str]] = [
+            {
+                "date": "2026-06-09",
+                "episodes_summary": "Unprocessed episode",
+                "reason": "test",
+            }
+        ]
         self.carryover_cleared = False
         self.collect_calls: list[dict] = []
         self.write_calls: list[dict] = []
@@ -48,6 +54,12 @@ class _FakeEngine:
     def collect_activity_chunks(self, *, hours: int, model: str, since=None, until=None):
         self.collect_calls.append({"hours": hours, "model": model, "since": since, "until": until})
         return self.chunks
+
+    def unprocessed_activity_chunks(self, target_date, chunks):
+        return chunks
+
+    def record_consolidated_chunks(self, target_date, chunks):
+        pass
 
     def read_episode_for_date(self, target_date):
         return self.existing_episode
@@ -68,7 +80,7 @@ class _FakeEngine:
     def _collect_recent_episodes(self, *, hours: int):
         return self.recent_episodes
 
-    def record_phase_b_carryover(self, episodes_summary, *, target_date, reason):
+    def record_phase_b_carryover(self, episodes_summary, *, target_date, reason, incremental=False):
         self.carryover_items = [
             {
                 "date": target_date.isoformat(),
@@ -128,6 +140,8 @@ def _mock_config(
         consolidation=SimpleNamespace(
             llm_model=consolidation_model,
             llm_credential=consolidation_credential,
+            knowledge_mutation_enabled=True,
+            skill_autolearn_enabled=False,
         ),
         credentials={
             "vllm-lb": SimpleNamespace(
@@ -294,7 +308,7 @@ async def test_daily_phase_b_interruption_returns_truncated_and_keeps_carryover(
     assert "[TRUNCATED]" in result.summary
     assert engine.carryover_items
     assert engine.carryover_cleared is False
-    assert "Important episode source" in engine.carryover_items[0]["episodes_summary"]
+    assert "Unprocessed episode" in engine.carryover_items[0]["episodes_summary"]
     assert engine.carryover_cleared is False
 
 
@@ -388,7 +402,7 @@ async def test_weekly_consolidation_uses_consolidation_model_without_mutating_ag
     ],
 )
 @pytest.mark.asyncio
-async def test_weekly_consolidation_injects_memory_hygiene_section(report, expected):
+async def test_weekly_consolidation_does_not_scan_whole_memory_library(report, expected):
     status_config = ModelConfig(model="bedrock/qwen.qwen3-next-80b-a3b", resolved_mode="S")
     anima = _make_lifecycle(status_config)
     anima.anima_dir = Path("/tmp/test-weekly-hygiene")
@@ -401,15 +415,13 @@ async def test_weekly_consolidation_injects_memory_hygiene_section(report, expec
     with (
         patch("core.config.load_config", return_value=_mock_config()),
         patch("core.config.resolve_execution_mode", return_value="D"),
-        patch("core._anima_lifecycle.scan_memory_hygiene", return_value=report),
+        patch("core.memory.hygiene.scan_memory_hygiene", return_value=report) as scan,
         patch("core._anima_lifecycle.load_prompt", side_effect=capture_prompt),
     ):
         await anima._run_weekly_consolidation(_FakeEngine())
 
-    if expected:
-        assert expected in prompt_kwargs["hygiene_section"]
-    else:
-        assert prompt_kwargs["hygiene_section"] == ""
+    assert prompt_kwargs["hygiene_section"] == ""
+    scan.assert_not_called()
 
 
 class _FakeExecutor:
@@ -529,7 +541,7 @@ async def test_run_cycle_streaming_override_uses_local_executor_without_mutating
     ):
         async for chunk in agent.run_cycle_streaming(
             "hello",
-            trigger="message:taka",
+            trigger="message:owner",
             model_config_override=override,
         ):
             chunks.append(chunk)
@@ -574,7 +586,7 @@ class _FakeMessagingAgent:
         yield {
             "type": "cycle_done",
             "cycle_result": {
-                "trigger": kwargs.get("trigger", "message:taka"),
+                "trigger": kwargs.get("trigger", "message:owner"),
                 "action": "responded",
                 "summary": "ok",
                 "duration_ms": 1,
@@ -657,7 +669,7 @@ async def test_process_message_stream_uses_message_specific_voice_effort(
         chunk
         async for chunk in anima.process_message_stream(
             "hello",
-            from_person="taka",
+            from_person="owner",
             thread_id="default",
             voice_mode=voice_mode,
         )

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from core.config.models import PermissionsConfig, load_permissions
+from core.config.schemas import command_deny_matches
 from core.file_access_policy import (
     effective_write_roots,
     find_denied_root,
@@ -384,19 +385,34 @@ class PermissionsMixin:
             logger.warning("permission_denied anima=%s command=<empty>", self._anima_name)
             return _error_result("PermissionDenied", "Empty command")
 
-        # Layer 1: Reject injection vectors
+        # Layer 1: Injection vectors — same rollout switch as the SDK path
+        # (sdk_bash_injection.mode: off / log / enforce, default log).
+        from core.config.global_permissions import GlobalPermissionsCache
+        from core.execution._sdk_security import _log_sdk_bash_injection_hit, _matching_injection_pattern
+
+        cache = GlobalPermissionsCache.get()
+        injection_mode = cache.config.sdk_bash_injection.mode if cache.loaded and cache.config else "log"
         inj_re = _get_injection_re()
-        if inj_re and inj_re.search(command):
-            logger.warning(
-                "permission_denied anima=%s command=%s reason=injection_pattern",
-                self._anima_name,
-                command[:80],
+        if inj_re and injection_mode != "off" and inj_re.search(command):
+            pattern_name = _matching_injection_pattern(command, cache.config)
+            _log_sdk_bash_injection_hit(
+                command,
+                self._anima_dir,
+                pattern_name=pattern_name,
+                trigger=getattr(self, "_trigger", ""),
+                mode=injection_mode,
             )
-            return _error_result(
-                "PermissionDenied",
-                "Command contains injection patterns (;  \\n  `  $()  $VAR)",
-                suggestion="Use pipes (|) or logical operators (&&) instead of semicolons. Avoid variable expansion and newlines.",
-            )
+            if injection_mode == "enforce":
+                logger.warning(
+                    "permission_denied anima=%s command=%s reason=injection_pattern",
+                    self._anima_name,
+                    command[:80],
+                )
+                return _error_result(
+                    "PermissionDenied",
+                    f"Command contains injection pattern: {pattern_name}",
+                    suggestion="Use pipes (|) or logical operators (&&) instead of semicolons. Avoid embedded newlines.",
+                )
 
         # Layer 2: Dangerous command patterns
         for pattern, reason in _get_blocked_patterns():
@@ -408,6 +424,21 @@ class PermissionsMixin:
                     reason,
                 )
                 return _error_result("PermissionDenied", reason)
+
+        # Layer 2.6: Recursive searches over the runtime data tree — same guard
+        # as the codex PreToolUse hook. Broad grep/find over ~/.animaworks
+        # (activity_log is >1GB per anima) saturates disk IO fleet-wide
+        # (2026-09-01 storm); non-codex engines bypass the hook, so enforce here.
+        from core.tooling.codex_command_hook import check_recursive_search
+
+        search_reason = check_recursive_search(command, self._anima_dir, self._anima_dir.resolve().parent.parent)
+        if search_reason:
+            logger.warning(
+                "permission_denied anima=%s command=%s reason=broad_recursive_search",
+                self._anima_name,
+                command[:80],
+            )
+            return _error_result("PermissionDenied", search_reason)
 
         # Layer 2.5: Per-anima denied commands from permissions config
         config = self._load_permissions_config()
@@ -423,7 +454,7 @@ class PermissionsMixin:
                     continue
                 cmd_base = seg_argv[0]
                 for denied in denied_items:
-                    if denied in cmd_base or denied in segment:
+                    if command_deny_matches(denied, segment, cmd_base):
                         logger.warning(
                             "permission_denied anima=%s command=%s reason=denied_list(%s)",
                             self._anima_name,

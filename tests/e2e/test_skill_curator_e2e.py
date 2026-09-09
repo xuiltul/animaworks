@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from core.skills.curator import SkillCurator
 from core.skills.index import SkillIndex
 from core.tooling.handler import ToolHandler
 
@@ -29,10 +30,11 @@ def _write_skill(anima_dir: Path, name: str) -> None:
     )
 
 
-def test_curator_tool_archives_and_restores_skill_access(tmp_path: Path) -> None:
+def test_curator_tool_archives_and_restores_skill_access(data_dir: Path) -> None:
+    tmp_path = data_dir
     anima_dir = tmp_path / "animas" / "alice"
     common_dir = tmp_path / "common_skills"
-    common_dir.mkdir(parents=True)
+    common_dir.mkdir(parents=True, exist_ok=True)
     _write_skill(anima_dir, "old-skill")
 
     memory = MagicMock()
@@ -48,8 +50,16 @@ def test_curator_tool_archives_and_restores_skill_access(tmp_path: Path) -> None
     )
     assert archived["to_state"] == "archived"
     assert archived["actor"] == "alice"
+    assert archived["event_type"] == "state_change_proposed"
 
     index = SkillIndex(anima_dir / "skills", common_dir, anima_dir=anima_dir)
+    assert "old-skill" in {meta.name for meta in index.all_skills}
+    assert "SkillBlocked" not in handler.handle("read_memory_file", {"path": "skills/old-skill/SKILL.md"})
+
+    # Routine model requests are proposals; an explicit host acceptance applies
+    # the transition. Both catalog invalidation and read access follow it.
+    curator = SkillCurator(anima_dir, common_skills_dir=common_dir)
+    curator.change_state("old-skill", "archived", reason="accepted", actor="human")
     assert "old-skill" not in {meta.name for meta in index.all_skills}
     blocked_read = handler.handle("read_memory_file", {"path": "skills/old-skill/SKILL.md"})
     assert "SkillBlocked" in blocked_read
@@ -61,11 +71,15 @@ def test_curator_tool_archives_and_restores_skill_access(tmp_path: Path) -> None
         )
     )
     assert restored["to_state"] == "active"
-    index.invalidate()
+    assert restored["event_type"] == "state_change_proposed"
+    assert "old-skill" not in {meta.name for meta in index.all_skills}
+    curator.change_state("old-skill", "active", reason="accepted", actor="human")
     assert "old-skill" in {meta.name for meta in index.all_skills}
+    assert "SkillBlocked" not in handler.handle("read_memory_file", {"path": "skills/old-skill/SKILL.md"})
 
 
-def test_curate_skills_reports_metadata_gaps_and_duplicates(tmp_path: Path) -> None:
+def test_curate_skills_reports_metadata_gaps_and_duplicates(data_dir: Path) -> None:
+    tmp_path = data_dir
     anima_dir = tmp_path / "animas" / "alice"
     _write_skill(anima_dir, "gmail-draft")
     _write_skill(anima_dir, "gmail-drafts")

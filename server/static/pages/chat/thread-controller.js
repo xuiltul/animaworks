@@ -3,7 +3,7 @@ import {
   isTabOpen, refreshAnimaUnread, clearUnreadForActiveThread,
   setThreadUnread, threadTimeValue, scheduleSaveChatUiState,
   saveDraft, loadDraft, chatInputMaxHeight,
-  CONSTANTS,
+  CONSTANTS, syncModelSelect,
 } from "./ctx.js";
 import {
   renderThreadTabsHtml,
@@ -102,6 +102,7 @@ export function createThreadController(ctx) {
     refreshAnimaUnread(ctx, state.selectedAnima);
     ctx.controllers.anima.renderAnimaTabs();
     renderThreadTabs();
+    syncModelSelect(ctx);
 
     if (!name) return;
 

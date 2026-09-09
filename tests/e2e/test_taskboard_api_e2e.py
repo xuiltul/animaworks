@@ -76,7 +76,6 @@ async def test_taskboard_api_lists_patches_and_summarizes_through_full_app(tmp_p
         summary="review partner response",
         task_id="task-review",
     )
-    bob_queue.update_status(bob_task.task_id, "blocked")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -97,7 +96,7 @@ async def test_taskboard_api_lists_patches_and_summarizes_through_full_app(tmp_p
 
     assert patch_resp.status_code == 200
     assert patch_resp.json()["task"]["visibility"] == "snoozed"
-    assert bob_queue.get_task_by_id(bob_task.task_id).status == "blocked"
+    assert bob_queue.get_task_by_id(bob_task.task_id).status == "pending"
 
     summary = summary_resp.json()
     assert summary["pending"] == 1

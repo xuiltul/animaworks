@@ -98,7 +98,7 @@
 ### 작업 위임
 - `delegate_task` — 모든 하위 계층(자식, 손자 등)에 작업을 위임합니다. 하위 작업 큐에 추가 + DM 전송 + 추적 엔트리 생성이 일괄 수행됩니다. deadline('30m', '2h', '1d' 등)은 필수입니다
 - `task_tracker` — delegate_task로 위임한 작업의 진행 상황을 추적합니다. 부하 큐의 최신 상태와 대조하여 표시합니다. status='active'(기본), 'completed', 'all'로 필터링합니다
-- `submit_tasks` — heartbeat 중 작업을 계획하고 state/pending/에 제출합니다. `state/pending/`에 JSON을 수동 생성해서는 안 됩니다(MUST)
+- `submit_tasks` — 정본 태스크 API를 통해 자신의 TaskExec에 제출합니다. 호스트가 실행 권한을 관리하므로 큐 파일을 직접 생성하거나 수정하지 마세요.
 
 ### 권장 워크플로
 1. heartbeat 시작 시 `org_dashboard`로 전체 상황을 파악합니다

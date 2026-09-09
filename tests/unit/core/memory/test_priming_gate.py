@@ -25,6 +25,15 @@ def test_japanese_explicit_recall_enables_evidence_mode() -> None:
     assert evidence_needed("前に森村さんへ送信しかけた件を教えて", "chat", tags, candidates)
 
 
+@pytest.mark.parametrize("term", ["이전", "어제"])
+def test_korean_explicit_recall_enables_evidence_mode(term: str) -> None:
+    candidates = [MemoryCandidate(channel="episodes", content="raw episode body")]
+    tags = classify_risk_tags(f"{term} 이야기를 알려줘", candidates)
+
+    assert "explicit_recall" in tags
+    assert evidence_needed(f"{term} 이야기를 알려줘", "chat", tags, candidates)
+
+
 def test_english_external_action_requires_search_before_action() -> None:
     candidates = [MemoryCandidate(channel="related_knowledge", content="Gmail draft workflow")]
     plan = build_priming_plan("Please prepare a Gmail draft reply", "chat", "", candidates)
@@ -78,17 +87,41 @@ def test_non_pointer_related_memory_is_suppressed_without_evidence_mode() -> Non
     assert gated.related_knowledge == ""
 
 
-def test_candidate_content_terms_enable_guardrail_and_evidence_mode() -> None:
+def test_candidate_content_terms_do_not_create_message_risk() -> None:
     result = PrimingResult(related_knowledge="Gmail下書きは送信前に承認を確認する")
     plan = build_priming_plan("こんにちは", "chat", "", build_candidates_from_result(result))
     gated = apply_priming_plan(result, plan)
 
     decision = plan.channel_decisions["related_knowledge"]
-    assert plan.evidence_mode is True
-    assert plan.require_search_before_action is True
-    assert decision.visible is True
+    assert plan.evidence_mode is False
+    assert plan.require_search_before_action is False
+    assert decision.visible is False
+    assert decision.render_mode == PrimingRenderMode.SUPPRESS
+    assert gated.related_knowledge == ""
+
+
+@pytest.mark.parametrize("ordinary_term", ["完了", "確認"])
+def test_everyday_candidate_terms_do_not_trigger_guardrail(ordinary_term: str) -> None:
+    candidate = MemoryCandidate(
+        channel="related_knowledge",
+        content=f'📌 PR {ordinary_term}手順 → read_memory_file(path="knowledge/pr.md")',
+    )
+    plan = build_priming_plan("メールを送信して", "chat", "", [candidate])
+
+    assert plan.channel_decisions["related_knowledge"].render_mode == PrimingRenderMode.POINTER
+
+
+@pytest.mark.parametrize("guardrail_term", ["承認", "機密"])
+def test_limited_candidate_terms_trigger_guardrail_for_external_action(guardrail_term: str) -> None:
+    candidate = MemoryCandidate(
+        channel="related_knowledge",
+        content=f'📌 送信前の{guardrail_term}規則 → read_memory_file(path="knowledge/send.md")',
+    )
+    plan = build_priming_plan("メールを送信して", "chat", "", [candidate])
+
+    decision = plan.channel_decisions["related_knowledge"]
     assert decision.render_mode == PrimingRenderMode.GUARDRAIL
-    assert gated.related_knowledge == "Gmail下書きは送信前に承認を確認する"
+    assert decision.require_search_before_action is True
 
 
 def test_non_pointer_related_memory_is_visible_in_evidence_mode() -> None:
@@ -121,9 +154,9 @@ def test_pending_task_external_action_requires_search_without_evidence_mode() ->
     decision = plan.channel_decisions["pending_tasks"]
 
     assert plan.evidence_mode is False
-    assert plan.require_search_before_action is True
+    assert plan.require_search_before_action is False
     assert decision.visible is True
-    assert decision.require_search_before_action is True
+    assert decision.require_search_before_action is False
 
 
 def test_apply_plan_preserves_untrusted_split() -> None:
@@ -153,8 +186,38 @@ def test_format_priming_section_collapses_pointer_mode() -> None:
     formatted = format_priming_section(result)
 
     assert 'render_mode="pointer"' in formatted
-    assert '- Gmail下書きは送信前に承認を確認する -> read_memory_file(path="knowledge/gmail-approval.md")' in formatted
+    assert '📌 Gmail下書きは送信前に承認を確認する → read_memory_file(path="knowledge/gmail-approval.md")' in formatted
     assert "RAW_DETAIL_SHOULD_NOT_BE_IN_POINTER_MODE" not in formatted
+
+
+def test_format_priming_section_collapses_pointer_in_guardrail_mode() -> None:
+    body = (
+        "--- Result 1 [personal] (score: 0.900) ---\n"
+        "送信前の承認規則\n"
+        "updated: 2026-09-07 | origin: external_platform\n"
+        '-> read_memory_file(path="knowledge/send.md")\n'
+        "RAW_DETAIL_SHOULD_NOT_BE_IN_GUARDRAIL"
+    )
+    result = PrimingResult(related_knowledge=body)
+    result.gate_plan = build_priming_plan("メールを送信して", "chat", "", build_candidates_from_result(result))
+
+    formatted = format_priming_section(result)
+
+    assert 'render_mode="guardrail"' in formatted
+    assert '📌 送信前の承認規則 → read_memory_file(path="knowledge/send.md")' in formatted
+    assert "updated:" not in formatted
+    assert "RAW_DETAIL_SHOULD_NOT_BE_IN_GUARDRAIL" not in formatted
+
+
+def test_untrusted_related_bucket_uses_mixed_origin() -> None:
+    result = PrimingResult(related_knowledge_untrusted='📌 External → read_memory_file(path="knowledge/external.md")')
+    result.gate_plan = build_priming_plan("こんにちは", "chat", "", build_candidates_from_result(result))
+
+    formatted = format_priming_section(result)
+
+    assert 'origin="mixed"' in formatted
+    assert 'origin="external_platform"' not in formatted
+    assert "→ →" not in formatted
 
 
 def test_format_priming_section_marks_evidence_mode() -> None:

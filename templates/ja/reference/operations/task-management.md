@@ -1,423 +1,69 @@
 # タスク管理の方法
 
-Digital Anima がタスクを受け取り、追跡し、完了させるための運用リファレンス。
-タスクの進め方に迷った場合に検索・参照すること。
+## 正本は一つ
 
-## タスク管理の基本構造
+確認には `list_tasks(detail=true)` または `animaworks-tool task list` を使う。ホスト管理の TaskStore に指示・依存関係・実行試行・結果・委譲エイリアスを永続化する。データベースの直接編集、実行権の捏造、ファイルを書いてのキュー修復は禁止。旧 `state/task_queue.jsonl` と `state/pending/` は移行・エクスポート用の証跡であり、稼働中の投入先ではない。運用者による移行のため保存する。
 
-タスクの状態は `state/` ディレクトリ内のファイルとタスクキューで管理する。
+通常チャットで処理できる依頼は直接対応してよい。バックグラウンド実行・並列化・継続追跡が必要な場合にだけタスクを登録する。人間由来の依頼を最優先とし、同等の優先度なら上司の依頼を同僚より優先する。引き継ぎでは原指示・完了条件・制約・必要な文脈を保持する。
 
-| リソース | 役割 |
-|---------|------|
-| `state/current_state.md` | ワーキングメモリ（今の状態・観察・計画・ブロッカー） |
-| `state/pending/` ディレクトリ | **LLM タスク**（JSON）。`submit_tasks`・`delegate_task` が書き出す。TaskExec が実行する |
-| `state/task_queue.jsonl` | 永続タスクキュー（append-only JSONL）。人間やAnimaからの依頼を追跡する |
-| `state/task_results/` ディレクトリ | LLM TaskExec の完了要約（`{task_id}.md`、最大2000文字）。依存タスクに自動注入。7日TTL |
-| `state/background_tasks/pending/` | **長時間 CLI ツール**の待ちキュー。`animaworks-tool submit …` が記述子 JSON を書く。`PendingTaskExecutor` が拾う（下記） |
-| `state/background_tasks/{task_id}.json` | **BackgroundTaskManager**（`core/background.py`）がツール実行の状態を永続化。`running` → `completed` / `failed` |
-| `state/background_notifications/` | 長時間ツール完了時の Markdown 通知。次回 Heartbeat で `drain_background_notifications()` が読み取り・削除する |
+## 実行経路を選ぶ
 
-`state/current_state.md` は常に最新の状態を保たなければならない（MUST）。
-タスク状態が変わるたびに更新すること。
+- Inbox はメッセージと軽量な返信を処理する。
+- Heartbeat は意味のある変化を確認して対応を判断する。長時間のコーディングや大量のツール実行は行わず、自分の TaskExec には `submit_tasks`、直属の部下には `delegate_task` を使う。
+- TaskExec は永続化されたタスクをツール付きで実行する。実行権の取得、並列数、依存関係、取消、試行の復旧はホストが管理し、定期 Heartbeat に依存しない。
+- Agent/Task のサブエージェント起動ツールは無効。上記の投入・委譲ツールを使う。
 
-### 3パス実行モデル
+## 投入と確認
 
-AnimaWorks ではタスクが3つの独立パスで処理される:
-
-| パス | トリガー | 役割 | 実行範囲 |
-|------|---------|------|---------|
-| **Inbox** | DM受信 | Anima間メッセージの処理・返信 | 即時、軽量な応答のみ |
-| **Heartbeat** | 定期巡回 | 状況確認・計画立案（Observe → Plan → Reflect） | 確認・判断のみ。実行は `state/pending/`（LLM）へ書き出す |
-| **TaskExec** | `state/pending/` に LLM タスク出現 | LLM セッションとしてタスク実行 | フル実行（ツール使用含む） |
-
-**PendingTaskExecutor**（`core/supervisor/pending_executor.py`）は、上記の `state/pending/`（LLM）と、**別ルート**の `state/background_tasks/pending/`（`animaworks-tool submit`）を**同じワッチャーループ**（最大約3秒間隔、`wake()` で即時も可）で監視する。後者は会話ロック外で **BackgroundTaskManager**（`core/background.py`）に載せ替え、長時間の外部ツールだけをバックグラウンド実行する。詳細は `operations/background-tasks.md` を参照。
-
-**語彙の整理（混同禁止）**: `task_queue.jsonl` のステータス（`pending` / `in_progress` / `done` / `failed` 等）は**業務タスク追跡用**。一方 `state/background_tasks/{task_id}.json` の `status`（`running` / `completed` / `failed`）は **BackgroundTaskManager** の実行状態用で、別のライフサイクルである。
-
-Heartbeat は **実行しない**。実行が必要なタスクを発見したら、部下がいれば `delegate_task` で委任するか、`submit_tasks` でタスク投入して TaskExec パスに委譲する。
-
-**注意**: Agent/Task ツール（サブエージェント起動）は**無効化**されている。バックグラウンド実行には `submit_tasks` を、部下への委譲には `delegate_task` を使用すること。
-
-### タスクキュー（submit_tasks / update_task / 一覧はCLI）
-
-永続タスクキューは `state/task_queue.jsonl` に append-only JSONL 形式で記録される。
-明示的なバックグラウンド実行や後続追跡が必要な場合に `submit_tasks` でタスクを登録し、`update_task` でステータスを更新する。一覧取得は CLI の `animaworks-tool task list` を使用する。
-キューに登録されたタスクはシステムプロンプトの Priming セクションに要約表示される。
-
-#### submit_tasks（タスク登録 — 自分自身が実行する）
-
-> **重要**: `submit_tasks` で投入したタスクは**あなた自身の TaskExec** が実行します（部下には送られません）。部下にタスクを委任する場合は `delegate_task` を使ってください。
-
-TaskExec に回すタスクの作成・登録には `submit_tasks` を使用する。通常チャットでその場で処理できる人間の指示は直接実行し、後続管理が必要な場合だけ `submit_tasks`、`update_task`、または `state/current_state.md` で記録する。単一タスクの場合は tasks 配列に1件だけ指定する。
+`submit_tasks` の実行者は部下ではなく**自分自身の TaskExec**。
 
 ```
-submit_tasks(batch_id="human-20260313", tasks=[
-  {"task_id": "t1", "title": "月次レポート作成", "description": "月次売上レポートを作成し、aoiに提出してください", "parallel": true}
+submit_tasks(batch_id="report-build", tasks=[
+  {"task_id": "collect", "title": "根拠収集", "description": "依頼された根拠を出典付きで収集する。", "parallel": true},
+  {"task_id": "report", "title": "報告作成", "description": "収集結果から依頼された報告書を作る。", "depends_on": ["collect"]}
 ])
+list_tasks(detail=true)
 ```
 
-| パラメータ | 必須 | 説明 |
-|-----------|------|------|
-| `batch_id` | MUST | バッチの一意識別子 |
-| `tasks[].task_id` | MUST | バッチ内で一意のタスクID |
-| `tasks[].title` | MUST | タスクタイトル（1行要約） |
-| `tasks[].description` | MUST | 元の指示文（委任時は原文引用を含める） |
-| `tasks[].parallel` | MAY | `true` で並列実行可能（単一タスクでは `true` 推奨） |
-| `tasks[].depends_on` | MAY | 先行タスクIDの配列 |
-| `tasks[].workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアス（例: `myproject`）を指定すると TaskExec がそのディレクトリで実行する。省略時は Anima のデフォルト |
+新規タスクには `task_id`、`title`、`description` が必要。任意項目は `context`、`acceptance_criteria`、`constraints`、`file_paths`、`workspace`、`parallel`、`depends_on`、`reply_to`、`model`。`workspace` は登録済みワークスペースのエイリアス。モデル選択は通常ランタイム設定に従う。長い原指示を短い要約に置換しない。
 
-- 通常チャットでは、人間からの指示を必ず `submit_tasks` に登録する必要はない。直接実行できない・並列化したい・後続追跡が必要な場合に登録する
-- 人間由来タスク（source=human 相当）は最優先で処理する（MUST）
-- キューのタスクは Heartbeat で確認され、着手時に `update_task` で `in_progress` に更新する
+投入時にバッチを検証し、タスクと実行入力を一括で確定する。同じ投入の再配信は冪等であり、再試行ではない。依存先が正常完了するまで後続は実行されない。ファイルの不在や `pending` 表示だけから実行可能と判断しない。
 
-#### update_task
-
-タスクのステータスを更新する。完了時は `done`、中断時は `cancelled`、失敗時は `failed` に設定する。
+## 結果宣言と明示的な再開
 
 ```
-update_task(task_id="abc123def456", status="in_progress")
-update_task(task_id="abc123def456", status="done", summary="レポート作成完了")
+update_task(task_id="TASK_ID", status="done", summary="検証済みの結果", result="根拠と成果物の場所")
+update_task(task_id="TASK_ID", status="pending", summary="指定した入力を待っている")
+update_task(task_id="TASK_ID", status="cancelled", summary="不要になった理由")
 ```
 
-| パラメータ | 必須 | 説明 |
-|-----------|------|------|
-| `task_id` | MUST | タスクID（submit_tasks 時に返されたID） |
-| `status` | MUST | `pending` / `in_progress` / `done` / `cancelled` / `blocked` / `failed` |
-| `summary` | MAY | 更新後の要約 |
+`in_progress` は実行権取得時にホストが設定する閲覧用状態。`update_task` で設定しない。完了宣言なしで試行が終了したタスクは、要対応理由を伴う pending になる場合がある。pending は自動再試行の約束ではない。再開のために別 ID で複製しない。
 
-#### タスク一覧の取得（CLI）
-
-タスクキューの一覧は `animaworks-tool task list` で取得する。ステータスでフィルタリング可能。
+中断理由を解消した後、同じ未終了タスクを明示的に再開する。
 
 ```
-Bash: animaworks-tool task list                    # 全件
-Bash: animaworks-tool task list --status pending   # 未着手のみ
-Bash: animaworks-tool task list --status in_progress
-Bash: animaworks-tool task list --status done
-Bash: animaworks-tool task list --status failed
+submit_tasks(batch_id="resume-report", tasks=[{"task_id": "TASK_ID", "resume": true}])
 ```
 
-#### タスクキューの状態とマーカー
+保存済み入力を再利用し履歴を保持する。稼働中の試行は再開できず、完了・取消済みタスクもこの方法では再開できない。依存先が取消・要対応なら詳細を確認し、依頼者に確認するか不要になった作業を取り消す。成功を捏造しない。
 
-| 状態 | 意味 |
-|------|------|
-| `pending` | 未着手 |
-| `in_progress` | 作業中 |
-| `done` | 完了 |
-| `cancelled` | 取り消し |
-| `blocked` | ブロック中 |
-| `failed` | 失敗（TaskExec 等で実行に失敗した場合） |
-| `delegated` | 委譲済み（delegate_task で部下に委譲した追跡用） |
+進められないときは事実、試したこと、不足する権限・情報、次の一手を依頼者に伝え、同じ失敗を繰り返さない。関連知識の検索は必要な場合に行い、儀式化しない。待機中は他の許可済み作業に取り組んでよい。委譲された仕事の完了は依頼者に報告し、重複通知や不要な了解返信を避ける。
 
-Priming 表示では、人間由来タスク（source=human）に 🔴 HIGH マーカー、30分以上更新されていないタスクに ⚠️ STALE、期限超過タスクに 🔴 OVERDUE マーカーが付く。
-
-委譲タスク（`delegated`）は Priming の Channel E に専用セクションとして表示される。部下のタスクキューからライブステータス（⏳進行中/✅完了/❌失敗/🚫キャンセル等）を取得して最大5件まで表示する。また、Heartbeat 完了後に `sync_delegated` が自動実行され、部下のキューで完了・失敗したタスクを検出して上司側の追跡エントリを自動更新する（`done` / `failed`）。
-
-## current_state.md の使い方
-
-`current_state.md` はワーキングメモリとして、今の状態・観察・計画・ブロッカーを記録するファイル。
-タスク一覧ではない。タスクの追跡は `task_queue.jsonl` で行う。
-
-- **サイズ制限**: 3000文字。Heartbeat 時に自動クリーンアップされる
-- **アイドル状態**: タスクがない場合は `status: idle` を記載する
-
-### フォーマット
-
-```markdown
-status: in-progress
-task: Slack連携機能のテスト
-assigned_by: aoi
-started: 2026-02-15 10:00
-context: |
-  aoiからの指示: Slack APIの接続テストを行い、
-  #generalチャンネルへの投稿が正常に動作するか確認する。
-  テスト完了後に結果を報告すること。
-blockers: なし
-```
-
-### フィールド説明
-
-| フィールド | 必須 | 説明 |
-|-----------|------|------|
-| `status` | MUST | タスクの状態（後述の状態遷移を参照） |
-| `task` | MUST | タスクの簡潔な説明（1行） |
-| `assigned_by` | SHOULD | 誰から受けたタスクか。自発タスクなら `self` |
-| `started` | SHOULD | 着手日時 |
-| `context` | SHOULD | タスクの詳細・背景情報 |
-| `blockers` | SHOULD | ブロッカーがあれば記載。なければ `なし` |
-
-### アイドル状態
-
-タスクがない場合は以下のように記載する:
-
-```markdown
-status: idle
-```
-
-`idle` は正常な状態であり、次のタスクが来るまで待機していることを意味する。
-ハートビートで確認した際に `idle` であれば、特にアクションは不要（`HEARTBEAT_OK`）。
-
-## タスク状態遷移
-
-タスクは `task_queue.jsonl` で追跡し、`current_state.md` は作業中のワーキングコンテキストを記録する。
+## 部下への委譲
 
 ```
-submit_tasks で登録 → update_task(status="in_progress") → 作業 → update_task(status="done")
-                                                                ↘ blocked → 報告 → 別タスクへ
+delegate_task(name="dave", instruction="API テストを実施し検証した結果を報告する", summary="API テスト")
+task_tracker()
 ```
 
-### 状態遷移の手順
+部下が所有する一つのタスクと、上司から見えるエイリアスを作る。双方に同じ最新状態が即座に反映され、別台帳や Heartbeat での同期は不要。`task_tracker(status="all")` は終了済みを含み、`status="completed"` は done/cancelled を表示する。指示が不明なら委譲元に確認し、完了時に結果を報告する。
 
-**着手**:
-1. `task_queue.jsonl` からタスクを選び、`update_task(task_id="...", status="in_progress")` で更新する
-2. `current_state.md` に `status: in-progress` で作業コンテキストを記載する
+## 作業文脈と結果
 
-**完了**:
-1. `update_task(task_id="...", status="done", summary="...")` でタスクを完了にする
-2. `current_state.md` を `status: idle` に戻す
-3. タスクの依頼者に結果を報告する（assigned_by が他者の場合 MUST）
+`state/current_state.md` には観察・文脈・計画・ブロッカーを簡潔に残す。タスク一覧の複製や恒久的な手順を置かない。作業文脈がなければ `status: idle`。通常のセッション境界では保持され、表示制限とディスク整理の制限は別（`anatomy/working-memory.md`）。
 
-**ブロック**:
-1. `current_state.md` の `status` を `blocked` にし、`blockers` に具体的な理由を記載する（MUST）
-2. ブロック解消のアクションを取る（後述のブロック対応フロー参照）
-3. ブロック解消に時間がかかる場合、`task_queue.jsonl` の別タスクに着手してよい（MAY）
+TaskExec の結果要約は `state/task_results/{task_id}/{attempt_token}.md` に保存される。ホストが受理した試行の結果を後続に渡し、古いファイルを任意に採用しない。結果ファイルの捏造や、存在だけを根拠にした完了判定は禁止。活動ログ・エピソードは証跡として残り、各状態遷移を手動で二重記録する義務はない。
 
-## 複数タスクの優先度管理
+## 長時間コマンドツールは別経路
 
-複数のタスクが `task_queue.jsonl` に存在する場合の判断基準:
-
-1. **人間由来タスクを最優先**: source=human 相当のタスクは最優先で処理する（MUST）
-2. **上司からのタスクを優先**: supervisor からの指示は同レベルの他タスクより優先する（SHOULD）
-3. **締め切り順**: deadline が近いものから着手する（SHOULD）
-4. **先入れ先出し**: 同優先度・同締め切りなら受信順に処理する（MAY）
-
-### タスク中断時の手順
-
-優先度の高いタスクが割り込んだ場合:
-
-1. 現在タスクを `update_task(status="pending")` でキューに戻す
-2. `current_state.md` の進捗をメモしてから、新しいタスクのコンテキストに切り替える
-
-## ブロックされたタスクの対応フロー
-
-タスクがブロックされた場合、以下の手順で対応する。
-
-### ステップ1: ブロック原因の特定と記録
-
-current_state.md の `blockers` に具体的な原因を記載する（MUST）。
-
-```markdown
-status: blocked
-task: AWS S3バケット設定
-blockers: |
-  AWS クレデンシャルが未設定。
-  config.json に aws credential が存在しない。
-  aoi に設定依頼が必要。
-```
-
-### ステップ2: 解消アクション
-
-ブロック原因に応じたアクションを取る:
-
-| 原因 | アクション |
-|------|-----------|
-| 情報不足 | 依頼者に質問メッセージを送る（SHOULD） |
-| 権限不足 | supervisor に権限追加を依頼する（SHOULD） |
-| 外部依存 | 待ちであることを依頼者に報告する（SHOULD） |
-| 技術的問題 | knowledge/ や procedures/ を検索し、解決策を探す。見つからなければ報告する |
-
-### ステップ3: 別タスクへの切り替え
-
-ブロック解消に時間がかかる場合、`task_queue.jsonl` の次のタスクに着手してよい（MAY）。
-ブロックされたタスクは `update_task(status="blocked")` で記録し、解消後に再着手する。
-
-## タスクファイルのテンプレート
-
-### current_state.md — アイドル状態
-
-```markdown
-status: idle
-```
-
-### current_state.md — 作業中
-
-```markdown
-status: in-progress
-task: {タスク名}
-assigned_by: {依頼者名 or self}
-started: {YYYY-MM-DD HH:MM}
-context: |
-  {タスクの詳細・背景情報}
-blockers: なし
-```
-
-### current_state.md — ブロック中
-
-```markdown
-status: blocked
-task: {タスク名}
-assigned_by: {依頼者名 or self}
-started: {YYYY-MM-DD HH:MM}
-context: |
-  {タスクの詳細・背景情報}
-blockers: |
-  {ブロック理由の具体的な説明}
-  {解消に向けて取ったアクション}
-```
-
-## episodes/ へのタスクログ記録
-
-タスクの着手・完了・ブロック等の状態変化は episodes/ に記録する（SHOULD）。
-ファイル名は `YYYY-MM-DD.md`（日別ログ）。
-
-```markdown
-## 10:00 タスク着手: Slack連携テスト
-
-aoi からの指示を受け、Slack API の接続テストを開始。
-permissions.json で slack: yes を確認済み。
-
-## 11:30 タスク完了: Slack連携テスト
-
-Slack API 接続テスト完了。#general への投稿テストも成功。
-結果を aoi に報告済み。
-
-[IMPORTANT] Slack API のレート制限: 1分間に最大1メッセージの制限あり。
-バースト送信時は間隔を空ける必要がある。
-```
-
-重要な学びには `[IMPORTANT]` タグを付ける（SHOULD）。後のハートビートや記憶統合で優先的に抽出される。
-
-## 並列タスク実行（submit_tasks）
-
-`submit_tasks` ツールを使うと、複数のタスクを依存関係付きで一括投入し、並列実行できる。
-TaskExec がDAG（有向非巡回グラフ）として依存関係を解決し、独立タスクを同時実行する。
-
-### 使い方
-
-```
-submit_tasks(batch_id="build-20260301", tasks=[
-  {"task_id": "compile", "title": "コンパイル", "description": "ソースをビルド", "parallel": true},
-  {"task_id": "lint", "title": "Lint", "description": "静的解析", "parallel": true},
-  {"task_id": "package", "title": "パッケージ", "description": "ビルド成果物をパッケージ化",
-   "depends_on": ["compile", "lint"]}
-])
-```
-
-| パラメータ | 必須 | 説明 |
-|-----------|------|------|
-| `batch_id` | MUST | バッチの一意識別子 |
-| `tasks[].task_id` | MUST | バッチ内で一意のタスクID |
-| `tasks[].title` | MUST | タスクタイトル |
-| `tasks[].description` | MUST | 作業内容 |
-| `tasks[].parallel` | MAY | `true` で並列実行可能（デフォルト: `false`） |
-| `tasks[].depends_on` | MAY | 先行タスクIDの配列 |
-| `tasks[].workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアスを指定すると TaskExec がそのディレクトリで実行する |
-| `tasks[].acceptance_criteria` | MAY | 完了条件の配列 |
-| `tasks[].constraints` | MAY | 制約の配列 |
-| `tasks[].file_paths` | MAY | 関連ファイルパスの配列 |
-
-### 実行の仕組み
-
-1. `submit_tasks` がバリデーション（ID一意性、依存先存在、循環検出）を行う
-2. タスクファイルが `state/pending/` に `batch_id` 付きで書き出される
-3. submit_tasks 実行後、TaskExec（PendingTaskExecutor）は即座にタスクを検出する（wake によりポーリングを待たない）
-4. TaskExec がバッチを検出し、トポロジカルソートで実行順を決定する
-5. 依存なしの `parallel: true` タスクはセマフォ上限内で同時実行される
-6. 先行タスクの結果は依存タスクのコンテキストに自動注入される
-7. 先行タスクが失敗した場合、依存タスクはスキップされる
-8. タスクは書き出しから24時間以内に実行されないとスキップされる（TTL）
-
-### 並列実行の上限
-
-同時実行数は `config.json` の `background_task.max_parallel_llm_tasks`（デフォルト: 3、1〜10）で制御される。
-
-### タスク結果の保存
-
-完了タスクの結果要約は `state/task_results/{task_id}.md` に保存される（最大2,000文字、7日TTL）。
-依存タスクはこの結果をコンテキストとして自動的に受け取る。先行タスクが失敗した場合、依存タスクはスキップされ `FAILED: {理由}` が記録される。
-各タスク完了時、submit_tasks を実行した Anima に完了通知が DM で送られる。
-
-### submit_tasks と delegate_task の使い分け
-
-| シナリオ | 方法 | 実行者 |
-|---------|------|--------|
-| 自分で LLM タスクをバックグラウンド実行したい | `submit_tasks` | **自分自身**（TaskExec） |
-| 複数独立タスクを並列で自分が実行 | `submit_tasks` で `parallel: true` | **自分自身** |
-| 依存関係付きタスク群を自分が実行 | `submit_tasks` で `depends_on` 指定 | **自分自身** |
-| **部下に作業を任せたい** | **`delegate_task`** | **部下** |
-
-**注意**: `state/pending/` に JSON を手動で書き出してはならない。必ず `submit_tasks` ツール経由で投入すること。`submit_tasks` は Layer 1（実行キュー）と Layer 2（タスクレジストリ）の両方に同時登録するため、タスクの追跡漏れを防げる。
-
-## 長時間外部ツール（BackgroundTaskManager / `core/background.py`）
-
-ツールガイドに ⚠ が付く処理（画像・3D 生成、`local_llm`、`run_command`、`machine_run` 等）は、会話ループを長時間ブロックしないよう **`animaworks-tool submit …`** でバックグラウンド投入する。これは **`submit_tasks`（LLM タスク）とは無関係**な別経路である。
-
-| 項目 | 内容 |
-|------|------|
-| 実装 | `core/background.py` の **BackgroundTaskManager** — `submit` / `submit_async` が `asyncio.create_task` でバックグラウンドタスクを起動し、終了時に `_save_task` の後で `on_complete` を await する（コールバック内の例外はログのみ） |
-| 同期ツール | `submit` → `run_in_executor` でスレッドプール上の同期 `execute_fn(tool_name, tool_args)` を実行 |
-| 非同期ツール | `submit_async` → 同一イベントループ上で `await execute_fn(tool_name, tool_args)`（内部・拡張向け） |
-| タスク ID | `uuid.uuid4().hex[:12]`（12 文字 hex） |
-| 永続化先 | `state/background_tasks/{task_id}.json`（UTF-8 JSON、`indent=2`）。**最初の保存から `status` は `running`**。成功で `completed` と `result`、例外で `failed` と `error`（いずれも `completed_at` を付与） |
-| JSON の主なキー | `task_id`, `anima_name`, `tool_name`, `tool_args`, `status`, `created_at`, `completed_at`, `result`, `error` |
-| `pending` について | `TaskStatus` に `pending` が定義されているが、`submit` / `submit_async` では未使用（投入直後から `running`）。通常、ディスク上は `running`→`completed`/`failed` のみ |
-| 資格チェック | `is_eligible(tool_name)` — **キーが `_eligible_tools` に含まれるかのみ**。スキーマ名（例: `generate_3d_model`）と `tool:subcommand`（例: `image_gen:3d`）の両形式を受理 |
-| 候補ツール集合 | **3 層マージ（後勝ち）**: (1) `_DEFAULT_ELIGIBLE_TOOLS`、(2) `get_eligible_tools_from_profiles` — 各ツール `EXECUTION_PROFILE` で `background_eligible: true` のエントリ（キー `tool:subcommand`、値は `expected_seconds`、未指定時 60）、(3) `config.json` `background_task.eligible_tools` の各エントリの **`threshold_s`** を整数化したマップ。各層の**数値は `is_eligible` では使われない**（ドキュメント・プロファイル整合用） |
-| 第1層の既定キー | `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`（いずれも 30）、`local_llm` / `run_command`（60）、`machine_run`（600） |
-| 無効化 | `config.json` で `background_task.enabled: false` とするとマネージャが作られない（submit キューは取り込まれても実行側で警告になりうる） |
-| 掃除 | `cleanup_old_tasks(max_age_hours=24)` — `status` が `completed`/`failed` で `completed_at` が **24 時間より古い** JSON を削除。加えて `running` のまま **`created_at` から 48 時間超**のファイル（プロセスクラッシュ等の孤児）も削除 |
-| 内部 API | `get_task`（インメモリ優先、なければディスク）、`list_tasks`（インメモリと `*.json` をマージ、`created_at` 降順、任意で `status` フィルタ）、`active_count`（`running` 件数） |
-| 運用上の確認 | ツール **`list_background_tasks`** / **`check_background_task`** で一覧・単体参照 |
-
-投入から完了通知までの経路（待ちキュー → 通知 → Heartbeat）は **`operations/background-tasks.md`** に集約してある。同一モジュールの **`rotate_dm_logs`** は `shared/dm_logs/` 配下の `*.jsonl` について、`max_age_days`（既定 7 日）より古いエントリを `{stem}.{YYYYMMDD}.archive.jsonl` へ追記アーカイブし、アクティブファイルを最近分だけに書き直す。業務タスクキュー（`task_queue.jsonl`）とは無関係である。
-
-## タスク委譲（delegate_task） — 部下が実行する
-
-> **重要**: `delegate_task` は**部下の TaskExec** がタスクを実行します（あなた自身は実行しません）。自分で **LLM タスク**をバックグラウンド実行したい場合は `submit_tasks` を使う。長時間 **CLI ツール**は `animaworks-tool submit`（前節・`operations/background-tasks.md`）。
-
-部下を持つ Anima（スーパーバイザー）は `delegate_task` ツールでタスクを部下に委譲できる。
-
-### delegate_task の動作
-
-1. 部下のタスクキューにタスクが追加される（source="anima"）
-2. 部下の `state/pending/` にタスクJSONが書き込まれ、即時実行される
-3. 部下に DM が自動送信される
-4. 自分のキューに追跡エントリが作成される（status="delegated"）
-
-### 使い方
-
-```
-delegate_task(name="dave", instruction="API テストを実施して結果を報告してください", deadline="2d", summary="API テスト")
-```
-
-| パラメータ | 必須 | 説明 |
-|-----------|------|------|
-| `name` | MUST | 委譲先の直属部下Anima名 |
-| `instruction` | MUST | タスクの指示内容 |
-| `deadline` | MUST | 期限。相対形式 `30m` / `2h` / `1d` または ISO8601 |
-| `summary` | MAY | タスクの1行要約（省略時は instruction の先頭100文字） |
-| `workspace` | MAY | 作業ディレクトリ。ワークスペースエイリアスを指定すると委譲先がそのディレクトリで作業する |
-
-### 委譲タスクの追跡
-
-`task_tracker` ツールで委譲したタスクの進捗を確認できる。
-部下側の task_queue.jsonl から最新ステータスを突き合わせて返す。
-
-```
-task_tracker()                     # アクティブな委譲タスク一覧（デフォルト）
-task_tracker(status="all")         # 完了済み含む全タスク
-task_tracker(status="completed")   # 完了済みのみ
-```
-
-| status | 意味 |
-|--------|------|
-| `active` | 進行中（done/cancelled/failed 以外）。デフォルト |
-| `all` | 全件 |
-| `completed` | 完了済み（done/cancelled/failed）のみ |
-
-### 委譲を受けた側の対応
-
-1. DM で委譲メッセージを受信する
-2. タスクキューに自動的にタスクが登録される
-3. 内容を確認し、不明点があれば委譲元に質問する（SHOULD）
-4. 完了したら委譲元に結果を報告する（MUST）
+画像生成や run_command など対応する長時間外部ツールには `animaworks-tool submit TOOL ...` を使う。これは `submit_tasks` とは別で、コマンド記述子は引き続き `state/background_tasks/pending/` に保存される。BackgroundTaskManager は `state/background_tasks/{task_id}.json` に `running` / `completed` / `failed` を記録する。`list_background_tasks` / `check_background_task` で確認する。このファイル経路と通知を維持する。詳細は `operations/background-tasks.md`。

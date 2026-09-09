@@ -117,6 +117,58 @@ class TestTokenUsageLoggerLog:
         assert "cache_read_tokens" not in entry
         assert "cache_write_tokens" not in entry
 
+    def test_unknown_price_is_explicit_not_free(self, tul):
+        tul.log(model="unpriced-synthetic-model", trigger="task", mode="c", input_tokens=100)
+        entry = tul.read_entries()[0]
+        assert entry["estimated_cost_usd"] == 0.0  # old numeric API remains compatible
+        assert entry["pricing_status"] == "unknown"
+        assert entry["input_includes_cache"] is True
+
+    def test_registered_zero_price_is_known(self, tul):
+        tul._pricing = {"local-free": {"input": 0.0, "output": 0.0}}
+        tul.log(model="local-free", trigger="chat", mode="a", input_tokens=100)
+        entry = tul.read_entries()[0]
+        assert entry["estimated_cost_usd"] == 0.0
+        assert entry["pricing_status"] == "estimated"
+        assert entry["input_includes_cache"] is False
+
+
+class TestCachePricingSemantics:
+    @pytest.mark.parametrize("model,mode", [("priced", "C"), ("codex/priced", ""), ("priced", "c")])
+    def test_codex_cache_is_subset_not_additional_input(self, tul, model, mode):
+        tul._pricing = {"priced": {"input": 10.0, "output": 20.0, "cache_read": 1.0, "cache_write": 2.0}}
+        cost = tul.estimate_cost(
+            model, mode=mode, input_tokens=1000, output_tokens=100, cache_read_tokens=800, cache_write_tokens=50
+        )
+        assert cost == pytest.approx((150 * 10 + 100 * 20 + 800 + 50 * 2) / 1000000)
+
+    def test_anthropic_cache_remains_additional_to_input(self, tul):
+        tul._pricing = {"priced": {"input": 10.0, "output": 20.0, "cache_read": 1.0}}
+        cost = tul.estimate_cost("priced", mode="S", input_tokens=1000, output_tokens=100, cache_read_tokens=800)
+        assert cost == pytest.approx((1000 * 10 + 100 * 20 + 800) / 1000000)
+
+    def test_summary_flags_unknown_legacy_and_current_rows(self, tul, monkeypatch):
+        tul._pricing = {"priced": {"input": 10.0, "output": 20.0}}
+        entries = [
+            {"model": "priced", "trigger": "chat", "ts": "2026-09-08T12:00:00", "estimated_cost_usd": 0.25},
+            {"model": "missing-old", "trigger": "task", "ts": "2026-09-08T12:00:01", "estimated_cost_usd": 0},
+            {
+                "model": "missing-new",
+                "trigger": "task",
+                "ts": "2026-09-08T12:00:02",
+                "estimated_cost_usd": 0,
+                "pricing_status": "unknown",
+            },
+        ]
+        monkeypatch.setattr(tul, "read_entries", lambda *args, **kwargs: entries)
+        summary = tul.summarize()
+        assert summary["total_estimated_cost_usd"] == 0.25
+        assert summary["unknown_pricing_sessions"] == 2
+        assert summary["cost_is_partial"] is True
+        assert summary["by_trigger"]["task"]["unknown_pricing_sessions"] == 2
+        assert summary["by_model"]["priced"]["cost_is_partial"] is False
+        assert summary["by_date"]["2026-09-08"]["cost_is_partial"] is True
+
 
 class TestEstimateCost:
     def test_claude_sonnet(self, tul: TokenUsageLogger):

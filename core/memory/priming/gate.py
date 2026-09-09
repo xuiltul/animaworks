@@ -73,6 +73,10 @@ EXPLICIT_RECALL_TERMS = frozenset(
         "yesterday",
         "continue",
         "that issue",
+        "이전",
+        "어제",
+        "계속",
+        "기억",
     }
 )
 
@@ -111,6 +115,8 @@ RESUME_TERMS = frozenset(
         "resume",
         "continue",
         "task",
+        "재개",
+        "계속",
     }
 )
 
@@ -119,14 +125,13 @@ GUARDRAIL_TERMS = frozenset(
         "承認",
         "approval",
         "二重送信",
-        "重複",
-        "duplicate",
+        "duplicate send",
         "機密",
         "confidential",
-        "完了",
-        "complete",
-        "確認",
-        "verify",
+        "[ACTION-RULE]",
+        "승인",
+        "기밀",
+        "중복 전송",
     }
 )
 
@@ -195,21 +200,6 @@ def build_priming_plan(
     """Build a deterministic gate plan for the current priming candidates."""
 
     message_risk_tags = classify_risk_tags(message, candidates, recent_human_messages=recent_human_messages)
-    evidence_candidate_tags = (
-        frozenset().union(
-            *(candidate.risk_tags for candidate in candidates if _candidate_risk_enables_evidence(candidate))
-        )
-        if candidates
-        else frozenset()
-    )
-    search_candidate_tags = (
-        frozenset().union(
-            *(candidate.risk_tags for candidate in candidates if _candidate_risk_requires_search(candidate))
-        )
-        if candidates
-        else frozenset()
-    )
-    all_risk_tags = message_risk_tags | evidence_candidate_tags | search_candidate_tags
     message_evidence_mode = evidence_needed(
         message,
         channel,
@@ -217,40 +207,26 @@ def build_priming_plan(
         candidates,
         recent_human_messages=recent_human_messages,
     )
-    is_evidence_mode = message_evidence_mode or bool(
-        evidence_candidate_tags
-        & {"external_action", "evidence_request", "guardrail", "duplicate_prevention", "confidentiality"}
-    )
-    require_search = "external_action" in all_risk_tags or "evidence_request" in all_risk_tags
+    require_search = "external_action" in message_risk_tags or "evidence_request" in message_risk_tags
 
     decisions: dict[str, PrimingGateDecision] = {}
     for candidate in candidates:
-        candidate_evidence_tags = candidate.risk_tags if _candidate_risk_enables_evidence(candidate) else frozenset()
-        candidate_search_tags = candidate.risk_tags if _candidate_risk_requires_search(candidate) else frozenset()
-        candidate_risk_tags = candidate_evidence_tags | candidate_search_tags
         decision = decide_candidate(
             candidate,
-            evidence_mode=message_evidence_mode
-            or bool(
-                candidate_evidence_tags
-                & {"external_action", "evidence_request", "guardrail", "duplicate_prevention", "confidentiality"}
-            ),
-            risk_tags=message_risk_tags | candidate_risk_tags,
+            evidence_mode=message_evidence_mode,
+            risk_tags=message_risk_tags,
             message=message,
             channel=channel,
             intent=intent,
-            require_search_before_action=(
-                "external_action" in (message_risk_tags | candidate_risk_tags)
-                or "evidence_request" in (message_risk_tags | candidate_risk_tags)
-            ),
+            require_search_before_action=require_search,
         )
         decisions[candidate.channel] = decision
 
     return PrimingPlan(
         channel_decisions=decisions,
-        evidence_mode=is_evidence_mode,
+        evidence_mode=message_evidence_mode,
         require_search_before_action=require_search,
-        risk_tags=all_risk_tags,
+        risk_tags=message_risk_tags,
     )
 
 
@@ -381,9 +357,9 @@ def classify_text_risk_tags(text: str) -> frozenset[str]:
         tags.add("resume")
     if _contains_any(haystack, GUARDRAIL_TERMS):
         tags.add("guardrail")
-    if "duplicate" in haystack or "重複" in haystack or "二重" in haystack:
+    if _contains_any(haystack, frozenset({"duplicate send", "二重送信", "중복 전송"})):
         tags.add("duplicate_prevention")
-    if "confidential" in haystack or "機密" in haystack:
+    if _contains_any(haystack, frozenset({"confidential", "機密", "기밀"})):
         tags.add("confidentiality")
     return frozenset(tags)
 
@@ -416,29 +392,10 @@ def _is_guardrail_candidate(candidate: MemoryCandidate, risk_tags: frozenset[str
         return False
     if candidate.channel in {"related_knowledge", "related_knowledge_untrusted", "pending_tasks", "recent_outbound"}:
         content = _normalize_search_text(candidate.content)
-        if _contains_any(content, GUARDRAIL_TERMS) or _contains_any(
-            content,
-            frozenset({"duplicate", "重複", "二重", "confidential", "機密"}),
-        ):
-            return True
-        return (
-            "external_action" in risk_tags
-            and _contains_any(content, EXTERNAL_ACTION_TERMS)
-            and _contains_any(
-                content,
-                GUARDRAIL_TERMS,
-            )
-        )
+        # Candidate text is only corroborating evidence. Everyday words in a
+        # retrieved document must never create message-level action risk.
+        return _contains_any(content, GUARDRAIL_TERMS)
     return False
-
-
-def _candidate_risk_enables_evidence(candidate: MemoryCandidate) -> bool:
-    return candidate.channel in _RELATED_CHANNELS and not is_pointer_like(candidate.content)
-
-
-def _candidate_risk_requires_search(candidate: MemoryCandidate) -> bool:
-    search_risk_channels = _RELATED_CHANNELS | frozenset({"pending_tasks", "recent_outbound"})
-    return candidate.channel in search_risk_channels and not is_pointer_like(candidate.content)
 
 
 def _is_empty_background_query(message: str, channel: str) -> bool:

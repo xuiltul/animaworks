@@ -63,13 +63,13 @@ class TestE2EChannelFlow:
             # 2. Post to general channel
             resp = await client.post(
                 "/api/channels/general",
-                json={"text": "Hello team!", "from_name": "taka"},
+                json={"text": "Hello team!", "from_name": "owner"},
             )
             assert resp.status_code == 200
 
             resp = await client.post(
                 "/api/channels/general",
-                json={"text": "@sakura please check", "from_name": "taka"},
+                json={"text": "@sakura please check", "from_name": "owner"},
             )
             assert resp.status_code == 200
 
@@ -111,7 +111,7 @@ class TestE2EChannelFlow:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             await client.post(
                 "/api/channels/general",
-                json={"text": "WS test message", "from_name": "taka"},
+                json={"text": "WS test message", "from_name": "owner"},
             )
 
         ws = app.state.ws_manager
@@ -217,7 +217,7 @@ class TestE2EReversePagination:
             for i in range(10):
                 await client.post(
                     "/api/channels/general",
-                    json={"text": f"message-{i}", "from_name": "taka"},
+                    json={"text": f"message-{i}", "from_name": "owner"},
                 )
 
             resp = await client.get("/api/channels/general?limit=5&offset=0")
@@ -320,7 +320,7 @@ class TestE2EReversePagination:
             for i in range(3):
                 await client.post(
                     "/api/channels/general",
-                    json={"text": f"short-{i}", "from_name": "taka"},
+                    json={"text": f"short-{i}", "from_name": "owner"},
                 )
 
             resp = await client.get("/api/channels/general?limit=50&offset=0")

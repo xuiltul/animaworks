@@ -10,6 +10,7 @@ export async function loadSystemStatus() {
     const animaCount = data.animas || 0;
     const schedulerRunning = data.scheduler_running;
     const dot = dom.systemStatus.querySelector(".status-dot");
+    dom.systemStatusText.removeAttribute("data-i18n");
     if (schedulerRunning) {
       dot.className = "status-dot status-idle";
       dom.systemStatusText.textContent = t("status.scheduler_running", { count: animaCount });
@@ -24,6 +25,9 @@ export async function loadSystemStatus() {
 
 export function updateSystemStatus() {
   const dot = dom.systemStatus.querySelector(".status-dot");
+  // Page translations must not restore the initial "Connecting..." label
+  // after the WebSocket has already connected.
+  dom.systemStatusText.removeAttribute("data-i18n");
   if (state.wsConnected) {
     dot.className = "status-dot status-idle";
     dom.systemStatusText.textContent = t("status.connected", { count: state.animas.length });

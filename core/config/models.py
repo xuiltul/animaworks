@@ -94,7 +94,6 @@ from core.config.schemas import (
     LlmRateGuardConfig,
     LocalLLMConfig,
     LoggingConfig,
-    MachineConfig,
     MediaProxyConfig,
     MemoryConfig,
     Neo4jConfig,

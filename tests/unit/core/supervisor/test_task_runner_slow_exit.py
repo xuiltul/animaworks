@@ -74,3 +74,38 @@ async def test_slow_exit_after_error_terminal_still_raises(tmp_path: Path, monke
             monkeypatch,
             {"error": {"code": "EXECUTION_ERROR", "message": "boom"}},
         )
+
+
+@pytest.mark.asyncio
+async def test_spawn_callback_failure_reaps_child_before_releasing_job(tmp_path, monkeypatch):
+    supervisor = _supervisor(tmp_path)
+    real_exec = asyncio.create_subprocess_exec
+    spawned = []
+
+    async def fake_exec(*args, **kwargs):
+        kwargs.pop("env", None)
+        process = await real_exec(sys.executable, "-c", "import time; time.sleep(60)", **kwargs)
+        spawned.append(process)
+        return process
+
+    def failed_callback(job):
+        raise RuntimeError("identity storage failed")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(trs, "_TASK_RUNNER_TERM_TIMEOUT", 0.2)
+    with pytest.raises(RuntimeError, match="identity storage failed"):
+        await asyncio.wait_for(
+            supervisor._spawn_and_await(
+                lane="task",
+                job_prefix="task",
+                params_builder=lambda urls: {"environment": {"urls": urls}},
+                log_context="callback-failure",
+                attempt=1,
+                display_lane="background",
+                on_spawned=failed_callback,
+                url_env={"ANIMAWORKS_EMBED_URL": "http://localhost:0"},
+            ),
+            timeout=5,
+        )
+    assert spawned[0].returncode is not None
+    assert not supervisor.jobs

@@ -466,8 +466,10 @@ def test_delegate_task_rejects_cross_company_before_persistence(
 
     assert "Beta Corporation" in result
     assert "owner" in result.lower() or "オーナー" in result
-    assert not (worker_dir / "state" / "task_queue.jsonl").exists()
-    assert not (boss_dir / "state" / "task_queue.jsonl").exists()
+    from core.memory.task_queue import TaskQueueManager
+
+    assert TaskQueueManager(worker_dir).list_tasks() == []
+    assert TaskQueueManager(boss_dir).list_tasks() == []
 
 
 def test_delegate_task_allows_same_company(
@@ -483,5 +485,11 @@ def test_delegate_task_allows_same_company(
     result = _delegate(harness)
 
     assert "worker" in result
-    assert (worker_dir / "state" / "task_queue.jsonl").exists()
-    assert (boss_dir / "state" / "task_queue.jsonl").exists()
+    from core.memory.task_queue import TaskQueueManager
+
+    children = TaskQueueManager(worker_dir).list_tasks()
+    aliases = TaskQueueManager(boss_dir).list_tasks()
+    assert len(children) == len(aliases) == 1
+    assert children[0].original_instruction == "Prepare the report"
+    assert aliases[0].meta["delegated_to"] == "worker"
+    assert aliases[0].meta["delegated_task_id"] == children[0].task_id

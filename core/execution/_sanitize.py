@@ -32,6 +32,7 @@ ORIGIN_EXTERNAL_PLATFORM: str = "external_platform"
 ORIGIN_EXTERNAL_WEB: str = "external_web"
 ORIGIN_CONSOLIDATION: str = "consolidation"
 ORIGIN_UNKNOWN: str = "unknown"
+ORIGIN_MIXED: str = "mixed"
 
 ORIGIN_TRUST_MAP: dict[str, str] = {
     ORIGIN_SYSTEM: "trusted",
@@ -41,6 +42,7 @@ ORIGIN_TRUST_MAP: dict[str, str] = {
     ORIGIN_EXTERNAL_WEB: "untrusted",
     ORIGIN_CONSOLIDATION: "medium",
     ORIGIN_UNKNOWN: "untrusted",
+    ORIGIN_MIXED: "untrusted",
 }
 
 MAX_ORIGIN_CHAIN_LENGTH: int = 10

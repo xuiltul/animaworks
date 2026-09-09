@@ -20,6 +20,7 @@ import pytest
 from core.execution._sdk_hooks import (
     _intercept_task_to_pending,
 )
+from core.memory.task_queue import TaskQueueManager
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -36,7 +37,7 @@ def anima_dir(tmp_path: Path) -> Path:
 
 
 class TestInterceptTaskToPending:
-    def test_writes_pending_json(self, anima_dir: Path):
+    def test_publishes_canonical_input(self, anima_dir: Path):
         tool_input = {
             "description": "Background research",
             "prompt": "Search for information",
@@ -45,9 +46,9 @@ class TestInterceptTaskToPending:
 
         pending_dir = anima_dir / "state" / "pending"
         task_file = pending_dir / f"{task_id}.json"
-        assert task_file.exists()
+        assert not task_file.exists()
 
-        data = json.loads(task_file.read_text(encoding="utf-8"))
+        data = TaskQueueManager(anima_dir).store.get_input(anima_dir.name, task_id)
         assert data["task_type"] == "llm"
         assert data["task_id"] == task_id
         assert data["title"] == "Background research"
@@ -59,8 +60,7 @@ class TestInterceptTaskToPending:
         tool_input = {"description": "test", "prompt": "test"}
         task_id = _intercept_task_to_pending(anima_dir, tool_input, "tu_002")
 
-        task_file = anima_dir / "state" / "pending" / f"{task_id}.json"
-        data = json.loads(task_file.read_text(encoding="utf-8"))
+        data = TaskQueueManager(anima_dir).store.get_input(anima_dir.name, task_id)
         assert data["reply_to"] == "ayame"
 
     def test_returns_task_id(self, anima_dir: Path):
@@ -78,8 +78,7 @@ class TestInterceptTaskToPending:
         tool_input = {"description": "related task", "prompt": "do stuff"}
         task_id = _intercept_task_to_pending(anima_dir, tool_input, "tu_004")
 
-        task_file = anima_dir / "state" / "pending" / f"{task_id}.json"
-        data = json.loads(task_file.read_text(encoding="utf-8"))
+        data = TaskQueueManager(anima_dir).store.get_input(anima_dir.name, task_id)
         assert "API refactor" in data["context"]
 
 

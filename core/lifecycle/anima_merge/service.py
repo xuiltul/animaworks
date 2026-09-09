@@ -486,24 +486,9 @@ class AnimaMergeService:
 
     @staticmethod
     def _task_ids(anima_dir: Path) -> set[str]:
-        path = anima_dir / "state" / "task_queue.jsonl"
-        result: set[str] = set()
-        if not path.is_file():
-            return result
-        try:
-            with path.open("r", encoding="utf-8", errors="replace") as handle:
-                for line in handle:
-                    try:
-                        item = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if isinstance(item, dict):
-                        task_id = item.get("task_id", item.get("id"))
-                        if isinstance(task_id, str) and task_id:
-                            result.add(task_id)
-        except OSError:
-            pass
-        return result
+        from .task_refs import _queue_ids
+
+        return _queue_ids(anima_dir)
 
     def _task_id_collisions(self) -> list[str]:
         from .task_refs import build_task_id_mapping
@@ -728,7 +713,6 @@ class AnimaMergeService:
             if not anima_dir.is_dir() or anima_dir.name in {self.source, self.target}:
                 continue
             copy_file(anima_dir / "status.json")
-            copy_file(anima_dir / "state" / "task_queue.jsonl")
 
         shared_dir = self.data_dir / "shared"
         for pattern in ("channels/*.meta.json", "meetings/*.json"):

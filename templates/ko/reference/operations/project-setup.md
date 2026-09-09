@@ -223,8 +223,7 @@ animaworks anima create --name aoi
 ├── procedures/          # 절차 기억 (절차서)
 ├── skills/              # 개인 스킬
 ├── state/               # 워킹 메모리
-│   ├── current_state.md  # 현재 작업
-│   └── task_queue.jsonl # 영구 태스크 큐 (미착수 태스크 등)
+│   └── current_state.md  # 현재 작업
 └── shortterm/           # 단기 기억 (세션 연속용)
     └── archive/
 ```

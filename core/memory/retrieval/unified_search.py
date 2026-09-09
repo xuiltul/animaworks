@@ -1010,6 +1010,7 @@ class UnifiedMemorySearch:
             remaining_vector_scopes = vector_scopes[1:]
 
         vector_groups: list[tuple[list[str], bool]] = []
+        graph_enabled = bool(rag._load_rag_pipeline_settings().get("enable_spreading_activation", True))
         grouped: set[str] = set()
         for scope in remaining_vector_scopes:
             if scope in grouped:
@@ -1018,8 +1019,8 @@ class UnifiedMemorySearch:
             if scope == "knowledge" and "common_knowledge" in remaining_vector_scopes:
                 group.append("common_knowledge")
             grouped.update(group)
-            vector_groups.append((group, "episodes" in group))
-        if "episodes" in scopes and "episodes" not in remaining_vector_scopes:
+            vector_groups.append((group, graph_enabled and "episodes" in group))
+        if graph_enabled and "episodes" in scopes and "episodes" not in remaining_vector_scopes:
             vector_groups.append(([], True))
 
         def _run_vector_group(group: list[str], include_graph: bool):

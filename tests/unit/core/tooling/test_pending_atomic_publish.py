@@ -4,15 +4,16 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Atomic publication tests for pending TaskExec JSON producers."""
+"""All task producers publish canonical executable inputs, never descriptors."""
 
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+
+from core.memory.task_queue import TaskQueueManager
 
 
 @pytest.fixture()
@@ -64,37 +65,12 @@ def test_submit_tasks_atomically_publishes_pending_json(
 
     assert json.loads(result)["status"] == "submitted"
     target = handler._anima_dir / "state" / "pending" / "task-atomic.json"
-    assert observe_pending_publish == [target]
-    assert json.loads(target.read_text(encoding="utf-8"))["task_id"] == "task-atomic"
-    assert list(target.parent.glob("*.tmp")) == []
-
-
-def test_retry_atomically_regenerates_pending_json(
-    tmp_path: Path,
-    observe_pending_publish: list[Path],
-) -> None:
-    from core.tooling.handler_skills import SkillsToolsMixin
-
-    handler = object.__new__(SkillsToolsMixin)
-    handler._anima_dir = tmp_path / "animas" / "sakura"
-    handler._anima_name = "sakura"
-    handler._pending_executor_wake = None
-    handler._retry_attention_decision = lambda *_args, **_kwargs: SimpleNamespace(
-        executable=True,
-        reason="active",
+    assert observe_pending_publish == []
+    assert not target.exists()
+    assert (
+        TaskQueueManager(handler._anima_dir).store.get_input("sakura", "task-atomic")["description"]
+        == "Publish this task atomically"
     )
-    entry = SimpleNamespace(
-        task_id="retry-atomic",
-        summary="Retry task",
-        original_instruction="Retry this task",
-        meta={"task_desc": {}},
-    )
-
-    assert handler._regenerate_pending_json(entry) is True
-
-    target = handler._anima_dir / "state" / "pending" / "retry-atomic.json"
-    assert observe_pending_publish == [target]
-    assert json.loads(target.read_text(encoding="utf-8"))["task_id"] == "retry-atomic"
     assert list(target.parent.glob("*.tmp")) == []
 
 
@@ -137,8 +113,8 @@ def test_delegate_task_atomically_publishes_pending_json(
         }
     )
 
-    assert len(observe_pending_publish) == 1
-    target = observe_pending_publish[0]
-    assert target.parent == alice_dir / "state" / "pending"
-    assert json.loads(target.read_text(encoding="utf-8"))["source"] == "delegation"
-    assert list(target.parent.glob("*.tmp")) == []
+    assert observe_pending_publish == []
+    tasks = TaskQueueManager(alice_dir).store.pending("alice")
+    assert len(tasks) == 1
+    assert tasks[0]["source"] == "delegation"
+    assert len(TaskQueueManager(boss_dir).get_delegated_tasks()) == 1

@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
     """Create AgentCore with all external dependencies mocked."""
@@ -102,3 +104,78 @@ class TestFitPromptBudgetShrink:
                 trigger="chat",
             )
         assert mock_build.called or len(result) < len(large_prompt)
+
+    def test_all_shrink_passes_preserve_protected_context(self, tmp_path: Path):
+        """Even the last shrink must pass typed recall and human decisions through."""
+        from core.exceptions import ExecutionError
+
+        agent = _make_agent(tmp_path)
+        priming = (
+            '<priming source="resident_knowledge" trust="medium" render_mode="guardrail">'
+            "REQUIRES_HUMAN_APPROVAL</priming>\n"
+            '<priming source="pending_tasks" trust="trusted">DO_NOT_DUPLICATE_TASK</priming>'
+        )
+        with patch("core._agent_priming.build_system_prompt") as build:
+            build.return_value = MagicMock(system_prompt="REQUIRED_AUTHORITY " * 20_000)
+            with pytest.raises(ExecutionError):
+                agent._fit_prompt_to_context_window(
+                    "large " * 20_000,
+                    "user instruction",
+                    16_000,
+                    priming_section=priming,
+                    pending_human_notifications="HUMAN_SAYS_STOP",
+                    shortterm_text="AUTHORIZED_SCOPE_ONLY",
+                    mode="a",
+                    trigger="chat",
+                )
+        assert build.call_count == 3
+        for call in build.call_args_list:
+            assert call.kwargs["priming_section"] == priming
+            assert call.kwargs["pending_human_notifications"] == "HUMAN_SAYS_STOP"
+            assert call.kwargs["shortterm_text"] == "AUTHORIZED_SCOPE_ONLY"
+        agent._executor.execute.assert_not_called()
+
+    def test_real_builder_overflow_fails_instead_of_truncating_authority(self, data_dir, make_anima):
+        """Exercise the final AgentCore fit, not just the section allocator."""
+        from core.exceptions import ExecutionError
+        from core.memory.manager import MemoryManager
+        from core.prompt.builder import build_system_prompt
+
+        anima_dir = make_anima("fit-safety")
+        identity = "MANDATORY_IDENTITY_BEGIN\n" + "Always preserve human authority. " * 12_000
+        identity += "\nMANDATORY_IDENTITY_END"
+        (anima_dir / "identity.md").write_text(identity, encoding="utf-8")
+        agent = _make_agent(anima_dir)
+        agent.memory = MemoryManager(anima_dir)
+        priming = (
+            '<priming source="resident_knowledge" trust="medium" render_mode="guardrail">'
+            "REQUIRES_HUMAN_APPROVAL</priming>\n"
+            '<priming source="pending_tasks" trust="trusted">DO_NOT_DUPLICATE_TASK</priming>'
+        )
+        built = build_system_prompt(
+            agent.memory,
+            priming_section=priming,
+            pending_human_notifications="HUMAN_SAYS_STOP",
+            execution_mode="a",
+            trigger="chat",
+            context_window=16_000,
+        ).system_prompt
+        assert "MANDATORY_IDENTITY_END" in built
+        assert "REQUIRES_HUMAN_APPROVAL" in built
+        assert "DO_NOT_DUPLICATE_TASK" in built
+        assert "HUMAN_SAYS_STOP" in built
+        with (
+            patch.object(agent, "_get_retriever", return_value=None),
+            pytest.raises(ExecutionError),
+        ):
+            agent._fit_prompt_to_context_window(
+                built,
+                "user instruction",
+                16_000,
+                priming_section=priming,
+                pending_human_notifications="HUMAN_SAYS_STOP",
+                mode="a",
+                trigger="chat",
+            )
+        assert (anima_dir / "identity.md").read_text(encoding="utf-8") == identity
+        agent._executor.execute.assert_not_called()

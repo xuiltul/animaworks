@@ -33,14 +33,17 @@ def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
     memory.anima_dir = anima_dir
     messenger = MagicMock()
 
-    with patch("core.agent.ToolHandler"), \
-         patch("core.agent.AgentCore._check_sdk", return_value=False), \
-         patch("core.agent.AgentCore._init_tool_registry", return_value=[]), \
-         patch("core.agent.AgentCore._discover_personal_tools", return_value={}), \
-         patch("core.agent.AgentCore._create_executor") as mock_create:
+    with (
+        patch("core.agent.ToolHandler"),
+        patch("core.agent.AgentCore._check_sdk", return_value=False),
+        patch("core.agent.AgentCore._init_tool_registry", return_value=[]),
+        patch("core.agent.AgentCore._discover_personal_tools", return_value={}),
+        patch("core.agent.AgentCore._create_executor") as mock_create,
+    ):
         mock_executor = MagicMock()
         mock_create.return_value = mock_executor
         from core.agent import AgentCore
+
         agent = AgentCore(anima_dir, memory, mc, messenger)
         agent._executor = mock_executor
     return agent
@@ -49,6 +52,7 @@ def _make_agent(anima_dir: Path, model: str = "claude-sonnet-4-20250514"):
 def _make_priming_result(*, sender_profile: str = "", recent_activity: str = ""):
     """Create a mock PrimingResult."""
     from core.memory.priming import PrimingResult
+
     return PrimingResult(
         sender_profile=sender_profile,
         recent_activity=recent_activity,
@@ -65,20 +69,27 @@ class TestPrimingTierMinimal:
     async def test_minimal_returns_empty(self, tmp_path):
         agent = _make_agent(tmp_path)
         result = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_MINIMAL,
         )
         assert result == ("", "")
 
     @pytest.mark.asyncio
-    async def test_minimal_does_not_call_priming_engine(self, tmp_path):
+    async def test_minimal_preserves_notifications_with_compact_engine(self, tmp_path):
         agent = _make_agent(tmp_path)
         with patch("core.memory.priming.PrimingEngine") as mock_pe:
-            await agent._run_priming(
-                "hello", "message:human",
+            primed = _make_priming_result()
+            primed.pending_human_notifications = "approval pending"
+            mock_pe.return_value.prime_memories = AsyncMock(return_value=primed)
+            _, notifications = await agent._run_priming(
+                "hello",
+                "message:human",
                 prompt_tier=TIER_MINIMAL,
             )
-            mock_pe.assert_not_called()
+            assert notifications == "approval pending"
+            assert mock_pe.return_value.prime_memories.call_args.kwargs["profile"] == "compact"
+            assert mock_pe.return_value.prime_memories.call_args.kwargs["include_related"] is False
 
 
 # ── T5 Micro: priming skipped (same as minimal) ──────────
@@ -91,20 +102,27 @@ class TestPrimingTierMicro:
     async def test_micro_returns_empty(self, tmp_path):
         agent = _make_agent(tmp_path)
         result = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_MICRO,
         )
         assert result == ("", "")
 
     @pytest.mark.asyncio
-    async def test_micro_does_not_call_priming_engine(self, tmp_path):
+    async def test_micro_preserves_notifications_with_compact_engine(self, tmp_path):
         agent = _make_agent(tmp_path)
         with patch("core.memory.priming.PrimingEngine") as mock_pe:
-            await agent._run_priming(
-                "hello", "message:human",
+            primed = _make_priming_result()
+            primed.pending_human_notifications = "approval pending"
+            mock_pe.return_value.prime_memories = AsyncMock(return_value=primed)
+            _, notifications = await agent._run_priming(
+                "hello",
+                "message:human",
                 prompt_tier=TIER_MICRO,
             )
-            mock_pe.assert_not_called()
+            assert notifications == "approval pending"
+            assert mock_pe.return_value.prime_memories.call_args.kwargs["profile"] == "compact"
+            assert mock_pe.return_value.prime_memories.call_args.kwargs["include_related"] is False
 
 
 # ── T3 Light: sender_profile only ─────────────────────────
@@ -114,28 +132,31 @@ class TestPrimingTierLight:
     """T3 (16k–32k): only sender_profile section is returned."""
 
     @pytest.mark.asyncio
-    async def test_light_returns_sender_profile_only(self, tmp_path):
+    async def test_light_preserves_essential_context(self, tmp_path):
         agent = _make_agent(tmp_path)
         priming_result = _make_priming_result(
             sender_profile="This is sender info",
-            recent_activity="Recent activity data",
+            recent_activity="",
         )
+        priming_result.pending_tasks = "Deadline tomorrow"
 
         mock_engine = AsyncMock()
         mock_engine.prime_memories = AsyncMock(return_value=priming_result)
         agent._priming_engine = mock_engine
 
         section, notifications = await agent._run_priming(
-            "hello", "message:yamada",
+            "hello",
+            "message:yamada",
             prompt_tier=TIER_LIGHT,
         )
 
         assert "This is sender info" in section
         assert "yamada" in section
-        assert "Recent activity" not in section
+        assert "Deadline tomorrow" in section
+        assert mock_engine.prime_memories.call_args.kwargs["include_related"] is False
 
     @pytest.mark.asyncio
-    async def test_light_empty_profile_returns_empty(self, tmp_path):
+    async def test_light_empty_profile_does_not_drop_task_context(self, tmp_path):
         agent = _make_agent(tmp_path)
         priming_result = _make_priming_result(
             sender_profile="",
@@ -147,21 +168,22 @@ class TestPrimingTierLight:
         agent._priming_engine = mock_engine
 
         section, notifications = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_LIGHT,
         )
 
-        assert section == ""
+        assert "Some activity" in section
 
 
-# ── T2 Standard: truncation to 4000 chars ─────────────────
+# ── T2 Standard: cap before gathering, never split rendered trust blocks ──
 
 
 class TestPrimingTierStandard:
-    """T2 (32k–128k): formatted priming truncated to 4000 chars."""
+    """T2 (32k–128k): retrieval gets a 1,000-token cap before formatting."""
 
     @pytest.mark.asyncio
-    async def test_standard_truncates_long_priming(self, tmp_path):
+    async def test_standard_caps_retrieval_without_truncating_trust_blocks(self, tmp_path):
         agent = _make_agent(tmp_path)
         priming_result = _make_priming_result(
             sender_profile="x" * 2000,
@@ -173,12 +195,14 @@ class TestPrimingTierStandard:
         agent._priming_engine = mock_engine
 
         section, notifications = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_STANDARD,
         )
 
-        assert len(section) <= 4000 + len("\n\n（以降省略）")
-        assert "（以降省略）" in section
+        assert mock_engine.prime_memories.call_args.kwargs["max_tokens"] == 1000
+        assert "（以降省略）" not in section
+        assert section.count("<priming ") == section.count("</priming>")
 
     @pytest.mark.asyncio
     async def test_standard_short_priming_not_truncated(self, tmp_path):
@@ -192,7 +216,8 @@ class TestPrimingTierStandard:
         agent._priming_engine = mock_engine
 
         section, notifications = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_STANDARD,
         )
 
@@ -219,7 +244,8 @@ class TestPrimingTierFull:
         agent._priming_engine = mock_engine
 
         section, notifications = await agent._run_priming(
-            "hello", "message:human",
+            "hello",
+            "message:human",
             prompt_tier=TIER_FULL,
         )
 

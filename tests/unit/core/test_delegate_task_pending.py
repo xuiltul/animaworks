@@ -103,23 +103,21 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Implement the login form",
                     "summary": "Login form implementation",
-                    "deadline": "1d",
-                    "exclusive_key": "pr-3999",
                 },
             )
 
-        pending_dir = alice_dir / "state" / "pending"
-        pending_files = list(pending_dir.glob("*.json"))
-        assert len(pending_files) == 1, f"Expected 1 pending file, got {len(pending_files)}: {result}"
+        pending_inputs = TaskQueueManager(alice_dir).store.pending("alice")
+        assert len(pending_inputs) == 1, result
+        assert not list((alice_dir / "state" / "pending").glob("*.json"))
 
-        task_data = json.loads(pending_files[0].read_text(encoding="utf-8"))
+        task_data = pending_inputs[0]
         assert task_data["task_type"] == "llm"
         assert task_data["title"] == "Login form implementation"
         assert task_data["description"] == "Implement the login form"
         assert task_data["submitted_by"] == "boss"
         assert task_data["reply_to"] == "boss"
         assert task_data["source"] == "delegation"
-        assert task_data["exclusive_key"] == "pr-3999"
+        assert "exclusive_key" not in task_data
         assert "task_id" in task_data
         assert "submitted_at" in task_data
 
@@ -138,12 +136,10 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Do something",
                     "summary": "Task summary",
-                    "deadline": "2h",
                 },
             )
 
-        pending_files = list((alice_dir / "state" / "pending").glob("*.json"))
-        pending_task = json.loads(pending_files[0].read_text(encoding="utf-8"))
+        pending_task = TaskQueueManager(alice_dir).store.pending("alice")[0]
 
         tqm = TaskQueueManager(alice_dir)
         tasks = tqm.list_tasks()
@@ -166,12 +162,10 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Test instruction",
                     "summary": "Test summary",
-                    "deadline": "30m",
                 },
             )
 
-        pending_files = list((alice_dir / "state" / "pending").glob("*.json"))
-        task_data = json.loads(pending_files[0].read_text(encoding="utf-8"))
+        task_data = TaskQueueManager(alice_dir).store.pending("alice")[0]
 
         required_fields = [
             "task_type",
@@ -203,14 +197,13 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Ship the fix",
                     "summary": "Ship fix",
-                    "deadline": "1h",
                     "acceptance_criteria": criteria,
                 },
             )
 
-        pending_files = list((alice_dir / "state" / "pending").glob("*.json"))
-        assert len(pending_files) == 1, f"Expected 1 pending file: {result}"
-        task_data = json.loads(pending_files[0].read_text(encoding="utf-8"))
+        pending_inputs = TaskQueueManager(alice_dir).store.pending("alice")
+        assert len(pending_inputs) == 1, result
+        task_data = pending_inputs[0]
         assert task_data["acceptance_criteria"] == criteria
 
     def test_pending_file_defaults_acceptance_criteria_empty(self, handler_with_sub):
@@ -229,12 +222,10 @@ class TestDelegateTaskWritesPending:
                     "name": "alice",
                     "instruction": "Do something",
                     "summary": "Task",
-                    "deadline": "1h",
                 },
             )
 
-        pending_files = list((alice_dir / "state" / "pending").glob("*.json"))
-        task_data = json.loads(pending_files[0].read_text(encoding="utf-8"))
+        task_data = TaskQueueManager(alice_dir).store.pending("alice")[0]
         assert task_data["acceptance_criteria"] == []
 
 
@@ -255,7 +246,6 @@ class TestPendingExecutorCancelledCheck:
             original_instruction="test task",
             assignee="anima",
             summary="test",
-            deadline="1d",
         )
         tqm.update_status(entry.task_id, status="cancelled")
 

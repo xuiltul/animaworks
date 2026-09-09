@@ -708,6 +708,11 @@ body.sidebar-collapsed .sidebar-collapse-btn {
     height: 32px;
   }
 
+  .chat-model-select {
+    max-width: 7rem;
+    height: 32px;
+  }
+
   .context-ring-wrap {
     width: 32px;
     height: 32px;

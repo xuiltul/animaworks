@@ -372,6 +372,7 @@ export function createStreamingController(ctx) {
     let _thinkingAnimator = null;
 
     const { success, error } = await mgr.sendChat(name, tid, message, {
+      model: state.modelByThread[`${name}|${tid}`] || undefined,
       images,
       displayImages,
       callbacks: {

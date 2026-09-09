@@ -21,8 +21,8 @@
 GLM4.7は現在vLLMプロキシに登録されていない。2通りのアプローチ:
 
 **方法A: vLLMバックエンドに追加（推奨）**
-1. gpu40 or gpu41でGLM4.7をvLLMで起動（別ポート or モデル差し替え）
-2. LiteLLMプロキシ(`gpu40:4000`)にルーティング追加
+1. GPUサーバーでGLM4.7をvLLMで起動（別ポート or モデル差し替え）
+2. LiteLLMプロキシ(`<litellm-host>:4000`)にルーティング追加
 3. `openai/glm-4.7-flash` + `vllm-local` credentialでhina接続
 
 **方法B: Ollama経由**
@@ -132,7 +132,7 @@ GLM4.7は現在vLLMプロキシに登録されていない。2通りのアプロ
 python scripts/benchmark/benchmark.py setup
 
 # 2. GLM4.7をvLLMに追加（手動 or スクリプト）
-# → gpu40/41でGLM4.7モデルを起動
+# → GPUサーバーでGLM4.7モデルを起動
 # → LiteLLMプロキシに登録
 
 # 3. hinaの短期記憶クリア

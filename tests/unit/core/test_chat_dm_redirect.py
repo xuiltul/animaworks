@@ -20,7 +20,7 @@ class _StubAnima(MessagingMixin):
 def _config_with_alias(chat_dm_redirect: bool, outbound_dm: bool = True) -> Config:
     config = Config()
     config.external_messaging.chat_dm_redirect = chat_dm_redirect
-    config.external_messaging.user_aliases["taka"] = UserAliasConfig(
+    config.external_messaging.user_aliases["owner"] = UserAliasConfig(
         slack_user_id="U06MJKLV0TG",
         outbound_dm=outbound_dm,
     )
@@ -32,12 +32,12 @@ def _resolve(anima: _StubAnima, config: Config, tmp_path):
         patch("core.config.models.load_config", return_value=config),
         patch("core.paths.get_animas_dir", return_value=tmp_path),
     ):
-        return anima._resolve_chat_external_recipient("taka")
+        return anima._resolve_chat_external_recipient("owner")
 
 
 def test_redirect_disabled_by_default(tmp_path):
     config = Config()
-    config.external_messaging.user_aliases["taka"] = UserAliasConfig(
+    config.external_messaging.user_aliases["owner"] = UserAliasConfig(
         slack_user_id="U06MJKLV0TG",
     )
     assert config.external_messaging.chat_dm_redirect is False
@@ -71,4 +71,4 @@ def test_external_platform_source_never_redirects(tmp_path):
         patch("core.config.models.load_config", return_value=config),
         patch("core.paths.get_animas_dir", return_value=tmp_path),
     ):
-        assert anima._resolve_chat_external_recipient("taka", source="slack") is None
+        assert anima._resolve_chat_external_recipient("owner", source="slack") is None

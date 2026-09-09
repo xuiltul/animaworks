@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -18,11 +19,10 @@ from core.config.local_llm import (
     normalize_ollama_model_name,
 )
 from core.config.model_catalog import (  # noqa: F401
-    _build_static_model_catalog,
-    available_model_id_set,
     validate_chat_model,
     validate_model_override,
 )
+from core.config.model_discovery import discover_models
 from core.config.models import (
     DEFAULT_LOCAL_LLM_BASE_URL,
     DEFAULT_LOCAL_LLM_PRESETS,
@@ -129,18 +129,6 @@ def _serialize_anthropic_auth() -> dict[str, object]:
         "claude_code_available": claude_code_available,
         "configured": configured,
     }
-
-
-def _list_nanogpt_models(base_url: str, api_key: str) -> list[str]:
-    """Fetch available model IDs from a nanoGPT-compatible /models endpoint."""
-    response = httpx.get(
-        f"{base_url}/models",
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=httpx.Timeout(5.0, connect=5.0),
-    )
-    response.raise_for_status()
-    data = response.json()
-    return sorted({str(item.get("id", "")).strip() for item in data.get("data", []) if item.get("id")})
 
 
 def _list_ollama_models(base_url: str) -> list[str]:
@@ -287,45 +275,35 @@ def create_config_router() -> APIRouter:
         return _serialize_local_llm()
 
     @router.get("/system/available-models")
-    def get_available_models(request: Request):
+    def get_available_models(request: Request, refresh: bool = False):
         """Return all available models (cloud + local) for UI dropdowns.
 
-        Sync (non-async) so FastAPI runs it in a threadpool: the nanoGPT/Ollama
-        reachability probes below use blocking ``httpx`` calls that would otherwise
-        stall the whole event loop for up to the (shortened) 5 s timeout.
+        Sync (non-async) so FastAPI runs it in a threadpool: model discovery
+        uses blocking subprocess / ``httpx`` calls that would otherwise stall
+        the whole event loop for up to the per-probe timeout.
+
+        ``refresh`` forces a fresh probe instead of the cached catalog.
         """
-        config = load_config()
-        # Static providers (canonical ids) via the shared catalog.
-        models = _build_static_model_catalog(config)
-        seen = {m["id"] for m in models}
-
-        # nanoGPT models (dynamic fetch)
-        nanogpt_cred = config.credentials.get("nanogpt")
-        if nanogpt_cred and nanogpt_cred.api_key:
-            try:
-                ngpt_base = nanogpt_cred.base_url or "https://nano-gpt.com/api/subscription/v1"
-                for m in _list_nanogpt_models(ngpt_base, nanogpt_cred.api_key):
-                    mid = f"nanogpt/{m}"
-                    if mid not in seen:
-                        models.append({"id": mid, "label": f"nanoGPT: {m}", "credential": "nanogpt"})
-                        seen.add(mid)
-            except Exception:
-                pass
-
-        # Local Ollama models
-        try:
-            local_llm = LocalLLMConfig.model_validate(config.local_llm.model_dump())
-            base_url = normalize_ollama_base_url(local_llm.base_url)
-            for m in _list_ollama_models(base_url):
-                mid = f"ollama/{m}" if not m.startswith("ollama/") else m
-                label = m.removeprefix("ollama/") if m.startswith("ollama/") else m
-                if mid not in seen:
-                    models.append({"id": mid, "label": label, "credential": "ollama"})
-                    seen.add(mid)
-        except Exception:
-            pass
-
-        return {"models": models}
+        models = discover_models(refresh=refresh)
+        payload = [
+            {
+                "id": m.id,
+                "label": m.label,
+                "credential": m.group.lower(),
+                "mode": m.mode,
+                "model": m.model,
+                "group": m.group,
+                "note": m.note,
+                "source": m.source,
+            }
+            for m in models
+        ]
+        groups = list(dict.fromkeys(m.group for m in models))
+        return {
+            "models": payload,
+            "groups": groups,
+            "generated_at": datetime.now(UTC).astimezone().isoformat(),
+        }
 
     @router.get("/system/available-tools")
     async def get_available_tools(request: Request):

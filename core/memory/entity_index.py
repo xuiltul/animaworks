@@ -307,6 +307,13 @@ def _match_query_entities_from_collection(
             vector_store = get_vector_store(Path(anima_dir).name)
         if vector_store is None:
             return set()
+        # This optional derived collection may not exist yet. Registry/alias
+        # matching remains available; absence is not a root memory outage.
+        from core.memory.rag.store import CollectionExistence
+
+        collection = f"{Path(anima_dir).name}_entities"
+        if vector_store.collection_exists(collection) in {CollectionExistence.MISSING, CollectionExistence.UNAVAILABLE}:
+            return set()
         if embedding_fn is None:
             from core.memory.rag.singleton import generate_embeddings
 
@@ -317,7 +324,6 @@ def _match_query_entities_from_collection(
         embeddings = embedding_fn([query])
         if not embeddings:
             return set()
-        collection = f"{Path(anima_dir).name}_entities"
         results = vector_store.query(collection, embeddings[0], top_k=top_k)
     except Exception:
         logger.debug("Failed to query entity collection for %s", anima_dir, exc_info=True)

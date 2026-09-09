@@ -303,7 +303,13 @@ class MemoryManager:
         return self._read(self.company_dir / "vision.md")
 
     def read_identity(self) -> str:
-        return self._read(self.anima_dir / "identity.md")
+        """Read identity.md, stripping YAML frontmatter if present."""
+        from core.memory.frontmatter import strip_frontmatter
+
+        raw = self._read(self.anima_dir / "identity.md")
+        if raw and raw.lstrip().startswith("---"):
+            return strip_frontmatter(raw)
+        return raw
 
     def read_injection(self) -> str:
         """Read injection.md, stripping YAML frontmatter if present."""

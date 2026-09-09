@@ -192,7 +192,7 @@ class TestE2EAtAllMirroring:
         sakura.receive_external(
             "Just a normal message",
             source="human",
-            external_user_id="taka",
+            external_user_id="owner",
         )
         msgs = sakura.read_channel("general")
         assert len(msgs) == 0

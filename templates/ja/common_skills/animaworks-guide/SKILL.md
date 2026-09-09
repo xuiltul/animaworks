@@ -296,9 +296,9 @@ animaworks cost --json                   # JSON出力
 
 ```bash
 animaworks task list                     # タスク一覧（JSON）
-animaworks task list --status pending    # ステータスでフィルタ（pending/in_progress/done/cancelled/blocked）
+animaworks task list --status pending    # ステータスでフィルタ（pending/in_progress/done/cancelled）
 animaworks task add --assignee {名前} --instruction "タスク内容"   # 既定 --source anima
-animaworks task add --assignee {名前} --instruction "内容" --source human --deadline 2026-03-10T18:00:00
+animaworks task add --assignee {名前} --instruction "内容" --source human
 animaworks task add ... --relay-chain alice,bob   # カンマ区切りリレー鎖（任意）
 animaworks task add ... --summary "1行要約"       # 省略時は instruction の先頭100文字
 animaworks task update --task-id {ID} --status done
@@ -427,11 +427,20 @@ animaworks-tool internal check-background-task {task_id}
 
 **vault**（Anima 名前空間付き KV）
 
+保存先は「自分の Anima 名前空間」と「`shared` セクション」の2つ。`shared` はツールのクレデンシャル解決（`get_credential`）が読む場所で、`--shared` を付けて書く。`get` / `list` は無指定なら自分の名前空間 → `shared` の順で両方を見る。
+
 ```bash
-animaworks-tool vault get {キー}
-animaworks-tool vault store {キー} {値}
-animaworks-tool vault list
+animaworks-tool vault get {キー}              # 自分の名前空間 → shared の順に探す
+animaworks-tool vault get {キー} --shared     # shared のみ
+animaworks-tool vault store {キー} {値}       # 自分の名前空間へ
+printf '%s' "{値}" | animaworks-tool vault store {キー} --shared   # shared へ（値は stdin 経由のみ）
+animaworks-tool vault list                    # {"namespace":..., "keys":[...], "shared":[...]}
+animaworks-tool vault list --shared           # shared のみ
+animaworks-tool vault delete {キー}           # 自分の名前空間から削除
+animaworks-tool vault delete {キー} --shared  # shared から削除
 ```
+
+`delete` だけはカスケードしない（`--shared` 無しで shared のクレデンシャルを巻き込まないため）。単回使用トークンのように「有効な複製が同時に1つしか存在し得ない」値は、保管先を1箇所に決めて分散させない。
 
 **supervisor**（`ANIMAWORKS_ANIMA_DIR` の Anima 名を起点に、status.json の supervisor 関係で配下を解決）
 

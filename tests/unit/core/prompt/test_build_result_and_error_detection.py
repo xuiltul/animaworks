@@ -12,6 +12,7 @@ and bugfix: pending procedures persistence + streaming retry BuildResult extract
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 from core.memory.conversation import (
     _ERROR_PATTERN,
@@ -130,6 +131,7 @@ class TestDoubleCountPrevention:
     def test_handler_writes_session_id(self) -> None:
         """report_procedure_outcome should write _reported_session_id to metadata."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             anima_dir = Path(tmpdir) / "animas" / "test-anima"
             for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
@@ -137,6 +139,7 @@ class TestDoubleCountPrevention:
 
             # Set up environment for MemoryManager
             import os
+
             os.environ["ANIMAWORKS_DATA_DIR"] = str(anima_dir.parent.parent)
             data_dir = anima_dir.parent.parent
             (data_dir / "company").mkdir(parents=True, exist_ok=True)
@@ -155,10 +158,16 @@ class TestDoubleCountPrevention:
             )
 
             handler = ToolHandler(anima_dir, memory)
-            handler.handle("report_procedure_outcome", {
-                "path": "procedures/deploy.md",
-                "success": True,
-            })
+            # This test checks persisted session metadata, not RAG access
+            # tracking. Do not load an embedding model from a unit test.
+            with patch.object(handler, "_record_memory_file_used"):
+                handler.handle(
+                    "report_procedure_outcome",
+                    {
+                        "path": "procedures/deploy.md",
+                        "success": True,
+                    },
+                )
 
             meta = memory.read_procedure_metadata(
                 anima_dir / "procedures" / "deploy.md",
@@ -169,12 +178,14 @@ class TestDoubleCountPrevention:
     def test_session_id_is_unique_per_handler(self) -> None:
         """Each ToolHandler instance should get a unique session_id."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             anima_dir = Path(tmpdir) / "animas" / "test-anima"
             for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
                 (anima_dir / sub).mkdir(parents=True)
 
             import os
+
             os.environ["ANIMAWORKS_DATA_DIR"] = str(anima_dir.parent.parent)
             data_dir = anima_dir.parent.parent
             (data_dir / "company").mkdir(parents=True, exist_ok=True)
@@ -193,12 +204,14 @@ class TestDoubleCountPrevention:
     def test_reset_session_id_generates_new(self) -> None:
         """reset_session_id should produce a new value."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             anima_dir = Path(tmpdir) / "animas" / "test-anima"
             for sub in ("episodes", "knowledge", "procedures", "skills", "state"):
                 (anima_dir / sub).mkdir(parents=True)
 
             import os
+
             os.environ["ANIMAWORKS_DATA_DIR"] = str(anima_dir.parent.parent)
             data_dir = anima_dir.parent.parent
             (data_dir / "company").mkdir(parents=True, exist_ok=True)

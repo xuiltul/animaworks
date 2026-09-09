@@ -18,12 +18,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.config.global_permissions import GlobalPermissionsCache
 from core.tooling.handler import (
     ToolHandler,
     _get_blocked_patterns,
     _get_injection_re,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -73,6 +73,7 @@ class TestNewlineInjection:
     def test_newline_command_rejected_by_permission_check(
         self, handler: ToolHandler, memory: MagicMock,
     ):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK\n- cat: OK"
         result = handler._check_command_permission("echo hello\ncat /etc/passwd")
         parsed = json.loads(result)
@@ -82,6 +83,7 @@ class TestNewlineInjection:
     def test_newline_command_rejected_via_execute_command(
         self, handler: ToolHandler, memory: MagicMock,
     ):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK"
         result = handler.handle(
             "execute_command", {"command": "echo safe\necho evil"},
@@ -261,6 +263,7 @@ class TestExecuteCommandIntegration:
         assert "PermissionDenied" not in result
 
     def test_newline_in_command_blocked(self, handler: ToolHandler, memory: MagicMock):
+        GlobalPermissionsCache.get().config.sdk_bash_injection.mode = "enforce"
         memory.read_permissions.return_value = "## コマンド実行\n- echo: OK"
         result = handler.handle(
             "execute_command", {"command": "echo safe\necho malicious"},
@@ -275,3 +278,24 @@ class TestExecuteCommandIntegration:
         )
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
+
+
+# ── Recursive search guard (Layer 2.6, 2026-09-01 IO storm) ──
+
+
+class TestBroadRecursiveSearchBlocking:
+    def test_broad_grep_over_data_tree_blocked(self, handler: ToolHandler, anima_dir: Path):
+        data_dir = anima_dir.parent.parent
+        result = handler._check_command_permission(f"grep -RIl foo {data_dir}/animas/test-anima {data_dir}/shared")
+        parsed = json.loads(result)
+        assert parsed["error_type"] == "PermissionDenied"
+        assert "Recursive search" in parsed["message"]
+
+    def test_broad_find_in_substitution_blocked(self, handler: ToolHandler, anima_dir: Path):
+        data_dir = anima_dir.parent.parent
+        result = handler._check_command_permission(f"f=$(find {data_dir}/animas/test-anima -name x); echo $f")
+        parsed = json.loads(result)
+        assert parsed["error_type"] == "PermissionDenied"
+
+    def test_narrow_search_allowed(self, handler: ToolHandler):
+        assert handler._check_command_permission("grep -rn foo knowledge/") is None

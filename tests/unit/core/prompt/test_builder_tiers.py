@@ -63,7 +63,7 @@ def _make_mock_memory(
     permissions: str = "",
     specialty: str = "専門テスト",
     bootstrap: str = "Bootstrap初回指示",
-    vision: str = "Company Vision",
+    vision: str = "# Vision\nCompany Vision builds reliable systems that improve the organization every day.",
 ) -> MagicMock:
     """Create a mock MemoryManager with typical return values."""
     anima_dir = tmp_path / "animas" / "test-anima"
@@ -187,6 +187,8 @@ class TestTierPromptSizes:
     """Verify that smaller tiers produce smaller or equal prompts."""
 
     def _build_size(self, tmp_path: Path, data_dir: Path, context_window: int, suffix: str = "") -> int:
+        from core.prompt.tokens import estimate_tokens
+
         sub = tmp_path / f"sz{suffix}"
         sub.mkdir(exist_ok=True)
         memory = _make_mock_memory(sub, data_dir)
@@ -196,7 +198,7 @@ class TestTierPromptSizes:
                 execution_mode="a",
                 context_window=context_window,
             )
-        return len(result.system_prompt)
+        return estimate_tokens(result.system_prompt)
 
     def test_t4_smaller_than_t1(self, tmp_path, data_dir):
         size_t1 = self._build_size(tmp_path, data_dir, 200_000, "t1")

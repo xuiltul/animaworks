@@ -120,7 +120,7 @@ def curator_allows_access(
 def _curator_proposal_count(report: dict[str, Any]) -> int:
     """Count actionable curator proposals (lifecycle suggestions + duplicates)."""
     count = 0
-    for key in ("suggestions", "duplicates"):
+    for key in ("suggestions", "duplicates", "pending_proposals"):
         value = report.get(key)
         if isinstance(value, list):
             count += len(value)
@@ -180,7 +180,8 @@ def summarize_curator_report(report: dict[str, Any]) -> tuple[int, str, str]:
     """
     suggestions = [s for s in (report.get("suggestions") or []) if isinstance(s, dict)]
     duplicates = [d for d in (report.get("duplicates") or []) if isinstance(d, dict)]
-    count = len(suggestions) + len(duplicates)
+    proposals = [p for p in (report.get("pending_proposals") or []) if isinstance(p, dict)]
+    count = len(suggestions) + len(duplicates) + len(proposals)
 
     breakdown_counts: dict[str, int] = {}
     for suggestion in suggestions:
@@ -189,10 +190,12 @@ def summarize_curator_report(report: dict[str, Any]) -> tuple[int, str, str]:
     parts = [f"{state} x{n}" for state, n in sorted(breakdown_counts.items())]
     if duplicates:
         parts.append(f"duplicates x{len(duplicates)}")
+    if proposals:
+        parts.append(f"proposals x{len(proposals)}")
     breakdown = ", ".join(parts) if parts else "none"
 
     names: list[str] = []
-    for entry in (*suggestions, *duplicates):
+    for entry in (*suggestions, *duplicates, *proposals):
         name = str(entry.get("skill_name") or "").strip()
         if name and name not in names:
             names.append(name)
@@ -279,6 +282,30 @@ class SkillCurator:
         self.append_event(event)
         self._invalidate_rag_cache(skill_name)
         self._purge_personal_skill_vectors(skill_name)
+        return event
+
+    def propose_state_change(
+        self,
+        skill_name: str,
+        to_state: SkillLifecycleState | str,
+        *,
+        reason: str,
+        actor: str = "curator",
+        absorbed_into: str | None = None,
+    ) -> SkillCuratorEvent:
+        """Record a reviewable proposal without changing access or vector data."""
+        state = SkillLifecycleState(to_state)
+        event = SkillCuratorEvent(
+            ts=now_iso(),
+            event_type="state_change_proposed",
+            skill_name=skill_name,
+            from_state=self.replay_state().state_for(skill_name),
+            to_state=state,
+            reason=reason,
+            actor=actor,
+            absorbed_into=absorbed_into,
+        )
+        self.append_event(event)
         return event
 
     def archive_skill(
@@ -440,7 +467,16 @@ class SkillCurator:
 
     def generate_report(self, skills: list[SkillMetadata]) -> dict[str, Any]:
         replay = self.replay_state()
+        latest: dict[str, SkillCuratorEvent] = {}
+        for event in replay.events:
+            if event.event_type in ("state_change_proposed", "state_changed"):
+                latest[event.skill_name] = event
         return {
+            "pending_proposals": [
+                event.model_dump(mode="json")
+                for event in latest.values()
+                if event.event_type == "state_change_proposed"
+            ],
             "states": {name: state.value for name, state in replay.states.items()},
             "suggestions": [
                 asdict(s) | {"suggested_state": s.suggested_state.value}

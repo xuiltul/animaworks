@@ -6,8 +6,8 @@ from __future__ import annotations
 
 """E2E tests for the RAG pipeline (Dense Vector + Temporal Decay + Spreading Activation).
 
-These tests use real ChromaDB in-memory vector store, real MemoryIndexer with
-sentence-transformers, and real MemoryRetriever. No mocks are used.
+These tests use an isolated real ChromaDB store, real MemoryIndexer and
+MemoryRetriever, with the deterministic embedding fixture from conftest.
 
 Install with: pip install 'animaworks[rag]'
 """
@@ -15,6 +15,7 @@ Install with: pip install 'animaworks[rag]'
 import asyncio
 import os
 from datetime import timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -212,13 +213,14 @@ def test_e2e_temporal_decay_ordering(anima_dir, indexer, retriever):
 # ── Test 3: Spreading Activation ──────────────────────────────────
 
 
-def test_e2e_spreading_activation(anima_dir, vector_store, indexer):
+def test_e2e_spreading_activation(anima_dir, vector_store, indexer, monkeypatch):
     """Verify spreading activation expands search results via knowledge graph links.
 
     Creates three knowledge files where file-A links to file-B via ``[[link]]``
     notation. After building the graph, a search for file-A's content with
     spreading activation enabled should also surface file-B as an activated neighbor.
     """
+    from core.memory.rag.graph import GRAPH_CACHE_FILE, KnowledgeGraph, rebuild_graph_cache
     from core.memory.rag.retriever import MemoryRetriever
 
     knowledge_dir = anima_dir / "knowledge"
@@ -253,14 +255,38 @@ def test_e2e_spreading_activation(anima_dir, vector_store, indexer):
         knowledge_dir,
     )
 
-    # Search with spreading activation enabled
-    results = retriever.search(
+    search_args = dict(
         query="API設計のエラー処理について",
         anima_name="test_anima",
         memory_type="knowledge",
         top_k=2,
-        enable_spreading_activation=True,
     )
+    dense = retriever.search(**search_args, enable_spreading_activation=False)
+    cache_file = anima_dir / "vectordb" / GRAPH_CACHE_FILE
+    assert dense
+    assert not cache_file.exists()
+    with monkeypatch.context() as guard:
+        build = MagicMock(side_effect=AssertionError("Request must not build the graph"))
+        guard.setattr(KnowledgeGraph, "build_graph", build)
+        cold = retriever.search(**search_args, enable_spreading_activation=True)
+        assert {(r.doc_id, r.content) for r in cold} == {(r.doc_id, r.content) for r in dense}
+        assert all("pagerank" not in r.source_scores for r in cold)
+        build.assert_not_called()
+        assert not cache_file.exists()
+
+    # Graph construction is an explicit maintenance operation. Search must
+    # consume its persisted cache, including after the earlier cold miss.
+    assert rebuild_graph_cache("test_anima", anima_dir, vector_store, indexer)
+    assert cache_file.is_file()
+    with monkeypatch.context() as guard:
+        build = MagicMock(side_effect=AssertionError("Warm request must load the cache"))
+        guard.setattr(KnowledgeGraph, "build_graph", build)
+        results = retriever.search(**search_args, enable_spreading_activation=True)
+        build.assert_not_called()
+    activated = [r for r in results if r.metadata.get("activation") == "spreading"]
+    assert activated, "Warm graph must add a neighbor, not merely return dense hits"
+    assert all(r.source_scores.get("pagerank", 0) > 0 for r in activated)
+    assert any(r.doc_id not in {seed.doc_id for seed in dense} for r in activated)
 
     assert len(results) > 0, "Should return results"
 

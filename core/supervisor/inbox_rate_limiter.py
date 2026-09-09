@@ -84,12 +84,36 @@ class InboxRateLimiter:
         self._last_msg_heartbeat_end: float = 0.0
         self._pair_heartbeat_times: dict[tuple[str, str], list[float]] = {}
         self._last_disabled_skip_log: float = 0.0
+        self._failure_retry_until: float = 0.0
 
     # ── Cooldown ─────────────────────────────────────────────────
 
     def is_in_cooldown(self) -> bool:
         """Return True if a message-triggered heartbeat finished too recently."""
         return (time.monotonic() - self._last_msg_heartbeat_end) < self._cooldown_sec
+
+    def _retry_is_delayed(self) -> bool:
+        """Provider failures retain unread messages but never hot-loop them."""
+        return time.monotonic() < self._failure_retry_until
+
+    def _record_processing_failure(self) -> None:
+        delay = max(self._cooldown_sec, 30.0)
+        try:
+            from core.config.model_config import _guard_key_for_model_config, resolve_effective_model_config
+            from core.execution.rate_guard import get_rate_guard
+            from core.schemas import ModelConfig
+
+            config = self._anima.agent.model_config
+            if isinstance(config, ModelConfig):
+                effective = resolve_effective_model_config(config)
+                # When every candidate is blocked the resolver returns the
+                # earliest recovery candidate. Wait for that guard, not a
+                # repeated paid request every poll/minimum retry interval.
+                key = _guard_key_for_model_config(effective, load_config())
+                delay = max(delay, get_rate_guard().blocked_remaining(key))
+        except Exception:
+            logger.debug("Could not inspect provider retry guard; retaining minimum inbox backoff", exc_info=True)
+        self._failure_retry_until = time.monotonic() + delay
 
     def _has_external_platform_message(self) -> bool:
         """Peek at inbox for external platform messages (Slack, etc.).
@@ -171,6 +195,7 @@ class InboxRateLimiter:
         if self._deferred_timer is not None:
             return  # already scheduled
         remaining = self._cooldown_sec - (time.monotonic() - self._last_msg_heartbeat_end)
+        remaining = max(remaining, self._failure_retry_until - time.monotonic())
         # If not in cooldown (e.g. lock-only), use a short retry delay
         delay = max(remaining, 2.0)
         loop = asyncio.get_running_loop()
@@ -198,7 +223,7 @@ class InboxRateLimiter:
         if self._pending_trigger:
             return
         # Bypass cooldown when external platform messages are waiting
-        if self.is_in_cooldown() and not self._has_external_platform_message():
+        if self._retry_is_delayed() or (self.is_in_cooldown() and not self._has_external_platform_message()):
             self.schedule_deferred_trigger()
             return
         if self._anima._inbox_lock.locked():
@@ -217,6 +242,11 @@ class InboxRateLimiter:
         """Execute inbox processing triggered by incoming messages."""
         if not self._anima:
             self._pending_trigger = False
+            return
+
+        if self._retry_is_delayed():
+            self._pending_trigger = False
+            self.schedule_deferred_trigger()
             return
 
         # Shared gate for poll / deferred timer / lock-released paths.
@@ -272,8 +302,17 @@ class InboxRateLimiter:
         self._scheduler_mgr.heartbeat_running = True
         try:
             logger.info("Message-triggered inbox: %s", self._anima_name)
-            await self._anima.process_inbox_message()
+            result = await self._anima.process_inbox_message()
+            if (
+                getattr(result, "action", None) == "error"
+                or isinstance(getattr(result, "reason", None), str)
+                and result.reason
+            ):
+                self._record_processing_failure()
+            else:
+                self._failure_retry_until = 0.0
         except Exception:
+            self._record_processing_failure()
             logger.exception(
                 "Message-triggered inbox failed: %s",
                 self._anima_name,
@@ -308,7 +347,7 @@ class InboxRateLimiter:
                     continue
                 # Bypass cooldown for external platform messages (Slack DMs
                 # from humans should never wait up to 5 minutes).
-                if self.is_in_cooldown() and not self._has_external_platform_message():
+                if self._retry_is_delayed() or (self.is_in_cooldown() and not self._has_external_platform_message()):
                     self.schedule_deferred_trigger()
                     await asyncio.sleep(2.0)
                     continue

@@ -1,5 +1,7 @@
 # Priming Channels Technical Reference
 
+The default `compact` profile gathers sender context, canonical task context, explicit `always_prime` guardrails, and bounded related recall when relevant. It skips recent-activity, episode, and graph channels before retrieval. The channel inventory below describes the opt-in `full` profile; it is not a promise that every channel runs on every trigger. Recall has its own token budget, separate from the framework prompt target.
+
 Detailed specification of all channels executed by PrimingEngine.
 Includes budget, search sources, filtering, and dynamic adjustment.
 
@@ -13,10 +15,10 @@ Parallel retrieval uses **six channels** (A / B / C / E / F / G). Channel C0 (im
 |---------|---------------------|--------|-------|
 | A: sender_profile | 500 | `shared/users/{sender}/index.md` | medium |
 | B: recent_activity | 1300 | `activity_log/` + shared channels | trusted |
-| C: related_knowledge | 1000 | RAG vector search (knowledge + common_knowledge) | medium / untrusted |
-| C0: important_knowledge | 500 | Chunks tagged with `[IMPORTANT]` | medium |
-| E: pending_tasks | 500 | `task_queue.jsonl` + `task_results/` | trusted |
-| F: episodes | 800 | RAG vector search (episodes/) | medium |
+| C: related_knowledge | 1200 | RAG vector search (knowledge + common_knowledge) | medium / untrusted |
+| C0: important_knowledge | 300 | Chunks tagged with `[IMPORTANT]` | medium |
+| E: pending_tasks | 500 | TaskStore + accepted task results | trusted |
+| F: episodes | 400 | RAG vector search (episodes/) | medium |
 | G: graph_context | 500 | MemoryBackend community context + recent facts | medium |
 
 Additional injection:
@@ -62,7 +64,7 @@ Injects the recent activity timeline.
 
 Injects related knowledge via RAG vector search.
 
-- **Budget**: 1000 tokens
+- **Budget**: 1200 tokens
 - **Search method**: Dual-query (message context + keywords only)
 - **Search target**: Personal `knowledge/` + `shared_common_knowledge` collection
 - **Min score**: `config.json` `rag.min_retrieval_score` (default 0.3)
@@ -82,7 +84,7 @@ Search results are separated by trust level based on chunk `origin`:
 
 Always injects summary pointers for chunks tagged with `[IMPORTANT]`.
 
-- **Budget**: 500 tokens
+- **Budget**: 300 tokens
 - **Target**: Chunks tagged with `[IMPORTANT]` in `knowledge/`
 - **Injection format**: Summary pointers only (not full text). Details fetched via `read_memory_file`
 - **Purpose**: Reliable recall of important business rules and decision criteria
@@ -110,7 +112,7 @@ Injects task queue summary.
 
 Injects related episodes via RAG vector search.
 
-- **Budget**: 800 tokens
+- **Budget**: 400 tokens
 - **Search target**: `episodes/` collection (ChromaDB)
 - **Min score**: Same as Channel C (`rag.min_retrieval_score`)
 

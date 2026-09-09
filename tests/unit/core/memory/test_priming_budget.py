@@ -222,11 +222,10 @@ def test_priming_engine_no_args_backward_compat(temp_anima_dir):
 
 
 def test_heartbeat_budget_with_context_window(temp_anima_dir):
-    """When context_window is set, HB budget = max(200, ctx * 0.05)."""
+    """Large context windows no longer expand routine recall by default."""
     engine = PrimingEngine(temp_anima_dir, context_window=200_000)
     budget = engine._adjust_token_budget("任意", "heartbeat")
-    # 200_000 * 0.05 = 10_000 > 200
-    assert budget == 10_000
+    assert budget == 200
 
 
 def test_heartbeat_budget_small_context_window(temp_anima_dir):

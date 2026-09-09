@@ -47,9 +47,7 @@ def test_close_search_failed_blocks(anima_dir: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(action_gate, "_search_action_rules", raise_search)
 
-    decision = action_gate.check_action(
-        anima_dir, "chatwork_send", {"message": "hello"}, session_key="s-close-sf"
-    )
+    decision = action_gate.check_action(anima_dir, "chatwork_send", {"message": "hello"}, session_key="s-close-sf")
 
     assert decision.allowed is False
     assert decision.reason == "search_failed"
@@ -76,9 +74,7 @@ def test_close_no_matching_rule_holds_and_notifies(
     monkeypatch.setattr(action_gate, "_maybe_notify_no_matching_rule", fake_notify)
 
     with caplog.at_level(logging.WARNING, logger="animaworks.action_memory_gate"):
-        decision = action_gate.check_action(
-            anima_dir, "gmail_send", {"body": "hello"}, session_key="s-close-nmr"
-        )
+        decision = action_gate.check_action(anima_dir, "gmail_send", {"body": "hello"}, session_key="s-close-nmr")
 
     assert decision.allowed is False
     assert decision.reason == "no_matching_rule"
@@ -99,17 +95,13 @@ def test_close_no_matching_rule_explicit_allow_releases(
     _patch_fail_mode(monkeypatch, "close")
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [])
 
-    blocked = action_gate.check_action(
-        anima_dir, "slack_send", {"text": "hi"}, session_key="s-allow"
-    )
+    blocked = action_gate.check_action(anima_dir, "slack_send", {"text": "hi"}, session_key="s-allow")
     assert blocked.allowed is False
     assert blocked.reason == "no_matching_rule"
 
     action_gate.grant_no_rule_allow(anima_dir, "slack_send", session_key="s-allow")
 
-    allowed = action_gate.check_action(
-        anima_dir, "slack_send", {"text": "hi"}, session_key="s-allow"
-    )
+    allowed = action_gate.check_action(anima_dir, "slack_send", {"text": "hi"}, session_key="s-allow")
     assert allowed.allowed is True
     assert allowed.reason == "no_matching_rule_allowed"
 
@@ -125,16 +117,12 @@ def test_close_rule_read_still_allows(anima_dir: Path, monkeypatch) -> None:
     )
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [rule])
 
-    blocked = action_gate.check_action(
-        anima_dir, "call_human", {"body": "x"}, session_key="s-ok"
-    )
+    blocked = action_gate.check_action(anima_dir, "call_human", {"body": "x"}, session_key="s-ok")
     assert blocked.allowed is False
     assert blocked.reason == "missing_required_memory"
 
     action_gate.record_memory_read(anima_dir, "procedures/check.md", session_key="s-ok")
-    allowed = action_gate.check_action(
-        anima_dir, "call_human", {"body": "x"}, session_key="s-ok"
-    )
+    allowed = action_gate.check_action(anima_dir, "call_human", {"body": "x"}, session_key="s-ok")
     assert allowed.allowed is True
     assert allowed.reason == "required_memory_satisfied"
 
@@ -153,9 +141,7 @@ def test_close_below_threshold_does_not_pass_through(
     )
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [rule])
 
-    decision = action_gate.check_action(
-        anima_dir, "gmail_send", {"body": "hello"}, session_key="s-bt"
-    )
+    decision = action_gate.check_action(anima_dir, "gmail_send", {"body": "hello"}, session_key="s-bt")
 
     assert decision.allowed is False
     assert decision.reason == "missing_required_memory"
@@ -175,9 +161,7 @@ def test_middle_search_failed_blocks(anima_dir: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(action_gate, "_search_action_rules", raise_search)
 
-    decision = action_gate.check_action(
-        anima_dir, "discord_send", {"message": "x"}, session_key="s-mid-sf"
-    )
+    decision = action_gate.check_action(anima_dir, "discord_send", {"message": "x"}, session_key="s-mid-sf")
     assert decision.allowed is False
     assert decision.reason == "search_failed"
     assert decision.fail_mode == "middle"
@@ -194,9 +178,7 @@ def test_middle_no_matching_rule_allows_with_log(
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [])
 
     with caplog.at_level(logging.WARNING, logger="animaworks.action_memory_gate"):
-        decision = action_gate.check_action(
-            anima_dir, "gmail_send", {"body": "x"}, session_key="s-mid-nmr"
-        )
+        decision = action_gate.check_action(anima_dir, "gmail_send", {"body": "x"}, session_key="s-mid-nmr")
 
     assert decision.allowed is True
     assert decision.reason == "no_matching_rule"
@@ -218,12 +200,8 @@ def test_middle_below_threshold_enforces_read_review(
     )
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [rule])
 
-    first = action_gate.check_action(
-        anima_dir, "post_channel", {"text": "FYI"}, session_key="s-mid-bt"
-    )
-    second = action_gate.check_action(
-        anima_dir, "post_channel", {"text": "FYI"}, session_key="s-mid-bt"
-    )
+    first = action_gate.check_action(anima_dir, "post_channel", {"text": "FYI"}, session_key="s-mid-bt")
+    second = action_gate.check_action(anima_dir, "post_channel", {"text": "FYI"}, session_key="s-mid-bt")
 
     assert first.allowed is False
     assert first.reason == "review_rule_before_retry"
@@ -249,9 +227,7 @@ def test_open_search_failed_allows_with_structured_log(
     monkeypatch.setattr(action_gate, "_search_action_rules", raise_search)
 
     with caplog.at_level(logging.WARNING, logger="animaworks.action_memory_gate"):
-        decision = action_gate.check_action(
-            anima_dir, "chatwork_send", {"message": "hello"}, session_key="s-open-sf"
-        )
+        decision = action_gate.check_action(anima_dir, "chatwork_send", {"message": "hello"}, session_key="s-open-sf")
 
     assert decision.allowed is True
     assert decision.reason == "search_failed"
@@ -273,9 +249,7 @@ def test_open_no_matching_rule_allows_with_log(
     monkeypatch.setattr(action_gate, "_search_action_rules", lambda *a, **k: [])
 
     with caplog.at_level(logging.WARNING, logger="animaworks.action_memory_gate"):
-        decision = action_gate.check_action(
-            anima_dir, "gmail_send", {"body": "hello"}, session_key="s-open-nmr"
-        )
+        decision = action_gate.check_action(anima_dir, "gmail_send", {"body": "hello"}, session_key="s-open-nmr")
 
     assert decision.allowed is True
     assert decision.reason == "no_matching_rule"
@@ -299,9 +273,7 @@ def test_open_below_threshold_allows_with_log(
     )
 
     with caplog.at_level(logging.WARNING, logger="animaworks.action_memory_gate"):
-        decision = action_gate.check_action(
-            anima_dir, "gmail_send", {"body": "hello"}, session_key="s-open-bt"
-        )
+        decision = action_gate.check_action(anima_dir, "gmail_send", {"body": "hello"}, session_key="s-open-bt")
 
     assert decision.allowed is True
     assert decision.reason == "below_threshold"
@@ -331,15 +303,9 @@ def test_no_rule_notify_dedup_per_action_anima(
         MagicMock(side_effect=RuntimeError("no config")),
     )
 
-    first = action_gate._maybe_notify_no_matching_rule(
-        anima_dir, "gmail_send", cooldown_seconds=3600
-    )
-    second = action_gate._maybe_notify_no_matching_rule(
-        anima_dir, "gmail_send", cooldown_seconds=3600
-    )
-    other_tool = action_gate._maybe_notify_no_matching_rule(
-        anima_dir, "slack_send", cooldown_seconds=3600
-    )
+    first = action_gate._maybe_notify_no_matching_rule(anima_dir, "gmail_send", cooldown_seconds=3600)
+    second = action_gate._maybe_notify_no_matching_rule(anima_dir, "gmail_send", cooldown_seconds=3600)
+    other_tool = action_gate._maybe_notify_no_matching_rule(anima_dir, "slack_send", cooldown_seconds=3600)
 
     assert first is True
     assert second is False  # suppressed by cooldown
@@ -376,3 +342,52 @@ def test_decision_payload_includes_fail_fields() -> None:
     assert payload["fail_mode"] == "close"
     assert payload["would_block"] is True
     assert "infrastructure" in payload["message"].lower() or "search" in payload["message"].lower()
+
+
+def test_common_memory_write_rule_is_returned_before_write(
+    anima_dir: Path,
+    monkeypatch,
+) -> None:
+    """The packaged common rule participates in the write-memory gate."""
+    from core.memory import action_gate
+    from core.memory.rag.retriever import MemoryRetriever
+
+    rule_path = (
+        Path(__file__).resolve().parents[4]
+        / "templates"
+        / "ja"
+        / "common_knowledge"
+        / "operations"
+        / "action-rule-memory-write-destination.md"
+    )
+    rule_content = rule_path.read_text(encoding="utf-8")
+    retriever = MemoryRetriever.__new__(MemoryRetriever)
+
+    def fake_vector_search(query, collection_name, top_k, filter_metadata):
+        del query, top_k
+        assert filter_metadata == {"type": "action_rule"}
+        if collection_name == "shared_common_knowledge":
+            return [
+                (
+                    "shared/action-rule-memory-write-destination.md#0",
+                    rule_content,
+                    0.99,
+                    {"type": "action_rule", "trigger_tools": "write_memory_file,create_skill"},
+                )
+            ]
+        return []
+
+    retriever._vector_search_collection = fake_vector_search
+    monkeypatch.setattr(action_gate, "_get_retriever", lambda _path: retriever)
+    _patch_fail_mode(monkeypatch, "close")
+
+    decision = action_gate.check_action(
+        anima_dir,
+        "write_memory_file",
+        {"path": "knowledge/example.md"},
+        session_key="common-memory-rule",
+    )
+
+    assert decision.allowed is False
+    assert decision.rule_id == "shared/action-rule-memory-write-destination.md#0"
+    assert decision.missing_paths == ["reference/operations/memory-writing-guide.md"]

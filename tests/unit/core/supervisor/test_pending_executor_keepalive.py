@@ -39,7 +39,7 @@ async def test_llm_task_runs_keepalive_while_background_lock_is_held(tmp_path: P
     executor._sync_task_queue = MagicMock()  # type: ignore[method-assign]
     executor._handle_goal_completion = AsyncMock()  # type: ignore[method-assign]
 
-    async def _run_task(_task_desc):
+    async def _run_task(_task_desc, _completed_results=None):
         await anima.keepalive_started.wait()
         return "done"
 

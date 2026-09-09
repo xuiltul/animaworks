@@ -65,6 +65,13 @@ class TestReadIdentity:
         (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
         assert mm.read_identity() == "I am Alice"
 
+    def test_strips_frontmatter(self, mm, anima_dir):
+        (anima_dir / "identity.md").write_text(
+            "---\nname: Alice\nrole: engineer\n---\n\n# Identity\nI am Alice",
+            encoding="utf-8",
+        )
+        assert mm.read_identity() == "# Identity\nI am Alice"
+
 
 class TestReadInjection:
     def test_no_file(self, mm):

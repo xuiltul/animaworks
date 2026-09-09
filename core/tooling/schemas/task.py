@@ -33,6 +33,11 @@ def _submit_tasks_tools() -> list[dict[str, Any]]:
                             "type": "object",
                             "properties": {
                                 "task_id": {"type": "string"},
+                                "resume": {
+                                    "type": "boolean",
+                                    "default": False,
+                                    "description": _t("schema.submit_tasks.resume"),
+                                },
                                 "title": {"type": "string"},
                                 "description": {"type": "string"},
                                 "parallel": {"type": "boolean", "default": False},
@@ -75,7 +80,7 @@ def _submit_tasks_tools() -> list[dict[str, Any]]:
                                     "default": "",
                                 },
                             },
-                            "required": ["task_id", "title", "description"],
+                            "required": ["task_id"],
                         },
                         "minItems": 1,
                     },
@@ -114,17 +119,13 @@ def _task_tools() -> list[dict[str, Any]]:
                         "type": "string",
                         "description": _t("schema.backlog_task.summary"),
                     },
-                    "deadline": {
-                        "type": "string",
-                        "description": _t("schema.backlog_task.deadline"),
-                    },
                     "relay_chain": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": _t("schema.backlog_task.relay_chain"),
                     },
                 },
-                "required": ["source", "original_instruction", "assignee", "summary", "deadline"],
+                "required": ["source", "original_instruction", "assignee", "summary"],
             },
         },
         {
@@ -139,7 +140,7 @@ def _task_tools() -> list[dict[str, Any]]:
                     },
                     "status": {
                         "type": "string",
-                        "enum": ["pending", "in_progress", "done", "cancelled", "blocked", "failed"],
+                        "enum": ["pending", "done", "cancelled"],
                         "description": _t("schema.update_task.status"),
                     },
                     "summary": {
@@ -149,10 +150,6 @@ def _task_tools() -> list[dict[str, Any]]:
                     "result": {
                         "type": "string",
                         "description": _t("schema.update_task.result"),
-                    },
-                    "unblock_check": {
-                        "type": "string",
-                        "description": _t("schema.update_task.unblock_check"),
                     },
                 },
                 "required": ["task_id", "status"],
@@ -166,7 +163,7 @@ def _task_tools() -> list[dict[str, Any]]:
                 "properties": {
                     "status": {
                         "type": "string",
-                        "enum": ["pending", "in_progress", "done", "cancelled", "blocked", "failed", "delegated"],
+                        "enum": ["pending", "in_progress", "done", "cancelled", "delegated"],
                         "description": _t("schema.list_tasks.status"),
                     },
                     "detail": {

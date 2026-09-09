@@ -35,14 +35,17 @@ def _render_mode_for(result: PrimingResult, channel: str) -> str | None:
 
 
 def _content_for_render_mode(content: str, render_mode: str | None) -> str:
-    if not content or render_mode != "pointer":
+    from core.memory.priming.gate import is_pointer_like
+
+    if not content or not is_pointer_like(content):
         return content
-    return _collapse_pointer_content(content)
+    return _collapse_pointer_content(content, preserve_guardrail_note=render_mode == "guardrail")
 
 
-def _collapse_pointer_content(content: str) -> str:
+def _collapse_pointer_content(content: str, *, preserve_guardrail_note: bool = False) -> str:
     """Collapse pointer-mode memories to cue + read_memory_file lines."""
     collapsed: list[str] = []
+    guardrail_notes: list[str] = []
     seen: set[str] = set()
     previous_label = ""
 
@@ -57,24 +60,42 @@ def _collapse_pointer_content(content: str) -> str:
             before_pointer = line[: match.start()]
             label = _clean_pointer_label(before_pointer) or previous_label
             if label:
-                rendered = f'- {label} -> read_memory_file(path="{path}")'
+                rendered = f'📌 {label} → read_memory_file(path="{path}")'
             else:
-                rendered = f'- read_memory_file(path="{path}")'
+                rendered = f'📌 read_memory_file(path="{path}")'
             if rendered not in seen:
                 collapsed.append(rendered)
                 seen.add(rendered)
             continue
 
-        if line.startswith("<") or line.startswith("--- Result"):
+        if line.startswith("---"):
+            previous_label = ""
             continue
-        previous_label = _clean_pointer_label(line)
+        if line.startswith("<") or _is_pointer_metadata_line(line):
+            continue
+        if preserve_guardrail_note and _is_guardrail_note(line):
+            guardrail_notes.append(line)
+        cleaned = _clean_pointer_label(line)
+        if cleaned:
+            previous_label = cleaned
 
-    return "\n".join(collapsed) if collapsed else content
+    output = [*guardrail_notes, *collapsed]
+    return "\n".join(output) if collapsed else content
+
+
+def _is_pointer_metadata_line(line: str) -> bool:
+    normalized = line.lstrip("- ").casefold()
+    return normalized.startswith(("updated:", "source:", "score", "origin:"))
+
+
+def _is_guardrail_note(line: str) -> bool:
+    normalized = line.casefold()
+    return normalized.startswith(("⚠", "guardrail:", "[guardrail]", "ガードレール:", "注意:"))
 
 
 def _clean_pointer_label(text: str) -> str:
     text = re.sub(r"^[^\w\[]+", "", text.strip(), flags=re.UNICODE)
-    text = text.strip(" \t-:>")
+    text = text.strip(" \t-:>→")
     text = re.sub(r"\s+", " ", text)
     if len(text) > 160:
         text = text[:157] + "..."
@@ -143,6 +164,14 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         )
         parts.append("")
 
+    if result.resident_knowledge:
+        from core.execution._sanitize import wrap_priming
+
+        parts.append(
+            wrap_priming("resident_knowledge", result.resident_knowledge, trust="medium", render_mode="guardrail")
+        )
+        parts.append("")
+
     if result.recent_activity:
         parts.append(t("priming.recent_activity_header"))
         parts.append("")
@@ -158,32 +187,24 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
         parts.append("")
 
     if result.related_knowledge or result.related_knowledge_untrusted:
-        from core.execution._sanitize import ORIGIN_CONSOLIDATION, ORIGIN_EXTERNAL_PLATFORM
+        from core.execution._sanitize import ORIGIN_CONSOLIDATION, ORIGIN_MIXED
 
         parts.append(t("priming.related_knowledge_header"))
         parts.append("")
         if result.related_knowledge:
-            if result.related_knowledge_untrusted:
-                parts.append(
-                    _wrap_priming_for_mode(
-                        result,
-                        "related_knowledge",
-                        "related_knowledge",
-                        result.related_knowledge,
-                        trust="medium",
-                        origin=ORIGIN_CONSOLIDATION,
-                    )
+            # When an untrusted bucket follows, label the medium block so the
+            # model can tell consolidated internal knowledge from external chunks.
+            medium_kwargs = {"origin": ORIGIN_CONSOLIDATION} if result.related_knowledge_untrusted else {}
+            parts.append(
+                _wrap_priming_for_mode(
+                    result,
+                    "related_knowledge",
+                    "related_knowledge",
+                    result.related_knowledge,
+                    trust="medium",
+                    **medium_kwargs,
                 )
-            else:
-                parts.append(
-                    _wrap_priming_for_mode(
-                        result,
-                        "related_knowledge",
-                        "related_knowledge",
-                        result.related_knowledge,
-                        trust="medium",
-                    )
-                )
+            )
             parts.append("")
         if result.related_knowledge_untrusted:
             parts.append(
@@ -193,7 +214,10 @@ def format_priming_section(result: PrimingResult, sender_name: str = "human") ->
                     "related_knowledge_external",
                     result.related_knowledge_untrusted,
                     trust="untrusted",
-                    origin=ORIGIN_EXTERNAL_PLATFORM,
+                    # This bucket can contain platform and web chunks. Marking
+                    # it mixed preserves that fact without falsely attributing
+                    # every item to one external platform.
+                    origin=ORIGIN_MIXED,
                 )
             )
             parts.append("")

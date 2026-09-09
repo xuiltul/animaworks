@@ -30,7 +30,7 @@ class TestCheckAnimaAssets:
 
     def test_no_assets_dir(self, tmp_path: Path) -> None:
         """Anima with no assets/ directory reports all missing."""
-        from core.asset_reconciler import check_anima_assets, REALISTIC_REQUIRED_ASSETS
+        from core.asset_reconciler import REALISTIC_REQUIRED_ASSETS, check_anima_assets
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
@@ -346,6 +346,7 @@ class TestExtractPrompt:
         anima_dir.mkdir()
 
         cfg = MagicMock()
+        cfg.anima_defaults.credential = "ollama"
         cfg.local_llm.default_model = "ollama/qwen2.5-coder:14b"
         cfg.local_llm.base_url = "http://127.0.0.1:11434"
         cfg.local_llm.credential = ""
@@ -632,13 +633,7 @@ class TestExtractAppearanceField:
     def test_bold_label_multiline_bullets(self) -> None:
         from core.asset_reconciler import _extract_appearance_field
 
-        text = (
-            "- **性格**: 大人びている\n"
-            "- **外見**:\n"
-            "  - 髪: 漆黒のロング\n"
-            "  - 瞳: ガーネット\n"
-            "- **口調**: 丁寧語\n"
-        )
+        text = "- **性格**: 大人びている\n- **外見**:\n  - 髪: 漆黒のロング\n  - 瞳: ガーネット\n- **口調**: 丁寧語\n"
         result = _extract_appearance_field(text)
         assert result == "髪: 漆黒のロング、瞳: ガーネット"
 
@@ -652,3 +647,37 @@ class TestExtractAppearanceField:
         from core.asset_reconciler import _extract_appearance_field
 
         assert _extract_appearance_field("性格: 優しい\n") is None
+
+
+async def test_first_profile_wait_does_not_start_image_failure_cooldown(tmp_path):
+    from core.asset_reconciler import _failure_cooldowns, reconcile_anima_assets
+    from core.bootstrap_state import get_bootstrap_status
+
+    anima_dir = tmp_path / "newcomer"
+    anima_dir.mkdir()
+    (anima_dir / "identity.md").write_text("# Identity\n未定義\n", encoding="utf-8")
+    (anima_dir / "injection.md").write_text("未定義\n", encoding="utf-8")
+    (anima_dir / "bootstrap.md").write_text("First conversation", encoding="utf-8")
+    assert get_bootstrap_status(anima_dir)["needs_user_input"]
+    with patch("core.asset_reconciler._extract_prompt", new_callable=AsyncMock) as extract:
+        result = await reconcile_anima_assets(anima_dir)
+        assert result["reason"] == "awaiting_profile"
+        extract.assert_not_awaited()
+    assert "newcomer" not in _failure_cooldowns
+
+
+def test_unconfigured_ollama_does_not_override_codex_image_prompt_model(tmp_path, monkeypatch):
+    from core.asset_reconciler import _resolve_prompt_synthesis_model
+    from core.config import AnimaWorksConfig
+    from core.schemas import ModelConfig
+
+    monkeypatch.delenv("OLLAMA_SERVERS", raising=False)
+    config = AnimaWorksConfig()
+    config.anima_defaults.model = "codex/account-model"
+    config.anima_defaults.credential = "openai"
+    resolved = ModelConfig(model="codex/account-model", credential="openai")
+    with (
+        patch("core.config.models.load_config", return_value=config),
+        patch("core.config.models.load_model_config", return_value=resolved),
+    ):
+        assert _resolve_prompt_synthesis_model(tmp_path) == ("codex/account-model", "openai")

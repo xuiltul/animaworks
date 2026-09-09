@@ -137,6 +137,10 @@ description: >-
 1. ...
 2. ...
 
+## Do not place symlinks in skill trees
+
+Never "re-publish" a host-side skill (e.g. one under `~/.claude/skills`) into `common_skills/` or `skills/` via a symlink. `read_memory_file` checks the resolved real path, so a symlink that points outside the tree fails with "Path traversal detected", and the catalog lists the symlink as a native skill that shadows the readable `external/<engine>/<name>/SKILL.md` entry. Host-side skill roots are injected automatically via `skills.external_roots`; if a real copy is needed, copy the file and decide which side is canonical.
+
 ## Notes
 
 - ...

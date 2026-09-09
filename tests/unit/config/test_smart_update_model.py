@@ -343,4 +343,7 @@ class TestFamilyCredentialMap:
         assert _FAMILY_CREDENTIAL_MAP["bedrock"] == "anthropic"
 
     def test_unknown_family_not_in_map(self):
-        assert "xai" not in _FAMILY_CREDENTIAL_MAP
+        assert "unregistered-family" not in _FAMILY_CREDENTIAL_MAP
+
+    def test_xai_uses_its_own_auth_realm(self):
+        assert _FAMILY_CREDENTIAL_MAP["xai"] == "grok"

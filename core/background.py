@@ -95,7 +95,6 @@ _DEFAULT_ELIGIBLE_TOOLS: dict[str, int] = {
     "generate_animations": 30,
     "local_llm": 60,
     "run_command": 60,
-    "machine_run": 600,
 }
 
 _DEFAULT_RESULT_MEMORY_RETENTION_MINUTES = 60
@@ -232,13 +231,16 @@ class BackgroundTaskManager:
         tool_name: str,
         tool_args: dict[str, Any],
         execute_fn: Callable[[str, dict[str, Any]], Awaitable[str]],
+        *,
+        task_id: str | None = None,
     ) -> str:
         """Submit an async tool call for background execution.
 
         Same as :meth:`submit` but *execute_fn* is an async callable.
+        A pending command may supply its existing ID for result retrieval.
         """
         self.evict_completed_tasks()
-        task_id = uuid.uuid4().hex[:12]
+        task_id = task_id or uuid.uuid4().hex[:12]
         task = BackgroundTask(
             task_id=task_id,
             anima_name=self._anima_name,

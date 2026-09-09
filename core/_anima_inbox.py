@@ -15,7 +15,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +60,7 @@ _THREAD_CTX_BUDGET = 300
 _MSG_BODY_BUDGET = 2000
 _MAX_INBOX_RETRIES = 3
 _INBOX_THREAD_ID = "inbox"
-_RESCUE_QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "blocked", "delegated"}
+_RESCUE_QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "delegated"}
 _RESCUE_QUEUE_CANCEL_REASONS = {"expired", "archived", "tombstoned"}
 
 
@@ -234,131 +234,23 @@ def _split_delegation_items(
 
 
 def _check_task_state(anima_dir: Path, task_id: str) -> str:
-    """Check task execution state. Returns one of:
-    'completed', 'processing', 'pending', 'terminal', 'missing'.
-    """
-    results_dir = anima_dir / "state" / "task_results"
-    if (results_dir / f"{task_id}.md").exists():
-        return "completed"
+    """Inspect canonical status; result files are artifacts, not completion proof."""
+    from core.memory.task_queue import TaskQueueManager
 
-    pending_dir = anima_dir / "state" / "pending"
-    processing_dir = pending_dir / "processing"
-    if (processing_dir / f"{task_id}.json").exists():
-        return "processing"
-
-    if (pending_dir / f"{task_id}.json").exists():
-        return "pending"
-
-    try:
-        from core.memory.task_queue import TaskQueueManager
-
-        tqm = TaskQueueManager(anima_dir)
-        entry = tqm.get_task_by_id(task_id)
-        if entry and entry.status in ("done", "failed", "cancelled"):
-            return "terminal"
-    except Exception:
-        logger.debug("Failed to check task_queue for %s", task_id, exc_info=True)
-
-    return "missing"
+    entry = TaskQueueManager(anima_dir).get_task_by_id(task_id)
+    if entry is None:
+        return "missing"
+    return {"done": "completed", "cancelled": "terminal", "in_progress": "processing"}.get(entry.status, "pending")
 
 
-def _rescue_attention_decision(anima_dir: Path, task_id: str):
-    """Return TaskBoard execution decision for delegation rescue."""
-    try:
-        from core.memory.task_queue import TaskQueueManager
-        from core.taskboard.attention_resolver import resolver_for_anima_dir
-
-        entry = TaskQueueManager(anima_dir).get_task_by_id(task_id)
-        return resolver_for_anima_dir(anima_dir).should_execute(
-            anima_dir.name,
-            task_id,
-            queue_status=entry.status if entry is not None else None,
-        )
-    except Exception:
-        logger.warning("TaskBoard delegation rescue gate unavailable for %s; failing open", task_id, exc_info=True)
-        from core.taskboard.models import AttentionDecision
-
-        return AttentionDecision(reason="active")
-
-
-def _cancel_rescued_queue_task(anima_dir: Path, task_id: str, reason: str) -> None:
-    if reason not in _RESCUE_QUEUE_CANCEL_REASONS:
-        return
-    try:
-        from core.memory.task_queue import TaskQueueManager
-
-        tqm = TaskQueueManager(anima_dir)
-        entry = tqm.get_task_by_id(task_id)
-        if entry and entry.status in _RESCUE_QUEUE_ACTIVE_STATUSES:
-            tqm.update_status(task_id, "cancelled", summary=f"{reason} by TaskBoard")
-    except Exception:
-        logger.debug("Failed to cancel suppressed rescued task %s", task_id, exc_info=True)
-
-
-def _rescue_regenerate_pending(anima_dir: Path, task_id: str, msg: Any) -> None:
-    """Rescue: regenerate pending file from delegation DM content for TaskExec pickup."""
-    pending_dir = anima_dir / "state" / "pending"
-    pending_dir.mkdir(parents=True, exist_ok=True)
-
-    instruction = getattr(msg, "content", "")
-
-    # Try to get original instruction from task_queue
-    try:
-        from core.memory.task_queue import TaskQueueManager
-
-        tqm = TaskQueueManager(anima_dir)
-        entry = tqm.get_task_by_id(task_id)
-        if entry and entry.original_instruction:
-            instruction = entry.original_instruction
-    except Exception:
-        logger.debug("Failed to retrieve original instruction for task %s", task_id, exc_info=True)
-
-    decision = _rescue_attention_decision(anima_dir, task_id)
-    if not decision.executable and decision.reason != "snoozed":
-        _cancel_rescued_queue_task(anima_dir, task_id, decision.reason)
-        logger.info(
-            "Rescue: suppressed pending regeneration for task %s (reason=%s)",
-            task_id,
-            decision.reason,
-        )
-        return
-
-    task_desc = {
-        "task_type": "llm",
-        "task_id": task_id,
-        "title": instruction[:100],
-        "description": instruction,
-        "context": "",
-        "acceptance_criteria": [],
-        "constraints": [],
-        "file_paths": [],
-        "submitted_by": getattr(msg, "from_person", "unknown"),
-        "submitted_at": datetime.now(UTC).isoformat(),
-        "reply_to": getattr(msg, "from_person", ""),
-        "source": "delegation_rescue",
-    }
-
-    target_dir = pending_dir / "deferred" if decision.reason == "snoozed" else pending_dir
-    target_dir.mkdir(parents=True, exist_ok=True)
-    path = target_dir / f"{task_id}.json"
-    path.write_text(
-        json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    logger.info(
-        "Rescue: regenerated %s file for task %s from delegation DM",
-        target_dir.name,
-        task_id,
-    )
-
-
-async def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxItem]) -> None:
+async def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxItem]) -> list[InboxItem]:
     """Handle delegation DMs at framework level without involving LLM.
 
     Checks task state and either archives (task exists/completed) or
     rescues (regenerates pending file) for each delegation DM.
     """
     anima_dir = anima_mixin.anima_dir
+    unresolved: list[InboxItem] = []
 
     for item in delegation_items:
         msg = item.msg
@@ -369,13 +261,10 @@ async def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxI
         state = _check_task_state(anima_dir, task_id)
 
         if state == "missing":
-            _rescue_regenerate_pending(anima_dir, task_id, msg)
-            logger.info(
-                "[%s] Delegation DM rescue: task=%s from=%s (pending file regenerated)",
-                anima_mixin.name,
-                task_id,
-                msg.from_person,
-            )
+            # A DM is not an executable input. Let the normal inbox handler
+            # ask the sender about the missing record; never guess constraints.
+            unresolved.append(item)
+            continue
         else:
             logger.info(
                 "[%s] Delegation DM handled at framework level: task=%s state=%s from=%s",
@@ -428,13 +317,14 @@ async def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxI
 
     # Archive delegation DMs immediately
     try:
-        anima_mixin.messenger.archive_paths(delegation_items)
+        anima_mixin.messenger.archive_paths([item for item in delegation_items if item not in unresolved])
     except Exception:
         logger.debug(
             "[%s] Failed to archive delegation DMs",
             anima_mixin.name,
             exc_info=True,
         )
+    return unresolved
 
 
 @dataclass
@@ -452,6 +342,29 @@ class InboxMixin:
     """Mixin: Anima-to-Anima inbox processing, filtering, dedup, archiving."""
 
     # ── Inbox MSG Immediate Processing ────────────────────────
+
+    def _undo_failed_inbox_presentation(self, items: list[InboxItem]) -> None:
+        """Provider failure does not consume the unanswered-message limit."""
+        path = self.anima_dir / "state" / "inbox_read_counts.json"
+        if not items or not path.exists():
+            return
+        try:
+            from core.memory._io import atomic_write_text
+
+            counts = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(counts, dict):
+                return
+            for item in items:
+                key = item.path.name
+                count = counts.get(key)
+                if isinstance(count, int) and not isinstance(count, bool):
+                    if count > 1:
+                        counts[key] = count - 1
+                    else:
+                        counts.pop(key, None)
+            atomic_write_text(path, json.dumps(counts, ensure_ascii=False))
+        except (OSError, ValueError):
+            logger.warning("[%s] Failed to restore inbox presentation counters", self.name, exc_info=True)
 
     async def process_inbox_message(
         self,
@@ -723,6 +636,7 @@ class InboxMixin:
                     # outage / rate limit).  Keeping them lets the next
                     # inbox cycle retry — up to _MAX_INBOX_RETRIES.
                     if cycle_failed:
+                        self._undo_failed_inbox_presentation(inbox_result.inbox_items)
                         logger.warning(
                             "[%s] Inbox LLM cycle failed — messages NOT archived (reason=%s)",
                             self.name,
@@ -779,6 +693,9 @@ class InboxMixin:
                             "trigger": trigger,
                             "session_type": "inbox",
                             "thread_id": _INBOX_THREAD_ID,
+                            "status": "failed" if cycle_failed else "completed",
+                            "reason": result.reason,
+                            "stop_kind": result.stop_kind,
                         },
                     )
 
@@ -798,16 +715,11 @@ class InboxMixin:
                             await locals()["agent_session_context"].__aexit__(None, None, None)
                         agent_session_acquired = False
                     logger.exception("[%s] process_inbox_message FAILED", self.name)
-                    # Archive on crash to prevent re-processing storms
-                    if inbox_result is not None and inbox_result.inbox_items:
-                        try:
-                            self.messenger.archive_paths(inbox_result.inbox_items)
-                        except Exception:
-                            logger.warning(
-                                "[%s] Failed to crash-archive inbox messages",
-                                self.name,
-                                exc_info=True,
-                            )
+                    # A provider/session failure is not acknowledgement of
+                    # unread work. The watcher schedules its bounded retry;
+                    # retain the original messages for recovery.
+                    if inbox_result is not None:
+                        self._undo_failed_inbox_presentation(inbox_result.inbox_items)
                     self._activity.log(
                         "error",
                         summary=t("anima.inbox_error", exc=type(exc).__name__),
@@ -977,7 +889,8 @@ class InboxMixin:
         # ── Delegation DM framework-level handling ──
         delegation_items, non_delegation_items = _split_delegation_items(inbox_items, messages)
         if delegation_items:
-            await _handle_delegation_dms(self, delegation_items)
+            unresolved = await _handle_delegation_dms(self, delegation_items)
+            non_delegation_items.extend(unresolved)
             inbox_items = non_delegation_items
             messages = [item.msg for item in non_delegation_items]
             unread_count = len(messages)

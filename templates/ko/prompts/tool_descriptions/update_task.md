@@ -1,1 +1,1 @@
-태스크의 상태를 업데이트한다. 완료 시 status='done', 중단 시 status='cancelled'로 설정. blocked 선언 시 가능하면 차단 원인이 해결되면 exit 0이 되는 unblock_check를 첨부할 것.
+태스크 결과를 선언합니다. 검증 후 status='done', 대기 사유가 있으면 'pending', 중지 시 'cancelled'를 사용하세요. in_progress는 호스트가 관리하므로 설정하지 마세요. 중단된 미종료 태스크를 의도적으로 재개하려면 submit_tasks에 기존 task_id와 resume=true를 전달하세요. 저장된 입력과 이력을 보존합니다.

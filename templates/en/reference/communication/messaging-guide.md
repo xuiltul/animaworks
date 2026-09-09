@@ -103,7 +103,7 @@ send_message(to="user", content="Follow-up is done.", intent="report")
 | Use case | Tool | Example |
 |----------|------|---------|
 | Progress/result report | send_message (intent=report) | Task completion report to supervisor |
-| Task delegation | delegate_task | Assign task to subordinate (writes to `state/pending/` for immediate execution) |
+| Task delegation | delegate_task | Assign one durable task to a direct subordinate; inspect progress with task_tracker |
 | Question/inquiry | send_message (intent=question) | Clarification request |
 | Acknowledgment/thanks/FYI | post_channel (Board) | “Understood”, “Shared” |
 | Communication to 3+ people | post_channel (Board) | Team-wide announcement |

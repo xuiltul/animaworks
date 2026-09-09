@@ -103,7 +103,7 @@ send_message(to="user", content="対応完了しました。", intent="report")
 | 用途 | 使用ツール | 例 |
 |------|-----------|-----|
 | 進捗報告・結果報告 | send_message (intent=report) | 上司へのタスク完了報告 |
-| タスク委譲 | delegate_task | 部下へのタスク委任（state/pending/ に書き出し即時実行） |
+| タスク委譲 | delegate_task | 直属の部下に一つの永続タスクを委任。進捗は task_tracker で確認 |
 | 質問・問い合わせ | send_message (intent=question) | 不明点の確認 |
 | 了解・感謝・FYI | post_channel（Board） | 「了解しました」「共有しました」 |
 | 3人以上への伝達 | post_channel（Board） | チーム全体へのお知らせ |

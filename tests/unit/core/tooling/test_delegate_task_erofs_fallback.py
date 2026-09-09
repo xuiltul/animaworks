@@ -4,12 +4,7 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for sandbox-resilient delegate_task EROFS fallback.
-
-Sandboxed ``delegate_task`` cannot write another anima's
-``task_queue.jsonl`` / ``state/pending/``; the handler must fall back to
-``POST /api/internal/delegate-task`` with residual persist flags.
-"""
+"""Delegation proxies one atomic publication when local SQLite is denied."""
 
 import json
 from pathlib import Path
@@ -19,6 +14,7 @@ import httpx
 import pytest
 
 from core.exceptions import TaskPersistenceError
+from core.memory.task_queue import TaskQueueManager
 from core.tooling.handler import ToolHandler
 
 
@@ -62,305 +58,105 @@ def _delegate_args() -> dict:
 
 
 class TestDelegateTaskErofsFallback:
-    def test_add_task_oserror_falls_back_with_all_persist_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @pytest.mark.parametrize("wrapped", [False, True])
+    def test_permission_failure_proxies_whole_transaction(self, tmp_path, monkeypatch, wrapped):
         handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
+        target = _setup_target(tmp_path)
         monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "ok": True,
-            "sub_task_id": "abc",
-            "tracking_task_id": "def",
-        }
-
+        denied = OSError(30, "Read-only file system")
+        if wrapped:
+            error = TaskPersistenceError("persistence failed")
+            error.__cause__ = denied
+        else:
+            error = denied
+        response = httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", "http://server.test"))
         with (
             patch.object(handler, "_check_subordinate", return_value=None),
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                side_effect=OSError(30, "Read-only file system"),
-            ),
-            patch("httpx.post", return_value=mock_resp) as mock_post,
-            patch(
-                "core.tooling.handler_delegation._record_taskboard_delegation"
-            ) as mock_tb,
+            patch.object(TaskQueueManager, "submit", side_effect=error),
+            patch("httpx.post", return_value=response) as post,
+            patch("core.tooling.handler_delegation._record_taskboard_delegation") as board,
         ):
             result = handler.handle("delegate_task", _delegate_args())
-
-        # Success is a human-readable string (not error JSON)
         assert not result.strip().startswith("{")
-        assert "natsume" in result
-        mock_post.assert_called_once()
-        url = mock_post.call_args[0][0]
-        assert url == "http://server.test:18500/api/internal/delegate-task"
-        payload = mock_post.call_args[1]["json"]
-        assert payload["persist_sub"] is True
-        assert payload["persist_tracking"] is True
-        assert payload["persist_pending"] is True
-        assert payload["delegator"] == "rin"
-        assert payload["target"] == "natsume"
-        assert payload["instruction"] == "resolve PR conflicts"
-        assert len(payload["sub_task_id"]) == 12
-        assert len(payload["tracking_task_id"]) == 12
-        assert payload["sub_task_id"] in result
-        assert payload["tracking_task_id"] in result
-        # Server already recorded TaskBoard; local call skipped
-        mock_tb.assert_not_called()
+        sent = post.call_args.kwargs["json"]
+        assert sent["delegator"] == "rin" and sent["target"] == "natsume"
+        assert sent["instruction"] == "resolve PR conflicts"
+        assert sent["sub_task_id"] in result
+        assert sent["tracking_task_id"] in result
+        assert not any(key.startswith("persist_") for key in sent)
+        board.assert_not_called()
+        assert TaskQueueManager(target).list_tasks() == []
 
-    def test_add_task_persistence_error_falls_back(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """TaskQueueManager wraps OSError in TaskPersistenceError (not an
-        OSError subclass); the fallback must fire for it too. Regression for
-        the 2026-07-22 production incident where EROFS delegations kept
-        failing despite the deployed fallback."""
+    def test_alias_write_denied_rolls_back_subordinate_before_proxy(self, tmp_path):
+        from core.taskboard.tasks import TaskStore
+
         handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"ok": True}
-
+        target = _setup_target(tmp_path)
+        response = httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", "http://server.test"))
         with (
             patch.object(handler, "_check_subordinate", return_value=None),
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                side_effect=TaskPersistenceError(
-                    "[Errno 30] Read-only file system: 'task_queue.jsonl'"
-                ),
-            ),
-            patch("httpx.post", return_value=mock_resp) as mock_post,
-            patch(
-                "core.tooling.handler_delegation._record_taskboard_delegation"
-            ) as mock_tb,
+            patch.object(TaskStore, "alias", side_effect=OSError(30, "Read-only file system")),
+            patch("httpx.post", return_value=response) as post,
         ):
             result = handler.handle("delegate_task", _delegate_args())
+        assert "PersistenceFailed" not in result
+        post.assert_called_once()
+        assert TaskQueueManager(target).list_tasks() == []
 
-        assert not result.strip().startswith("{")
-        assert "natsume" in result
-        mock_post.assert_called_once()
-        payload = mock_post.call_args[1]["json"]
-        assert payload["persist_sub"] is True
-        assert payload["persist_tracking"] is True
-        assert payload["persist_pending"] is True
-        mock_tb.assert_not_called()
-
-    def test_tracking_oserror_skips_already_persisted_sub(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @pytest.mark.parametrize("failure", ["transport", "server"])
+    def test_host_failure_reports_persistence_failed(self, tmp_path, failure):
         handler = _make_handler(tmp_path)
         _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"ok": True}
-
-        sub_entry = MagicMock()
-        sub_entry.task_id = "subid0000001"
-
+        response = httpx.Response(
+            500, json={"detail": "disk full"}, request=httpx.Request("POST", "http://server.test")
+        )
         with (
             patch.object(handler, "_check_subordinate", return_value=None),
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                return_value=sub_entry,
-            ),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_delegated_task",
-                side_effect=OSError(30, "Read-only file system"),
-            ),
-            patch("httpx.post", return_value=mock_resp) as mock_post,
-        ):
-            result = handler.handle("delegate_task", _delegate_args())
-
-        assert "natsume" in result
-        payload = mock_post.call_args[1]["json"]
-        assert payload["persist_sub"] is False
-        assert payload["persist_tracking"] is True
-        assert payload["persist_pending"] is True
-
-    def test_fallback_http_failure_returns_persistence_failed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        with (
-            patch.object(handler, "_check_subordinate", return_value=None),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                side_effect=OSError(30, "Read-only file system"),
-            ),
+            patch.object(TaskQueueManager, "submit", side_effect=OSError(30, "Read-only file system")),
             patch(
                 "httpx.post",
-                side_effect=httpx.ConnectError("connection refused"),
-            ),
+                side_effect=httpx.ConnectError("down") if failure == "transport" else None,
+                return_value=response,
+            ) as post,
         ):
             result = handler.handle("delegate_task", _delegate_args())
+        assert json.loads(result)["error_type"] == "PersistenceFailed"
+        assert post.call_count == 2
+        assert post.call_args_list[0].kwargs["json"] == post.call_args_list[1].kwargs["json"]
 
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "PersistenceFailed"
-        assert "Read-only file system" in parsed["message"]
-        assert "connection refused" in parsed["message"].lower() or "unreachable" in parsed["message"].lower()
-
-    def test_fallback_server_500_returns_persistence_failed(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_lost_response_retries_same_task_identity(self, tmp_path):
         handler = _make_handler(tmp_path)
         _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 500
-        mock_resp.json.return_value = {"detail": "internal boom"}
-        mock_resp.text = "internal boom"
-
+        response = httpx.Response(200, json={"ok": True}, request=httpx.Request("POST", "http://server.test"))
         with (
             patch.object(handler, "_check_subordinate", return_value=None),
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                side_effect=OSError(30, "Read-only file system"),
-            ),
-            patch("httpx.post", return_value=mock_resp),
+            patch.object(TaskQueueManager, "submit", side_effect=OSError(30, "Read-only file system")),
+            patch("httpx.post", side_effect=[httpx.ReadTimeout("response lost"), response]) as post,
         ):
             result = handler.handle("delegate_task", _delegate_args())
+        assert "PersistenceFailed" not in result
+        assert post.call_count == 2
+        assert post.call_args_list[0].kwargs["json"] == post.call_args_list[1].kwargs["json"]
 
-        parsed = json.loads(result)
-        assert parsed["status"] == "error"
-        assert parsed["error_type"] == "PersistenceFailed"
-        assert "Read-only file system" in parsed["message"]
-        assert "500" in parsed["message"] or "internal boom" in parsed["message"]
-
-    def test_direct_success_skips_httpx(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_direct_success_needs_no_http_or_pending_file(self, tmp_path):
         handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
+        target = _setup_target(tmp_path)
         with (
             patch.object(handler, "_check_subordinate", return_value=None),
             patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.tooling.handler_delegation._record_taskboard_delegation"
-            ) as mock_tb,
-            patch("httpx.post") as mock_post,
+            patch("httpx.post") as post,
         ):
             result = handler.handle("delegate_task", _delegate_args())
+        assert "PersistenceFailed" not in result
+        post.assert_not_called()
+        assert len(TaskQueueManager(target).list_tasks()) == 1
+        assert not list((target / "state" / "pending").glob("*.json"))
 
-        assert "natsume" in result
-        mock_post.assert_not_called()
-        mock_tb.assert_called_once()
-
-        sub_queue = tmp_path / "animas" / "natsume" / "state" / "task_queue.jsonl"
-        own_queue = tmp_path / "animas" / "rin" / "state" / "task_queue.jsonl"
-        assert sub_queue.exists()
-        assert own_queue.exists()
-        sub_task = json.loads(sub_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
-        assert sub_task["status"] == "pending"
-        own_task = json.loads(own_queue.read_text(encoding="utf-8").strip().split("\n")[-1])
-        assert own_task["status"] == "delegated"
-        pending = list((tmp_path / "animas" / "natsume" / "state" / "pending").glob("*.json"))
-        assert len(pending) == 1
-
-    def test_read_timeout_retries_then_succeeds(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """httpx ReadTimeout on first attempt is retried once and can succeed."""
-        handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"ok": True}
-
-        with (
-            patch.object(handler, "_check_subordinate", return_value=None),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                side_effect=OSError(30, "Read-only file system"),
-            ),
-            patch(
-                "httpx.post",
-                side_effect=[httpx.ReadTimeout("timed out"), mock_resp],
-            ) as mock_post,
-            patch("time.sleep") as mock_sleep,
-        ):
-            result = handler.handle("delegate_task", _delegate_args())
-
-        assert not result.strip().startswith("{")
-        assert "natsume" in result
-        assert mock_post.call_count == 2
-        mock_sleep.assert_called_once_with(2.0)
-        timeout_arg = mock_post.call_args_list[0][1]["timeout"]
-        assert isinstance(timeout_arg, httpx.Timeout)
-        assert timeout_arg.connect == 5.0
-        assert timeout_arg.read == 60.0
-
-    def test_memory_write_error_triggers_fallback(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """MemoryWriteError from pending atomic write must trigger server fallback."""
-        from core.exceptions import MemoryWriteError
-
-        handler = _make_handler(tmp_path)
-        _setup_target(tmp_path)
-        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", "http://server.test:18500")
-
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"ok": True}
-
-        sub_entry = MagicMock()
-        sub_entry.task_id = "subid0000001"
-
-        with (
-            patch.object(handler, "_check_subordinate", return_value=None),
-            patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_task",
-                return_value=sub_entry,
-            ),
-            patch(
-                "core.memory.task_queue.TaskQueueManager.add_delegated_task",
-                return_value=MagicMock(),
-            ),
-            patch(
-                "core.tooling.handler_delegation.atomic_write_text",
-                side_effect=MemoryWriteError("Atomic write failed: Read-only file system"),
-            ),
-            patch("httpx.post", return_value=mock_resp) as mock_post,
-            patch(
-                "core.tooling.handler_delegation._record_taskboard_delegation"
-            ) as mock_tb,
-        ):
-            result = handler.handle("delegate_task", _delegate_args())
-
-        assert not result.strip().startswith("{")
-        assert "natsume" in result
-        mock_post.assert_called_once()
-        payload = mock_post.call_args[1]["json"]
-        assert payload["persist_sub"] is False
-        assert payload["persist_tracking"] is False
-        assert payload["persist_pending"] is True
-        mock_tb.assert_not_called()
-
-    def test_mcp_env_includes_server_url(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_mcp_env_includes_server_url(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Codex MCP env must inject ANIMAWORKS_SERVER_URL (contract for EROFS fallback)."""
         from core.execution.codex_sdk import CodexSDKExecutor
         from core.schemas import ModelConfig

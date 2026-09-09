@@ -71,6 +71,32 @@ def cmd_create_anima(args: argparse.Namespace) -> None:
 
 def cmd_chat(args: argparse.Namespace) -> None:
     """Chat with an anima (via gateway or direct)."""
+    thread_id = getattr(args, "thread_id", "default") or "default"
+    resume = getattr(args, "resume", None)
+
+    if getattr(args, "sessions", False):
+        # List saved TUI sessions and exit without opening the TUI.
+        from cli.tui.session import list_sessions, sessions_table
+
+        infos = list_sessions()
+        if not infos:
+            print("no sessions")
+            return
+        print(sessions_table(infos))
+        return
+
+    if args.anima is None and resume is None:
+        print("an anima name or --resume is required", file=sys.stderr)
+        sys.exit(2)
+
+    if resume and not args.local:
+        from cli.tui.session import latest_session, load_session
+
+        sid = None if resume == "latest" else resume
+        if (latest_session() if sid is None else load_session(sid)) is None:
+            print("no session to resume", file=sys.stderr)
+            sys.exit(1)
+
     if args.local:
         import warnings
 
@@ -91,19 +117,62 @@ def cmd_chat(args: argparse.Namespace) -> None:
             sys.exit(1)
 
         anima = DigitalAnima(anima_dir, get_shared_dir())
-        response = asyncio.run(anima.process_message(args.message, from_person=args.from_person))
+        message = args.message if args.message is not None else sys.stdin.read()
+        response = asyncio.run(anima.process_message(message, from_person=args.from_person))
         print(response)
     else:
-        from cli._gateway import gateway_request
+        message = args.message
+        if message is not None:
+            # One-shot reply (existing behaviour).
+            from cli._gateway import gateway_request
 
-        data = gateway_request(
-            args,
-            "POST",
-            f"/api/animas/{args.anima}/chat",
-            json={"message": args.message, "from_person": args.from_person},
-            timeout=300.0,
+            data = gateway_request(
+                args,
+                "POST",
+                f"/api/animas/{args.anima}/chat",
+                json={
+                    "message": message,
+                    "from_person": args.from_person,
+                    "thread_id": thread_id,
+                },
+                timeout=300.0,
+            )
+            print(data.get("response", data.get("error", "Unknown error")))
+            return
+
+        # No message given.
+        no_tui = getattr(args, "no_tui", False) or False
+        if no_tui:
+            # Read the whole stdin as the message, one-shot reply.
+            from cli._gateway import gateway_request
+
+            stdin_text = sys.stdin.read()
+            data = gateway_request(
+                args,
+                "POST",
+                f"/api/animas/{args.anima}/chat",
+                json={
+                    "message": stdin_text,
+                    "from_person": args.from_person,
+                    "thread_id": thread_id,
+                },
+                timeout=300.0,
+            )
+            print(data.get("response", data.get("error", "Unknown error")))
+            return
+
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            from cli.tui import run_tui
+
+            run_tui(args)
+            return
+
+        print(
+            f"TUI requires a terminal for '{args.anima}' (no message given). "
+            "Provide a message or use --no-tui to read from stdin.",
+            file=sys.stderr,
         )
-        print(data.get("response", data.get("error", "Unknown error")))
+        sys.exit(2)
 
 
 # ── Heartbeat ──────────────────────────────────────────────

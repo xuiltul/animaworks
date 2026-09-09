@@ -162,7 +162,7 @@ def _collect_running_background_tasks(
     """Join background-worker busy lanes with task queue titles.
 
     Busy sidecars are the runtime source of truth for which worker slots are
-    active.  ``task_queue.jsonl`` supplies the human-readable task title.  A
+    active. The canonical task store supplies the human-readable task title. A
     malformed or concurrently replaced sidecar is treated as an empty state so
     the activity page remains available while workers update their marker.
     """

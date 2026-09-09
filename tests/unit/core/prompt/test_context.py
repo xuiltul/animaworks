@@ -336,21 +336,27 @@ class TestEstimateFromTranscript:
             assert abs(ratio - expected) < 0.01
 
     def test_threshold_detection(self, tmp_path):
-        f = tmp_path / "big.json"
-        f.write_text("x" * 400_000)
+        small = tmp_path / "start.json"
+        small.write_text("x" * 4_000)
+        big = tmp_path / "big.json"
+        big.write_text("x" * 400_000)
 
         with patch(_PATCH_TARGET, return_value=None):
             ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
-            ratio = ct.estimate_from_transcript(str(f))
+            ct.estimate_from_transcript(str(small))  # sets the session baseline
+            ratio = ct.estimate_from_transcript(str(big))
             assert ratio >= ct.threshold
             assert ct.threshold_exceeded is True
 
     def test_threshold_only_triggers_once(self, tmp_path):
+        small = tmp_path / "start.json"
+        small.write_text("x" * 4_000)
         f = tmp_path / "big.json"
         ct = ContextTracker(threshold=0.50)
         needed_tokens = int(ct.context_window * (ct.threshold + 0.05))
         f.write_text("x" * (needed_tokens * CHARS_PER_TOKEN))
 
+        ct.estimate_from_transcript(str(small))
         ct.estimate_from_transcript(str(f))
         assert ct.threshold_exceeded is True
         ct.estimate_from_transcript(str(f))
@@ -371,12 +377,14 @@ class TestUpdateFromUsage:
     def test_threshold_crossed(self):
         with patch(_PATCH_TARGET, return_value=None):
             ct = ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
-            result = ct.update_from_usage({"input_tokens": 90_000, "output_tokens": 10_000})
+            ct.update_from_usage({"input_tokens": 1_000})  # baseline
+            result = ct.update_from_usage({"input_tokens": 190_000, "output_tokens": 10_000})
             assert result is True
             assert ct.threshold_exceeded is True
 
     def test_threshold_not_crossed_twice(self):
         ct = ContextTracker(threshold=0.50)
+        ct.update_from_usage({"input_tokens": 1_000})  # baseline
         over_threshold = int(ct.context_window * (ct.threshold + 0.05))
         ct.update_from_usage({"input_tokens": over_threshold, "output_tokens": 10_000})
         assert ct.threshold_exceeded is True
@@ -423,6 +431,7 @@ class TestUpdateFromResultMessage:
 class TestReset:
     def test_resets_all(self):
         ct = ContextTracker()
+        ct.update_from_usage({"input_tokens": 1_000})  # baseline
         over_threshold = int(ct.context_window * (ct.threshold + 0.05))
         ct.update_from_usage({"input_tokens": over_threshold, "output_tokens": 10_000})
         assert ct.threshold_exceeded is True
@@ -431,3 +440,53 @@ class TestReset:
         assert ct.threshold_exceeded is False
         assert ct._input_tokens == 0
         assert ct._output_tokens == 0
+        assert ct.baseline_tokens == 0
+
+
+# ── Baseline-relative threshold ───────────────────────────
+
+
+class TestBaseline:
+    """The prompt an anima carries into every session is not "fullness".
+
+    A fleet anima opens each chat with ~93K of system prompt and tool /
+    MCP schemas in a 200K window.  Measured absolutely that is 47% before
+    a word is exchanged, so a 50% threshold fired on the first or second
+    turn of every conversation.
+    """
+
+    @pytest.fixture
+    def ct(self):
+        """A 200K-window tracker, pinned so the machine's models.json cannot move it."""
+        entry = {"mode": "S", "context_window": 200_000}
+        with patch(_PATCH_TARGET, return_value=entry):
+            yield ContextTracker(model="claude-sonnet-4-6", threshold=0.50)
+
+    def test_first_measurement_becomes_the_baseline(self, ct):
+        crossed = ct.update_from_message_start(
+            {"input_tokens": 2, "cache_creation_input_tokens": 24_000, "cache_read_input_tokens": 69_000}
+        )
+        assert ct.baseline_tokens == 93_002
+        # Nearly half the window, but none of the conversation space.
+        assert ct.usage_ratio == pytest.approx(0.465, abs=0.001)
+        assert ct.fill_ratio == 0.0
+        assert crossed is False
+
+    def test_threshold_measures_the_space_that_can_grow(self, ct):
+        ct.update_from_usage({"input_tokens": 93_000})
+        # Half of the 107K above the baseline, not half of the window.
+        assert ct.update_from_usage({"input_tokens": 140_000}) is False
+        assert ct.update_from_usage({"input_tokens": 147_000}) is True
+        assert ct.usage_ratio == pytest.approx(0.735, abs=0.001)
+
+    def test_absolute_ratio_when_the_baseline_leaves_no_room(self, ct):
+        """A prompt that nearly fills the window falls back to plain fullness."""
+        ct.update_from_usage({"input_tokens": 199_000})
+        assert ct.threshold_exceeded is True
+        assert ct.fill_ratio == pytest.approx(0.995, abs=0.001)
+
+    def test_cumulative_result_message_does_not_seed_a_baseline(self, ct):
+        """``ResultMessage.usage`` sums the session; it is not a snapshot."""
+        ct.update_from_result_message({"input_tokens": 400_000, "output_tokens": 5_000})
+        assert ct.baseline_tokens == 0
+        assert ct.threshold_exceeded is True

@@ -31,7 +31,7 @@ You can act autonomously even without human instructions:
 
 - **Heartbeat (periodic patrol)**: Runs on a fixed interval for situation awareness and planning
 - **Cron (scheduled tasks)**: Tasks that run at defined times
-- **TaskExec (task execution)**: **LLM tasks** written under `state/pending/` are executed automatically in a session separate from the main chat (e.g. from `submit_tasks` or Heartbeat handoffs)
+- **TaskExec (task execution)**: **LLM tasks** published through `submit_tasks` or `delegate_task` are claimed from the canonical task store and execute saved input in a separate attempt.
 - **Background tool execution**: Long-running external tools can be run asynchronously via `BackgroundTaskManager` (`core/background.py`) so the conversation loop is not blocked for long periods (details below)
 
 ## Lifecycle
@@ -56,7 +56,7 @@ You operate day to day through **five execution paths**:
 | **Inbox** | DM from another Anima | Immediate response to internal messages |
 | **Heartbeat** | Periodic auto-start | Observe → Plan → Reflect. **Assessment and planning only — no execution** |
 | **Cron** | Schedule in cron.md | Deterministic tasks at fixed times |
-| **TaskExec** | JSON appears under `state/pending/` | Hands-on LLM work: `submit_tasks` batches, Heartbeat writes to `state/pending/`, delegation flows, etc. Batches run in parallel or serially according to dependency edges (DAG) |
+| **TaskExec** | A published canonical task is ready | Execute complete saved input; enforce dependencies and worker capacity, then persist the attempt outcome |
 
 Because Chat and Heartbeat (and background work such as cron / TaskExec) use **separate locks**, you can respond to human messages immediately even while Heartbeat is running.
 
@@ -67,12 +67,12 @@ Because Chat and Heartbeat (and background work such as cron / TaskExec) use **s
 - **Persistence**: Each task saves a `TaskStatus` (`running` / `completed` / `failed`, etc.) and result text to `state/background_tasks/{task_id}.json`. `get_task` / `list_tasks` can read from both in-memory cache and disk.
 - **Enqueue API**: `submit` returns a `task_id` immediately; `_run_task` wrapped in `asyncio.create_task` runs the body. Synchronous tool implementations execute on a thread pool via `run_in_executor`. `submit_async` exists for async tools. On completion, an optional `on_complete` callback is `await`ed (exceptions inside the callback are logged and do not affect the task result).
 - **How eligible tools are determined** (`BackgroundTaskManager.from_profiles`, **later wins**):
-  1. `_DEFAULT_ELIGIBLE_TOOLS` (code defaults — Mode A schema names; e.g. `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`, `local_llm`, `run_command`, `machine_run`, and others)
+  1. `_DEFAULT_ELIGIBLE_TOOLS` (code defaults — Mode A schema names; e.g. `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`, `local_llm`, `run_command`, and others)
   2. Entries with `background_eligible: true` in each module’s `EXECUTION_PROFILE` loaded via `load_execution_profiles(TOOL_MODULES)`. Keys use the **`tool:subcmd`** form; values include `expected_seconds` (default 60 if unset)
   3. `background_task.eligible_tools` in `config.json` (each tool’s `threshold_s` overrides the map value)
   `is_eligible(name)` checks **only whether the name is present in the map** (values are kept as indicative seconds and are **not** used for threshold comparison).
 - **Via the agent**: When `ToolHandler` dispatches an unregistered tool externally, if the name is in the map above it is routed to `BackgroundTaskManager.submit` and JSON including `task_id` is returned immediately. Use tools such as `check_background_task` / `list_background_tasks` to read results.
-- **Via CLI (`animaworks-tool submit`)**: Writes descriptor JSON under **`state/background_tasks/pending/`**. `PendingTaskExecutor` (`core/supervisor/pending_executor.py`) `watcher_loop` picks it up on an interval of **about 3 seconds** (immediate on `wake()`), with lifecycle **`pending/*.json` → `pending/processing/*.json` → delete on success / `pending/failed/` on failure**. Command-type work is submitted to `BackgroundTaskManager` and runs via an `animaworks-tool` child process (timeout: implementation constant 1800 seconds). **`state/pending/` (TaskExec) for LLM tasks is a different directory**, but the same watcher loop monitors both.
+- **Via CLI (`animaworks-tool submit`)**: Command-tool descriptors still use **`state/background_tasks/pending/`** and its processing lifecycle. `PendingTaskExecutor` monitors this command queue and separately claims LLM work from the canonical task store. Do not create files to submit LLM tasks.
 - **Housekeeping**: `cleanup_old_tasks(max_age_hours=24)` deletes JSON for `completed` / `failed` tasks more than **24 hours** after `completed_at`, and also removes `running` files more than **48 hours** after `created_at` (orphans from process crashes, etc.). `background_task.result_retention_hours` exists in the schema but **the current `BackgroundTaskManager` does not read it** (callers are expected to pass the age to `cleanup_old_tasks`).
 
 In the same module, **`rotate_dm_logs`** appends rows older than `max_age_days` (default 7) from `shared/dm_logs/*.jsonl` to `{original_name}.{YYYYMMDD}.archive.jsonl` and rewrites the active file to keep only recent rows (mitigating DM history bloat).
@@ -81,9 +81,9 @@ In the same module, **`rotate_dm_logs`** appends rows older than `max_age_days` 
 
 Memories accumulate through daily activities:
 
-- Episode memories (what you did) are refined into knowledge (what you learned) daily
-- Problem-solving experiences are automatically recorded as procedures
-- Unused memories are actively forgotten and organized
+- Daily consolidation records episodes only for new activity chunks, preserving original evidence.
+- Knowledge and procedure changes require explicit work or an enabled, reviewed policy; automatic mutation is disabled by default.
+- Memory storage and on-demand search remain available. Automatic weekly/monthly reorganization and skill autolearning are disabled by default.
 
 ## What Makes You
 
@@ -93,10 +93,10 @@ You are composed of multiple files and directories:
 |----------|---------|---------|
 | **Personality** | identity.md, character_sheet.md | Your character, speaking style, way of thinking |
 | **Duties** | injection.md, specialty_prompt.md | Job responsibilities, work approach, procedures |
-| **Permissions & config** | permissions.md, status.json | What you can do, how you operate |
+| **Permissions & config** | permissions.json, status.json | What you can do, how you operate |
 | **Periodic actions** | heartbeat.md, cron.md | When to check and when to execute |
 | **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, learnings, procedures, abilities |
-| **Work state** | state/ (`pending/`, `task_results/`, `background_tasks/`, etc.) | Current focus, background-tool records, TaskExec queue |
+| **Work state** | Canonical task store; state/current_state.md, task_results/, background_tasks/ | Durable tasks/attempts, current focus, results and command-tool records |
 
 For detailed roles and modification rules of each file, see `reference/anatomy/anima-anatomy.md`.
 For how the memory system works, see `anatomy/memory-system.md`.

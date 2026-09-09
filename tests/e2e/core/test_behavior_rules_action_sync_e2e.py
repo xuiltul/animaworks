@@ -24,11 +24,14 @@ def test_v063_migration_syncs_runtime_prompt_surfaces_end_to_end(tmp_path: Path)
     behavior_rules = (data_dir / "prompts" / "behavior_rules.md").read_text(encoding="utf-8")
     action_guide = (data_dir / "common_knowledge" / "operations" / "action-rules-guide.md").read_text(encoding="utf-8")
     skill_creator = (data_dir / "common_skills" / "skill-creator" / "SKILL.md").read_text(encoding="utf-8")
-    assert "[ACTION-RULE]" in behavior_rules
-    assert "create_skill" in behavior_rules
+    template = Path(__file__).resolve().parents[3] / "templates" / "ja" / "prompts" / "behavior_rules.md"
+    assert behavior_rules == template.read_text(encoding="utf-8")
+    assert "stale behavior rules" not in behavior_rules
+    assert "`list_tasks`" in behavior_rules
+    assert "`update_task`" in behavior_rules
     assert "gmail_draft" in action_guide
     assert "slack_post" not in action_guide
-    assert "routing_examples" in skill_creator
+    assert "trust_level" in skill_creator
 
 
 def test_cli_migrate_fresh_process_resyncs_prompt_surfaces(tmp_path: Path) -> None:
@@ -61,6 +64,9 @@ def test_cli_migrate_fresh_process_resyncs_prompt_surfaces(tmp_path: Path) -> No
     assert "cannot import name" not in output
 
     behavior_rules = (data_dir / "prompts" / "behavior_rules.md").read_text(encoding="utf-8")
-    assert "[ACTION-RULE]" in behavior_rules
-    assert "通常チャットでは `submit_tasks` を使わない" in behavior_rules
+    template = repo_root / "templates" / "ja" / "prompts" / "behavior_rules.md"
+    assert behavior_rules == template.read_text(encoding="utf-8")
+    assert "stale behavior rules" not in behavior_rules
+    assert "`list_tasks`" in behavior_rules
+    assert "`update_task`" in behavior_rules
     assert "人間からの指示・依頼は必ず `submit_tasks`" not in behavior_rules

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from core.supervisor.manager import ProcessSupervisor, HealthConfig, RestartPolicy
+from core.supervisor.manager import HealthConfig, ProcessSupervisor, RestartPolicy
 
 
 @pytest.mark.asyncio
@@ -25,7 +25,9 @@ async def test_health_check_loop(data_dir: Path, make_anima):
         ping_interval_sec=1.0,
         ping_timeout_sec=2.0,
         max_missed_pings=3,
-        startup_grace_sec=2.0
+        startup_grace_sec=0.0,
+        health_check_warmup_seconds=0.0,
+        runner_warmup_seconds=0.0,
     )
 
     supervisor = ProcessSupervisor(
@@ -33,19 +35,19 @@ async def test_health_check_loop(data_dir: Path, make_anima):
         shared_dir=data_dir / "shared",
         run_dir=data_dir / "run",
         log_dir=data_dir / "logs",
-        health_config=health_config
+        health_config=health_config,
     )
 
     try:
         # Start anima
         await supervisor.start_all(["test-anima"])
 
-        # Wait for health check loop to run a few times
-        await asyncio.sleep(3.0)
-
-        # Verify ping stats updated
+        # Observe a ping instead of racing a fixed sleep against startup warmup.
         handle = supervisor.processes.get("test-anima")
         assert handle is not None
+        async with asyncio.timeout(8):
+            while handle.stats.last_ping_at is None:
+                await asyncio.sleep(0.1)
         assert handle.stats.last_ping_at is not None
         assert handle.stats.missed_pings == 0
 
@@ -61,7 +63,7 @@ async def test_process_crash_detection(data_dir: Path, make_anima):
     restart_policy = RestartPolicy(
         max_retries=1,  # Allow one restart
         backoff_base_sec=0.5,
-        reset_after_sec=10.0
+        reset_after_sec=10.0,
     )
 
     supervisor = ProcessSupervisor(
@@ -69,7 +71,7 @@ async def test_process_crash_detection(data_dir: Path, make_anima):
         shared_dir=data_dir / "shared",
         run_dir=data_dir / "run",
         log_dir=data_dir / "logs",
-        restart_policy=restart_policy
+        restart_policy=restart_policy,
     )
 
     try:
@@ -80,18 +82,15 @@ async def test_process_crash_detection(data_dir: Path, make_anima):
 
         # Kill the process forcibly
         import os
+
         os.kill(original_pid, signal.SIGKILL)
 
         # Wait for supervisor to detect crash and restart
         await asyncio.sleep(3.0)
 
-        # Verify process was restarted
-        handle = supervisor.processes.get("test-anima")
-        if handle:
-            new_pid = handle.get_pid()
-            # Note: In actual implementation, supervisor needs to monitor
-            # process exit and trigger restart. This test may need adjustment
-            # based on actual auto-restart implementation.
+        # The original handle must observe the crash. start_anima alone does
+        # not start the supervisor's periodic restart loop (start_all does).
+        assert not handle.is_alive()
 
     finally:
         await supervisor.shutdown_all()
@@ -106,7 +105,7 @@ async def test_missed_pings_tracking(data_dir: Path, make_anima):
         animas_dir=data_dir / "animas",
         shared_dir=data_dir / "shared",
         run_dir=data_dir / "run",
-        log_dir=data_dir / "logs"
+        log_dir=data_dir / "logs",
     )
 
     try:

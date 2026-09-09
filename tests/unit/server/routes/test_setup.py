@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from server.routes.setup import (
@@ -17,6 +18,16 @@ from server.routes.setup import (
     _parse_accept_language,
     create_setup_router,
 )
+
+
+@pytest.fixture(autouse=True)
+def _codex_setup_model():
+    with patch(
+        "server.routes.setup._resolve_codex_setup_model",
+        new_callable=AsyncMock,
+        return_value="codex/test-account-default",
+    ):
+        yield
 
 
 # ── Helper to build a minimal FastAPI app with setup router ──

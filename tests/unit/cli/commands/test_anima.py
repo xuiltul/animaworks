@@ -236,6 +236,26 @@ class TestCmdChat:
         with pytest.raises(SystemExit):
             cmd_chat(args)
 
+    def test_chat_no_message_non_tty_exits_2(self, capsys):
+        from cli.commands.anima import cmd_chat
+
+        args = argparse.Namespace(
+            local=False, anima="sora", message=None,
+            from_person="human", gateway_url=None,
+            thread_id="default", no_tui=False,
+        )
+        not_tty = MagicMock()
+        not_tty.isatty.return_value = False
+        with (
+            patch("cli.commands.anima.sys.stdin", not_tty),
+            patch("cli.commands.anima.sys.stdout", not_tty),
+            pytest.raises(SystemExit) as exc,
+        ):
+            cmd_chat(args)
+        assert exc.value.code == 2
+        captured = capsys.readouterr()
+        assert "TUI requires a terminal" in captured.err
+
 
 # ── cmd_heartbeat ────────────────────────────────────────
 

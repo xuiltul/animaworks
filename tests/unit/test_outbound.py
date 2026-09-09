@@ -37,7 +37,7 @@ def config_with_aliases() -> ExternalMessagingConfig:
         preferred_channel="slack",
         user_aliases={
             "user": UserAliasConfig(slack_user_id="U0TEST000001", outbound_dm=True),
-            "taka": UserAliasConfig(
+            "owner": UserAliasConfig(
                 slack_user_id="U0TEST000001",
                 chatwork_room_id="12345",
                 outbound_dm=True,
@@ -149,17 +149,17 @@ class TestResolveRecipient:
     def test_alias_outbound_dm_default_false(self, known_animas):
         """Aliases are inbound-trust-only by default: no external DM resolution."""
         config = ExternalMessagingConfig(
-            user_aliases={"taka": UserAliasConfig(slack_user_id="U0TEST000001")},
+            user_aliases={"owner": UserAliasConfig(slack_user_id="U0TEST000001")},
         )
         with pytest.raises(RecipientNotFoundError, match="outbound_dm"):
-            resolve_recipient("taka", known_animas, config)
+            resolve_recipient("owner", known_animas, config)
 
     def test_alias_outbound_dm_disabled_case_insensitive(self, known_animas):
         config = ExternalMessagingConfig(
-            user_aliases={"taka": UserAliasConfig(slack_user_id="U0TEST000001")},
+            user_aliases={"owner": UserAliasConfig(slack_user_id="U0TEST000001")},
         )
         with pytest.raises(RecipientNotFoundError, match="outbound_dm"):
-            resolve_recipient("TAKA", known_animas, config)
+            resolve_recipient("OWNER", known_animas, config)
 
     def test_disabled_alias_still_allows_anima_fallback(self):
         """A disabled alias must not block case-insensitive anima resolution."""

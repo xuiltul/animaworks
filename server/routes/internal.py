@@ -136,16 +136,18 @@ class DelegateTaskPersistRequest(BaseModel):
     target: str  # destination anima name
     instruction: str  # full delegation text
     summary: str
-    deadline: str  # relative ('30m','2h','1d') or ISO8601
+    deadline: str = ""  # retired; accepted for external client compat, ignored
     sub_task_id: str  # client-assigned 12hex id
     tracking_task_id: str  # client-assigned 12hex id
     workspace: str = ""  # resolve_workspace absolute path string
-    exclusive_key: str = ""  # optional task exclusion group
+    exclusive_key: str = ""  # retired; accepted for external client compat, ignored
     acceptance_criteria: list[str] = []  # verifiable acceptance criteria for pending JSON
     persist_sub: bool = True  # write to subordinate queue
     persist_tracking: bool = True  # write delegated entry on delegator queue
-    persist_pending: bool = True  # create state/pending/<id>.json
+    persist_pending: bool = True  # legacy request field; publication is always atomic
     model: str = ""  # optional per-task LLM model override
+    execution_input: dict[str, Any] | None = None  # complete canonical input from sandbox callers
+    attempt_identity: dict[str, str] | None = None
 
 
 class InternalSendMessageRequest(BaseModel):
@@ -163,9 +165,18 @@ class InternalPostChannelRequest(BaseModel):
 class UpdateTaskPersistRequest(BaseModel):
     anima_name: str
     task_id: str
-    status: Literal["pending", "in_progress", "done", "cancelled", "blocked", "failed"]
+    status: Literal["pending", "in_progress", "done", "cancelled"]
     meta: dict[str, Any] = {}
     summary: str | None = None
+    attempt_identity: dict[str, str] | None = None
+
+
+class SubmitTasksPersistRequest(BaseModel):
+    anima_name: str
+    tasks: list[dict[str, Any]]
+    source: Literal["human", "anima"] = "anima"
+    meta: dict[str, Any] = {}
+    attempt_identity: dict[str, str] | None = None
 
 
 def create_internal_router() -> APIRouter:
@@ -375,17 +386,71 @@ def create_internal_router() -> APIRouter:
         return body.dict()
 
     async def _require_vector_worker(request: Request, path: str, body: BaseModel) -> dict[str, Any] | JSONResponse:
+        from core.i18n import t
+
         anima_name = getattr(body, "anima_name", None)
         if isinstance(anima_name, str) and anima_name:
+            from core.anima_factory import validate_anima_name
             from core.config.resolver import resolve_process_model_config
             from core.paths import get_animas_dir
 
+            if validate_anima_name(anima_name) is not None:
+                return JSONResponse(status_code=422, content={"detail": t("rag.invalid_anima_name")})
             process_config = resolve_process_model_config(get_animas_dir() / anima_name)
             if process_config.valid and process_config.process_model == "phase3":
-                return JSONResponse(
-                    status_code=409,
-                    content={"detail": f"Vector proxy disabled for phase3 anima: {anima_name}"},
-                )
+                # MCP/CLI subprocesses cannot share a task runner's Python IPC
+                # requester. This is transport forwarding only: the phase3
+                # root retains the sole native handle, queue and repair fence.
+                methods = {
+                    "/query": "memory.query",
+                    "/upsert": "memory.upsert",
+                    "/update-metadata": "memory.update_metadata",
+                    "/delete-documents": "memory.delete_documents",
+                    "/get-by-metadata": "memory.get_by_metadata",
+                    "/get-by-ids": "memory.get_by_ids",
+                    "/create-collection": "memory.create_collection",
+                    "/delete-collection": "memory.delete_collection",
+                    "/list-collections": "memory.list_collections_checked",
+                }
+                method = methods.get(path)
+                if method is None:
+                    # Reset/repair/health must not open a second native owner.
+                    return JSONResponse(
+                        status_code=409,
+                        content={"detail": t("rag.worker_operation_disabled", anima=anima_name)},
+                    )
+                supervisor = getattr(request.app.state, "supervisor", None)
+                if supervisor is None:
+                    return JSONResponse(
+                        status_code=503,
+                        content={"detail": t("rag.root_unavailable")},
+                        headers={"Retry-After": "1"},
+                    )
+                payload = _body_payload(body)
+                payload.pop("anima_name", None)
+                try:
+                    result = await supervisor.send_request(
+                        anima_name,
+                        "memory",
+                        {"method": method, "params": payload},
+                        timeout=120.0,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Root memory proxy unavailable: anima=%s method=%s", anima_name, method, exc_info=True
+                    )
+                    return JSONResponse(
+                        status_code=503,
+                        content={"detail": t("rag.root_unavailable")},
+                        headers={"Retry-After": "1"},
+                    )
+                if not isinstance(result, dict) or result.get("ok") is False:
+                    return JSONResponse(
+                        status_code=503,
+                        content={"detail": t("rag.root_operation_failed")},
+                        headers={"Retry-After": "1"},
+                    )
+                return result
         manager = getattr(request.app.state, "vector_worker", None)
         if manager is None or not getattr(manager, "enabled", False):
             logger.warning("Vector worker unavailable for %s: manager disabled or missing", path)
@@ -589,10 +654,15 @@ def create_internal_router() -> APIRouter:
             return JSONResponse(status_code=400, content={"detail": f"Invalid message: {exc}"})
         if validate_anima_name(msg.from_person) or not re.fullmatch(r"[A-Za-z0-9_-]+", msg.to_person):
             return JSONResponse(status_code=400, content={"detail": "Invalid sender/recipient name"})
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,160}", msg.id):
+            return JSONResponse(status_code=400, content={"detail": "Invalid message ID"})
 
         target_dir = get_shared_dir() / "inbox" / msg.to_person
         target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / f"{msg.id}.json").write_text(msg.model_dump_json(indent=2), encoding="utf-8")
+        from core.memory._io import atomic_write_text
+
+        if not (target_dir / "processed" / f"{msg.id}.json").exists():
+            atomic_write_text(target_dir / f"{msg.id}.json", msg.model_dump_json(indent=2))
         logger.info("internal send-message: %s -> %s (%s)", msg.from_person, msg.to_person, msg.id)
         return {"ok": True, "message_id": msg.id, "thread_id": msg.thread_id}
 
@@ -621,19 +691,72 @@ def create_internal_router() -> APIRouter:
         logger.info("internal post-channel: %s -> #%s", body.from_anima, body.channel)
         return {"ok": True}
 
+    @router.get("/internal/tasks")
+    async def internal_tasks(anima_name: str, include_archived: bool = False, task_id: str | None = None):
+        """Read a task snapshot for workers without direct database access."""
+        from core.anima_factory import validate_anima_name
+        from core.memory.task_queue import TaskQueueManager
+        from core.paths import get_animas_dir
+
+        if validate_anima_name(anima_name):
+            return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
+        anima_dir = get_animas_dir() / anima_name
+        if not anima_dir.is_dir():
+            return JSONResponse(status_code=404, content={"detail": "Anima directory not found"})
+
+        def _read():
+            store = TaskQueueManager(anima_dir).store
+            with store.reader():
+                if task_id is not None:
+                    entry = store.get(anima_name, task_id)
+                    return {"tasks": [entry.model_dump(mode="json")] if entry else [], "input_ids": []}
+                return {
+                    "tasks": [
+                        entry.model_dump(mode="json")
+                        for entry in store.read(anima_name, archived=include_archived).values()
+                    ],
+                    "input_ids": sorted(store.executable_ids(anima_name)),
+                }
+
+        return await asyncio.get_running_loop().run_in_executor(_native_executor, _read)
+
+    @router.post("/internal/submit-tasks")
+    async def internal_submit_tasks(body: SubmitTasksPersistRequest):
+        """Publish a complete batch on the host; no sandbox DB grant is needed."""
+        from core.anima_factory import validate_anima_name
+        from core.paths import get_animas_dir
+        from core.tasks_dispatch import publish_tasks
+
+        if validate_anima_name(body.anima_name):
+            return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
+        anima_dir = get_animas_dir() / body.anima_name
+        if not anima_dir.is_dir():
+            return JSONResponse(status_code=404, content={"detail": "Anima directory not found"})
+
+        def _publish():
+            from core.taskboard.tasks import attempt_scope
+
+            with attempt_scope(body.attempt_identity):
+                return publish_tasks(anima_dir, body.tasks, source=body.source, meta=body.meta, host_fallback=False)
+
+        try:
+            entries = await asyncio.get_running_loop().run_in_executor(_native_executor, _publish)
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"detail": str(exc)})
+        except Exception as exc:
+            logger.exception("internal submit-tasks failed")
+            return JSONResponse(status_code=500, content={"detail": str(exc)})
+        return {"ok": True, "tasks": [entry.model_dump(mode="json") for entry in entries]}
+
     @router.post("/internal/delegate-task")
     async def internal_delegate_task(body: DelegateTaskPersistRequest):
         """Persist a delegated task outside sandbox EROFS constraints.
 
-        Sandboxed ``delegate_task`` cannot append to another anima's
-        ``task_queue.jsonl`` or write ``state/pending/``.  Mode C handlers
-        fall back here so host-side TaskQueueManager / TaskBoard writes succeed.
+        Sandboxed ``delegate_task`` cannot write the shared task database.
+        Mode C handlers use this endpoint for atomic host-side publication.
         """
         from core.anima_factory import validate_anima_name
         from core.company import check_company_boundary
-        from core.i18n import t
-        from core.memory._io import atomic_write_text
-        from core.memory.task_queue import TaskQueueManager
         from core.paths import get_animas_dir
         from core.tooling.handler_delegation import _record_taskboard_delegation
 
@@ -676,71 +799,50 @@ def create_internal_router() -> APIRouter:
         def _persist() -> dict[str, str]:
             from datetime import UTC, datetime
 
-            if body.persist_sub:
-                TaskQueueManager(target_dir).add_task(
-                    source="anima",
-                    original_instruction=body.instruction,
-                    assignee=body.target,
-                    summary=body.summary,
-                    deadline=body.deadline,
-                    relay_chain=[body.delegator],
-                    task_id=body.sub_task_id,
-                    meta={"model": body.model} if body.model else None,
-                )
-            if body.persist_tracking:
-                TaskQueueManager(delegator_dir).add_delegated_task(
-                    original_instruction=body.instruction,
-                    assignee=body.target,
-                    summary=t("handler.delegation_summary", summary=body.summary),
-                    deadline=body.deadline,
-                    relay_chain=[body.delegator, body.target],
-                    task_id=body.tracking_task_id,
-                    meta={
-                        "delegated_to": body.target,
-                        "delegated_task_id": body.sub_task_id,
-                        **({"model": body.model} if body.model else {}),
-                    },
-                )
-            if body.persist_pending:
-                task_desc = {
-                    "task_type": "llm",
-                    "task_id": body.sub_task_id,
-                    "title": body.summary,
-                    "description": body.instruction,
-                    "context": "",
-                    "acceptance_criteria": list(body.acceptance_criteria or []),
-                    "constraints": [],
-                    "file_paths": [],
-                    "submitted_by": body.delegator,
-                    "submitted_at": datetime.now(UTC).isoformat(),
-                    "reply_to": body.delegator,
-                    "source": "delegation",
-                    "working_directory": body.workspace,
-                    "exclusive_key": body.exclusive_key,
-                    "model": body.model,
-                }
-                pending_dir = target_dir / "state" / "pending"
-                pending_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_text(
-                    pending_dir / f"{body.sub_task_id}.json",
-                    json.dumps(task_desc, ensure_ascii=False, indent=2) + "\n",
+            from core.taskboard.tasks import attempt_scope
+            from core.tasks_dispatch import publish_delegation
+
+            payload = {
+                "task_type": "llm",
+                "task_id": body.sub_task_id,
+                "title": body.summary,
+                "description": body.instruction,
+                "context": "",
+                "acceptance_criteria": list(body.acceptance_criteria or []),
+                "constraints": [],
+                "file_paths": [],
+                "submitted_by": body.delegator,
+                "submitted_at": datetime.now(UTC).isoformat(),
+                "reply_to": body.delegator,
+                "source": "delegation",
+                "working_directory": body.workspace,
+                "model": body.model,
+            }
+            if body.execution_input is not None:
+                payload = dict(body.execution_input)
+                if payload.get("task_id") != body.sub_task_id:
+                    raise ValueError("Delegated execution input task_id must match sub_task_id")
+                if payload.get("submitted_by", body.delegator) != body.delegator:
+                    raise ValueError("Delegated execution input must retain its delegator")
+                payload.setdefault("submitted_by", body.delegator)
+            with attempt_scope(body.attempt_identity):
+                publish_delegation(
+                    target_dir,
+                    payload,
+                    delegator=body.delegator,
+                    tracking_task_id=body.tracking_task_id,
+                    host_fallback=False,
                 )
             try:
                 _record_taskboard_delegation(
                     delegated_to=body.target,
                     delegated_task_id=body.sub_task_id,
                     delegator=body.delegator,
-                    tracking_task_id=(body.tracking_task_id if body.persist_tracking else None),
+                    tracking_task_id=body.tracking_task_id,
                 )
             except Exception:
-                logger.warning(
-                    "TaskBoard write failed in internal delegate-task; queue entries remain authoritative",
-                    exc_info=True,
-                )
-            return {
-                "sub_task_id": body.sub_task_id,
-                "tracking_task_id": body.tracking_task_id,
-            }
+                logger.warning("TaskBoard metadata unavailable after delegation", exc_info=True)
+            return {"sub_task_id": body.sub_task_id, "tracking_task_id": body.tracking_task_id}
 
         try:
             loop = asyncio.get_running_loop()
@@ -766,6 +868,15 @@ def create_internal_router() -> APIRouter:
 
         if validate_anima_name(body.anima_name):
             return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
+        if body.status == "in_progress":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "detail": "status 'in_progress' is written only by the running TaskExec. "
+                    "To (re)start a task, submit it with the submit_tasks tool. "
+                    "To close it, use status done or cancelled."
+                },
+            )
         anima_dir = get_animas_dir() / body.anima_name
         if not anima_dir.is_dir():
             return JSONResponse(
@@ -774,11 +885,14 @@ def create_internal_router() -> APIRouter:
             )
 
         def _persist() -> Any:
+            from core.taskboard.tasks import attempt_scope
+
             manager = TaskQueueManager(anima_dir)
-            entry = manager.update_meta(body.task_id, body.meta, summary=body.summary)
-            if entry is None:
-                return None
-            return manager.update_status(body.task_id, body.status, summary=body.summary)
+            with attempt_scope(body.attempt_identity), manager.store.transaction():
+                entry = manager.update_meta(body.task_id, body.meta, summary=body.summary)
+                if entry is None:
+                    return None
+                return manager.update_status(body.task_id, body.status, summary=body.summary)
 
         try:
             loop = asyncio.get_running_loop()

@@ -37,7 +37,6 @@
 
 ### Skills
 - **create_skill**: 新しいスキルディレクトリを作成する
-- 新規スキル作成前に `read_memory_file(path="common_skills/skill-creator/SKILL.md")` を読む
 - 既存のスキル文書・CLIマニュアルは **read_memory_file** でカタログのパスを指定して読む
 
 

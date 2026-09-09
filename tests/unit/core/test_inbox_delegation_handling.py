@@ -22,7 +22,6 @@ from core._anima_inbox import (
     _check_task_state,
     _extract_task_id,
     _handle_delegation_dms,
-    _rescue_regenerate_pending,
     _split_delegation_items,
 )
 from core.messenger import InboxItem
@@ -160,223 +159,52 @@ class TestSplitDelegationItems:
 # ── _check_task_state ────────────────────────────────────────
 
 
-class TestCheckTaskState:
-    def test_completed(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        (anima_dir / "state" / "task_results" / "abc123def456.md").write_text("done")
-        assert _check_task_state(anima_dir, "abc123def456") == "completed"
+class TestCanonicalDelegation:
+    @pytest.mark.parametrize(
+        "status,expected",
+        [("pending", "pending"), ("in_progress", "processing"), ("done", "completed"), ("cancelled", "terminal")],
+    )
+    def test_status_comes_from_task_record(self, tmp_path, status, expected):
+        from core.memory.task_queue import TaskQueueManager
 
-    def test_processing(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        (anima_dir / "state" / "pending" / "processing" / "abc123def456.json").write_text("{}")
-        assert _check_task_state(anima_dir, "abc123def456") == "processing"
+        directory = _setup_anima_dir(tmp_path)
+        queue = TaskQueueManager(directory)
+        entry = queue.add_task(source="anima", original_instruction="full instruction", assignee="bob", summary="task")
+        queue.update_status(entry.task_id, status)
+        assert _check_task_state(directory, entry.task_id) == expected
 
-    def test_pending(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        (anima_dir / "state" / "pending" / "abc123def456.json").write_text("{}")
-        assert _check_task_state(anima_dir, "abc123def456") == "pending"
-
-    def test_terminal_done(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        queue_path = anima_dir / "state" / "task_queue.jsonl"
-        entry = {
-            "task_id": "abc123def456",
-            "ts": "2026-03-19T00:00:00",
-            "source": "anima",
-            "original_instruction": "test",
-            "assignee": "bob",
-            "status": "done",
-            "summary": "done",
-            "updated_at": "2026-03-19T00:00:00",
-        }
-        queue_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
-        assert _check_task_state(anima_dir, "abc123def456") == "terminal"
-
-    def test_terminal_failed(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        queue_path = anima_dir / "state" / "task_queue.jsonl"
-        entry = {
-            "task_id": "abc123def456",
-            "ts": "2026-03-19T00:00:00",
-            "source": "anima",
-            "original_instruction": "test",
-            "assignee": "bob",
-            "status": "failed",
-            "summary": "failed",
-            "updated_at": "2026-03-19T00:00:00",
-        }
-        queue_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
-        assert _check_task_state(anima_dir, "abc123def456") == "terminal"
-
-    def test_missing(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        assert _check_task_state(anima_dir, "abc123def456") == "missing"
-
-    def test_completed_takes_priority_over_pending(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        (anima_dir / "state" / "task_results" / "abc123def456.md").write_text("done")
-        (anima_dir / "state" / "pending" / "abc123def456.json").write_text("{}")
-        assert _check_task_state(anima_dir, "abc123def456") == "completed"
-
-
-# ── _rescue_regenerate_pending ──────────────────────────────
-
-
-class TestRescueRegeneratePending:
-    def test_creates_pending_file(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        msg = _make_message(
-            from_person="alice",
-            content="[タスク委譲]\nCreate issue for X\n\n期限: 2h\nタスクID: abc123def456",
-        )
-        _rescue_regenerate_pending(anima_dir, "abc123def456", msg)
-
-        pending_file = anima_dir / "state" / "pending" / "abc123def456.json"
-        assert pending_file.exists()
-
-        data = json.loads(pending_file.read_text(encoding="utf-8"))
-        assert data["task_id"] == "abc123def456"
-        assert data["task_type"] == "llm"
-        assert data["source"] == "delegation_rescue"
-        assert data["submitted_by"] == "alice"
-        assert data["reply_to"] == "alice"
-
-    def test_uses_task_queue_instruction_when_available(self, tmp_path: Path) -> None:
-        anima_dir = _setup_anima_dir(tmp_path)
-        queue_path = anima_dir / "state" / "task_queue.jsonl"
-        entry = {
-            "task_id": "abc123def456",
-            "ts": "2026-03-19T00:00:00",
-            "source": "anima",
-            "original_instruction": "Original detailed instruction from queue",
-            "assignee": "bob",
-            "status": "pending",
-            "summary": "test",
-            "updated_at": "2026-03-19T00:00:00",
-        }
-        queue_path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
-
-        msg = _make_message(content="Short DM content")
-        _rescue_regenerate_pending(anima_dir, "abc123def456", msg)
-
-        pending_file = anima_dir / "state" / "pending" / "abc123def456.json"
-        data = json.loads(pending_file.read_text(encoding="utf-8"))
-        assert data["description"] == "Original detailed instruction from queue"
-
-
-# ── _handle_delegation_dms ──────────────────────────────────
-
-
-class TestHandleDelegationDms:
-    def _make_anima_mixin(self, tmp_path: Path) -> SimpleNamespace:
-        anima_dir = _setup_anima_dir(tmp_path)
-        shared_dir = tmp_path / "shared"
-        inbox_dir = shared_dir / "inbox" / "bob"
-        inbox_dir.mkdir(parents=True)
-        processed_dir = inbox_dir / "processed"
-        processed_dir.mkdir(parents=True)
-
-        messenger = MagicMock()
-        messenger.archive_paths = MagicMock(return_value=1)
-
-        memory = MagicMock()
-        memory.append_episode = MagicMock()
-
-        activity = MagicMock()
-        activity.log = MagicMock()
-
-        return SimpleNamespace(
-            name="bob",
-            anima_dir=anima_dir,
-            messenger=messenger,
-            memory=memory,
-            _activity=activity,
-        )
+    def test_result_file_is_not_completion_proof(self, tmp_path):
+        directory = _setup_anima_dir(tmp_path)
+        (directory / "state" / "task_results" / "abc123.md").write_text("partial output")
+        assert _check_task_state(directory, "abc123") == "missing"
 
     @pytest.mark.asyncio
-    async def test_archives_when_task_completed(self, tmp_path: Path) -> None:
-        mixin = self._make_anima_mixin(tmp_path)
-        (mixin.anima_dir / "state" / "task_results" / "abc123def456.md").write_text("done")
-
-        msg = _make_message(intent="delegation", meta={"task_id": "abc123def456"})
-        items = [_make_inbox_item(msg, tmp_path)]
-
-        await _handle_delegation_dms(mixin, items)
-
-        mixin.messenger.archive_paths.assert_called_once_with(items)
-        mixin._activity.log.assert_called_once()
-        assert mixin._activity.log.call_args[1]["meta"]["delegation_state"] == "completed"
-
-    @pytest.mark.asyncio
-    async def test_archives_when_task_pending(self, tmp_path: Path) -> None:
-        mixin = self._make_anima_mixin(tmp_path)
-        (mixin.anima_dir / "state" / "pending" / "abc123def456.json").write_text("{}")
-
-        msg = _make_message(intent="delegation", meta={"task_id": "abc123def456"})
-        items = [_make_inbox_item(msg, tmp_path)]
-
-        await _handle_delegation_dms(mixin, items)
-
-        mixin.messenger.archive_paths.assert_called_once()
-        assert not (mixin.anima_dir / "state" / "pending" / "abc123def456_rescue.json").exists()
-
-    @pytest.mark.asyncio
-    async def test_rescues_when_task_missing(self, tmp_path: Path) -> None:
-        mixin = self._make_anima_mixin(tmp_path)
-
-        msg = _make_message(
-            intent="delegation",
-            meta={"task_id": "abc123def456"},
-            content="[タスク委譲]\nDo something\n\n期限: 2h\nタスクID: abc123def456",
-            from_person="alice",
+    async def test_missing_task_dm_is_not_guessed_or_archived(self, tmp_path):
+        directory = _setup_anima_dir(tmp_path)
+        mixin = SimpleNamespace(
+            anima_dir=directory, name="bob", messenger=MagicMock(), memory=MagicMock(), _activity=MagicMock()
         )
-        items = [_make_inbox_item(msg, tmp_path)]
-
-        await _handle_delegation_dms(mixin, items)
-
-        pending_file = mixin.anima_dir / "state" / "pending" / "abc123def456.json"
-        assert pending_file.exists()
-        data = json.loads(pending_file.read_text(encoding="utf-8"))
-        assert data["source"] == "delegation_rescue"
-
-        mixin.messenger.archive_paths.assert_called_once()
-        assert mixin._activity.log.call_args[1]["meta"]["delegation_state"] == "missing"
+        item = _make_inbox_item(_make_message(intent="delegation", meta={"task_id": "abc123def456"}), tmp_path)
+        unresolved = await _handle_delegation_dms(mixin, [item])
+        assert unresolved == [item]
+        mixin.messenger.archive_paths.assert_called_once_with([])
+        assert not list((directory / "state" / "pending").glob("*.json"))
 
     @pytest.mark.asyncio
-    async def test_records_episode(self, tmp_path: Path) -> None:
-        mixin = self._make_anima_mixin(tmp_path)
-        (mixin.anima_dir / "state" / "pending" / "abc123def456.json").write_text("{}")
+    async def test_existing_task_dm_is_archived_and_recorded_without_republication(self, tmp_path):
+        from core.memory.task_queue import TaskQueueManager
 
-        msg = _make_message(
-            intent="delegation",
-            meta={"task_id": "abc123def456"},
-            from_person="alice",
+        directory = _setup_anima_dir(tmp_path)
+        queue = TaskQueueManager(directory)
+        queue.submit({"task_id": "abc123def456", "task_type": "llm", "title": "work", "description": "full work"})
+        mixin = SimpleNamespace(
+            anima_dir=directory, name="bob", messenger=MagicMock(), memory=MagicMock(), _activity=MagicMock()
         )
-        items = [_make_inbox_item(msg, tmp_path)]
-
-        await _handle_delegation_dms(mixin, items)
-
+        item = _make_inbox_item(_make_message(intent="delegation", meta={"task_id": "abc123def456"}), tmp_path)
+        assert await _handle_delegation_dms(mixin, [item]) == []
+        mixin.messenger.archive_paths.assert_called_once_with([item])
         mixin.memory.append_episode.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_handles_multiple_delegation_dms(self, tmp_path: Path) -> None:
-        mixin = self._make_anima_mixin(tmp_path)
-        (mixin.anima_dir / "state" / "pending" / "aaa111bbb222.json").write_text("{}")
-
-        msgs = [
-            _make_message(intent="delegation", meta={"task_id": "aaa111bbb222"}),
-            _make_message(intent="delegation", meta={"task_id": "ccc333ddd444"}),
-        ]
-        items = [_make_inbox_item(m, tmp_path) for m in msgs]
-
-        await _handle_delegation_dms(mixin, items)
-
-        assert mixin._activity.log.call_count == 2
-        rescue_file = mixin.anima_dir / "state" / "pending" / "ccc333ddd444.json"
-        assert rescue_file.exists()
-
-
-# ── Message.meta serialization ──────────────────────────────
+        assert len(queue.store.pending("bob")) == 1
 
 
 class TestMessageMeta:

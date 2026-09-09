@@ -285,6 +285,7 @@ class StreamingState:
     message_count: int = 0
     usage_acc: Any = None
     interrupted: bool = False
+    sdk_error: str | None = None
 
 
 def _append_assistant_blocks_to_state(
@@ -455,6 +456,9 @@ async def process_stream_messages(
                     yield {"type": "thinking_end"}
 
         elif isinstance(message, AssistantMessage):
+            sdk_error = getattr(message, "error", None)
+            if isinstance(sdk_error, str) and sdk_error:
+                state.sdk_error = sdk_error
             if not got_stream_event:
                 buffered_assistant_messages.append(message)
                 continue
@@ -485,6 +489,8 @@ async def process_stream_messages(
                 u = message.usage
                 state.usage_acc.input_tokens = u.get("input_tokens", 0) or 0
                 state.usage_acc.output_tokens = u.get("output_tokens", 0) or 0
+                state.usage_acc.cache_read_tokens = u.get("cache_read_input_tokens", 0) or 0
+                state.usage_acc.cache_write_tokens = u.get("cache_creation_input_tokens", 0) or 0
             break
 
         elif isinstance(message, SystemMessage):

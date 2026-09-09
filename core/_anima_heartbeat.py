@@ -184,104 +184,26 @@ class HeartbeatMixin:
     # ── Background model resolution ──────────────────────────
 
     def _resolve_background_config(self, channel: str = "background") -> ModelConfig | None:  # noqa: F821
-        """Resolve background model config for heartbeat/cron.
-
-        Resolution order:
-          1. status.json background_model (per-anima)
-          2. config.heartbeat.default_model (global)
-          3. main model
-
-        The selected base config then passes through the shared rate-guard
-        fallback preflight used by heartbeat, cron, and inbox cycles.
-        """
-        from core.config.model_config import (
-            _FAMILY_CREDENTIAL_MAP,
-            _model_family,
-            infer_mode_s_auth,
-            resolve_effective_model_config,
-        )
-        from core.config.models import load_config, resolve_execution_mode
+        """Resolve the background lane through the common route selection."""
+        from core.config.model_config import resolve_model_selection
+        from core.config.models import load_config
         from core.execution.fallback_activity import log_model_fallback
         from core.schemas import ModelConfig
 
         main_config = self.agent.model_config
-        bg_model = main_config.background_model
-        bg_effort = main_config.background_thinking_effort
-        if not bg_model:
-            config = load_config()
-            bg_model = config.heartbeat.default_model
-        if not bg_model or bg_model == main_config.model:
-            # Same model: only thinking_effort may differ for background runs.
-            if bg_effort and bg_effort != main_config.thinking_effort:
-                base_config = main_config.model_copy(update={"thinking_effort": bg_effort})
-            else:
-                base_config = main_config
-        else:
-            # Recalculate resolved_mode for the background model so that
-            # the correct executor type is created (e.g. claude-* → S, codex/* → C).
-            # Without this, model_copy carries the main model's resolved_mode,
-            # which may be incompatible with the background model name.
-            config = load_config()
-            bg_resolved_mode = resolve_execution_mode(config, bg_model)
-
-            bg_credential = main_config.background_credential
-            bg_family = _model_family(bg_model)
-            main_family = _model_family(main_config.model)
-            if not bg_credential and bg_family != main_family:
-                mapped_credential = _FAMILY_CREDENTIAL_MAP.get(bg_family)
-                if mapped_credential in config.credentials:
-                    bg_credential = mapped_credential
-
-            updates: dict[str, Any] = {
-                "model": bg_model,
-                "resolved_mode": bg_resolved_mode,
-            }
-            if bg_effort:
-                updates["thinking_effort"] = bg_effort
-            if bg_credential:
-                if bg_credential in config.credentials:
-                    cred = config.credentials[bg_credential]
-                    updates.update(
-                        {
-                            "background_credential": bg_credential,
-                            "api_key": cred.api_key or None,
-                            "api_key_env": f"{bg_credential.upper()}_API_KEY",
-                            "api_base_url": cred.base_url or None,
-                            "extra_keys": dict(cred.keys) if cred.keys else {},
-                        }
-                    )
-                    if bg_resolved_mode == "S" and not main_config.mode_s_auth:
-                        updates["mode_s_auth"] = infer_mode_s_auth(
-                            mode=bg_resolved_mode,
-                            credential_name=bg_credential,
-                            config=config,
-                        )
-                    elif bg_resolved_mode != "S":
-                        updates["mode_s_auth"] = None
-            base_config = main_config.model_copy(update=updates)
-
-        # A few lifecycle unit tests deliberately install a generic MagicMock
-        # model config.  Preserve the pre-existing background resolution result
-        # for those test doubles; runtime AgentCore configs are ModelConfig.
-        if not isinstance(base_config, ModelConfig):
-            return base_config
-
-        effective_config = resolve_effective_model_config(base_config)
+        if not isinstance(main_config, ModelConfig):
+            return main_config
+        selection = resolve_model_selection(main_config, lane="background", config=load_config())
         activity = getattr(self, "_activity", None)
         if activity is not None:
             log_model_fallback(
                 activity,
-                base_config,
-                effective_config,
+                selection.primary,
+                selection.effective,
                 channel=channel,
                 phase="preflight",
             )
-
-        # Preserve the existing no-swap signal when neither a background
-        # override nor a rate-guard fallback changed the main config.
-        if base_config is main_config and effective_config is main_config:
-            return None
-        return effective_config
+        return None if selection.effective is main_config else selection.effective
 
     # ── Heartbeat history ────────────────────────────────────
 
@@ -452,17 +374,6 @@ class HeartbeatMixin:
                         animas_dir=str(get_animas_dir()),
                     )
                 )
-                try:
-                    from core.delegation_recovery import build_supervision_context
-
-                    supervision_context = build_supervision_context(
-                        self.name,
-                        get_animas_dir(),
-                    )
-                    if supervision_context:
-                        parts.append(supervision_context)
-                except Exception:
-                    logger.debug("[%s] Failed to build supervision recovery context", self.name, exc_info=True)
         except Exception:
             logger.debug(
                 "[%s] Failed to inject delegation check",
@@ -814,7 +725,7 @@ class HeartbeatMixin:
                     )
 
                 try:
-                    self.memory.append_episode(episode_entry)
+                    await asyncio.to_thread(self.memory.append_episode, episode_entry)
                 except Exception:
                     logger.debug("[%s] Failed to record heartbeat episode", self.name, exc_info=True)
 
@@ -861,7 +772,7 @@ class HeartbeatMixin:
             # Keep current_state.md across normal heartbeat boundaries. It is
             # working memory, not a disposable session scratchpad; only trim it
             # when an explicit size limit is configured.
-            self._enforce_state_size_limit()
+            await asyncio.to_thread(self._enforce_state_size_limit)
 
             return result
         finally:
@@ -875,26 +786,11 @@ class HeartbeatMixin:
         inbox_items: list[InboxItem],
         unread_count: int,
     ) -> None:
-        """Handle heartbeat failure: crash-archive, log error, save recovery note."""
+        """Keep unread work on failure, log the error, and save recovery state."""
         logger.exception("[%s] run_heartbeat FAILED", self.name)
 
-        # Archive inbox messages even on crash to prevent
-        # re-processing storms on next heartbeat.
-        if inbox_items:
-            try:
-                crash_archived = self.messenger.archive_paths(inbox_items)
-                logger.info(
-                    "[%s] Crash-archived %d/%d inbox messages",
-                    self.name,
-                    crash_archived,
-                    len(inbox_items),
-                )
-            except Exception:
-                logger.warning(
-                    "[%s] Failed to crash-archive inbox messages",
-                    self.name,
-                    exc_info=True,
-                )
+        # Failed model execution never acknowledges unread requests. Retry
+        # cadence remains owned by the scheduler/watcher, not a local loop.
 
         # Activity log: heartbeat failure (single event to avoid double-fault)
         self._activity.log(
@@ -944,15 +840,5 @@ class HeartbeatMixin:
         Called after heartbeat completion to ensure tasks written
         during planning phase are picked up promptly.
         """
-        pending_dir = self.anima_dir / "state" / "pending"
-        if not pending_dir.exists():
-            return
-        task_files = list(pending_dir.glob("*.json"))
-        if task_files:
-            logger.info(
-                "[%s] %d pending tasks found after heartbeat, signaling executor",
-                self.name,
-                len(task_files),
-            )
-            if self._pending_executor is not None:
-                self._pending_executor.wake()
+        if self._pending_executor is not None:
+            self._pending_executor.wake()

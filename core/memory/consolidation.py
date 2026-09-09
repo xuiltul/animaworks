@@ -22,6 +22,7 @@ This module retains:
 - LLM output sanitisation (shared utility used by reconsolidation.py)
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -97,6 +98,42 @@ class ConsolidationEngine:
     CONSOLIDATED_TIMELINE_HEADER = "## Consolidated timeline"
     PHASE_B_CARRYOVER_FILE = "consolidation_phase_b_carryover.json"
     PHASE_B_CARRYOVER_MAX_DAYS = 3
+
+    def unprocessed_activity_chunks(self, target_date: date, chunks: list[str]) -> list[str]:
+        """Exclude inputs whose episode was durably written by an earlier run."""
+        checkpoint = self._load_episode_checkpoint()
+        processed = set(checkpoint.get(target_date.isoformat(), []))
+        return [chunk for chunk in chunks if hashlib.sha256(chunk.encode()).hexdigest() not in processed]
+
+    def _load_episode_checkpoint(self) -> dict[str, list[str]]:
+        path = self.anima_dir / "state" / "consolidation_episode_checkpoint.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return (
+                {
+                    key: values
+                    for key, values in data.items()
+                    if isinstance(values, list) and all(isinstance(value, str) for value in values)
+                }
+                if isinstance(data, dict)
+                else {}
+            )
+        except (OSError, ValueError):
+            return {}
+
+    def record_consolidated_chunks(self, target_date: date, chunks: list[str]) -> None:
+        """Advance only after the episode write succeeds; raw inputs stay intact."""
+        from core.memory._io import atomic_write_text
+
+        checkpoint = self._load_episode_checkpoint()
+        key = target_date.isoformat()
+        checkpoint[key] = sorted(
+            set(checkpoint.get(key, [])) | {hashlib.sha256(chunk.encode()).hexdigest() for chunk in chunks}
+        )
+        atomic_write_text(
+            self.anima_dir / "state" / "consolidation_episode_checkpoint.json",
+            json.dumps(checkpoint, ensure_ascii=False),
+        )
 
     @staticmethod
     def previous_local_day_window(reference: datetime | None = None) -> tuple[date, datetime, datetime]:
@@ -203,6 +240,7 @@ class ConsolidationEngine:
         target_date: date,
         reason: str,
         max_days: int = PHASE_B_CARRYOVER_MAX_DAYS,
+        incremental: bool = False,
     ) -> list[dict[str, Any]]:
         """Persist Phase B source so timeout retries can resume from it.
 
@@ -215,7 +253,17 @@ class ConsolidationEngine:
         if not summary:
             return self.load_phase_b_carryover()
 
-        items = [item for item in self.load_phase_b_carryover() if item.get("date") != target_date.isoformat()]
+        prior = self.load_phase_b_carryover()
+        if incremental:
+            same_day = [
+                str(item.get("episodes_summary", "")) for item in prior if item.get("date") == target_date.isoformat()
+            ]
+            existing = "\n\n".join(part for part in same_day if part)
+            if existing and summary not in existing:
+                summary = existing + "\n\n" + summary
+            elif existing:
+                summary = existing
+        items = [item for item in prior if item.get("date") != target_date.isoformat()]
         items.append(
             {
                 "date": target_date.isoformat(),

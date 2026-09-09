@@ -14,9 +14,7 @@ from core.taskboard.store import TaskBoardStore
 QUEUE_STATUS_TO_COLUMN: dict[str, BoardColumn] = {
     "pending": BoardColumn.TODO,
     "in_progress": BoardColumn.RUNNING,
-    "blocked": BoardColumn.BLOCKED,
     "delegated": BoardColumn.WAITING,
-    "failed": BoardColumn.REVIEW,
     "done": BoardColumn.DONE,
     "cancelled": BoardColumn.DONE,
 }
@@ -34,7 +32,7 @@ def project_anima(
     include_missing: bool = False,
     include_archived: bool = False,
 ) -> list[BoardTask]:
-    """Project one Anima's task_queue.jsonl into BoardTask rows."""
+    """Project one Anima's canonical tasks into BoardTask rows."""
     resolved_anima_dir = Path(anima_dir)
     resolved_anima_name = anima_name or resolved_anima_dir.name
     resolved_store = store or TaskBoardStore()
@@ -42,7 +40,7 @@ def project_anima(
     metadata_rows = resolved_store.list_metadata(anima_name=resolved_anima_name)
     metadata_by_task_id = {metadata.task_id: metadata for metadata in metadata_rows}
 
-    tasks = _load_queue_tasks(resolved_anima_dir)
+    tasks = _load_queue_tasks(resolved_anima_dir, include_archived=include_archived)
     projected: list[BoardTask] = []
     seen_task_ids: set[str] = set()
     for task in tasks:
@@ -102,11 +100,11 @@ def _discover_anima_names(animas_dir: Path) -> set[str]:
     return {path.name for path in animas_dir.iterdir() if path.is_dir()}
 
 
-def _load_queue_tasks(anima_dir: Path) -> list[TaskEntry]:
+def _load_queue_tasks(anima_dir: Path, *, include_archived: bool = False) -> list[TaskEntry]:
     manager = TaskQueueManager(anima_dir)
     # list_tasks() intentionally hides terminal tasks; TaskBoard needs a full
     # replay to decide whether those entries should be archived.
-    return list(manager._load_all().values())
+    return list(manager._load_all(include_archived=include_archived).values())
 
 
 def _metadata_older_than_queue(metadata_updated_at: str | None, queue_updated_at: str | None) -> bool:
@@ -164,7 +162,6 @@ def _project_queue_task(
         assignee=task.assignee,
         queue_status=task.status,
         summary=task.summary,
-        deadline=task.deadline,
         relay_chain=task.relay_chain,
         meta=task.meta,
         queue_updated_at=task.updated_at,

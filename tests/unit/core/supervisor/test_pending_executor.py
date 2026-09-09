@@ -12,17 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.i18n import t
 from core.supervisor.pending_executor import PendingTaskExecutor
-
-
-@pytest.fixture(autouse=True)
-def _legacy_completion_semantics():
-    with patch(
-        "core.supervisor.pending_executor._completion_declaration_required",
-        return_value=False,
-    ):
-        yield
 
 
 def _make_executor(tmp_path: Path) -> PendingTaskExecutor:
@@ -197,6 +187,8 @@ class TestTaskExecLaneIsolation:
             "task_id": "unknown",
             "title": "Synthetic task title",
             "submitted_by": "unknown",
+            "attempt_token": "",
+            "attempt": None,
         }
         assert end_call.args == ("task_exec_end",)
         assert end_call.kwargs["ctx"] == "task:unknown"
@@ -261,6 +253,7 @@ class TestWatcherLoop:
         (pending_dir / "task1.json").write_text(json.dumps(task))
 
         async def stop_after_first(coro, *, timeout):
+            coro.close()
             executor._shutdown_event.set()
             raise TimeoutError
 
@@ -280,6 +273,7 @@ class TestWatcherLoop:
         (pending_dir / "bad.json").write_text("not json")
 
         async def stop_after_first(coro, *, timeout):
+            coro.close()
             executor._shutdown_event.set()
             raise TimeoutError
 
@@ -287,61 +281,6 @@ class TestWatcherLoop:
             await executor.watcher_loop()
 
         assert not (pending_dir / "bad.json").exists()
-
-
-class TestMachineDirectiveInjection:
-    """Test machine tool directive injection into TaskExec prompt."""
-
-    def test_directive_appended_when_machine_in_description(self):
-        """Prompt should have machine directive when description mentions machine."""
-        description = "machineツールで実装し、検証してpushする"
-        assert "machine" in description.lower()
-        directive = t("pending_executor.machine_directive")
-        assert "MUST" in directive
-
-    def test_directive_not_appended_without_machine(self):
-        """No directive when description does not mention machine."""
-        description = "git pushして結果を報告する"
-        assert "machine" not in description.lower()
-
-    def test_case_insensitive_detection(self):
-        """Detection should be case-insensitive."""
-        for desc in ["Machineで実装", "MACHINE RUN", "use machine tool"]:
-            assert "machine" in desc.lower()
-
-    def test_directive_i18n_ja(self):
-        directive = t("pending_executor.machine_directive", lang="ja")
-        assert "MUST" in directive
-        assert "animaworks-tool machine run" in directive
-
-    def test_directive_i18n_en(self):
-        directive = t("pending_executor.machine_directive", lang="en")
-        assert "MUST" in directive
-        assert "animaworks-tool machine run" in directive
-
-    def test_integration_prompt_with_machine(self):
-        """Simulate the prompt construction logic: machine → directive appended."""
-        base_prompt = "あなたはタスク実行エージェントです。\n## 作業内容\nmachineで実装し検証する"
-        description = "machineで実装し検証する"
-        directive = t("pending_executor.machine_directive")
-
-        prompt = base_prompt
-        if "machine" in description.lower():
-            prompt += "\n\n" + directive
-
-        assert prompt.endswith(directive)
-        assert "MUST" in prompt
-
-    def test_integration_prompt_without_machine(self):
-        """Prompt stays unchanged when no machine mention."""
-        base_prompt = "あなたはタスク実行エージェントです。\n## 作業内容\nCI結果を確認する"
-        description = "CI結果を確認してレポートを作成する"
-
-        prompt = base_prompt
-        if "machine" in description.lower():
-            prompt += "\n\n" + t("pending_executor.machine_directive")
-
-        assert prompt == base_prompt
 
 
 class TestStreamErrorSuppression:
@@ -383,18 +322,12 @@ class TestStreamErrorSuppression:
         mock_entry.summary = "Task completed successfully"
         mock_entry.meta = {"completed_by": "agent_declaration"}
 
-        from core.taskboard.models import AttentionDecision
-
         with (
             patch("core.paths.load_prompt", return_value="test prompt"),
             patch("core.memory.activity.ActivityLogger") as mock_activity,
             patch("core.supervisor.pending_executor._resolve_default_workspace", return_value=""),
             patch("core.memory.task_queue.TaskQueueManager") as mock_tqm,
-            patch(
-                "core.supervisor.pending_executor.resolver_for_anima_dir",
-            ) as mock_resolver,
         ):
-            mock_resolver.return_value.should_execute.return_value = AttentionDecision(reason="active")
             mock_activity.return_value.log = MagicMock()
             mock_tqm.return_value.get_task_by_id.return_value = mock_entry
 
@@ -589,6 +522,6 @@ class TestLlmTaskFailurePropagation:
         assert start_call.args == ("task_exec_start",)
         assert end_call.args == ("task_exec_end",)
         assert end_call.kwargs["ctx"] == "task:llm-fail-1"
-        assert end_call.kwargs["meta"]["status"] == "failed"
+        assert end_call.kwargs["meta"]["status"] == "error"
         assert end_call.kwargs["meta"]["error"] == "stream retry exhausted"
         assert end_call.kwargs["meta"]["error_type"] == "RuntimeError"

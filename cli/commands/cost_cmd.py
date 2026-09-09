@@ -12,6 +12,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from core.i18n import t
+
 
 def cmd_cost(args: argparse.Namespace) -> None:
     """Show token usage and estimated cost."""
@@ -50,6 +52,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
             grand_total_cache_read = 0
             grand_total_cache_write = 0
             grand_total_sessions = 0
+            grand_total_unknown = 0
 
             for ad in anima_dirs:
                 logger = TokenUsageLogger(ad)
@@ -63,6 +66,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
                 grand_total_cache_read += summary.get("total_cache_read_tokens", 0)
                 grand_total_cache_write += summary.get("total_cache_write_tokens", 0)
                 grand_total_sessions += summary["total_sessions"]
+                grand_total_unknown += summary.get("unknown_pricing_sessions", 0)
                 _print_anima_summary(ad.name, summary, budget_fields)
 
             if grand_total_sessions > 0:
@@ -73,7 +77,7 @@ def cmd_cost(args: argparse.Namespace) -> None:
                     f"CacheR:{_fmt_tokens(grand_total_cache_read):>10s}  "
                     f"CacheW:{_fmt_tokens(grand_total_cache_write):>10s}  "
                     f"out:{_fmt_tokens(grand_total_output):>10s}  "
-                    f"${grand_total_cost:.4f}"
+                    f"{_fmt_cost(grand_total_cost, grand_total_unknown, grand_total_sessions)}"
                 )
                 print()
 
@@ -111,7 +115,7 @@ def _show_anima_cost(name: str, anima_dir: Path, days: int, json_output: bool) -
                 f"{_fmt_tokens(data.get('cache_read_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('cache_write_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('output_tokens', 0)):>10s} "
-                f"${data['cost_usd']:.4f}"
+                f"{_fmt_cost(data['cost_usd'], data.get('unknown_pricing_sessions', 0), data['sessions'])}"
             )
         print()
 
@@ -129,7 +133,7 @@ def _show_anima_cost(name: str, anima_dir: Path, days: int, json_output: bool) -
                 f"{_fmt_tokens(data.get('cache_read_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('cache_write_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('output_tokens', 0)):>10s} "
-                f"${data['cost_usd']:.4f}"
+                f"{_fmt_cost(data['cost_usd'], data.get('unknown_pricing_sessions', 0), data['sessions'])}"
             )
         print()
 
@@ -147,7 +151,7 @@ def _show_anima_cost(name: str, anima_dir: Path, days: int, json_output: bool) -
                 f"{_fmt_tokens(data.get('cache_read_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('cache_write_tokens', 0)):>10s} "
                 f"{_fmt_tokens(data.get('output_tokens', 0)):>10s} "
-                f"${data['cost_usd']:.4f}"
+                f"{_fmt_cost(data['cost_usd'], data.get('unknown_pricing_sessions', 0), data['sessions'])}"
             )
         print()
 
@@ -205,8 +209,19 @@ def _print_anima_summary(name: str, summary: dict, budget_fields: dict[str, obje
         f"CacheW: {_fmt_tokens(cache_w)}   "
         f"Output: {_fmt_tokens(summary['total_output_tokens'])}"
     )
-    print(f"  Estimated cost: ${summary['total_estimated_cost_usd']:.4f}")
+    cost_text = _fmt_cost(
+        summary["total_estimated_cost_usd"], summary.get("unknown_pricing_sessions", 0), summary["total_sessions"]
+    )
+    print(f"  Estimated cost: {cost_text}")
     _print_budget_summary(budget_fields)
+
+
+def _fmt_cost(cost: float, unknown: int, sessions: int) -> str:
+    if unknown and unknown >= sessions:
+        return t("cost.unknown_pricing", count=unknown)
+    if unknown:
+        return t("cost.partial_pricing", cost=f"${cost:.4f}", count=unknown)
+    return f"${cost:.4f}"
 
 
 def _fmt_tokens(n: int) -> str:

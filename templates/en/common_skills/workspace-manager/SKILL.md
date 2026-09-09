@@ -71,7 +71,6 @@ A top-level Anima with an explicit human instruction can grant access to a subor
 
 ## Tool Usage
 
-- **machine_run**: Specify alias or qualified form in `working_directory`
 - **submit_tasks**: Specify alias in each task's `workspace` field
 - **delegate_task**: Specify alias in the `workspace` field
 

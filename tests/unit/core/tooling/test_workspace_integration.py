@@ -7,7 +7,6 @@
 Validates that workspace resolution integrates correctly with:
 - submit_tasks (handler_skills)
 - delegate_task (handler_org)
-- machine_run (machine.py)
 - _intercept_task_to_pending (_sdk_hooks)
 - TaskExec prompt injection (pending_executor + task_exec.md templates)
 """
@@ -16,11 +15,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from core.config.models import AnimaModelConfig, AnimaWorksConfig
+from core.memory.task_queue import TaskQueueManager
 
 # ── TestSubmitTasksWorkspace ─────────────────────────────────────
 
@@ -65,8 +65,8 @@ class TestSubmitTasksWorkspace:
         assert "t1" in data.get("task_ids", [])
 
         pending_path = handler._anima_dir / "state" / "pending" / "t1.json"
-        assert pending_path.exists()
-        task_json = json.loads(pending_path.read_text(encoding="utf-8"))
+        assert not pending_path.exists()
+        task_json = TaskQueueManager(handler._anima_dir).store.get_input(handler._anima_dir.name, "t1")
         assert task_json.get("working_directory") == str(resolved_path.resolve())
 
     def test_invalid_workspace_returns_error(self, handler) -> None:
@@ -113,8 +113,9 @@ class TestSubmitTasksWorkspace:
         assert data.get("status") == "submitted"
 
         pending_path = handler._anima_dir / "state" / "pending" / "t1.json"
-        task_json = json.loads(pending_path.read_text(encoding="utf-8"))
+        task_json = TaskQueueManager(handler._anima_dir).store.get_input(handler._anima_dir.name, "t1")
         assert task_json.get("working_directory") == ""
+        assert not pending_path.exists()
 
     def test_multiple_tasks_with_workspace_each_resolved(self, handler, tmp_path: Path) -> None:
         """Multiple tasks with same workspace all get resolved working_directory."""
@@ -152,9 +153,7 @@ class TestSubmitTasksWorkspace:
         assert len(data.get("task_ids", [])) == 2
 
         for tid in ("t2a", "t2b"):
-            task_json = json.loads(
-                (handler._anima_dir / "state" / "pending" / f"{tid}.json").read_text(encoding="utf-8")
-            )
+            task_json = TaskQueueManager(handler._anima_dir).store.get_input(handler._anima_dir.name, tid)
             assert task_json.get("working_directory") == str(resolved_path.resolve())
 
 
@@ -216,12 +215,12 @@ class TestDelegateTaskWorkspace:
                     "workspace": "project",
                 },
             )
-        # Success: pending JSON written with working_directory
+        # Success: immutable canonical input retains the resolved workspace.
         pending_dir = tmp_path / "animas" / "sub" / "state" / "pending"
-        assert pending_dir.exists(), f"Expected pending dir; result: {result}"
-        json_files = list(pending_dir.glob("*.json"))
-        assert json_files, f"No pending JSON; result: {result}"
-        task_json = json.loads(json_files[0].read_text(encoding="utf-8"))
+        assert not pending_dir.exists()
+        tasks = TaskQueueManager(tmp_path / "animas" / "sub").store.pending("sub")
+        assert tasks, result
+        task_json = tasks[0]
         assert task_json.get("working_directory") == str(resolved_path.resolve())
 
     def test_delegate_task_invalid_workspace_returns_error(self, handler) -> None:
@@ -245,90 +244,6 @@ class TestDelegateTaskWorkspace:
         assert "Workspace" in result or "workspace" in result.lower()
 
 
-# ── TestMachineWorkspaceResolution ───────────────────────────────
-
-
-class TestMachineWorkspaceResolution:
-    """Workspace resolution in machine_run dispatch."""
-
-    def setup_method(self) -> None:
-        """Reset machine call counts before each test."""
-        from core.tools.machine import reset_call_counts
-
-        reset_call_counts()
-
-    def test_dispatch_resolves_workspace_alias(self, tmp_path: Path) -> None:
-        """machine_run with working_directory alias calls resolve_workspace."""
-        wd = tmp_path / "workspace"
-        wd.mkdir()
-        resolved_path = tmp_path / "myproject"
-        resolved_path.mkdir()
-
-        with (
-            patch("core.workspace.resolve_workspace", return_value=Path(resolved_path)) as mock_resolve,
-            patch("core.tools.machine._is_fs_sandboxed", return_value=False),
-            patch("core.tools.machine.shutil.which", return_value="/usr/bin/claude"),
-            patch(
-                "core.tools.machine.subprocess.Popen",
-                return_value=MagicMock(
-                    communicate=MagicMock(return_value=("ok", "")),
-                    returncode=0,
-                    pid=99999,
-                ),
-            ),
-        ):
-            from core.tools.machine import dispatch
-
-            result = dispatch(
-                "machine_run",
-                {
-                    "engine": "claude",
-                    "instruction": "test",
-                    "working_directory": "myproject",
-                    "anima_dir": str(tmp_path / "anima"),
-                },
-            )
-        mock_resolve.assert_called_once_with("myproject")
-        out = json.loads(result)
-        assert out.get("success") is True
-
-    def test_invalid_workspace_returns_json_error(self) -> None:
-        """Unknown workspace returns JSON with error key."""
-        with patch(
-            "core.workspace.resolve_workspace",
-            side_effect=ValueError("Workspace 'bad' not found"),
-        ):
-            from core.tools.machine import dispatch
-
-            result = dispatch(
-                "machine_run",
-                {
-                    "engine": "claude",
-                    "instruction": "test",
-                    "working_directory": "bad",
-                },
-            )
-        out = json.loads(result)
-        assert "error" in out
-        assert "bad" in out["error"] or "not found" in out["error"].lower()
-
-    def test_empty_working_directory_returns_error(self) -> None:
-        """Empty working_directory returns missing_working_directory error."""
-        from core.tools.machine import dispatch
-
-        result = dispatch(
-            "machine_run",
-            {
-                "engine": "claude",
-                "instruction": "test",
-                "working_directory": "",
-            },
-        )
-        out = json.loads(result)
-        assert "error" in out
-        assert "working_directory" in out["error"].lower()
-
-
 # ── TestInterceptWorkingDirectory ─────────────────────────────────
 
 
@@ -348,8 +263,8 @@ class TestInterceptWorkingDirectory:
             tool_use_id=None,
         )
         pending_path = anima_dir / "state" / "pending" / f"{task_id}.json"
-        assert pending_path.exists()
-        task_json = json.loads(pending_path.read_text(encoding="utf-8"))
+        assert not pending_path.exists()
+        task_json = TaskQueueManager(anima_dir).store.get_input(anima_dir.name, task_id)
         assert "working_directory" in task_json
         assert task_json["working_directory"] == ""
 
@@ -365,7 +280,7 @@ class TestInterceptWorkingDirectory:
             {"description": "Task", "prompt": "Task"},
             tool_use_id=None,
         )
-        task_json = json.loads((anima_dir / "state" / "pending" / f"{task_id}.json").read_text(encoding="utf-8"))
+        task_json = TaskQueueManager(anima_dir).store.get_input(anima_dir.name, task_id)
         assert task_json["working_directory"] == ""
 
 

@@ -2381,6 +2381,37 @@
   border-color: var(--aw-color-accent);
 }
 
+/* ── Chat Model Select (per-thread model dropdown) ──
+   Placed inside chat-input-actions; spans its own row so it never
+   shrinks the textarea column, even on narrow/mobile widths. */
+.chat-model-select {
+  grid-column: 1 / -1;
+  min-width: 0;
+  max-width: 11rem;
+  height: 28px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--aw-color-text-primary);
+  background: var(--aw-color-bg-primary);
+  border: 1px solid var(--aw-color-border-medium);
+  border-radius: 6px;
+  padding: 0 6px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.chat-model-select:hover:not(:disabled),
+.chat-model-select:active:not(:disabled) {
+  border-color: var(--aw-color-accent);
+}
+
+.chat-model-select:disabled {
+  color: var(--aw-color-text-muted);
+  background: var(--aw-color-bg-subtle);
+}
+
 /* ── Chat Input Row (legacy / fallback) ──────── */
 
 .chat-input-row {

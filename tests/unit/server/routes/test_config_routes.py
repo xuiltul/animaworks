@@ -14,12 +14,12 @@ from httpx import ASGITransport, AsyncClient
 from core.config.models import AnimaWorksConfig, CredentialConfig
 from server.routes.config_routes import _mask_secrets
 
-
 # ── Helper ──────────────────────────────────────────────────
 
 
 def _make_test_app():
     from fastapi import FastAPI
+
     from server.routes.config_routes import create_config_router
 
     app = FastAPI()
@@ -66,20 +66,18 @@ class TestMaskSecrets:
         assert result["model"] == "gpt-4o"
 
     def test_nested_dicts(self):
-        result = _mask_secrets({
-            "providers": {
-                "anthropic": {"api_key": "sk-ant-1234567890"}
-            }
-        })
+        result = _mask_secrets({"providers": {"anthropic": {"api_key": "sk-ant-1234567890"}}})
         assert result["providers"]["anthropic"]["api_key"] == "sk-...7890"
 
     def test_nested_lists(self):
-        result = _mask_secrets({
-            "items": [
-                {"api_key": "abcdefghij", "name": "test"},
-                {"token": "xyz"},
-            ]
-        })
+        result = _mask_secrets(
+            {
+                "items": [
+                    {"api_key": "abcdefghij", "name": "test"},
+                    {"token": "xyz"},
+                ]
+            }
+        )
         assert result["items"][0]["api_key"] == "abc...ghij"
         assert result["items"][0]["name"] == "test"
         assert result["items"][1]["token"] == "***"
@@ -113,13 +111,9 @@ class TestGetConfig:
         config_dir.mkdir()
         config = {
             "model": "claude-sonnet-4-6",
-            "providers": {
-                "anthropic": {"api_key": "sk-ant-1234567890"}
-            },
+            "providers": {"anthropic": {"api_key": "sk-ant-1234567890"}},
         }
-        (config_dir / "config.json").write_text(
-            json.dumps(config), encoding="utf-8"
-        )
+        (config_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
@@ -136,9 +130,7 @@ class TestGetConfig:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         config_dir = tmp_path / ".animaworks"
         config_dir.mkdir()
-        (config_dir / "config.json").write_text(
-            "not valid json {{{", encoding="utf-8"
-        )
+        (config_dir / "config.json").write_text("not valid json {{{", encoding="utf-8")
 
         app = _make_test_app()
         transport = ASGITransport(app=app)
@@ -290,49 +282,77 @@ class TestOpenAIAuthSettings:
         assert resp.status_code == 400
 
     async def test_available_models_include_codex_subscription_models(self):
-        config = AnimaWorksConfig(
-            credentials={
-                "openai": CredentialConfig(type="codex_login"),
-            }
-        )
+        config = AnimaWorksConfig(credentials={"openai": CredentialConfig(type="codex_login")})
         app = _make_test_app()
         transport = ASGITransport(app=app)
+        from core.config.model_discovery import DiscoveredModel
 
+        stub = [
+            DiscoveredModel("c:codex/gpt-5.4", "c", "codex/gpt-5.4", "GPT-5.4", "Codex", note="", source="codex-cli"),
+            DiscoveredModel(
+                "c:codex/gpt-5.4-mini", "c", "codex/gpt-5.4-mini", "GPT-5.4-Mini", "Codex", note="", source="codex-cli"
+            ),
+            DiscoveredModel(
+                "c:codex/gpt-5.3-codex",
+                "c",
+                "codex/gpt-5.3-codex",
+                "GPT-5.3-Codex",
+                "Codex",
+                note="",
+                source="codex-cli",
+            ),
+        ]
         with (
             patch("server.routes.config_routes.load_config", return_value=config),
-            patch("core.config.model_catalog.is_codex_login_available", return_value=True),
+            patch("server.routes.config_routes.discover_models", return_value=stub),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/system/available-models")
 
         assert resp.status_code == 200
-        models = resp.json()["models"]
+        data = resp.json()
+        models = data["models"]
         ids = {item["id"] for item in models}
 
-        assert "codex/gpt-5.4" in ids
-        assert "codex/gpt-5.4-mini" in ids
-        assert "codex/gpt-5.3-codex" in ids
-        assert "openai-codex/gpt-5.3-codex" not in ids
+        assert "c:codex/gpt-5.4" in ids
+        assert "c:codex/gpt-5.4-mini" in ids
+        assert "c:codex/gpt-5.3-codex" in ids
+        # New response contract
+        assert data["groups"] == ["Codex"]
+        assert "generated_at" in data
+        assert all(item["mode"] == "c" for item in models)
+        assert all(item["credential"] == "codex" for item in models)
 
     async def test_available_models_include_grok_build_models(self):
         config = AnimaWorksConfig()
         app = _make_test_app()
         transport = ASGITransport(app=app)
+        from core.config.model_discovery import DiscoveredModel
 
+        stub = [
+            DiscoveredModel("x:grok/grok-4.5", "x", "grok/grok-4.5", "grok-4.5", "Grok", source="grok-cli"),
+            DiscoveredModel(
+                "x:grok/grok-composer-2.5-fast",
+                "x",
+                "grok/grok-composer-2.5-fast",
+                "grok-composer-2.5-fast",
+                "Grok",
+                source="grok-cli",
+            ),
+        ]
         with (
             patch("server.routes.config_routes.load_config", return_value=config),
-            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
-            patch("core.config.model_catalog.is_grok_authenticated", return_value=True),
+            patch("server.routes.config_routes.discover_models", return_value=stub),
         ):
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 resp = await client.get("/api/system/available-models")
 
         assert resp.status_code == 200
         models = resp.json()["models"]
-        grok_models = {item["id"]: item for item in models if item["credential"] == "grok"}
+        grok_models = {item["id"]: item for item in models if item["group"] == "Grok"}
 
-        assert set(grok_models) == {"grok/grok-4.5", "grok/grok-composer-2.5-fast"}
-        assert all(item["label"] == item["id"] for item in grok_models.values())
+        assert set(grok_models) == {"x:grok/grok-4.5", "x:grok/grok-composer-2.5-fast"}
+        assert all(item["label"] == item["model"].removeprefix("grok/") for item in grok_models.values())
 
 
 class TestLocalLLMSettings:

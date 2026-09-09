@@ -101,7 +101,10 @@ def test_heartbeat_disable_skips_periodic_job() -> None:
     harness = _SchedulerHarness()
     anima = _anima("alice", heartbeat_enabled=False)
 
-    with patch("core.lifecycle.scheduler.load_config", return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30))):
+    with patch(
+        "core.lifecycle.scheduler.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30)),
+    ):
         harness._setup_heartbeat(anima)
 
     assert harness.scheduler.get_job("alice_heartbeat") is None
@@ -111,7 +114,10 @@ def test_heartbeat_enabled_registers_periodic_job() -> None:
     harness = _SchedulerHarness()
     anima = _anima("alice", heartbeat_enabled=True)
 
-    with patch("core.lifecycle.scheduler.load_config", return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30))):
+    with patch(
+        "core.lifecycle.scheduler.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30)),
+    ):
         harness._setup_heartbeat(anima)
 
     assert harness.scheduler.get_job("alice_heartbeat") is not None
@@ -121,7 +127,10 @@ def test_heartbeat_disable_removes_existing_periodic_job() -> None:
     harness = _SchedulerHarness()
     anima = _anima("alice", heartbeat_enabled=True)
 
-    with patch("core.lifecycle.scheduler.load_config", return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30))):
+    with patch(
+        "core.lifecycle.scheduler.load_config",
+        return_value=SimpleNamespace(heartbeat=SimpleNamespace(interval_minutes=30)),
+    ):
         harness._setup_heartbeat(anima)
         assert harness.scheduler.get_job("alice_heartbeat") is not None
 
@@ -183,3 +192,10 @@ def test_supervisor_heartbeat_disable_removes_existing_periodic_job(tmp_path) ->
         mgr._setup_heartbeat()
 
     assert mgr.scheduler.get_job("alice_heartbeat") is None
+
+
+@pytest.mark.asyncio
+async def test_already_dispatched_periodic_tick_respects_disabled_setting(tmp_path) -> None:
+    mgr, anima = _supervisor_mgr(tmp_path, heartbeat_enabled=False)
+    await mgr.heartbeat_tick()
+    anima.run_heartbeat.assert_not_called()

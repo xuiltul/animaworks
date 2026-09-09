@@ -3,6 +3,7 @@
 Verifies that _channel_e_pending_tasks() includes completed background
 task results from state/task_results/ in the Priming output.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -110,13 +111,13 @@ class TestChannelETaskResults:
             original_instruction="Pending task",
             assignee="test",
             summary="Pending summary",
-            deadline="1h",
         )
 
         results_dir = anima_dir / "state" / "task_results"
         results_dir.mkdir(parents=True)
         (results_dir / "done_task.md").write_text(
-            "Task completed successfully", encoding="utf-8",
+            "Task completed successfully",
+            encoding="utf-8",
         )
 
         engine = PrimingEngine(anima_dir)

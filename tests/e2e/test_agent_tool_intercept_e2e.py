@@ -2,7 +2,7 @@
 
 Verifies the full pipeline:
   1. PreToolUse hook hard-blocks "Agent" / "Task" tool (no pending creation)
-  2. _intercept_task_to_pending still works for delegation code
+  2. _intercept_task_to_pending publishes canonical delegation input
   3. _tool_summary handles "Agent" tool
   4. Channel E reads task_results for Heartbeat visibility
   5. AgentOutput / TaskOutput are also blocked
@@ -10,7 +10,6 @@ Verifies the full pipeline:
 
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -39,8 +38,9 @@ class TestAgentToolHardBlockE2E:
 
     @pytest.mark.asyncio
     async def test_intercept_to_pending_still_works_for_delegation(self, anima_dir: Path):
-        """_intercept_task_to_pending still creates pending files (used by delegation)."""
+        """The compatibility helper publishes a canonical task, not a descriptor file."""
         from core.execution._sdk_hooks import _intercept_task_to_pending
+        from core.memory.task_queue import TaskQueueManager
 
         tool_input = {
             "description": "Research AI safety standards",
@@ -49,9 +49,11 @@ class TestAgentToolHardBlockE2E:
         task_id = _intercept_task_to_pending(anima_dir, tool_input, "tu_e2e_001")
 
         pending_file = anima_dir / "state" / "pending" / f"{task_id}.json"
-        assert pending_file.exists()
+        assert not pending_file.exists()
 
-        data = json.loads(pending_file.read_text(encoding="utf-8"))
+        manager = TaskQueueManager(anima_dir)
+        data = manager.store.get_input(anima_dir.name, task_id)
+        assert manager.get_task_by_id(task_id).status == "pending"
         assert data["reply_to"] == "ayame"
         assert data["task_type"] == "llm"
         assert data["submitted_by"] == "self_task_intercept"

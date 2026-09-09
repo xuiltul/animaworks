@@ -10,14 +10,14 @@ Heartbeat은 Digital Anima가 정기적으로 자동 기동하여 상황을 확�
 
 ### 중요: Heartbeat은 "확인과 계획"만 수행
 
-Heartbeat의 역할은 **Observe (관찰) → Plan (계획) → Reflect (성찰)** 의 3단계로 한정됩니다.
+Heartbeat는 의미 있는 변화를 확인하고 필요한 다음 조치를 판단합니다. 의식적인 성찰 보고는 필요하지 않습니다.
 
-- MUST: Heartbeat 내에서는 상황 확인, 계획 수립, 성찰만 수행
+- MUST: Heartbeat에서는 상황 확인과 판단에 집중
 - MUST NOT: Heartbeat 내에서 장시간 실행 태스크 (코딩, 대량 도구 호출 등)를 수행하지 않음
 - MUST: 실행이 필요한 태스크를 발견하면 부하가 있을 경우 `delegate_task`로 위임하거나 `submit_tasks`로 태스크 투입
 
-기록된 태스크는 **TaskExec 경로**가 자동으로 가져와 실행합니다.
-Heartbeat 완료 후 3초 이내에 TaskExec가 기동하여 태스크를 처리합니다.
+제출된 태스크는 **TaskExec 경로**에서 정기 Heartbeat와 독립적으로 실행됩니다.
+TaskExec는 정본 TaskStore에서 실행 가능한 영속 태스크를 가져옵니다. 기동 알림과 복구는 호스트가 관리하며 기존 LLM JSON 파일은 감시하지 않습니다.
 
 ### Heartbeat과 대화의 병행 동작
 
@@ -35,10 +35,10 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ])
 ```
 
-`submit_tasks`는 Layer 1 (실행 큐 `state/pending/`)과 Layer 2 (태스크 레지스트리 `task_queue.jsonl`) 양쪽에 동시 등록합니다.
-TaskExec가 태스크를 감지하고 LLM 세션에서 실행합니다.
+`submit_tasks`는 검증 후 태스크와 완전한 실행 입력을 하나의 정본 TaskStore에 원자적으로 저장합니다.
+실행 권한 획득과 시도 이력은 호스트가 관리합니다. `in_progress`는 읽기 전용이며 에이전트는 `update_task`로 `done`, `pending`, `cancelled`를 선언합니다. 중단된 pending 태스크는 같은 ID에 `resume: true`를 지정해 명시적으로 재개하고 새 태스크로 대체하지 않습니다.
 
-**주의**: `state/pending/`에 JSON을 수동으로 기록해서는 안 됩니다. 반드시 `submit_tasks` 도구를 경유하여 투입하세요.
+**주의**: 저장소를 직접 수정하지 마세요. 기존 `state/task_queue.jsonl`과 `state/pending/`은 마이그레이션·내보내기 증거로 보존하며 실행 중인 제출 경로로 사용하지 않습니다.
 
 단일 태스크에도 `submit_tasks` (tasks 배열 1건)를 사용합니다.
 여러 독립 태스크는 `parallel: true`로 병렬 실행하고, 의존 관계가 있으면 `depends_on`을 지정합니다.
@@ -303,7 +303,7 @@ type: llm
 어제의 episodes/를 되돌아보고 오늘의 태스크를 계획한다.
 우선순위는 비전과 목표에 비추어 판단한다.
 결과는 state/current_state.md에 기록한다.
-task_queue.jsonl의 미착수 태스크도 확인하고 필요하면 우선순위를 재검토한다.
+정본 태스크 목록(`list_tasks`)의 미착수 태스크도 확인하고 필요하면 우선순위를 재검토한다.
 ```
 
 description (`type:` 행 뒤의 본문)에는 다음을 포함하는 것이 좋습니다 (SHOULD):
@@ -440,7 +440,7 @@ LLM형 태스크의 결과는 `CycleResult`로 기록되며, 다음 정보를 �
 ## 매일 아침 업무 계획
 schedule: 0 9 * * *
 type: llm
-episodes/에서 어제의 활동을 확인하고, task_queue.jsonl의 미착수 태스크를 확인한다.
+episodes/에서 어제의 활동을 확인하고, 정본 태스크 목록(`list_tasks`)의 미착수 태스크를 확인한다.
 오늘의 우선 태스크를 결정하고 state/current_state.md를 업데이트한다.
 
 ## 주간 성찰

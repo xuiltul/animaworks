@@ -10,14 +10,14 @@ It automates the same behavior as a human periodically checking their inbox and 
 
 ### Important: Heartbeat is only "observe and plan"
 
-Heartbeat is limited to three phases: **Observe → Plan → Reflect**.
+Heartbeat checks for meaningful changes and chooses necessary next actions. It does not require a ritual reflection report.
 
-- MUST: During Heartbeat, only observe, plan, and reflect
+- MUST: Keep Heartbeat focused on observation and decisions
 - MUST NOT: Run long-running execution tasks during Heartbeat (coding, heavy tool use, etc.)
 - MUST: When execution is needed, delegate with `delegate_task` if you have subordinates, or submit work with `submit_tasks`
 
-Written tasks are picked up and executed by the **TaskExec path** (`PendingTaskExecutor`) via polling.
-LLM tasks written by `submit_tasks` are watched under `state/pending/` and are collected at intervals of up to about 3 seconds (the same loop also processes CLI-submitted tasks under `state/background_tasks/pending/`).
+Submitted tasks are executed by **TaskExec**, independently of periodic Heartbeat.
+TaskExec claims durable eligible tasks from the canonical TaskStore, with wakeups and recovery managed by the host; it does not watch legacy LLM JSON files.
 
 ### Heartbeat and chat run in parallel
 
@@ -35,12 +35,12 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ])
 ```
 
-`submit_tasks` registers in both Layer 1 (execution queue `state/pending/`) and Layer 2 (task registry `task_queue.jsonl`) at the same time.
-TaskExec moves the JSON to `processing/` and runs it in an LLM session. On failure, it is moved to `state/pending/failed/`.
+`submit_tasks` validates and atomically stores the task and its complete execution input in one canonical TaskStore.
+The host owns execution claims and attempt history. `in_progress` is read-only for agents; declare `done`, `pending`, or `cancelled` with `update_task`. An interrupted pending task is resumed deliberately using the same ID and `resume: true`, not by creating a replacement task.
 
 **Long-running CLI tools** (`animaworks-tool submit …`) are written on a separate path to `state/background_tasks/pending/` and are executed in the background by `BackgroundTaskManager` (`core/background.py`). See `operations/background-tasks.md` for details.
 
-**Note**: Manually placing JSON under `state/pending/` is discouraged. Submit via the `submit_tasks` tool (validation and queue sync are skipped otherwise).
+**Note**: Never write task storage directly. Legacy `state/task_queue.jsonl` and `state/pending/` are preserved only as migration/export evidence, not live submission paths.
 
 Use `submit_tasks` even for a single task (one item in the `tasks` array).
 Multiple independent tasks run in parallel with `parallel: true`; when there are dependencies, set `depends_on`.
@@ -176,7 +176,7 @@ Otherwise (e.g. effective 61 minutes, or 43 minutes so 60 is not evenly divided)
 - **Completion callback**: Async functions passed to `on_complete` run after the task is saved. Exceptions inside the callback still preserve task results and are only logged (typically combined with writes to `state/background_notifications/`, **read and removed on the next Heartbeat** and merged into conversation context).
 - **Eligibility `is_eligible(tool_name)`**: If the map contains a key, the tool is background-eligible. Keys accept: (1) **schema name** (e.g. `generate_3d_model`)—e.g. Mode A external tool dispatch; (2) **`tool:subcommand`** (e.g. `image_gen:pipeline`)—entries with `background_eligible: true` in each tool module's `EXECUTION_PROFILE` are registered in this form via `get_eligible_tools_from_profiles()` (e.g. Mode S `submit` path).
 - **Building the eligible map `from_profiles()`**: Merges three layers with dict `update`; **later wins**: (1) `_DEFAULT_ELIGIBLE_TOOLS` (code defaults) (2) argument `profiles` (aggregated `EXECUTION_PROFILE`) (3) argument `config_eligible` (usually `name → seconds` expanded from `config.json` `background_task.eligible_tools` `threshold_s`). Values are expected seconds (integer) for profile integration.
-- **Code defaults `_DEFAULT_ELIGIBLE_TOOLS` (seconds)**: `generate_character_assets` 30; `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` each 30; `generate_3d_model` / `generate_rigged_model` / `generate_animations` each 30; `local_llm` 60; `run_command` 60; `machine_run` 600.
+- **Code defaults `_DEFAULT_ELIGIBLE_TOOLS` (seconds)**: `generate_character_assets` 30; `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` each 30; `generate_3d_model` / `generate_rigged_model` / `generate_animations` each 30; `local_llm` 60; `run_command` 60.
 - **Cleanup `cleanup_old_tasks(max_age_hours=24)`**: Deletes JSON where `status` is `completed` / `failed` and `completed_at` is **older than the given hours (default 24)**. Also removes files stuck in `running` with `created_at` **more than 48 hours** ago as crash orphans. Return value is the number of deletions.
 - **`result_retention_hours`**: Present on `config.json` `background_task.result_retention_hours`, but **`BackgroundTaskManager.cleanup_old_tasks` does not read it** (default remains method argument `max_age_hours=24`). Callers are expected to pass `max_age_hours` when operational retention should differ.
 
@@ -347,7 +347,7 @@ type: llm
 Reread yesterday's episodes/ and plan today's tasks.
 Prioritize against vision and goals.
 Write results to state/current_state.md.
-Also check task_queue.jsonl for pending tasks and revise priorities if needed.
+Also check the canonical task list (`list_tasks`) for pending tasks and revise priorities if needed.
 ```
 
 The description (body after the `type:` line) SHOULD include:
@@ -489,7 +489,7 @@ LLM task results are stored as `CycleResult` with:
 ## Morning work plan
 schedule: 0 9 * * *
 type: llm
-Review yesterday's actions from episodes/ and pending tasks in task_queue.jsonl.
+Review yesterday's actions from episodes/ and pending tasks in the canonical task list (`list_tasks`).
 Set today's priorities and update state/current_state.md.
 
 ## Weekly reflection

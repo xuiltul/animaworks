@@ -1,131 +1,15 @@
-# Memory Consolidation Task (Daily)
+# Memory update (explicitly enabled daily maintenance)
 
-{anima_name}, it is time to organize your memory. Follow the steps below.
+## Scope and safeguards
 
-## Today's Episodes
+{anima_name}, examine only these new records:
 
 {episodes_summary}
 
-※ The episodes above are structured timelines automatically extracted from the activity log.
-When extracting knowledge from them, note the following:
-- Record in knowledge/ only what can be confidently judged as fact
-- Record items requiring inference or interpretation with confidence: 0.5
-- Add `source: "activity_log"` to frontmatter
+Preserve confirmed human instructions, customer-specific facts, and reusable environment-specific procedures or lessons. Keep PR/commit approval status, one-off results and general tool usage in task history instead of generating long-term knowledge.
 
-## Resolved Events
+For an item worth preserving, find related files with `search_memory`, read their originals with `read_memory_file`, then update them. Create a file only when no existing file covers it. Retain source, date and confidence; do not convert inference into fact or combine details belonging to different customers or projects.
 
-{resolved_events_summary}
+Preserve raw records, confirmed instructions, approval conditions and important tags. Rewriting identity.md, injection.md, permissions, or reorganizing the whole library is outside this task. If there is no useful change, write nothing. Use memory operations only; do not use `delegate_task`, `submit_tasks`, or `send_message`.
 
-{reflections_summary}
-
-## Existing knowledge files list
-
-{knowledge_files_list}
-
-## Merge candidates (similar file pairs — advisory only)
-
-{merge_candidates}
-
-※ The pairs above are **mechanical suggestions** based on vector similarity, not merge instructions.
-In a narrow domain, files about different subjects (e.g. customer A vs customer B) can score highly similar. Decide whether to merge by **reading the contents yourself**, following the criteria in Step 1.
-
-## Error patterns (past 24 hours)
-
-{error_patterns_summary}
-
----
-
-## Workflow
-
-### Step 0: Self-compact injection.md (run every time — MUST)
-
-Use `read_memory_file(path="injection.md")` to inspect the current content.
-
-Keep `injection.md` under a **2,000 character target** as a constitution plus pointer index:
-
-- **Keep resident**: role definition, non-negotiable rules, safety, approval, confidentiality, and duplicate-action prevention that must apply on every turn
-- **Move out**: procedural details to `procedures/`; learned knowledge, examples, and operational notes to `knowledge/`
-- **Replace**: detailed prose with `read_memory_file(path="...")` pointers
-- **Preserve**: do not remove the core rules for external sending, confidential information, approval, and duplicate send/draft prevention
-
-If it exceeds 2,000 characters, do not create a proposal file. Rewrite it directly during this consolidation with `write_memory_file(path="injection.md", mode="overwrite")`.
-Even when it is already within 2,000 characters, check whether detailed prose has accumulated and shorten it with the same policy when needed.
-
-### Step 1: Review duplicate files (merge at your own judgment)
-
-Review each merge-candidate pair and the file list above, and merge **only true duplicates**.
-Merge candidates are advisory; there is no obligation to merge every pair.
-
-Decision criteria:
-- **Merge**: genuine duplicates or fragments of the same topic (old/new versions of the same procedure, restatements of the same fact)
-- **Do NOT merge**: files about different entities (per-customer, per-project, per-person, per-system context files). Keep them as **separate files** even when similarity is high
-- **When in doubt, do not merge**. Preserving information granularity and searchability takes priority
-
-For pairs you decide to merge:
-1. Use `read_memory_file` to review both contents
-2. Combine the information **without losing details** and write to one file with `write_memory_file` (do not discard specifics through summarization)
-3. Archive the redundant one with `archive_memory_file` (state the merge target and your reasoning in the reason)
-4. If `[IMPORTANT]` tag exists, preserve it in the merged file
-
-- Do not defer pairs you decided to merge. Complete them now
-
-### Step 2: Knowledge extraction from episodes
-
-Review today's episodes; if substantive information exists:
-1. Use `search_memory` to find related existing knowledge/ and procedures/
-2. If an existing file covers the same topic, review with `read_memory_file` and update with `write_memory_file`
-3. Create a new file when no existing file covers the topic
-4. Keep knowledge about individual entities (customers, projects, people) in **per-entity files** (e.g. `customer-context-{{name}}.md`). Do not mix customer-specific details into generic rule files
-
-### Step 2.5: Error pattern analysis
-
-Review the "Error patterns" section above and if recurring patterns are found:
-1. Use `search_memory` to find related existing procedures/
-2. If existing procedures found, review with `read_memory_file` and update with `write_memory_file`
-3. Create new files in `procedures/` only when no existing file covers the pattern
-4. Single-occurrence errors should be ignored (noise)
-
-Frontmatter for new procedure files:
-```
----
-created_at: "YYYY-MM-DDTHH:MM:SS"
-confidence: 0.4
-auto_consolidated: true
-source: "error_trace_analysis"
-version: 1
----
-```
-
-### Step 3: Quality check
-- Verify updated or created content does not contradict episode facts
-- Use clear, topic-descriptive filenames
-
-## Information to extract
-- Specific configuration values, credential locations
-- User and system identifiers
-- Procedures, workflows, and process records
-- Team structure, role assignments, chain of command
-- Technical decisions and their rationale
-- Lessons and procedures from resolved events
-
-## Critical constraints
-- **You MUST perform this work yourself directly**. Do NOT use `delegate_task`, `submit_tasks`, or `send_message`. Complete all work using only memory operation tools
-- Do NOT skip the Step 1 review. Whether to merge is your judgment based on content — **merging files about different entities purely because of similarity scores is considered a failure**
-
-## Notes
-- Do not convert greetings-only or substantively empty exchanges into knowledge
-- [REFLECTION] tagged entries should be prioritized for knowledge extraction
-- `[IMPORTANT]` tagged entries **MUST** be extracted into knowledge/. If overlapping with existing knowledge, merge by appending. **Keep the `[IMPORTANT]` tag in the file body**
-- When creating new knowledge/ files, add YAML frontmatter:
-  ```
-  ---
-  created_at: "YYYY-MM-DDTHH:MM:SS"
-  confidence: 0.7
-  auto_consolidated: true
-  success_count: 0
-  failure_count: 0
-  version: 1
-  last_used: ""
-  ---
-  ```
-- After completion, output a summary (include number of pairs merged and files archived)
+Briefly report changed files and their supporting evidence.

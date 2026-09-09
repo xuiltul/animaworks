@@ -10,6 +10,14 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "cost.unknown_pricing": {
+        "ja": "不明（{count}件の料金未登録）",
+        "en": "Unknown (pricing unavailable for {count} sessions)",
+    },
+    "cost.partial_pricing": {
+        "ja": "{cost} + 不明分（{count}件の料金未登録）",
+        "en": "{cost} + unknown (pricing unavailable for {count} sessions)",
+    },
     "activity.blocked": {
         "ja": "ブロック: {reason}",
         "en": "Blocked: {reason}",
@@ -170,17 +178,14 @@ STRINGS: dict[str, dict[str, str]] = {
             "references"
         ),
     },
-    "builder.machine_hint": {
-        "ja": (
-            '\n\n**machine ツール**: コード変更・調査・分析など重い作業は `animaworks-tool machine run` で外部エージェントに委託できます。詳細は read_memory_file(path="common_skills/machine-tool/SKILL.md") で確認。'
-        ),
-        "en": (
-            '\n\n**machine tool**: For heavy tasks like code changes, investigation, or analysis, delegate to an external agent via `animaworks-tool machine run`. Use read_memory_file(path="common_skills/machine-tool/SKILL.md") for details.'
-        ),
-    },
     "builder.skill_catalog_header": {
         "ja": "## Available Skills",
         "en": "## Available Skills",
+    },
+    "builder.superseded_note": {
+        "ja": "（旧版。{latest} に統合）",
+        "en": "(superseded; folded into {latest})",
+        "ko": "(이전 버전. {latest} 에 통합)",
     },
     "builder.skill_catalog_instruction": {
         "ja": "ここに出るスキルは候補です。使う前に表示パスを `read_memory_file` で読み、全文の手順・制約を確認すること。新規スキル作成時は `common_skills/skill-creator/SKILL.md` を読むこと。`external/...` はホスト側スキル。SKILL.md 内の相対パス（scripts/ 等）は実体ディレクトリ基準で、`read_memory_file` の結果冒頭に実体ディレクトリが表示される。",
@@ -451,10 +456,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "(auto: TaskExec)",
         "en": "(auto: TaskExec)",
     },
-    "task_queue.deadline_by": {
-        "ja": "📅 {time}まで",
-        "en": "📅 By {time}",
-    },
     "task_queue.elapsed_hours": {
         "ja": "⏱️ {hours}時間経過",
         "en": "⏱️ {hours}h elapsed",
@@ -467,31 +468,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "⏱️ {minutes}分経過",
         "en": "⏱️ {minutes}m elapsed",
     },
-    "task_queue.failed_line": {
-        "ja": "- [{task_id}] {summary}",
-        "en": "- [{task_id}] {summary}",
-    },
-    "task_queue.failed_section_header": {
-        "ja": ("\n❌ Failed (要対処):"),
-        "en": ("\n❌ Failed (action required):"),
-    },
-    "task_queue.overdue": {
-        "ja": "🔴 OVERDUE({time}期限)",
-        "en": "🔴 OVERDUE(deadline {time})",
-    },
-    "task_queue.overdue_aggregate": {
-        "ja": '🔴 OVERDUE集約（{count}件）: {summaries}\n  → list_tasks(status="pending") で詳細確認',
-        "en": '🔴 OVERDUE aggregate ({count}): {summaries}\n  → list_tasks(status="pending") for details',
-    },
     "task_queue.sync_done": {
         "ja": "{orig} (→{target}: 完了)",
         "en": "{orig} (→{target}: done)",
         "ko": "{orig} (→{target}: 완료)",
-    },
-    "task_queue.sync_failed": {
-        "ja": "{orig} (→{target}: 失敗 — 再委任を検討)",
-        "en": "{orig} (→{target}: failed — consider re-delegation)",
-        "ko": "{orig} (→{target}: 실패 — 재위임 검토)",
     },
     "task_queue.sync_cancelled": {
         "ja": "{orig} (→{target}: 部下タスクがキャンセルされた)",

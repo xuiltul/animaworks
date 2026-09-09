@@ -17,11 +17,11 @@ import pytest
 
 from core.memory.priming import (
     _BUDGET_IMPORTANT_KNOWLEDGE,
-    _CHARS_PER_TOKEN,
     PrimingEngine,
 )
 from core.memory.rag.retriever import MemoryRetriever
 from core.memory.rag.store import ChromaVectorStore, Document, SearchResult
+from core.prompt.tokens import estimate_tokens
 
 # ── ChromaVectorStore.get_by_metadata ────────────────────────────────────────
 
@@ -215,7 +215,7 @@ class TestChannelC0ImportantKnowledge:
         assert "📌" in result
 
     @pytest.mark.asyncio
-    async def test_output_includes_metadata_for_external_important_knowledge(self, temp_anima_dir):
+    async def test_output_omits_metadata_for_external_important_knowledge(self, temp_anima_dir):
         doc = Document(
             id="c1",
             content="# External Rule\n\nDetails here.",
@@ -240,14 +240,13 @@ class TestChannelC0ImportantKnowledge:
             engine = PrimingEngine(temp_anima_dir)
             result = await engine._channel_c0_important_knowledge()
 
-        assert "updated: 2026-06-03 | origin: external_web" in result
+        assert "updated:" not in result
+        assert "origin:" not in result
         assert 'read_memory_file(path="knowledge/external-rule.md")' in result
 
     @pytest.mark.asyncio
     async def test_budget_trims_when_over_500_tokens(self, temp_anima_dir):
-        """When total exceeds 500 tokens (~2000 chars), output is trimmed."""
-        budget_chars = _BUDGET_IMPORTANT_KNOWLEDGE * _CHARS_PER_TOKEN
-        assert budget_chars == 2000
+        """When total exceeds 500 estimated tokens, output is trimmed."""
 
         long_summary = "A" * 100
         docs = []
@@ -277,9 +276,8 @@ class TestChannelC0ImportantKnowledge:
 
         lines = result.split("\n")
         content_lines = [line for line in lines if line.startswith("📌")]
-        total_len = len(result)
-        assert total_len <= budget_chars + 50
-        assert len(content_lines) < 30
+        assert estimate_tokens(result) <= _BUDGET_IMPORTANT_KNOWLEDGE
+        assert len(content_lines) <= 3
 
     @pytest.mark.asyncio
     async def test_empty_when_no_knowledge_dir(self, tmp_path):

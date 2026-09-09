@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from core.i18n import t
 from core.platform.process import subprocess_session_kwargs
 from core.schemas import CronTask
@@ -33,6 +35,7 @@ from core.supervisor.transport import cleanup_ipc_endpoint, start_ipc_server
 logger = logging.getLogger(__name__)
 
 _TASK_RUNNER_CONNECT_TIMEOUT = 10.0
+_RECEIVE_POLL_TIMEOUT_SEC = 15.0
 # Post-result exit wait. Under load the child's interpreter shutdown (CLI
 # grandchild reaping, thread joins, MCP cleanup) can exceed several seconds;
 # a laggy exit must not turn a delivered result into a failure (2026-08-12).
@@ -42,6 +45,10 @@ _TASK_RUNNER_EXIT_TIMEOUT = 30.0
 _TASK_RUNNER_GRACE_TIMEOUT = 5.0
 _TASK_RUNNER_TERM_TIMEOUT = 5.0
 _HANG_CHECK_INTERVAL_MAX = 5.0
+# External (queue) cancel watch cadence; 30s so the queue file is not read on
+# every hang-check tick (max 5s).  Patching this to 0 lets tests drive a check
+# on the next loop iteration.
+_CANCEL_CHECK_INTERVAL = 30.0
 
 OnSpawned = Callable[["TaskRunnerJob"], Awaitable[None] | None]
 
@@ -97,6 +104,7 @@ class TaskRunnerSupervisor:
         self._memory_service = MemoryService(anima_name, anima_dir) if memory_via_root else None
         self._start_lock = asyncio.Lock()
         self._jobs: dict[str, TaskRunnerJob] = {}
+        self._journal_recovery_lock = asyncio.Lock()
         self._accepting = True
         self._busy_hang_threshold_sec = max(0.0, float(busy_hang_threshold_sec))
         self._hang_check_interval = min(
@@ -472,7 +480,10 @@ class TaskRunnerSupervisor:
             last_progress_at=loop.time(),
             stream_events=list(stream_events or []),
         )
-        self._jobs[job_id] = job
+        # A recovery worker must finish unlinking old journals before a new
+        # child can open a journal in the same runtime.
+        async with self._journal_recovery_lock:
+            self._jobs[job_id] = job
 
         env = os.environ.copy()
         for name in tuple(env):
@@ -585,12 +596,23 @@ class TaskRunnerSupervisor:
                     )
             result = self._terminal_result(terminal)
             if not slow_exit and process.returncode != 0:
-                raise TaskRunnerError(f"task runner exited with status {process.returncode}")
+                # The result was already delivered before the child exited; a
+                # nonzero exit (e.g. a laggy EPIPE during shutdown) must not
+                # discard an executed task's result.
+                logger.warning(
+                    "result kept despite nonzero exit anima=%s job=%s task_id=%s returncode=%s",
+                    self.anima_name,
+                    job_id,
+                    (job.params.get("task_desc") or {}).get("task_id"),
+                    process.returncode,
+                )
             return result
-        except asyncio.CancelledError:
-            self._terminate_job_group(job)
-            if job.process is not None:
-                await job.process.wait()
+        except BaseException:
+            # Failure in IPC/on_spawned is as capable of leaving a live child
+            # as cancellation. Reap the exact recorded group before releasing
+            # ownership; escalate after the existing bounded TERM grace.
+            if job.process is not None and job.process.returncode is None:
+                await self._terminate_hung_job(job)
             raise
         finally:
             if stderr_file is not None:
@@ -607,16 +629,36 @@ class TaskRunnerSupervisor:
                     waiter.set_result({"accepted": False, "error": "chat job ended"})
             self._clear_busy_if_idle()
             # A-07: recover orphan streaming journals after every task ends.
-            self._recover_task_journals((lane,))
+            await self._recover_task_journals((lane,))
 
     async def _watch_job(self, job: TaskRunnerJob) -> None:
-        """Kill only this task-runner group after progress stops."""
+        """Kill only this task-runner group after progress stops.
+
+        Besides hang detection, a ``task``-lane job whose queue entry was
+        externally cancelled (e.g. superseded by a newer PR exact) is terminated
+        here.  The queue cancel check is rate-limited to ``_CANCEL_CHECK_INTERVAL``
+        seconds to avoid reading the queue file on every hang-check tick.
+        """
+        last_cancel_check = 0.0
         while job.identity.job_id in self._jobs:
             await asyncio.sleep(self._hang_check_interval)
             process = job.process
             if process is None or process.returncode is not None:
                 return
-            idle_sec = asyncio.get_running_loop().time() - job.last_progress_at
+            now = asyncio.get_running_loop().time()
+            if job.identity.lane == "task" and now - last_cancel_check >= _CANCEL_CHECK_INTERVAL:
+                last_cancel_check = now
+                if await self._task_is_externally_cancelled(job):
+                    job.hang_kill_started = True
+                    logger.info(
+                        "Task runner external cancel: anima=%s job=%s task_id=%s",
+                        self.anima_name,
+                        job.identity.job_id,
+                        (job.params.get("task_desc") or {}).get("task_id"),
+                    )
+                    await self._terminate_hung_job(job)
+                    return
+            idle_sec = now - job.last_progress_at
             if idle_sec <= self._busy_hang_threshold_sec:
                 continue
             job.hang_kill_started = True
@@ -632,6 +674,33 @@ class TaskRunnerSupervisor:
             )
             await self._terminate_hung_job(job)
             return
+
+    async def _task_is_externally_cancelled(self, job: TaskRunnerJob) -> bool:
+        """Return True when the task's queue entry was externally cancelled.
+
+        Reads the live task queue (via a thread so the event loop is not blocked)
+        and returns True only for a ``cancelled`` status.  Any queue read error
+        is swallowed and treated as not-cancelled so the watcher keeps going.
+        """
+        try:
+            task_desc = job.params.get("task_desc") or {}
+            task_id = task_desc.get("task_id")
+            if not task_id:
+                return False
+            from core.memory.task_queue import TaskQueueManager
+
+            entry = await asyncio.to_thread(
+                TaskQueueManager(self.anima_dir).get_task_by_id,
+                task_id,
+            )
+            return entry is not None and entry.status == "cancelled"
+        except Exception:
+            logger.debug(
+                "Task runner external-cancel check failed for job=%s",
+                job.identity.job_id,
+                exc_info=True,
+            )
+            return False
 
     async def _terminate_hung_job(self, job: TaskRunnerJob) -> None:
         """Terminate a hung task group, escalating to SIGKILL after grace."""
@@ -681,83 +750,105 @@ class TaskRunnerSupervisor:
         if callable(callback):
             callback()
 
-    def _recover_task_journals(
+    async def _recover_task_journals(
         self,
         session_types: tuple[str, ...] = ("task", "heartbeat", "chat", "cron"),
     ) -> None:
-        """Best-effort orphan StreamingJournal recovery after a child exits."""
-        try:
-            from core.memory.streaming_journal import StreamingJournal
-        except Exception:
-            return
-        for session_type in session_types:
-            try:
-                if not StreamingJournal.has_orphan(self.anima_dir, session_type=session_type):
-                    continue
-                thread_ids = StreamingJournal.list_orphan_thread_ids(self.anima_dir, session_type)
-                for thread_id in thread_ids or ("default",):
-                    recovery = StreamingJournal.recover(
-                        self.anima_dir,
-                        session_type,
-                        thread_id=thread_id,
-                    )
-                    if recovery is None:
-                        continue
-                    if session_type in {"task", "task_exec"} and (
-                        recovery.recovered_text.strip() or recovery.tool_calls
-                    ):
-                        owner = self._busy_status_owner
-                        pending_executor = getattr(owner, "_pending_executor", None)
-                        if pending_executor is not None:
-                            pending_executor.add_recovered_task_checkpoint(
-                                thread_id,
-                                recovery.recovered_text,
-                                recovery.tool_calls,
-                            )
-                    if session_type == "chat" and recovery.recovered_text:
-                        from core.memory.conversation import ConversationMemory
+        """Best-effort orphan StreamingJournal recovery after a child exits.
 
-                        owner = self._busy_status_owner
-                        model_config = getattr(owner, "model_config", None)
-                        if model_config is None:
-                            logger.error("Cannot persist recovered chat journal without root model config")
-                            continue
-                        conversation = ConversationMemory(
+        All disk work runs in a thread so a saturated disk can never stall the
+        root event loop (which would delay every child's ack).
+        """
+        # Snapshot event-loop-owned inputs before handing disk work to a thread.
+        owner = self._busy_status_owner
+        model_config = getattr(owner, "model_config", None)
+
+        def _disk_recovery() -> list[dict[str, Any]]:
+            outcomes: list[dict[str, Any]] = []
+            try:
+                from core.memory.conversation import ConversationMemory
+                from core.memory.streaming_journal import StreamingJournal
+            except Exception:
+                return outcomes
+            for session_type in session_types:
+                try:
+                    if not StreamingJournal.has_orphan(self.anima_dir, session_type=session_type):
+                        continue
+                    thread_ids = StreamingJournal.list_orphan_thread_ids(self.anima_dir, session_type)
+                    for thread_id in thread_ids or ("default",):
+                        recovery = StreamingJournal.recover(
                             self.anima_dir,
-                            model_config,
+                            session_type,
                             thread_id=thread_id,
                         )
-                        marker = t("anima.response_interrupted")
-                        saved_text = recovery.recovered_text + "\n" + marker
-                        last_assistant = next(
-                            (turn for turn in reversed(conversation.load().turns) if turn.role == "assistant"),
-                            None,
+                        if recovery is None:
+                            continue
+                        if session_type == "chat" and recovery.recovered_text:
+                            if model_config is None:
+                                logger.error("Cannot persist recovered chat journal without root model config")
+                            else:
+                                conversation = ConversationMemory(
+                                    self.anima_dir,
+                                    model_config,
+                                    thread_id=thread_id,
+                                )
+                                marker = t("anima.response_interrupted")
+                                saved_text = recovery.recovered_text + "\n" + marker
+                                last_assistant = next(
+                                    (turn for turn in reversed(conversation.load().turns) if turn.role == "assistant"),
+                                    None,
+                                )
+                                already_saved = last_assistant is not None and (
+                                    last_assistant.content == saved_text
+                                    or recovery.recovered_text.strip()
+                                    in last_assistant.content.replace(marker, "").strip()
+                                )
+                                if not already_saved:
+                                    conversation.append_turn("assistant", saved_text)
+                                    conversation.save()
+                        StreamingJournal.confirm_recovery(
+                            self.anima_dir,
+                            session_type,
+                            thread_id=thread_id,
                         )
-                        already_saved = last_assistant is not None and (
-                            last_assistant.content == saved_text
-                            or recovery.recovered_text.strip() in last_assistant.content.replace(marker, "").strip()
+                        logger.info(
+                            "Recovered orphan journal after task exit: anima=%s session=%s thread=%s",
+                            self.anima_name,
+                            session_type,
+                            thread_id,
                         )
-                        if not already_saved:
-                            conversation.append_turn("assistant", saved_text)
-                            conversation.save()
-                    StreamingJournal.confirm_recovery(
-                        self.anima_dir,
-                        session_type,
-                        thread_id=thread_id,
-                    )
-                    logger.info(
-                        "Recovered orphan journal after task exit: anima=%s session=%s thread=%s",
+                        outcomes.append(
+                            {
+                                "session_type": session_type,
+                                "thread_id": thread_id,
+                                "recovered_text": recovery.recovered_text,
+                                "tool_calls": recovery.tool_calls,
+                            }
+                        )
+                except Exception:
+                    logger.debug(
+                        "Orphan journal recovery failed for %s/%s",
                         self.anima_name,
                         session_type,
-                        thread_id,
+                        exc_info=True,
                     )
-            except Exception:
-                logger.debug(
-                    "Orphan journal recovery failed for %s/%s",
-                    self.anima_name,
-                    session_type,
-                    exc_info=True,
-                )
+            return outcomes
+
+        async with self._journal_recovery_lock:
+            # File existence does not mean orphaned: a sibling child may still
+            # be writing. Defer the entire lane until its final child exits.
+            active_lanes = {job.identity.lane for job in self._jobs.values()}
+            session_types = tuple(lane for lane in session_types if lane not in active_lanes)
+            if not session_types:
+                return
+            recovery_task = asyncio.create_task(asyncio.to_thread(_disk_recovery))
+            try:
+                await asyncio.shield(recovery_task)
+            except asyncio.CancelledError:
+                # Cancelling to_thread does not stop its disk work. Retain the
+                # registration lock until that work has really finished.
+                await recovery_task
+                raise
 
     async def _handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         connection: IPCV2Connection | None = None
@@ -806,7 +897,17 @@ class TaskRunnerSupervisor:
                 await connection.send_event("interrupt", {"thread_id": job.interrupt_thread_id})
 
             while True:
-                envelope = await asyncio.wait_for(connection.receive(), timeout=15.0)
+                try:
+                    envelope = await asyncio.wait_for(connection.receive(), timeout=_RECEIVE_POLL_TIMEOUT_SEC)
+                except TimeoutError:
+                    # A quiet interval is not an error: runner liveness is judged
+                    # by the hang watchdog (busy_hang_threshold), not this socket.
+                    # Severing here used to permanently mute healthy runners and
+                    # produce mass false hang-kills after root event-loop stalls.
+                    current = self._jobs.get(job.identity.job_id)
+                    if current is None or current.connection is not connection:
+                        break  # superseded by a reconnect, or the job is gone
+                    continue
                 if envelope.kind == "request":
                     await self._handle_memory_request(connection, envelope)
                     continue
@@ -958,33 +1059,51 @@ class TaskRunnerSupervisor:
         if self._memory_service is not None:
             await self._memory_service.close()
         cleanup_ipc_endpoint(self.socket_path)
-        self._recover_task_journals()
+        await self._recover_task_journals()
+
+    @staticmethod
+    def _descendant_processes(job: TaskRunnerJob) -> list[psutil.Process]:
+        """Every descendant of the runner, including ones outside its process group.
+
+        Codex's ``codex-linux-sandbox`` starts each shell tool in its own session,
+        so ``killpg`` alone leaves its ``grep -R``/``find`` children alive as
+        orphans (2026-08-30: 84 orphan sessions saturated disk IO and hang-killed
+        every TaskExec in a loop).  Collect them *before* the parent dies, because
+        orphans are reparented and become untraceable.
+        """
+        if not job.pid:
+            return []
+        try:
+            return psutil.Process(job.pid).children(recursive=True)
+        except psutil.Error:
+            return []
+
+    @staticmethod
+    def _signal_job_group(job: TaskRunnerJob, sig: int) -> None:
+        process = job.process
+        if process is None:
+            return
+        descendants = TaskRunnerSupervisor._descendant_processes(job)
+        try:
+            if os.name == "posix" and job.pgid:
+                os.killpg(job.pgid, sig)
+            elif process.returncode is None:
+                process.send_signal(sig)
+        except ProcessLookupError:
+            pass
+        for child in descendants:
+            try:
+                child.send_signal(sig)
+            except psutil.Error:
+                continue
 
     @staticmethod
     def _terminate_job_group(job: TaskRunnerJob) -> None:
-        process = job.process
-        if process is None:
-            return
-        try:
-            if os.name == "posix" and job.pgid:
-                os.killpg(job.pgid, signal.SIGTERM)
-            elif process.returncode is None:
-                process.terminate()
-        except ProcessLookupError:
-            return
+        TaskRunnerSupervisor._signal_job_group(job, signal.SIGTERM)
 
     @staticmethod
     def _kill_job_group(job: TaskRunnerJob) -> None:
-        process = job.process
-        if process is None:
-            return
-        try:
-            if os.name == "posix" and job.pgid:
-                os.killpg(job.pgid, signal.SIGKILL)
-            elif process.returncode is None:
-                process.kill()
-        except ProcessLookupError:
-            return
+        TaskRunnerSupervisor._signal_job_group(job, signal.SIGKILL)
 
 
 __all__ = ["TaskRunnerError", "TaskRunnerJob", "TaskRunnerSupervisor"]

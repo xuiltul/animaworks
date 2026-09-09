@@ -144,6 +144,12 @@ class MemoryService:
 
     async def repair(self, *, include_shared: bool) -> dict[str, Any]:
         """Rebuild, swap, reopen, and verify this root's sole vector store."""
+        if not include_shared:
+            from core.i18n import t
+
+            # This operation replaces the whole DB, not just personal
+            # collections. A partial rebuild would discard shared memories.
+            raise ValueError(t("rag.phase3_repair_requires_shared"))
         if self._repair_lock.locked():
             raise MemoryServiceUnavailable("RAG repair already in progress")
         async with self._repair_lock:
@@ -225,7 +231,43 @@ class MemoryService:
         chunks: int,
         shared_hashes: dict[str, str],
     ) -> dict[str, Any]:
-        from core.memory.rag.repair_rebuild import _backup_bm25, _restore_bm25
+        """Keep promotion consistent before releasing a cancelled caller's fence.
+
+        Executor futures cannot stop a running filesystem operation. Shield the
+        entire transaction, not just individual awaits whose return values
+        determine whether rollback is required.
+        """
+        operation = asyncio.create_task(self._promote_and_verify_consistent(staging, chunks, shared_hashes))
+        try:
+            return await asyncio.shield(operation)
+        except asyncio.CancelledError:
+            # Repeated caller cancellation must not abandon the native worker
+            # or drop repair()'s fence early. A cancelled child is already done
+            # and must not be awaited forever.
+            while not operation.done():
+                try:
+                    await asyncio.shield(operation)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if not operation.cancelled():
+                try:
+                    operation.result()
+                except Exception:
+                    logger.warning(
+                        "RAG promotion failed while caller was cancelled: %s", self.anima_name, exc_info=True
+                    )
+            raise
+
+    async def _promote_and_verify_consistent(
+        self,
+        staging: Path,
+        chunks: int,
+        shared_hashes: dict[str, str],
+    ) -> dict[str, Any]:
+        from core.memory.rag.repair_rebuild import _backup_repair_metadata, _restore_repair_metadata
+        from core.memory.rag.repair_snapshot import publish_rebuild_metadata, validate_rebuild_sources
 
         loop = asyncio.get_running_loop()
         backup_dir: Path | None = None
@@ -233,8 +275,10 @@ class MemoryService:
         archive: Path | None = None
         closed = False
         promoted = False
+        rollback_incomplete = False
         try:
-            backup_dir, existing = await loop.run_in_executor(self._executor, _backup_bm25, self.anima_dir)
+            await loop.run_in_executor(self._executor, validate_rebuild_sources, staging, self.anima_dir)
+            backup_dir, existing = await loop.run_in_executor(self._executor, _backup_repair_metadata, self.anima_dir)
             closed = True
             await loop.run_in_executor(self._executor, self._close_store_sync)
             archive = await loop.run_in_executor(self._executor, self._promote_staging_sync, staging)
@@ -246,6 +290,7 @@ class MemoryService:
             verification = await loop.run_in_executor(self._executor, self._verify_store_sync, store, chunks)
             if shared_hashes:
                 await loop.run_in_executor(self._executor, self._write_shared_hashes_sync, shared_hashes)
+            await loop.run_in_executor(self._executor, publish_rebuild_metadata, self.anima_dir)
             await loop.run_in_executor(self._executor, self._invalidate_shared_checks_sync)
             return {
                 "ok": True,
@@ -261,7 +306,13 @@ class MemoryService:
                     await loop.run_in_executor(self._executor, self._close_store_sync)
                     await loop.run_in_executor(self._executor, self._rollback_sync, archive)
                     assert backup_dir is not None
-                    await loop.run_in_executor(self._executor, _restore_bm25, self.anima_dir, backup_dir, existing)
+                    await loop.run_in_executor(
+                        self._executor,
+                        _restore_repair_metadata,
+                        self.anima_dir,
+                        backup_dir,
+                        existing,
+                    )
                     self._store = await loop.run_in_executor(self._executor, self._opener)
                     self._open_error = None
                 except Exception as rollback_exc:
@@ -276,11 +327,12 @@ class MemoryService:
                     self._open_error = reopen_exc
                     rollback_errors.append(str(reopen_exc))
             if rollback_errors:
+                rollback_incomplete = True
                 raise RuntimeError(f"{exc}; rollback incomplete: {'; '.join(rollback_errors)}") from exc
             raise
         finally:
             await loop.run_in_executor(self._executor, shutil.rmtree, staging, True)
-            if backup_dir is not None:
+            if backup_dir is not None and not rollback_incomplete:
                 await loop.run_in_executor(self._executor, shutil.rmtree, backup_dir, True)
 
     def _close_store_sync(self) -> None:
@@ -355,7 +407,7 @@ class MemoryService:
             reason="store_init_failed",
             collection=None,
             source="phase3_root_startup",
-            include_shared=False,
+            include_shared=True,
             animas_dir=self.anima_dir.parent,
         )
         logger.warning("Marked phase3 root RAG for background repair after open failure: %s", error)

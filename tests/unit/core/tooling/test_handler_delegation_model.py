@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.config.models import AnimaModelConfig, AnimaWorksConfig
+from core.memory.task_queue import TaskQueueManager
 
 
 def _make_config(animas: dict[str, dict]) -> AnimaWorksConfig:
@@ -63,9 +64,9 @@ class TestDelegateTaskModelValidation:
                     "model": "openai/gpt-4.1",
                 },
             )
-        pending = list((animas_dir / "alice" / "state" / "pending").glob("*.json"))
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
         assert len(pending) == 1, result
-        data = json.loads(pending[0].read_text(encoding="utf-8"))
+        data = pending[0]
         assert data["model"] == "openai/gpt-4.1"
         assert "InvalidArguments" not in result
 
@@ -94,7 +95,7 @@ class TestDelegateTaskModelValidation:
         assert parsed["error_type"] == "InvalidArguments"
         assert "not-a-real-model" in parsed["message"]
         assert "available-models" in parsed["message"]
-        pending = list((animas_dir / "alice" / "state" / "pending").glob("*.json"))
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
         assert pending == []
 
     def test_omitted_model_keeps_legacy_behavior(self, handler_with_sub):
@@ -115,9 +116,9 @@ class TestDelegateTaskModelValidation:
                 },
             )
             validate.assert_not_called()
-        pending = list((animas_dir / "alice" / "state" / "pending").glob("*.json"))
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
         assert len(pending) == 1, result
-        data = json.loads(pending[0].read_text(encoding="utf-8"))
+        data = pending[0]
         assert data.get("model") == ""
 
     def test_empty_model_skips_validation(self, handler_with_sub):
@@ -139,5 +140,5 @@ class TestDelegateTaskModelValidation:
                 },
             )
             validate.assert_not_called()
-        pending = list((animas_dir / "alice" / "state" / "pending").glob("*.json"))
+        pending = TaskQueueManager(animas_dir / "alice").store.pending("alice")
         assert len(pending) == 1, result

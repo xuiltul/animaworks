@@ -32,9 +32,7 @@ def _manager(tmp_path: Path, *, isolated: bool) -> tuple[SchedulerManager, Magic
     )
     anima = MagicMock()
     anima.shared_dir = tmp_path / "shared"
-    anima.run_heartbeat = AsyncMock(
-        return_value=CycleResult(trigger="heartbeat", action="completed", summary="done")
-    )
+    anima.run_heartbeat = AsyncMock(return_value=CycleResult(trigger="heartbeat", action="completed", summary="done"))
     emit = MagicMock()
     manager = SchedulerManager(anima, "sakura", anima_dir, emit)
     return manager, anima
@@ -221,9 +219,7 @@ async def test_cron_only_flag_does_not_isolate_heartbeat(tmp_path: Path) -> None
     )
     anima = MagicMock()
     anima.shared_dir = tmp_path / "shared"
-    anima.run_heartbeat = AsyncMock(
-        return_value=CycleResult(trigger="heartbeat", action="completed", summary="legacy")
-    )
+    anima.run_heartbeat = AsyncMock(return_value=CycleResult(trigger="heartbeat", action="completed", summary="legacy"))
     manager = SchedulerManager(anima, "sakura", anima_dir, MagicMock())
 
     assert manager._task_runner_supervisor is not None
@@ -232,3 +228,29 @@ async def test_cron_only_flag_does_not_isolate_heartbeat(tmp_path: Path) -> None
 
     await manager.heartbeat_tick()
     anima.run_heartbeat.assert_awaited_once()
+
+
+@pytest.mark.parametrize("isolated", [False, True])
+async def test_periodic_work_waits_for_initial_profile(tmp_path, isolated):
+    from core.schemas import CronTask
+
+    manager, anima = _manager(tmp_path, isolated=isolated)
+    directory = manager._anima_dir
+    (directory / "identity.md").write_text("未定義", encoding="utf-8")
+    (directory / "injection.md").write_text("未定義", encoding="utf-8")
+    (directory / "bootstrap.md").write_text("First conversation", encoding="utf-8")
+    runner = manager._task_runner_supervisor
+    if runner:
+        runner.run_heartbeat = AsyncMock()
+    manager._run_cron_task = AsyncMock()
+    await manager.heartbeat_tick()
+    await manager.cron_tick(CronTask(name="daily", schedule="0 9 * * *", type="llm", description="plan"))
+    anima.run_heartbeat.assert_not_awaited()
+    manager._run_cron_task.assert_not_awaited()
+    if runner:
+        runner.run_heartbeat.assert_not_awaited()
+    # Completing the profile re-enables the existing schedule automatically.
+    (directory / "identity.md").write_text("# Identity\nA helpful manager.", encoding="utf-8")
+    (directory / "injection.md").write_text("# Role\nCoordinate the team.", encoding="utf-8")
+    (directory / "bootstrap.md").unlink()
+    assert not manager._awaiting_initial_setup()

@@ -159,14 +159,15 @@ async def run_daily_consolidation_post_processing(
     model: str,
 ) -> None:
     """Run framework-side daily consolidation post-processing."""
-    try:
-        from core.memory.forgetting import ForgettingEngine
+    if getattr(consolidation_cfg, "synaptic_downscaling_enabled", False) is True:
+        try:
+            from core.memory.forgetting import ForgettingEngine
 
-        forgetter = ForgettingEngine(anima_dir, anima_name)
-        downscaling_result = forgetter.synaptic_downscaling()
-        logger.info("Synaptic downscaling for %s: %s", anima_name, downscaling_result)
-    except Exception:
-        logger.exception("Synaptic downscaling failed for anima=%s", anima_name)
+            forgetter = ForgettingEngine(anima_dir, anima_name)
+            downscaling_result = forgetter.synaptic_downscaling()
+            logger.info("Synaptic downscaling for %s: %s", anima_name, downscaling_result)
+        except Exception:
+            logger.exception("Synaptic downscaling failed for anima=%s", anima_name)
 
     await run_knowledge_self_correction_if_enabled(
         anima_dir,
@@ -202,7 +203,8 @@ async def run_weekly_integration_post_processing(
     model: str,
 ) -> None:
     """Run framework-side weekly integration post-processing."""
-    await run_weekly_pattern_distillation(anima_dir, anima_name, model=model)
+    if getattr(consolidation_cfg, "weekly_distillation_enabled", False) is True:
+        await run_weekly_pattern_distillation(anima_dir, anima_name, model=model)
 
     try:
         from core.memory.consolidation import ConsolidationEngine
@@ -384,7 +386,7 @@ class SystemConsolidationMixin:
             try:
                 result = await anima.run_consolidation(consolidation_type="daily")
 
-                if result.duration_ms < 10_000:
+                if result.duration_ms < 10_000 and result.action not in {"completed", "skipped"}:
                     logger.warning(
                         "Daily consolidation too short for %s (%dms), scheduling retry",
                         anima_name,
@@ -407,12 +409,13 @@ class SystemConsolidationMixin:
                 should_retry = True
                 logger.exception("Daily consolidation failed for anima=%s", anima_name)
             finally:
-                await run_daily_consolidation_post_processing(
-                    anima_name,
-                    anima.memory.anima_dir,
-                    consolidation_cfg=consolidation_cfg,
-                    model=model,
-                )
+                if result is None or result.action != "skipped":
+                    await run_daily_consolidation_post_processing(
+                        anima_name,
+                        anima.memory.anima_dir,
+                        consolidation_cfg=consolidation_cfg,
+                        model=model,
+                    )
 
             if should_retry:
                 self._schedule_consolidation_retry(anima_name)

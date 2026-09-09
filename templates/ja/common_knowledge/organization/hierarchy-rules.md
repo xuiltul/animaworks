@@ -66,26 +66,24 @@ alice宛: キャッシュ戦略について判断をお願いしたいです。
 | `org_dashboard` | 全配下（再帰） | 配下全体のプロセス状態・最終アクティビティ・現在タスク・タスク数をツリー表示 | なし |
 | `ping_subordinate` | 全配下（再帰） | 配下の生存確認。`name` 省略で全員一括、指定で単一 Anima のみ | `name`（任意） |
 | `read_subordinate_state` | 全配下（再帰） | 配下の `state/current_state.md` を読み取り | `name`（必須） |
-| `delegate_task` | 直属部下のみ | タスク委譲（部下キュー追加 + DM送信 + 自分側追跡エントリ作成） | `name`, `instruction`, `deadline`（必須）, `summary`（任意） |
+| `delegate_task` | 直属部下のみ | 完全な実行入力と追跡参照を原子的に登録し、部下へ通知 | `name`, `instruction`（必須）, `summary`, `acceptance_criteria`, `workspace`, `model`（任意） |
 | `task_tracker` | 自分の委譲タスク | `delegate_task` で委譲したタスクの進捗を配下側キューから追跡 | `status`（任意: "all"/"active"/"completed", デフォルト "active"） |
 | `audit_subordinate` | 全配下（再帰） | 活動タイムラインまたは統計サマリーを生成。`name` 省略で全配下を一括監査（統合タイムライン） | `name`（任意）, `mode`（任意: `"report"`/`"summary"`, デフォルト `"report"`）, `hours`（任意: 1〜168, デフォルト 24）, `direct_only`（任意: boolean）, `since`（任意: `"HH:MM"` 当日の開始時刻、指定時はhoursより優先） |
 | `disable_subordinate` | 全配下（再帰） | 配下を休止（status.json enabled=false、約30秒でプロセス停止） | `name`（必須）, `reason`（任意） |
 | `enable_subordinate` | 全配下（再帰） | 休止した配下を再開 | `name`（必須） |
 | `set_subordinate_model` | 全配下（再帰） | 配下のモデルを変更（status.json 更新。反映には `restart_subordinate` が必要） | `name`, `model`（必須）, `reason`（任意） |
-| `set_subordinate_background_model` | 全配下（再帰） | 配下のバックグラウンドモデル（Heartbeat/Inbox/Cron用）を変更。空文字でクリア。反映には `restart_subordinate` が必要 | `name`, `model`（必須）, `credential`, `reason`（任意） |
+| `set_subordinate_background_model` | 全配下（再帰） | 配下のバックグラウンドモデル（Heartbeat/Cron用。Inboxはメイン）を変更。空文字でクリア。反映には `restart_subordinate` が必要 | `name`, `model`（必須）, `credential`, `reason`（任意） |
 | `restart_subordinate` | 全配下（再帰） | 配下プロセスを再起動（restart_requested フラグ、約30秒で再起動） | `name`（必須）, `reason`（任意） |
 
 `check_permissions` は全 Anima が利用可能（自分の権限一覧を確認）。
 
 ### タスク委譲フロー
 
-1. `delegate_task(name="dave", instruction="...", deadline="...")` を実行
-   - `deadline` は相対形式（`30m`, `2h`, `1d`）または ISO8601 形式（例: `2026-02-20`）
-   - `summary` は任意（省略時は instruction の先頭100文字）
-2. dave のタスクキュー（`state/task_queue.jsonl`）にタスクが自動追加される
-3. dave の `state/pending/` にタスクJSONが書き込まれ、即時実行される
-4. dave に DM が自動送信される
-5. 自分のキューに追跡エントリが作成される（status="delegated"）
+1. `delegate_task(name="dave", instruction="目的・成果物・制約・期限・必要な文脈", acceptance_criteria=["確認可能な完了条件"])` を実行する。
+2. 完全な入力と追跡参照が正規タスクストアへ原子的に登録される。
+3. ワーカーが依存関係と空き容量を確認し、実行可能なタスクを取得する。
+4. dave に DM で通知する。DM は実行入力ではなく、欠落タスクを再生成する材料にしない。
+5. 自分の委譲追跡エントリは同じタスクへの参照であり、別の可変コピーではない。
 6. `task_tracker(status="active")` で進行中の委譲タスクを追跡する（`status="all"` で全件、`status="completed"` で完了済みのみ）
 
 ### 配下の状態確認（定期的に行うべき）

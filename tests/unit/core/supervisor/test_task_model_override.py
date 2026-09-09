@@ -23,15 +23,6 @@ from core.supervisor.pending_executor import PendingTaskExecutor
 
 
 @pytest.fixture(autouse=True)
-def _legacy_completion_semantics():
-    with patch(
-        "core.supervisor.pending_executor._completion_declaration_required",
-        return_value=False,
-    ):
-        yield
-
-
-@pytest.fixture(autouse=True)
 def _silence_activity():
     with patch("core.memory.activity.ActivityLogger") as mock_activity:
         mock_activity.return_value.log = MagicMock()
@@ -94,9 +85,7 @@ class TestTaskModelOverrideConstruction:
         # fields — each authenticates via its own CLI store.
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t1", "model": "c:codex/gpt-5.6-sol"}
-            )
+            override = executor._task_model_config_override({"task_id": "t1", "model": "c:codex/gpt-5.6-sol"})
         assert override is not None
         assert override.model == "codex/gpt-5.6-sol"
         assert override.resolved_mode == "C"
@@ -108,10 +97,9 @@ class TestTaskModelOverrideConstruction:
     def test_s_mode_replaces_credential(self, tmp_path):
         # S-mode resolves the family credential and replaces credential fields.
         executor = _make_executor(tmp_path)
+        executor._anima.model_config.model = "openai/gpt-4.1"
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t2", "model": "claude-sonnet-4-6"}
-            )
+            override = executor._task_model_config_override({"task_id": "t2", "model": "claude-sonnet-4-6"})
         assert override is not None
         assert override.model == "claude-sonnet-4-6"
         assert override.resolved_mode == "S"
@@ -127,18 +115,15 @@ class TestTaskModelOverrideConstruction:
         # task uses the anima default (avoid auth-error → quota misclassification).
         executor = _make_executor(tmp_path)
         cfg = AnimaWorksConfig(credentials={})
+        executor._anima.model_config.model = "openai/gpt-4.1"
         with patch("core.config.load_config", return_value=cfg):
-            override = executor._task_model_config_override(
-                {"task_id": "t2", "model": "claude-sonnet-4-6"}
-            )
+            override = executor._task_model_config_override({"task_id": "t2", "model": "claude-sonnet-4-6"})
         assert override is None
 
     def test_invalid_value_returns_none(self, tmp_path):
         executor = _make_executor(tmp_path)
         with patch("core.config.load_config", return_value=_config_with_anthropic()):
-            override = executor._task_model_config_override(
-                {"task_id": "t3", "model": "z:bad-model"}
-            )
+            override = executor._task_model_config_override({"task_id": "t3", "model": "z:bad-model"})
         assert override is None
 
     def test_unset_model_returns_none(self, tmp_path):
@@ -164,8 +149,9 @@ class TestTaskModelOverridePassedToCycle:
         agent.reset_read_paths = MagicMock()
         agent.set_interrupt_event = MagicMock()
         agent.set_task_cwd = MagicMock()
-        with patch("core.paths.load_prompt", return_value="prompt"), patch(
-            "core.config.load_config", return_value=_config_with_anthropic()
+        with (
+            patch("core.paths.load_prompt", return_value="prompt"),
+            patch("core.config.load_config", return_value=_config_with_anthropic()),
         ):
             await executor._run_llm_task(
                 {
@@ -224,3 +210,48 @@ class TestModelConfigHelper:
         cfg = AnimaWorksConfig(credentials={})
         cand = build_model_override_config(base, "s", "claude-sonnet-4-6", cfg)
         assert cand is None
+
+
+class TestClaudeCliAliases:
+    """The picker offers the CLI's own aliases; they have to resolve.
+
+    ``claude --help`` lists ``fable`` / ``opus`` / ``sonnet``, which carry
+    no ``provider/`` prefix and do not start with ``claude-``.  Family
+    detection found nothing, so the whole Claude group of the model picker
+    resolved to no credential and every override was dropped in silence.
+    """
+
+    def test_bare_alias_resolves_to_the_anthropic_credential(self):
+        from core.config.model_config import build_model_override_config
+
+        base = ModelConfig(model="claude-fable-5", credential="openai")
+        cfg = _config_with_anthropic()
+        for alias in ("opus", "sonnet", "fable"):
+            cand = build_model_override_config(base, "s", alias, cfg)
+            assert cand is not None, alias
+            assert cand.model == alias
+            assert cand.credential == "anthropic"
+
+    def test_alias_without_an_anthropic_credential_still_returns_none(self):
+        from core.config.model_config import build_model_override_config
+
+        base = ModelConfig(model="claude-fable-5")
+        cand = build_model_override_config(base, "s", "opus", AnimaWorksConfig(credentials={}))
+        assert cand is None
+
+    def test_bare_name_stays_unresolvable_for_non_s_modes(self):
+        """Only Mode S is the Claude CLI; an ``a:`` model needs a real family."""
+        from core.config.model_config import build_model_override_config
+
+        base = ModelConfig(model="claude-fable-5")
+        cand = build_model_override_config(base, "a", "opus", _config_with_anthropic())
+        assert cand is None
+
+    def test_can_build_matches_the_builder(self):
+        from core.config.model_config import build_model_override_config, can_build_model_override
+
+        base = ModelConfig(model="claude-fable-5")
+        cfg = _config_with_anthropic()
+        for mode, model in (("s", "opus"), ("c", "codex/gpt-5.6-sol"), ("x", "grok/grok-4.6"), ("a", "opus")):
+            built = build_model_override_config(base, mode, model, cfg) is not None
+            assert can_build_model_override(mode, model, cfg) is built, (mode, model)

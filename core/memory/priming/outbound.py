@@ -14,12 +14,20 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.i18n import t
-from core.memory.priming.constants import _CHARS_PER_TOKEN
+from core.memory.priming.items import ItemizedMemory, MemoryItem, render_items, select_within_budget
+from core.prompt.tokens import estimate_tokens
 from core.time_utils import ensure_aware, now_local
 
 logger = logging.getLogger("animaworks.priming")
 
 _HUMAN_NOTIFY_BUDGET_TOKENS = 500
+
+
+def _timestamp_rank(value: str) -> float:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 async def collect_recent_outbound(anima_dir: Path, max_entries: int = 3) -> str:
@@ -60,18 +68,28 @@ async def collect_recent_outbound(anima_dir: Path, max_entries: int = 3) -> str:
     if not recent:
         return ""
 
-    lines = [t("priming.outbound_header"), ""]
+    items: list[MemoryItem] = []
     for e in reversed(recent):
         time_str = e.ts[11:16] if len(e.ts) >= 16 else e.ts
         text_preview = (e.summary or e.content or "")[:200]
         if e.type == "channel_post":
             ch = e.channel or "?"
-            lines.append(t("priming.outbound_posted", time_str=time_str, ch=ch, text_preview=text_preview))
+            text = t("priming.outbound_posted", time_str=time_str, ch=ch, text_preview=text_preview)
         elif e.type in ("dm_sent", "message_sent"):
             to = e.to_person or "?"
-            lines.append(t("priming.outbound_sent", time_str=time_str, to=to, text_preview=text_preview))
-    lines.append("")
-    return "\n".join(lines)
+            text = t("priming.outbound_sent", time_str=time_str, to=to, text_preview=text_preview)
+        else:
+            continue
+        items.append(
+            MemoryItem(
+                source="recent_outbound",
+                key=f"{e.ts}|{e.channel}|{e.from_person}",
+                text=text,
+                updated=e.ts,
+                rank=_timestamp_rank(e.ts),
+            )
+        )
+    return ItemizedMemory(render_items(items, t("priming.outbound_header")), items) if items else ""
 
 
 async def collect_pending_human_notifications(anima_dir: Path, *, channel: str = "") -> str:
@@ -91,9 +109,8 @@ async def collect_pending_human_notifications(anima_dir: Path, *, channel: str =
     if not entries:
         return ""
 
-    lines: list[str] = []
-    budget_chars = _HUMAN_NOTIFY_BUDGET_TOKENS * _CHARS_PER_TOKEN
-    total = 0
+    items: list[MemoryItem] = []
+    header = "## Pending Human Notifications (last 24h)"
     try:
         resolver = resolver_for_anima_dir(anima_dir)
     except Exception:
@@ -109,14 +126,21 @@ async def collect_pending_human_notifications(anima_dir: Path, *, channel: str =
         if resolver is not None and not resolver.should_show_human_notify(anima_dir.name, notification_key, entry.ts):
             continue
         line = f"[{ts}] call_human (via {via}):\n{body}"
-        if total + len(line) > budget_chars:
-            break
-        lines.append(line)
-        total += len(line)
+        items.append(
+            MemoryItem(
+                source="pending_human_notifications",
+                key=notification_key,
+                text=line,
+                updated=entry.ts,
+                rank=_timestamp_rank(entry.ts),
+            )
+        )
 
-    if not lines:
+    available = _HUMAN_NOTIFY_BUDGET_TOKENS - estimate_tokens(header)
+    selected = select_within_budget(items, available)
+    while selected and estimate_tokens(render_items(selected, header)) > _HUMAN_NOTIFY_BUDGET_TOKENS:
+        selected.pop()
+    if not selected:
         return ""
-
-    lines.reverse()
-    header = "## Pending Human Notifications (last 24h)"
-    return header + "\n\n" + "\n\n".join(lines)
+    selected.sort(key=lambda item: item.updated)
+    return ItemizedMemory(render_items(selected, header), selected)

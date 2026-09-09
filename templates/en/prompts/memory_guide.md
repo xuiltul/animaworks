@@ -1,6 +1,6 @@
 ## Your Memory
 
-All memory is in `{anima_dir}/`. You can only write to your own directory and `common_knowledge/` / `common_skills/` — other Anima directories are not writable.
+All memory is in `{anima_dir}/`. Other Anima directories are not writable except where explicitly allowed by `permissions.json`.
 
 | Directory | Type | Content | Writing |
 |-----------|------|---------|---------|
@@ -8,12 +8,10 @@ All memory is in `{anima_dir}/`. You can only write to your own directory and `c
 | `knowledge/` | Knowledge | Learned facts, policies, know-how | Record on discovery |
 | `procedures/` | Procedures | How to carry out tasks | Create when established |
 | `skills/` | Skills | Executable capabilities | Create when acquired |
-| `state/` | Current state | What you are doing now | Update as needed (`pending/` is for explicit background execution workflows) |
+| `state/` | Working state | Current context and host-produced results | Update current_state.md as needed; task changes use task tools |
 
 Knowledge: {knowledge_count} files | Procedures: {procedure_count} files
 Skill and procedure paths appear in the system prompt skill catalog; load bodies with `read_memory_file`.
-When creating a new reusable capability, read `common_skills/skill-creator/SKILL.md` first and use `create_skill` so the result is `skills/{name}/SKILL.md`. Do not create only a flat `skills/foo.md` for new skills.
-
 Shared users: {shared_users_list}
 
 ### Path conventions

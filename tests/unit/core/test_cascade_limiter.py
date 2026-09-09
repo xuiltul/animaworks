@@ -381,13 +381,13 @@ class TestSelfMessageExclusion:
         anima_dir = tmp_path / "animas" / "sanae"
         anima_dir.mkdir(parents=True)
         now = now_jst()
-        self_entries = [
-            _make_dm_entry("message_sent", "sanae", "sanae", f"TaskExec完了{i}")
-            for i in range(33)
-        ]
+        self_entries = [_make_dm_entry("message_sent", "sanae", "sanae", f"TaskExec完了{i}") for i in range(33)]
         real_entries = [
             _make_dm_entry(
-                "message_sent", "sanae", "ritsu", f"報告{i}",
+                "message_sent",
+                "sanae",
+                "ritsu",
+                f"報告{i}",
                 ts=(now - timedelta(minutes=i * 5)).isoformat(),
             )
             for i in range(17)
@@ -414,3 +414,16 @@ class TestModuleSingleton:
         from core.cascade_limiter import depth_limiter
 
         assert isinstance(depth_limiter, ConversationDepthLimiter)
+
+
+class TestOutboundLimitDisabled:
+    """heartbeat.outbound_limit_enabled=False bypasses the hourly/daily caps."""
+
+    def test_disabled_allows_over_limit(self, tmp_path: Path, _patch_config):
+        _patch_config.return_value.heartbeat.outbound_limit_enabled = False
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        _write_activity_entries(anima_dir, [_make_dm_entry("dm_sent", "alice", "bob") for _ in range(10)])
+
+        limiter = ConversationDepthLimiter(max_per_hour=3, max_per_day=5)
+        assert limiter.check_global_outbound("alice", anima_dir) is True

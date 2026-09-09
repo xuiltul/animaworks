@@ -13,6 +13,7 @@ Regression: 2026-04-30 weekly bug investigation (Bug B).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -187,8 +188,33 @@ class TestIndexFileCollectionRecovery:
         idx._generate_embeddings.reset_mock()
 
         assert idx.index_file(f, "knowledge") == 0
+        assert idx._last_index_file_outcome.status == "failed"
+        assert idx._last_index_file_outcome.transient is True
         idx._generate_embeddings.assert_not_called()
         idx.vector_store.upsert.assert_not_called()
+
+    def test_directory_unavailable_collection_is_retryable_not_unchanged(self, anima_dir: Path):
+        idx = _make_indexer(anima_dir)
+        idx.vector_store.upsert.return_value = True
+        for name in ("a", "b"):
+            file_path = anima_dir / "knowledge" / f"{name}.md"
+            file_path.write_text(self._SAMPLE_MD, encoding="utf-8")
+            assert idx.index_file(file_path, "knowledge") > 0
+        idx._known_collections = None
+        idx.vector_store.list_collections_checked.side_effect = None
+        idx.vector_store.list_collections_checked.return_value = None
+        idx._generate_embeddings.reset_mock()
+        idx._reconcile_stale_entries = MagicMock()
+
+        result = idx.index_directory(anima_dir / "knowledge", "knowledge")
+
+        assert result.files_failed == 1
+        assert result.transient_failures == 1
+        assert result.files_unprocessed == 1
+        assert result.files_unchanged == 0
+        assert result.transient is True
+        idx._generate_embeddings.assert_not_called()
+        idx._reconcile_stale_entries.assert_not_called()
 
 
 class TestIndexConversationSummaryRecovery:
@@ -235,8 +261,111 @@ class TestIndexConversationSummaryRecovery:
         chunks = idx.index_conversation_summary(state_dir, "test_anima")
 
         assert chunks == 0
+        assert idx._last_index_file_outcome.status == "failed"
+        assert idx._last_index_file_outcome.transient is True
         idx.vector_store.create_collection.assert_called_once_with("test_anima_conversation_summary")
         idx._generate_embeddings.assert_not_called()
         idx.vector_store.upsert.assert_not_called()
         idx._save_index_meta.assert_not_called()
         assert "conversation_summary" not in idx.index_meta
+
+    @pytest.mark.parametrize("contents", [None, {}, {"compressed_summary": "short"}])
+    def test_skipped_summary_replaces_previous_outcome(self, anima_dir: Path, contents):
+        idx = _make_indexer(anima_dir)
+        idx._finish_index_file(0, "failed", transient=True)
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        if contents is not None:
+            (state_dir / "conversation.json").write_text(json.dumps(contents), encoding="utf-8")
+
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 0
+        assert idx._last_index_file_outcome.status == "skipped"
+        assert idx._last_index_file_outcome.transient is False
+        idx._generate_embeddings.assert_not_called()
+        idx.vector_store.upsert.assert_not_called()
+
+    def test_malformed_summary_reports_failure(self, anima_dir: Path):
+        idx = _make_indexer(anima_dir)
+        idx._finish_index_file(1, "indexed")
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        (state_dir / "conversation.json").write_text("{invalid", encoding="utf-8")
+
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 0
+        assert idx._last_index_file_outcome.status == "failed"
+        assert idx._last_index_file_outcome.transient is False
+        idx._generate_embeddings.assert_not_called()
+
+    @pytest.mark.parametrize("available", [True, False])
+    def test_unchanged_summary_requires_confirmed_collection(self, anima_dir: Path, available: bool):
+        idx = _make_indexer(anima_dir)
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        (state_dir / "conversation.json").write_text(
+            json.dumps({"compressed_summary": "### Section A\n\n" + "hello world " * 10}), encoding="utf-8"
+        )
+        idx.vector_store.upsert.return_value = True
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 1
+        assert idx._last_index_file_outcome.status == "indexed"
+        idx._known_collections = None
+        idx.vector_store.list_collections_checked.side_effect = None
+        idx.vector_store.list_collections_checked.return_value = (
+            ["test_anima_conversation_summary"] if available else None
+        )
+        idx._generate_embeddings.reset_mock()
+        idx.vector_store.upsert.reset_mock()
+
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 0
+        assert idx._last_index_file_outcome.status == ("unchanged" if available else "failed")
+        assert idx._last_index_file_outcome.transient is (not available)
+        idx._generate_embeddings.assert_not_called()
+        idx.vector_store.upsert.assert_not_called()
+
+    @pytest.mark.parametrize("transient", [True, False])
+    def test_upsert_failure_reports_outcome_without_committing_hash(self, anima_dir: Path, transient: bool):
+        idx = _make_indexer(anima_dir)
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        (state_dir / "conversation.json").write_text(
+            json.dumps({"compressed_summary": "### Section A\n\n" + "hello world " * 10}), encoding="utf-8"
+        )
+        idx.vector_store.upsert.return_value = False
+        idx.vector_store.is_transient_write_failure.return_value = transient
+        idx._save_index_meta = MagicMock()
+
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 0
+        assert idx._last_index_file_outcome.status == "failed"
+        assert idx._last_index_file_outcome.transient is transient
+        idx._save_index_meta.assert_not_called()
+        assert "conversation_summary" not in idx.index_meta
+
+    def test_embedding_exception_cannot_reuse_previous_success_outcome(self, anima_dir: Path):
+        idx = _make_indexer(anima_dir)
+        idx._finish_index_file(1, "indexed")
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        (state_dir / "conversation.json").write_text(
+            json.dumps({"compressed_summary": "### Section A\n\n" + "hello world " * 10}), encoding="utf-8"
+        )
+        idx._generate_embeddings.side_effect = RuntimeError("embedding unavailable")
+
+        with pytest.raises(RuntimeError, match="embedding unavailable"):
+            idx.index_conversation_summary(state_dir, "test_anima")
+        assert idx._last_index_file_outcome.status == "failed"
+        assert idx._last_index_file_outcome.transient is False
+        idx.vector_store.upsert.assert_not_called()
+
+    def test_empty_chunk_result_is_skipped_not_failed(self, anima_dir: Path):
+        idx = _make_indexer(anima_dir)
+        state_dir = anima_dir / "state"
+        state_dir.mkdir()
+        (state_dir / "conversation.json").write_text(
+            json.dumps({"compressed_summary": "### Section A\n\n" + "hello world " * 10}), encoding="utf-8"
+        )
+        idx._chunk_markdown_text = MagicMock(return_value=[])
+
+        assert idx.index_conversation_summary(state_dir, "test_anima") == 0
+        assert idx._last_index_file_outcome.status == "skipped"
+        assert idx._last_index_file_outcome.transient is False
+        idx.vector_store.create_collection.assert_not_called()
+        idx._generate_embeddings.assert_not_called()

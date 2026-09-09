@@ -154,14 +154,14 @@ class TestEnhancedCardStream:
             "sakura",
             {
                 "eventType": "message_received",
-                "from_person": "taka",
+                "from_person": "owner",
                 "summary": "新しいタスクをお願いします",
             },
         )
         assert len(entries) == 1
         assert entries[0]["type"] == "msg_in"
         assert "↓" in entries[0]["text"]
-        assert "taka" in entries[0]["text"]
+        assert "owner" in entries[0]["text"]
 
     def test_response_sent_creates_msg_out(self):
         sim = EnhancedCardStreamSimulator()

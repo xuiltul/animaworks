@@ -20,6 +20,7 @@ from core.memory.entity_index import (
 )
 from core.memory.facts import FactRecord, append_fact_records
 from core.memory.rag.store import (
+    CollectionExistence,
     _is_missing_collection_error,
     log_missing_collection_once,
     reset_missing_collection_warnings,
@@ -153,6 +154,9 @@ def test_match_query_entities_uses_entity_collection_for_fuzzy_match(tmp_path: P
                 )
             ]
 
+        def collection_exists(self, collection: str):
+            return CollectionExistence.EXISTS
+
     matches = match_query_entities(
         anima_dir,
         "Who suggested that memoir?",
@@ -280,6 +284,9 @@ def test_rebuild_entity_collection_from_registry_without_existing_collection(tmp
                     score=0.9,
                 )
             ]
+
+        def collection_exists(self, collection: str):
+            return CollectionExistence.EXISTS if collection in created else CollectionExistence.MISSING
 
     store = FakeStore()
     ok = rebuild_entity_collection(

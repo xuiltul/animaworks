@@ -12,6 +12,7 @@ import pytest
 
 from core.prompt.builder import (
     _MIN_SYSTEM_BUDGET,
+    PromptBudget,
     SectionEntry,
     _allocate_sections,
     _compute_system_budget,
@@ -26,46 +27,50 @@ class TestComputeSystemBudget:
 
     def test_128k_budget(self):
         budget = _compute_system_budget(128_000)
-        # 128000 * 0.65 = 83200
-        assert budget == 83200
+        assert budget == PromptBudget(target=6_000, ceiling=44_800)
 
     def test_32k_budget(self):
         budget = _compute_system_budget(32_000)
-        # 32000 * 0.65 = 20800
-        assert budget == 20800
+        assert budget == PromptBudget(target=6_000, ceiling=11_200)
 
     def test_8k_budget(self):
         budget = _compute_system_budget(8_000)
-        # 8000 * 0.65 = 5200
-        assert budget == 5200
+        assert budget == PromptBudget(target=2_800, ceiling=2_800)
 
     def test_minimum_budget(self):
         budget = _compute_system_budget(100)
-        assert budget == _MIN_SYSTEM_BUDGET
+        assert budget == PromptBudget(target=_MIN_SYSTEM_BUDGET, ceiling=_MIN_SYSTEM_BUDGET)
 
     def test_zero_context_window(self):
         budget = _compute_system_budget(0)
-        assert budget == _MIN_SYSTEM_BUDGET
+        assert budget == PromptBudget(target=_MIN_SYSTEM_BUDGET, ceiling=_MIN_SYSTEM_BUDGET)
 
     def test_explicit_budget_clamped_to_auto(self):
         """system_budget cannot exceed auto-computed budget."""
         budget = _compute_system_budget(32_000, system_budget=999_999)
-        assert budget == 20800
+        assert budget == PromptBudget(target=6_000, ceiling=11_200)
 
     def test_explicit_budget_below_auto(self):
         """system_budget below auto is used as-is."""
         budget = _compute_system_budget(128_000, system_budget=10_000)
-        assert budget == 10_000
+        assert budget == PromptBudget(target=6_000, ceiling=10_000)
 
     def test_explicit_budget_below_minimum(self):
         """system_budget cannot go below _MIN_SYSTEM_BUDGET."""
         budget = _compute_system_budget(128_000, system_budget=500)
-        assert budget == _MIN_SYSTEM_BUDGET
+        assert budget == PromptBudget(target=_MIN_SYSTEM_BUDGET, ceiling=_MIN_SYSTEM_BUDGET)
 
     def test_200k_budget(self):
         budget = _compute_system_budget(200_000)
-        # 200000 * 0.65 = 130000
-        assert budget == 130_000
+        assert budget == PromptBudget(target=6_000, ceiling=70_000)
+
+    def test_configured_target_and_ceiling(self):
+        config = MagicMock()
+        config.prompt.system_prompt_target_tokens = 9_000
+        config.prompt.system_prompt_ceiling_pct = 0.20
+        with patch("core.config.load_config", return_value=config):
+            budget = _compute_system_budget(100_000)
+        assert budget == PromptBudget(target=9_000, ceiling=20_000)
 
 
 # ── _allocate_sections ──────────────────────────────────────
@@ -79,7 +84,7 @@ class TestAllocateSections:
         sections = [
             SectionEntry(id="identity", priority=1, kind="rigid", content="I am X"),
         ]
-        allocated = _allocate_sections(sections, budget=0)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=0, ceiling=0))
         assert len(allocated) == 1
         assert allocated[0].id == "identity"
 
@@ -89,8 +94,7 @@ class TestAllocateSections:
             SectionEntry(id="identity", priority=1, kind="rigid", content="x" * 100),
             SectionEntry(id="behavior", priority=2, kind="rigid", content="y" * 200),
         ]
-        # Budget only enough for identity
-        allocated = _allocate_sections(sections, budget=100)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=10, ceiling=65))
         ids = {s.id for s in allocated}
         assert "identity" in ids
         assert "behavior" not in ids
@@ -102,27 +106,23 @@ class TestAllocateSections:
             SectionEntry(id="behavior", priority=2, kind="rigid", content="y" * 100),
             SectionEntry(id="emotion", priority=4, kind="rigid", content="z" * 100),
         ]
-        # Budget enough for identity + behavior but not emotion
-        allocated = _allocate_sections(sections, budget=160)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=10, ceiling=50))
         ids = {s.id for s in allocated}
         assert "identity" in ids
         assert "behavior" in ids
         assert "emotion" not in ids
 
-    def test_elastic_proportional_trimming(self):
-        """Elastic sections are trimmed proportionally when budget is tight."""
+    def test_elastic_items_trim_by_priority(self):
+        """Lower-priority elastic items are removed before important ones."""
         sections = [
-            SectionEntry(id="identity", priority=1, kind="rigid", content="x" * 100),
-            SectionEntry(id="priming", priority=2, kind="elastic", content="p" * 1000),
-            SectionEntry(id="dk", priority=3, kind="elastic", content="d" * 1000),
+            SectionEntry(id="identity", priority=1, kind="rigid", content="identity"),
+            SectionEntry(id="priming", priority=2, kind="elastic", content="important" * 20),
+            SectionEntry(id="dk", priority=3, kind="elastic", content="optional" * 20),
         ]
-        # Budget: 100 for identity + 400 remaining for elastic (2000 total elastic)
-        allocated = _allocate_sections(sections, budget=500)
-        elastic = [s for s in allocated if s.kind == "elastic"]
-        for s in elastic:
-            # Each should be ~200 chars (400 * 1000/2000)
-            assert len(s.content) < 1000
-            assert len(s.content) > 100
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=70, ceiling=1000))
+        ids = {section.id for section in allocated}
+        assert "priming" in ids
+        assert "dk" not in ids
 
     def test_elastic_all_included_when_budget_sufficient(self):
         """Elastic sections included fully when budget allows."""
@@ -130,7 +130,7 @@ class TestAllocateSections:
             SectionEntry(id="identity", priority=1, kind="rigid", content="x" * 100),
             SectionEntry(id="priming", priority=2, kind="elastic", content="p" * 200),
         ]
-        allocated = _allocate_sections(sections, budget=10000)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=10000, ceiling=10000))
         priming = next(s for s in allocated if s.id == "priming")
         assert len(priming.content) == 200
 
@@ -141,13 +141,13 @@ class TestAllocateSections:
             SectionEntry(id="b", priority=4, kind="rigid", content="BBB"),
             SectionEntry(id="c", priority=2, kind="rigid", content="CCC"),
         ]
-        allocated = _allocate_sections(sections, budget=10000)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=10000, ceiling=10000))
         ids = [s.id for s in allocated]
         assert ids == ["a", "b", "c"]
 
     def test_empty_sections(self):
         """Empty sections list returns empty result."""
-        assert _allocate_sections([], budget=10000) == []
+        assert _allocate_sections([], budget=PromptBudget(target=10000, ceiling=10000)) == []
 
     def test_no_rigid_sections_cut(self):
         """Rigid sections with sufficient budget are never truncated."""
@@ -155,18 +155,16 @@ class TestAllocateSections:
         sections = [
             SectionEntry(id="full", priority=2, kind="rigid", content=content),
         ]
-        allocated = _allocate_sections(sections, budget=1000)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=1000, ceiling=1000))
         assert allocated[0].content == content
 
-    def test_elastic_tiny_fragments_excluded(self):
-        """Elastic sections trimmed to <100 chars are excluded entirely."""
+    def test_elastic_item_is_never_partially_retained(self):
+        """A too-large elastic item is dropped rather than sliced."""
         sections = [
             SectionEntry(id="identity", priority=1, kind="rigid", content="x" * 900),
             SectionEntry(id="priming", priority=2, kind="elastic", content="p" * 1000),
         ]
-        # Budget=950: 900 for identity, 50 remaining for elastic
-        # 50 * (1000/1000) = 50 < 100 → excluded
-        allocated = _allocate_sections(sections, budget=950)
+        allocated = _allocate_sections(sections, budget=PromptBudget(target=300, ceiling=1000))
         ids = {s.id for s in allocated}
         assert "priming" not in ids
 
@@ -223,10 +221,11 @@ class TestBudgetIntegration:
                 execution_mode="a",
                 context_window=context_window,
             )
-        # Allow some margin since budget is in chars and sections have separators
-        # The prompt should be within 2x the budget (generous but catches pathological cases)
-        assert len(result.system_prompt) <= budget * 2, (
-            f"Prompt {len(result.system_prompt)} chars exceeds 2x budget {budget} at cw={context_window}"
+        from core.prompt.tokens import estimate_tokens
+
+        # XML boundary tags add a small amount beyond section-content accounting.
+        assert estimate_tokens(result.system_prompt) <= budget.ceiling + 500, (
+            f"Prompt exceeds ceiling {budget.ceiling} tokens at cw={context_window}"
         )
 
     def test_identity_always_present(self, tmp_path: Path, data_dir: Path):

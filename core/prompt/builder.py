@@ -20,9 +20,10 @@ This module re-exports every symbol that tests reference via
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.i18n import t
 from core.memory import MemoryManager
@@ -31,17 +32,19 @@ from core.paths import get_data_dir, load_prompt, load_prompt_text
 from core.prompt.assembler import (
     _MIN_SYSTEM_BUDGET,  # noqa: F401
     _REFERENCE_WINDOW,
+    PromptBudget,  # noqa: F401
     SectionEntry,  # noqa: F401
     _allocate_sections,
     _assemble_with_tags,
     _compute_system_budget,
     _normalize_headings,  # noqa: F401
+    _split_content_items,
 )
 from core.prompt.messaging import (
     _build_human_notification_guidance,  # noqa: F401
     _build_messaging_section,
     _build_recent_tool_section,
-    _load_a_reflection,
+    _load_a_reflection,  # noqa: F401 -- compatibility export
 )
 from core.prompt.org_context import (
     _build_full_org_tree,  # noqa: F401
@@ -107,6 +110,22 @@ def _read_default_workspace(anima_dir: Path) -> str:
     return t("builder.default_workspace_unresolved", alias=alias)
 
 
+def _prompt_kind(
+    is_task: bool,
+    is_heartbeat: bool,
+    is_chat: bool,
+) -> Literal["chat", "heartbeat", "task", "inbox"]:
+    """Classify the prompt for trigger-specific L2 instructions."""
+    if is_heartbeat:
+        return "heartbeat"
+    if is_task:
+        return "task"
+    if is_chat:
+        return "chat"
+    # Cron and inbox both receive instructions from outside a chat session.
+    return "inbox"
+
+
 @dataclass
 class BuildResult:
     """Result of system prompt building."""
@@ -161,8 +180,10 @@ def _build_group1(
     _ss: dict[str, str],
     *,
     tier: str = TIER_FULL,
+    is_heartbeat: bool = False,
+    is_chat: bool = False,
 ) -> list[SectionEntry]:
-    """Group 1: Environment, identity, injection, time, behaviour rules."""
+    """Group 1: Environment, identity, injection, and behaviour rules."""
     out: list[SectionEntry] = []
 
     def _add(c: str, sid: str, pri: int = 2, kind: str = "rigid") -> None:
@@ -177,6 +198,11 @@ def _build_group1(
         dw = _read_default_workspace(pd)
         if dw:
             _add(dw, "default_workspace", 2)
+            _add(
+                load_prompt("builder/repo_work_rules", data_dir=data_dir),
+                "repo_work_rules",
+                2,
+            )
 
         _env = load_prompt("environment", data_dir=data_dir, anima_name=pd.name)
         if _env:
@@ -204,19 +230,52 @@ def _build_group1(
         except Exception:
             pass
 
-    current_time = now_local().strftime("%Y-%m-%d %H:%M (%Z)")
-    _add(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}", "current_time", 1)
-
     if tier != TIER_MICRO:
         _br = load_prompt_text("behavior_rules")
         if _br:
             _add(_br, "behavior_rules", 2)
+
+        # Trigger-specific procedures stay out of the stable L1 prompt.
+        prompt_kind = _prompt_kind(is_task, is_heartbeat, is_chat)
+        behavior_context: list[str] = []
+        if prompt_kind in ("chat", "inbox"):
+            behavior_context.append(load_prompt("builder/instruction_internalization"))
+        if prompt_kind == "chat":
+            behavior_context.append(load_prompt("builder/task_recording_chat"))
+        elif prompt_kind == "heartbeat":
+            behavior_context.append(load_prompt("builder/task_recording_heartbeat"))
+        _add("\n\n".join(behavior_context), "behavior_rules_ctx", 2)
 
         _tdi = load_prompt("tool_data_interpretation")
         if _tdi:
             _add(_tdi, "tool_data_interpretation", 2)
 
     return out
+
+
+_VISION_PLACEHOLDERS = frozenset(
+    {
+        "要記入",
+        "未記入",
+        "todo",
+        "tbd",
+        "to be determined",
+        "not entered",
+        "not filled in",
+        "작성 필요",
+        "미작성",
+        "추후 작성",
+    }
+)
+
+
+def _is_placeholder_vision(text: str) -> bool:
+    """Return whether a vision has no substantive body worth injecting."""
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#")).strip()
+    if len(body) < 40:
+        return True
+    normalized = re.sub(r"^[\s\[\](){}<>（）：:._*-]+|[\s\[\](){}<>（）：:._*-]+$", "", body).casefold()
+    return normalized in _VISION_PLACEHOLDERS
 
 
 def _build_group2(
@@ -238,14 +297,14 @@ def _build_group2(
     if b:
         _add(b, "bootstrap", 3)
     v = memory.read_company_vision()
-    if v:
+    if v and not _is_placeholder_vision(v):
         _add(v, "vision", 3)
     if not is_background_auto:
         sp = memory.read_specialty_prompt()
         if sp:
             _add(sp, "specialty", 3)
     if permissions:
-        _add(permissions, "permissions", 2)
+        _add(permissions, "permissions", 1)
     return out
 
 
@@ -328,6 +387,51 @@ def _build_resolved_approvals_section(anima_name: str, _ss: dict[str, str]) -> s
     return "\n".join(lines)
 
 
+_DATED_STATE_HEADING_RE = re.compile(
+    r"^##\s+(?P<title>.+?)（(?P<date>[^）]*\d{1,4}[-/]\d{1,2}[^）]*)）\s*$",
+    re.MULTILINE,
+)
+
+
+def _collapse_superseded_notes(state: str) -> str:
+    """Collapse bodies of older dated notes that share the same case key."""
+    matches = list(_DATED_STATE_HEADING_RE.finditer(state))
+    by_key: dict[str, list[int]] = {}
+    for index, match in enumerate(matches):
+        title = match.group("title").strip()
+        if " " not in title:
+            continue
+        case_key = title.rsplit(" ", 1)[0].strip()
+        if case_key:
+            by_key.setdefault(case_key, []).append(index)
+
+    superseded: dict[int, int] = {}
+    for indices in by_key.values():
+        if len(indices) > 1:
+            latest = indices[-1]
+            superseded.update({old: latest for old in indices[:-1]})
+    if not superseded:
+        return state
+
+    parts: list[str] = []
+    cursor = 0
+    for index, match in enumerate(matches):
+        if index not in superseded:
+            continue
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(state)
+        parts.append(state[cursor : match.start()])
+        latest_match = matches[superseded[index]]
+        latest_heading = latest_match.group(0).removeprefix("## ").strip()
+        old_heading = match.group(0).rstrip()
+        parts.append(f"{old_heading}{t('builder.superseded_note', latest=latest_heading)}\n\n")
+        dropped_body = state[match.end() : next_start]
+        logger.debug("Collapsed superseded current_state note body: %s", dropped_body.strip())
+        cursor = next_start
+    parts.append(state[cursor:])
+    logger.info("Collapsed %d superseded current_state note(s)", len(superseded))
+    return "".join(parts)
+
+
 def _build_group3(
     pd: Path,
     memory: MemoryManager,
@@ -340,15 +444,37 @@ def _build_group3(
     is_task: bool,
     _ss: dict[str, str],
     _fs: dict[str, str],
+    *,
+    shortterm_text: str = "",
 ) -> list[SectionEntry]:
     """Group 3: Current state, resolutions, priming, notifications, recent tools."""
     out: list[SectionEntry] = []
 
-    def _add(c: str, sid: str, pri: int = 2, kind: str = "rigid") -> None:
+    def _add(
+        c: str,
+        sid: str,
+        pri: int = 2,
+        kind: str = "rigid",
+        *,
+        trim_from: Literal["head", "tail"] = "tail",
+        budget_group: Literal["framework", "recall"] = "framework",
+    ) -> None:
         if c and c.strip():
-            out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
+            out.append(
+                SectionEntry(
+                    id=sid,
+                    priority=pri,
+                    kind=kind,
+                    content=c,
+                    trim_from=trim_from,
+                    budget_group=budget_group,
+                )
+            )
 
-    _add(_ss.get("group3_header", "# 3. Current Situation"), "group3_header", 1)
+    _add(_ss.get("group3_header", "# 6. Current Situation"), "group3_header", 1)
+
+    current_time = now_local().strftime("%Y-%m-%d %H:%M (%Z)")
+    _add(f"{_ss.get('current_time_label', '**Current time**:')} {current_time}", "current_time", 1)
 
     _state_max = max(int(_CURRENT_STATE_MAX_CHARS * scale), 500)
     state = memory.read_current_state()
@@ -366,6 +492,7 @@ def _build_group3(
         except Exception:
             logger.debug("TaskBoard current_state gate failed; using current_state as-is", exc_info=True)
     if state and state.strip() != "status: idle":
+        state = _collapse_superseded_notes(state)
         if len(state) > _state_max:
             truncated = state[-_state_max:]
             first_nl = truncated.find("\n")
@@ -376,13 +503,13 @@ def _build_group3(
     elif state:
         state_content = f"{_ss.get('current_state_header', '## Current State')}\n\n{state}"
     if state_content:
-        _add(state_content, "current_state", 2, "elastic")
+        _add(state_content, "current_state", 2, "elastic", trim_from="head")
 
     # Deterministic safety net: remind anima to close resolved approval blockers
     try:
         resolved_block = _build_resolved_approvals_section(pd.name, _ss)
         if resolved_block:
-            _add(resolved_block, "resolved_approvals", 2, "elastic")
+            _add(resolved_block, "resolved_approvals", 1, "rigid")
     except Exception:
         logger.debug("Failed to inject resolved approvals section", exc_info=True)
 
@@ -400,16 +527,25 @@ def _build_group3(
             _add(
                 load_prompt("builder/resolution_registry", res_lines="\n".join(lines)),
                 "resolution_registry",
-                3,
-                "elastic",
+                2,
+                "rigid",
             )
     except Exception:
         logger.debug("Failed to inject resolution registry", exc_info=True)
 
     if priming_section:
-        _add(priming_section, "priming", 2, "elastic")
+        # Explicit source contracts survive recall trimming. Never infer safety
+        # importance from arbitrary memory prose or split a trust-boundary block.
+        protected, recall = [], []
+        for item in _split_content_items(priming_section):
+            if re.match(r'<priming\b[^>]*\bsource="(?:resident_knowledge|pending_tasks|recent_outbound)"', item):
+                protected.append(item)
+            else:
+                recall.append(item)
+        _add("\n\n".join(protected), "priming_required_context", 1, "rigid", budget_group="recall")
+        _add("\n\n".join(recall), "priming", 2, "elastic", budget_group="recall")
     if pending_human_notifications and (is_chat or is_heartbeat):
-        _add(pending_human_notifications, "pending_human_notifications", 3, "elastic")
+        _add(pending_human_notifications, "pending_human_notifications", 1, "rigid")
     if is_chat and execution_mode.upper() == "B":
         try:
             recent = _build_recent_tool_section(pd, memory.read_model_config())
@@ -417,6 +553,8 @@ def _build_group3(
                 _add(recent, "recent_tools", 3, "elastic")
         except Exception:
             logger.debug("Failed to inject recent tool results", exc_info=True)
+    if shortterm_text:
+        _add(shortterm_text, "shortterm", 3, "elastic", trim_from="head")
     return out
 
 
@@ -501,6 +639,46 @@ def _format_skill_catalog_line(
     return f"- {path}{label_text}{_format_trust_tag(meta)}{ext_tag}: {desc}"
 
 
+def _skill_catalog_sections(entries: list[str], *, mode_b: bool) -> list[SectionEntry]:
+    """Keep a bounded discovery foothold for the text-tool Mode B executor."""
+    from core.prompt.tokens import estimate_tokens
+
+    def render(lines: list[str]) -> str:
+        return "\n".join(
+            [
+                t("builder.skill_catalog_header"),
+                t("builder.skill_catalog_instruction"),
+                "",
+                "<available_skills>",
+                *lines,
+                "</available_skills>",
+            ]
+        )
+
+    protected_count = 0
+    if mode_b:
+        # Preserve the existing router ranking and permission filtering. The
+        # soft framework target must not erase every way to discover a skill;
+        # the hard ceiling can still evict this priority-2 section.
+        for count in range(1, min(3, len(entries)) + 1):
+            if estimate_tokens(render(entries[:count])) > 512:
+                break
+            protected_count = count
+    if not protected_count:
+        return [SectionEntry("skill_catalog", 2, "elastic", render(entries))]
+    sections = [SectionEntry("skill_catalog", 2, "rigid", render(entries[:protected_count]))]
+    if remaining := entries[protected_count:]:
+        sections.append(
+            SectionEntry(
+                "skill_catalog_additional",
+                2,
+                "elastic",
+                "\n".join(["<available_skills>", *remaining, "</available_skills>"]),
+            )
+        )
+    return sections
+
+
 def _requires_human_approval(meta: Any) -> bool:
     risk = getattr(meta, "risk", None)
     if isinstance(risk, dict):
@@ -510,6 +688,20 @@ def _requires_human_approval(meta: Any) -> bool:
 
 def _skill_visible_in_prompt_context(meta: Any, *, is_background_auto: bool) -> bool:
     return not (is_background_auto and _requires_human_approval(meta))
+
+
+def _host_tool_line(execution_mode: str) -> str:
+    """Return the host built-in tool line for the given execution mode.
+
+    d (Cursor) and g (Gemini) are unused, so they reuse the 's' wording.
+    Unknown modes return an empty string (no injection).
+    """
+    mode = (execution_mode or "").lower()
+    if mode in ("d", "g"):
+        mode = "s"
+    if mode not in ("s", "c", "x", "a"):
+        return ""
+    return t(f"tool_guide.host_tools.{mode}")
 
 
 def _build_group4(
@@ -537,7 +729,7 @@ def _build_group4(
         if c and c.strip():
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
-    _add(_ss.get("group4_header", "# 4. Memory and Capabilities"), "group4_header", 1)
+    _add(_ss.get("group4_header", "# 3. Memory and Capabilities"), "group4_header", 1)
 
     _none = _fs.get("none", "(none)")
     mg = load_prompt(
@@ -569,40 +761,31 @@ def _build_group4(
         sm = load_guide("s_mcp")
         g = "\n\n".join(p for p in (sb, sm) if p)
         if g:
+            host_line = _host_tool_line(execution_mode)
+            if host_line:
+                g = host_line + "\n\n" + g
             _add(g, "tool_guides", 2)
     else:
         ns = load_guide("non_s")
         if ns:
+            host_line = _host_tool_line(execution_mode)
+            if host_line:
+                ns = host_line + "\n\n" + ns
             _add(ns, "tool_guides", 2)
 
-    if not is_heartbeat:
-        _add(
-            "\n## CLI Tools\n"
-            "For supervisor management, vault, channel management, "
-            "background tasks, and external tools (Slack, Chatwork, Gmail, GitHub, etc.):\n"
-            "```\nBash: animaworks-tool <tool> <subcommand> [args]\n```\n"
-            "Run `animaworks-tool --help` to see available commands.",
-            "tool_guides",
-            1,
-        )
     if not is_heartbeat and (tool_registry or personal_tools):
         cats = sorted(set((tool_registry or []) + list((personal_tools or {}).keys())))
         if cats:
             if _is_mcp_mode(execution_mode):
                 et = (
                     f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
-                    "When a dedicated external tool is visible in your tool list, call it directly by tool name.\n"
-                    "Prefer direct tools such as `slack_channel_post` over Bash/CLI.\n"
-                    "Use `animaworks-tool <tool> <subcommand>` via Bash only when no equivalent dedicated tool is available."
+                    "When a dedicated external tool is visible in your tool list, call it directly by tool name."
                 )
             else:
                 et = (
                     f"## External Tools\nAvailable categories: {', '.join(cats)}\n"
-                    "Use read_memory_file to load skill content and look up CLI usage, "
-                    f"then execute via Bash: `animaworks-tool <tool> <subcommand>`."
+                    "Read the skill document with read_memory_file for CLI usage."
                 )
-            if "machine" in cats:
-                et += t("builder.machine_hint")
             _add(et, "external_tools", 2)
 
     if is_chat:
@@ -620,7 +803,7 @@ def _build_group4(
     # Uses SkillIndex which excludes blocked/quarantine skills. Background
     # automation also excludes skills that need separate human approval.
     if not is_heartbeat:
-        _DESC_LIMIT = 250
+        _DESC_LIMIT = 120 if execution_mode == "b" else 250
         common_label = t("skill.label_common")
         procedure_label = t("skill.label_procedure")
         settings = _load_skill_catalog_router_settings()
@@ -692,16 +875,7 @@ def _build_group4(
                 )
 
         if catalog_entries or not (settings.enabled and message.strip()):
-            catalog_lines: list[str] = [
-                t("builder.skill_catalog_header"),
-                t("builder.skill_catalog_instruction"),
-                "",
-                "<available_skills>",
-                *catalog_entries,
-                "</available_skills>",
-            ]
-            catalog_text = "\n".join(catalog_lines)
-            _add(catalog_text, "skill_catalog", 2, "elastic")
+            out.extend(_skill_catalog_sections(catalog_entries, mode_b=execution_mode == "b"))
 
     return out
 
@@ -726,7 +900,7 @@ def _build_group5(
         if c and c.strip():
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
-    _add(_ss.get("group5_header", "# 5. Organization and Communication"), "group5_header", 1)
+    _add(_ss.get("group5_header", "# 4. Organization and Communication"), "group5_header", 1)
 
     if tier == TIER_MICRO:
         return out
@@ -767,7 +941,7 @@ def _build_group6(
         if c and c.strip():
             out.append(SectionEntry(id=sid, priority=pri, kind=kind, content=c))
 
-    _add(_ss.get("group6_header", "# 6. Meta Settings"), "group6_header", 1)
+    _add(_ss.get("group6_header", "# 5. Meta Settings"), "group6_header", 1)
 
     if tier == TIER_MICRO:
         return out
@@ -776,10 +950,6 @@ def _build_group6(
         ei = _build_emotion_instruction()
         if ei:
             _add(ei, "emotion_instruction", 4)
-    if not is_background_auto and execution_mode == "a":
-        ar = _load_a_reflection()
-        if ar:
-            _add(ar, "a_reflection", 4)
     if execution_mode == "c" and not is_background_auto:
         _add(t("builder.c_response_requirement"), "c_response_requirement", 2)
     return out
@@ -802,6 +972,7 @@ def build_system_prompt(
     system_budget: int | None = None,
     pending_human_notifications: str = "",
     thread_id: str = "default",
+    shortterm_text: str = "",
 ) -> BuildResult:
     """Construct the full system prompt from Markdown files.
 
@@ -846,10 +1017,18 @@ def build_system_prompt(
     )
     permissions = memory.read_permissions()
 
-    # Assemble sections from all 6 groups
-    sections = _build_group1(pd, data_dir, memory, is_task, _ss, tier=tier)
-    sections += _build_group2(memory, permissions, is_background_auto, is_task, _ss)
-    sections += _build_group3(
+    group1 = _build_group1(
+        pd,
+        data_dir,
+        memory,
+        is_task,
+        _ss,
+        tier=tier,
+        is_heartbeat=is_heartbeat,
+        is_chat=is_chat,
+    )
+    group2 = _build_group2(memory, permissions, is_background_auto, is_task, _ss)
+    group3 = _build_group3(
         pd,
         memory,
         scale,
@@ -861,6 +1040,7 @@ def build_system_prompt(
         is_task,
         _ss,
         _fs,
+        shortterm_text=shortterm_text,
     )
     g4 = _build_group4(
         pd,
@@ -880,8 +1060,7 @@ def build_system_prompt(
         message=message,
         thread_id=thread_id,
     )
-    sections += g4
-    sections += _build_group5(
+    group5 = _build_group5(
         pd,
         memory,
         other_animas,
@@ -893,7 +1072,7 @@ def build_system_prompt(
         _fs,
         tier=tier,
     )
-    sections += _build_group6(
+    group6 = _build_group6(
         execution_mode,
         is_chat,
         is_background_auto,
@@ -902,15 +1081,20 @@ def build_system_prompt(
         tier=tier,
     )
 
+    # Dynamic current-state content stays last so the preceding static groups
+    # form a stable prefix that providers can cache across turns.
+    sections = group1 + group2 + g4 + group5 + group6 + group3
+
     # Budget allocation + Final assembly
     allocated = _allocate_sections(sections, budget)
     prompt = _assemble_with_tags(allocated)
     logger.debug(
-        "System prompt built: %d/%d sections, total_len=%d, budget=%d, tier=%s, cw=%d",
+        "System prompt built: %d/%d sections, total_len=%d, target=%d, ceiling=%d, tier=%s, cw=%d",
         len(allocated),
         len(sections),
         len(prompt),
-        budget,
+        budget.target,
+        budget.ceiling,
         tier,
         context_window,
     )
@@ -957,6 +1141,22 @@ def build_voice_front_prompt(anima_dir: Path, *, anima_name: str | None = None) 
     parts.append(
         "You are " + name + ", speaking to a person by voice. "
         "Respond in natural, conversational spoken language.\n\n"
+        "MOST IMPORTANT — the ask_anima tool:\n"
+        "- You cannot look anything up, check anything, or do any work "
+        "yourself; only the ask_anima tool does work. Whenever the person asks "
+        "for something to be done or looked into (調べる・確認する・チェックする・"
+        "探す・やっておく・対応する・調査・実装・記憶の検索や保存・タスク化), "
+        "call ask_anima in that same turn with the full request, then reply "
+        "briefly like 'やっておくね'. Saying 「調べておくね」「確認しておきますね」 "
+        "in words alone does NOTHING — the person will wait forever.\n"
+        "- Do NOT call ask_anima when nothing was asked to be done: greetings "
+        "(おはよう), thanks (ありがとう), small talk, feelings, opinions, or "
+        "questions you can answer from what you already know. Just talk.\n"
+        "- When several things are asked, call ask_anima once per item. When a "
+        "result prefixed with [ask_anima完了] arrives, report it in your own "
+        "words.\n"
+        "- read_memory is read-only and safe to call any time you want to recall "
+        "something (recent events, notes, procedures).\n\n"
         "Rules:\n"
         "- Reply in one or two short spoken sentences — aim for 60 characters, "
         "never exceed 120. This is a voice conversation: one thing per turn, "
@@ -970,13 +1170,15 @@ def build_voice_front_prompt(anima_dir: Path, *, anima_name: str | None = None) 
         "of a short sentence to convey emotion.\n"
         "- Write large numbers and years in speakable form "
         "(「三千八百億」「にせんさんねん」), not raw digits.\n"
+        "- Every alphabet-spelled term — English words, acronyms, product/"
+        "service names, people, command names — MUST be followed by its "
+        "katakana reading in full-width parentheses, no exceptions: "
+        "GitHub（ギットハブ）, API（エーピーアイ）, PR（ピーアール）, "
+        "Claude Code（クロードコード）. The reading feeds only the TTS; "
+        "subtitles show the original spelling.\n"
         "- Do NOT use Markdown (headings, bold, lists, code blocks).\n"
-        "- Do not run long tasks inline; for time-consuming requests "
-        "(調査・実装・ツール実行・記憶の検索保存・タスク化など), call ask_anima "
-        "to delegate to your main self and reply briefly like 'やっておくね'. "
-        "Never say 'やっておく' (will do) without calling ask_anima.\n"
-        "- When ask_anima's result, prefixed with [ask_anima完了], arrives, "
-        "report it in your own words.\n"
+        "- Never promise work (やっておく／調べておく／確認しておく) without "
+        "having called ask_anima in the same turn.\n"
         "- End every reply with exactly one emotion tag on its own final line:\n"
         '  <!-- emotion: {"emotion": "<emotion>"} -->\n'
         f"  (emotions: {_VOICE_FRONT_EMOTION_NAMES}; prefer a non-neutral one "

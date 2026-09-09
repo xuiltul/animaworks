@@ -51,13 +51,16 @@ Read existing heartbeat.md and cron.md, and rewrite them from the template to fi
 
 Once identity.md appearance is finalized (whether generated from skeleton or from existing settings), **always** generate avatar images and 3D models.
 
-If `image_gen` is available (check your permissions.json for `yes`):
-1. **Follow the Character Design Guide** "Avatar Image Generation" section to convert identity.md appearance to NovelAI-compatible anime tags
-2. **Follow the Character Design Guide** "Generation Procedure" to generate images and 3D models (no step argument = all 6 steps run by default)
-3. Declare to the user "I'll create my appearance!" and execute — **no need to wait for permission**
-4. If any step fails, log the error and use only successful outputs
+Check `external_tools` in your `permissions.json`. Do not generate if `deny` contains `image_gen`. The tool is permitted when `allow_all` is true or `allow` contains `image_gen`. If `allow_all` is false and `allow` is empty, tools not in `deny` are also permitted. Do not look for legacy `yes` / `no` values or a standalone `image_gen` key.
 
-If `image_gen` is unavailable (`no` or not listed in permissions.json):
+If `image_gen` is permitted:
+1. **Follow the Character Design Guide** "Avatar Image Generation" section to convert identity.md appearance into a prompt for the selected style (photographic natural language for realistic, anime tags for anime)
+2. **Follow the Character Design Guide** "Generation Procedure" with no step argument to generate the complete asset set for the selected style. Realistic generates fullbody, bustup expressions and an icon; it does not generate 3D models. Anime also includes the 3D steps. Tell the user only about the assets actually being generated.
+3. Declare to the user "I'll create my appearance!" and execute — **no need to wait for permission**
+4. A full image set takes several minutes. From the CLI, always use `animaworks-tool submit image_gen pipeline "image prompt" --anima-dir "$ANIMAWORKS_ANIMA_DIR"` (add other arguments from the generation guide). Keep the returned `task_id` and let generation continue in the background. Do not block the conversation with a polling loop or a direct `image_gen pipeline` call
+5. Explain that images are being generated and will appear as they become available, then continue your introduction and the remaining setup. Submission is not completion. Check the completion notification, log failed steps, and use successful outputs
+
+If the `external_tools` rules disallow `image_gen`:
 - Skip this step (no need to mention it to the user)
 
 **Important**: This step is mandatory, not optional. The avatar is part of this Anima's identity; having a form is proof of being born.

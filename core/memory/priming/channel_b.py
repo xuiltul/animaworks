@@ -11,14 +11,18 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.file_access_policy import find_denied_root, load_denied_roots
+from core.memory.priming.items import ItemizedMemory, MemoryItem, render_items
 from core.time_utils import ensure_aware, now_local, today_local
 from core.tools._async_compat import run_sync
 
 logger = logging.getLogger("animaworks.priming")
+
+_SPECIAL_ACTIVITY_TYPES = frozenset({"heartbeat_end", "tool_result", "human_notify"})
 
 # Event types that are noise for heartbeat/cron priming — tool invocations
 # and heartbeat lifecycle events crowd out actionable messages.
@@ -140,12 +144,54 @@ async def channel_b_recent_activity(
     entries.extend(channel_entries)
 
     if entries:
-        prioritized = prioritize_entries(entries, sender_name, keywords)
-        prioritized = prioritized[:50]
-        return activity.format_for_priming(prioritized, budget_tokens=1300)
+        ranked = prioritize_entries_with_ranks(entries, sender_name, keywords)
+        item_list: list[MemoryItem] = []
+        for rank, entry in ranked:
+            text = _format_entry_at_sentence_boundary(activity, entry, content_trim=200)
+            if text:
+                item_list.append(
+                    MemoryItem(
+                        source="recent_activity",
+                        key=f"{entry.ts}|{entry.channel}|{entry.from_person}",
+                        text=text,
+                        updated=entry.ts,
+                        rank=rank,
+                    )
+                )
+        items = tuple(item_list)
+        return ItemizedMemory(render_items(items, ""), items)
 
     # Fallback: read old episodes if no activity log exists yet
-    return await fallback_episodes_and_channels(anima_dir, shared_dir, denied_roots=denied_roots)
+    fallback = await fallback_episodes_and_channels(anima_dir, shared_dir, denied_roots=denied_roots)
+    if not fallback:
+        return ""
+    item = MemoryItem(source="recent_activity", key="", text=fallback)
+    return ItemizedMemory(fallback, (item,))
+
+
+def _format_entry_at_sentence_boundary(activity, entry, *, content_trim: int) -> str:
+    """Format one priming entry without cutting a sentence when practical."""
+    text = entry.summary or entry.content
+    if entry.type in _SPECIAL_ACTIVITY_TYPES or content_trim <= 0 or len(text) <= content_trim:
+        return activity._format_entry(entry, content_trim=content_trim)
+
+    trim_window = text[:content_trim]
+    last_boundary = max(trim_window.rfind(mark) for mark in ("。", "．", ".", "!", "?", "\n"))
+    if last_boundary + 1 >= 100:
+        trimmed = trim_window[: last_boundary + 1]
+    else:
+        trimmed = trim_window + "…"
+    date_str = entry.ts[:10] if len(entry.ts) >= 10 else "unknown"
+    trimmed += f"\n  -> activity_log/{date_str}.jsonl"
+
+    # Do this only in Channel B: changing ActivityLogger's shared formatter
+    # would alter dashboard and consolidation views outside priming.
+    formatted_entry = replace(
+        entry,
+        summary=trimmed if entry.summary else "",
+        content=entry.content if entry.summary else trimmed,
+    )
+    return activity._format_entry(formatted_entry, content_trim=0)
 
 
 def read_shared_channels(
@@ -289,6 +335,18 @@ def prioritize_entries(
     3. Entries matching keywords (topically relevant)
     4. Most recent entries (temporal relevance, timestamp-based)
     """
+    ranked = prioritize_entries_with_ranks(entries, sender_name, keywords)
+    top_entries = [entry for _, entry in ranked]
+    top_entries.sort(key=lambda entry: entry.ts)
+    return top_entries
+
+
+def prioritize_entries_with_ranks(
+    entries: list,
+    sender_name: str,
+    keywords: list[str],
+) -> list[tuple[float, object]]:
+    """Return the existing activity priority score with each selected entry."""
     from core.memory.activity import ActivityEntry
 
     keywords_lower = {kw.lower() for kw in keywords} if keywords else set()
@@ -337,9 +395,7 @@ def prioritize_entries(
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    top_entries = [e for _, _, e in scored[:50]]
-    top_entries.sort(key=lambda e: e.ts)
-    return top_entries
+    return [(score, entry) for score, _, entry in scored[:50]]
 
 
 async def fallback_episodes_and_channels(

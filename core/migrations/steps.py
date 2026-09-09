@@ -44,7 +44,6 @@ _SECTION_FILES: dict[str, str] = {
     "environment": "environment.md",
     "messaging_s": "messaging_s.md",
     "messaging": "messaging.md",
-    "communication_rules_s": "communication_rules_s.md",
     "communication_rules": "communication_rules.md",
     "a_reflection": "a_reflection.md",
 }
@@ -732,6 +731,54 @@ def step_channel_company_defaults(data_dir: Path, dry_run: bool, verbose: bool) 
         return StepResult(changed=changed, skipped=skipped, details=details)
     except Exception as exc:
         logger.exception("step_channel_company_defaults failed")
+        return StepResult(changed=0, skipped=0, details=[], error=str(exc))
+
+
+def step_remove_machine_config(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Remove the retired ``machine`` key from config.json root.
+
+    ``AppConfig`` uses ``extra="forbid"``, so a leftover ``machine`` key in an
+    existing config.json would crash startup.  This step drops it (idempotent).
+    """
+    del verbose
+    config_path = data_dir / "config.json"
+    if not config_path.is_file():
+        return StepResult(changed=0, skipped=1, details=["config.json not found"])
+    try:
+        config_data = json.loads(config_path.read_text(encoding="utf-8") or "{}")
+        if not isinstance(config_data, dict) or "machine" not in config_data:
+            return StepResult(
+                changed=0,
+                skipped=1,
+                details=["No retired machine key in config.json"],
+            )
+        if dry_run:
+            return StepResult(
+                changed=1,
+                skipped=0,
+                details=["Would remove the retired machine key from config.json"],
+            )
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        backup_path = config_path.with_name(f"{config_path.name}.bak-{timestamp}")
+        shutil.copy2(config_path, backup_path)
+        config_data.pop("machine", None)
+        config_path.write_text(
+            json.dumps(config_data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        try:
+            from core.config import invalidate_cache
+
+            invalidate_cache()
+        except Exception:
+            logger.debug("Failed to invalidate config cache after machine-key migration", exc_info=True)
+        return StepResult(
+            changed=1,
+            skipped=0,
+            details=[f"Backed up and removed machine key from {config_path.name} ({backup_path.name})"],
+        )
+    except Exception as exc:
+        logger.exception("step_remove_machine_config failed")
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
@@ -1458,6 +1505,39 @@ def step_v063_behavior_rules_action_rules_skill_sync(
     return StepResult(changed=total, skipped=skipped, details=details, error=error)
 
 
+def step_v0120_prompt_deadline_engine_neutral_resync(
+    data_dir: Path,
+    dry_run: bool,
+    verbose: bool,
+) -> StepResult:
+    """v0.12.0: Resync prompts/ (deadline rule + engine-neutral tool wording) and drop stale files."""
+    details: list[str] = []
+    total = 0
+    skipped = 0
+    errors: list[str] = []
+
+    r1 = step_prompt_resync(data_dir, dry_run, verbose)
+    total += r1.changed
+    skipped += r1.skipped
+    details.extend(r1.details)
+    if r1.error:
+        errors.append(f"step_prompt_resync: {r1.error}")
+
+    stale = data_dir / "prompts" / "task_delegation_rules.md"
+    if stale.is_file():
+        if dry_run:
+            details.append("Would remove stale prompts/task_delegation_rules.md")
+        else:
+            stale.unlink()
+            details.append("Removed stale prompts/task_delegation_rules.md")
+        total += 1
+    else:
+        skipped += 1
+
+    error = "; ".join(errors) if errors else None
+    return StepResult(changed=total, skipped=skipped, details=details, error=error)
+
+
 def step_remove_precompletion_guide(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
     """Resync templates after pre-completion verification removal and delete the guide file.
 
@@ -1734,6 +1814,12 @@ def register_all_steps(runner: Any) -> None:
             step_channel_company_defaults,
         ),
         MigrationStep(
+            "remove_machine_config_20260903",
+            "Remove retired machine key from config.json",
+            "structural",
+            step_remove_machine_config,
+        ),
+        MigrationStep(
             "tool_prompts_db_to_md",
             "Write legacy tool prompt DB to Markdown templates",
             "db_sync",
@@ -1744,6 +1830,12 @@ def register_all_steps(runner: Any) -> None:
             "Remove retired common_knowledge/team-design/ trees",
             "template_sync",
             step_remove_team_design,
+        ),
+        MigrationStep(
+            "v0120_prompt_deadline_engine_neutral_resync",
+            "v0.12.0: Resync prompts (deadline rule + engine-neutral tool wording)",
+            "template_sync",
+            step_v0120_prompt_deadline_engine_neutral_resync,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

@@ -45,9 +45,10 @@ class TestModelCatalogMove:
         assert "gemini/gemini-2.5-flash" in ids
 
     def test_available_model_id_set_matches_catalog(self, provider_config):
-        with (
-            patch("core.config.model_catalog.is_codex_login_available", return_value=False),
-            patch("core.config.model_catalog.is_grok_authenticated", return_value=False),
+        # Discovery is exercised elsewhere; here verify the ID-set plumbing by
+        # monkeypatching discovery to a deterministic result.
+        with patch(
+            "core.config.model_catalog.discovered_model_ids", return_value={"openai/gpt-4.1", "claude-sonnet-4-6"}
         ):
             ids = available_model_id_set(provider_config)
         assert "openai/gpt-4.1" in ids
@@ -55,7 +56,7 @@ class TestModelCatalogMove:
 
 
 class TestValidateModelOverride:
-    def _patch_allowed(self, allowed_set, anima_model="claude-sonnet-4-6"):
+    def _patch_allowed(self, allowed_set, anima_model="claude-sonnet-4-6", *, buildable=True):
         from contextlib import ExitStack
 
         from core.schemas import ModelConfig
@@ -74,6 +75,14 @@ class TestValidateModelOverride:
                 return_value=mc,
             )
         )
+        # Credential resolution is its own gate (see the buildable tests);
+        # the isolated test config carries no credentials at all.
+        stack.enter_context(
+            patch(
+                "core.config.model_config.can_build_model_override",
+                return_value=buildable,
+            )
+        )
         return stack
 
     def test_empty_or_none_passes(self):
@@ -84,6 +93,18 @@ class TestValidateModelOverride:
     def test_allowed_model_passes(self):
         with self._patch_allowed({"openai/gpt-4.1"}):
             assert validate_model_override("anima", "openai/gpt-4.1") is None
+
+    def test_model_without_a_credential_rejected(self):
+        """In the catalog is not enough — the override must be usable.
+
+        It used to pass the wall and then be dropped inside the anima, so
+        the reply came back on the unchanged model with nothing said.
+        """
+        with self._patch_allowed({"opus"}, buildable=False):
+            err = validate_model_override("anima", "s:opus")
+        assert err is not None
+        assert "no credential" in err
+        assert "s:opus" in err
 
     def test_unknown_model_rejected(self):
         with self._patch_allowed({"openai/gpt-4.1"}):

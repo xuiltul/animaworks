@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,9 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-
 from core.tooling.handler import ToolHandler
-
 
 # ── Test 5: submit_tasks sets reply_to ────────────────────────────────────
 
@@ -35,35 +34,39 @@ def test_submit_tasks_sets_reply_to(tmp_path: Path) -> None:
         tool_registry=[],
     )
 
-    result = handler.handle("submit_tasks", {
-        "batch_id": "test-batch-1",
-        "tasks": [
-            {
-                "task_id": "task-a",
-                "title": "Task A",
-                "description": "Do thing A",
-            },
-            {
-                "task_id": "task-b",
-                "title": "Task B",
-                "description": "Do thing B",
-                "depends_on": ["task-a"],
-            },
-        ],
-    })
+    result = handler.handle(
+        "submit_tasks",
+        {
+            "batch_id": "test-batch-1",
+            "tasks": [
+                {
+                    "task_id": "task-a",
+                    "title": "Task A",
+                    "description": "Do thing A",
+                },
+                {
+                    "task_id": "task-b",
+                    "title": "Task B",
+                    "description": "Do thing B",
+                    "depends_on": ["task-a"],
+                },
+            ],
+        },
+    )
 
     parsed = json.loads(result)
     assert parsed.get("status") == "submitted"
     assert parsed.get("batch_id") == "test-batch-1"
     assert set(parsed.get("task_ids", [])) == {"task-a", "task-b"}
 
-    pending_dir = anima_dir / "state" / "pending"
-    assert pending_dir.exists()
+    from core.memory.task_queue import TaskQueueManager
+
+    manager = TaskQueueManager(anima_dir)
+    assert not list((anima_dir / "state" / "pending").glob("*.json"))
 
     for task_id in ("task-a", "task-b"):
-        path = pending_dir / f"{task_id}.json"
-        assert path.exists(), f"Expected {path} to exist"
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = manager.store.get_input("sakura", task_id)
+        assert data is not None
         assert data.get("reply_to") == "sakura", (
             f"Task {task_id} should have reply_to='sakura' (anima_dir.name), got {data.get('reply_to')!r}"
         )

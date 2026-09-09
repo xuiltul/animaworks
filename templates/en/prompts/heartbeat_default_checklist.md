@@ -4,7 +4,7 @@
 - Board check: Run `read_channel(...)` for your restricted team channel first and state specifically whether any mentions target you. If you do not belong to one, check `general`. Do **not** post praise/acknowledgment replies
 - Whether you can access required external tools (if not, report to supervisor)
 - Whether in-progress tasks have blockers
-- Whether state/pending/ has unexecuted tasks
+- Check `list_tasks` for pending work, unmet dependencies, or tasks needing a decision
 
 ### Blocker Reporting (MUST)
 

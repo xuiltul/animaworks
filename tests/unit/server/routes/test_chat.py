@@ -428,3 +428,66 @@ class TestGreet:
             params={},
             timeout=60.0,
         )
+
+
+# ── POST /animas/{name}/chat/compact ────────────────────
+
+
+class TestChatCompact:
+    async def test_compact_anima_not_found(self):
+        supervisor = MagicMock()
+        supervisor.processes = set()
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/nobody/chat/compact", json={"thread_id": "default"}
+            )
+        assert resp.status_code == 404
+
+    async def test_compact_conflict_when_stream_active(self):
+        supervisor = MagicMock()
+        supervisor.processes = {"alice"}
+        app = _make_test_app(supervisor=supervisor)
+        app.state.stream_registry.register("alice", thread_id="default")
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat/compact", json={"thread_id": "default"}
+            )
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "chat in progress"
+        supervisor.send_request.assert_not_called()
+
+    async def test_compact_success(self):
+        supervisor = MagicMock()
+        supervisor.processes = {"alice"}
+        supervisor.send_request = AsyncMock(
+            return_value={"status": "ok", "thread_id": "default", "mode": "s"}
+        )
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat/compact", json={"thread_id": "default"}
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "thread_id": "default", "mode": "s"}
+        supervisor.send_request.assert_awaited_once_with(
+            anima_name="alice",
+            method="compact_session",
+            params={"thread_id": "default"},
+            timeout=90.0,
+        )
+
+    async def test_compact_timeout(self):
+        supervisor = MagicMock()
+        supervisor.processes = {"alice"}
+        supervisor.send_request = AsyncMock(side_effect=TimeoutError)
+        app = _make_test_app(supervisor=supervisor)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/animas/alice/chat/compact", json={"thread_id": "default"}
+            )
+        assert resp.status_code == 504

@@ -57,9 +57,45 @@ if [ ! -f .env ] && [ -f .env.example ]; then
     echo "[OK] .env created from .env.example"
 fi
 
+# 6. Link the CLI into ~/.local/bin so `animaworks` works from any directory.
+#    The console scripts in .venv/bin pin this repo's interpreter by absolute
+#    path, so a symlink resolves to the exact same environment as `uv run`.
+BIN_DIR="$HOME/.local/bin"
+REPO_DIR="$PWD"
+LINKED=0
+mkdir -p "$BIN_DIR"
+for cmd in animaworks animaworks-tool; do
+    target="$REPO_DIR/.venv/bin/$cmd"
+    [ -x "$target" ] || continue
+    link="$BIN_DIR/$cmd"
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+        mv "$link" "$link.bak"
+        echo "[!] Existing $link moved to $link.bak"
+    fi
+    ln -sfn "$target" "$link"
+    LINKED=1
+done
+if [ "$LINKED" = "1" ]; then
+    echo "[OK] animaworks linked into $BIN_DIR"
+fi
+
+case ":$PATH:" in
+    *":$BIN_DIR:"*) PATH_HAS_BIN_DIR=1 ;;
+    *) PATH_HAS_BIN_DIR=0 ;;
+esac
+
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  cd $INSTALL_DIR"
-echo "  uv run animaworks start   # Start server; setup wizard opens on first run"
+if [ "$LINKED" = "1" ] && [ "$PATH_HAS_BIN_DIR" = "1" ]; then
+    echo "  animaworks start          # Start server from any directory; setup wizard opens on first run"
+else
+    echo "  cd $INSTALL_DIR"
+    echo "  uv run animaworks start   # Start server; setup wizard opens on first run"
+fi
+if [ "$LINKED" = "1" ] && [ "$PATH_HAS_BIN_DIR" = "0" ]; then
+    echo ""
+    echo "[!] $BIN_DIR is not on your PATH. To run 'animaworks' from any directory, add to your shell rc:"
+    echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
+fi

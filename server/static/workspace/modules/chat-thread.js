@@ -12,6 +12,7 @@ import {
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
 import { HISTORY_PAGE_SIZE } from "./chat-history.js";
 import { wsSaveDraft, wsLoadDraft, isMobileView } from "./chat-mobile.js";
+import { wsRestoreModelSelect } from "./chat-streaming.js";
 
 // ── Module State ──────────────────────
 let _getDom = () => ({});
@@ -71,6 +72,7 @@ export async function selectWsThread(threadId) {
 
   setState({ activeThreadId: threadId });
   renderWsThreadTabs();
+  wsRestoreModelSelect();
 
   const animaName = getState().conversationAnima;
   if (!animaName) return;

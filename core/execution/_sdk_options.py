@@ -43,6 +43,34 @@ from core.execution._sdk_session import (
 
 logger = logging.getLogger("animaworks.execution.agent_sdk")
 
+# ── Built-in tool surface ─────────────────────────────────────────
+# The CLI ships 25 built-in tools and sends every schema on every
+# request.  Measured on this fleet, the tool block is ~69K tokens of a
+# 200K window — three quarters of what an anima carries before a word of
+# conversation.  This is the set the animas actually call (counted from
+# ``ToolResult captured`` across the fleet's logs) plus ``Skill``, which
+# the skill loader needs even where the sample showed no call.  Dropped:
+# DesignSync, EnterWorktree, ExitWorktree, NotebookEdit, RemoteTrigger,
+# ReportFindings, ScheduleWakeup, Workflow and the Task / Task* subagent
+# and background-job family — the Mode S tool guide already tells animas
+# that subagents are off and to delegate through the ``aw`` MCP tools.
+#
+# ``ToolSearch`` has to stay: it is what lets the CLI send tool *names*
+# and fetch schemas on demand.  Dropping it re-sends every schema in full
+# — measured at +11,044 tokens even on this reduced set.
+BUILTIN_TOOLS: tuple[str, ...] = (
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "WebSearch",
+    "WebFetch",
+    "Skill",
+    "SendMessage",
+    "ListAgents",
+    "ToolSearch",
+)
+
 # ── Cached CLI path resolution ────────────────────────────────────
 # The SDK bundled ``claude.exe`` can intermittently fail to launch on
 # Windows (antivirus hold, file locking, etc.) even though the file
@@ -330,6 +358,14 @@ class SDKOptionsMixin:
         temp_files: list[Path] = []
 
         extra_args: dict[str, str | None] = {}
+        # Only the servers built here (``aw`` plus any configured
+        # ``extra_mcp_servers``) may attach.  Without this the CLI also
+        # loads whatever the logged-in claude.ai account has connected —
+        # for this fleet Gmail / Google Calendar / Google Drive, 40 extra
+        # tools whose schemas every anima paid for on every request while
+        # animaworks routes that work through its own tools anyway.
+        extra_args["strict-mcp-config"] = None  # boolean flag, no value
+        extra_args["tools"] = ",".join(BUILTIN_TOOLS)
         # On Windows, enable CLI debug output to stderr for diagnostics.
         # The CLI normally writes nothing to stderr; this flag makes it
         # dump its internal debug log so we can see what happens during

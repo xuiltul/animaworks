@@ -83,13 +83,14 @@ class ResponseStream:
             self.full_text += payload.get("text", "")
         elif event == "tool_start":
             self.active_tool = payload.get("tool_name")
-            self.tool_history.append(
-                {
-                    "tool_name": payload.get("tool_name", ""),
-                    "tool_id": payload.get("tool_id", ""),
-                    "started_at": int(time.time() * 1000),
-                }
-            )
+            entry: dict[str, Any] = {
+                "tool_name": payload.get("tool_name", ""),
+                "tool_id": payload.get("tool_id", ""),
+                "started_at": int(time.time() * 1000),
+            }
+            if payload.get("input_summary"):
+                entry["input_summary"] = payload["input_summary"]
+            self.tool_history.append(entry)
         elif event == "tool_detail":
             tid = payload.get("tool_id", "")
             for entry in reversed(self.tool_history):
