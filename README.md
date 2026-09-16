@@ -354,6 +354,18 @@ Credentials resolve through a cascade: `config.json` `credentials` → vault →
 | `NOVELAI_TOKEN` | NovelAI | Anime-style character art | [novelai.net](https://novelai.net/) |
 | `FAL_KEY` | fal.ai (Flux) | Stylized / photorealistic | [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys) |
 | `MESHY_API_KEY` | Meshy | 3D character models | [meshy.ai](https://www.meshy.ai/) |
+| `ATLASCLOUD_API_KEY` | Atlas Cloud (Seedream 4.5) | Character images and reference edits | [atlascloud.ai/console/api-keys](https://www.atlascloud.ai/console/api-keys) |
+
+To use Atlas Cloud for character images, set `image_gen.backend` to `"atlascloud"`
+in `config.json` and configure `ATLASCLOUD_API_KEY` (or `credentials.atlascloud.api_key`).
+This explicit backend uses Seedream 4.5 for full-body images and its edit model
+for bust-ups, icons, and other reference-based images. It bypasses Codex/Fal
+image selection; Meshy remains responsible for 3D assets.
+Outputs use the closest supported 2K aspect ratio and are encoded as PNG by default.
+Seed, negative prompt, guidance, and NovelAI sampler/vibe-strength settings are not
+supported by these models. Each generation is submitted once, followed by bounded
+prediction polling; failed or timed-out submissions are not automatically resubmitted
+by the client.
 
 #### Voice chat (optional)
 

@@ -101,6 +101,7 @@ from core.tools._image_pipeline import ImageGenPipeline, PipelineResult
 
 # ── Re-exports: _image_schemas ─────────────────────────────
 from core.tools._image_schemas import get_cli_guide, get_tool_schemas
+from core.tools.image.atlascloud import AtlasCloudImageClient
 
 _MUTABLE_GLB_ATTRS = {"_FBX2GLTF_PATH", "_GLTF_MODULES_DIR"}
 
@@ -164,6 +165,8 @@ def _build_fullbody_api_client(image_config: Any) -> Any:
 
 
 def _build_fullbody_client(image_config: Any) -> Any:
+    if getattr(image_config, "backend", "api") == "atlascloud":
+        return AtlasCloudImageClient()
     if _use_diffusers_backend(image_config):
         return LocalDiffusersClient(image_config)
     if getattr(image_config, "prefer_codex", True) and codex_available():
@@ -175,6 +178,8 @@ def _build_fullbody_client(image_config: Any) -> Any:
 
 
 def _build_reference_client(image_config: Any) -> Any:
+    if getattr(image_config, "backend", "api") == "atlascloud":
+        return AtlasCloudImageClient()
     if _use_diffusers_backend(image_config):
         return LocalDiffusersClient(image_config)
     if getattr(image_config, "prefer_codex", True) and codex_available():
