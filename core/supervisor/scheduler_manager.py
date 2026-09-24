@@ -31,6 +31,21 @@ from core.supervisor.task_runner_supervisor import TaskRunnerSupervisor
 from core.time_utils import get_app_timezone, now_local
 
 _INDENTED_SCHEDULE_RE = re.compile(r"^\s+schedule:", re.MULTILINE)
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_FENCED_CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
+
+
+def _strip_cron_documentation(content: str) -> str:
+    """Remove non-configuration documentation before health checks.
+
+    ``parse_cron_md`` strips HTML comments before parsing, so the health check
+    must inspect the same effective document. Fenced examples are also prose
+    and must not be treated as indented configuration directives.
+    """
+    content = _HTML_COMMENT_RE.sub("", content)
+    return _FENCED_CODE_BLOCK_RE.sub("", content)
+
+
 # Cron health check:
 # - interval: how often the health job runs (kept short for timely detection)
 # - window: lookback window for "no executions" detection
@@ -714,14 +729,15 @@ class SchedulerManager:
         which is drained into the next heartbeat or cron context.
         """
         messages: list[str] = []
+        effective_config = _strip_cron_documentation(raw_config)
 
         if tasks and registered == 0:
             messages.append(t("scheduler.cron_health_no_valid_schedule", task_count=len(tasks)))
 
-        if _INDENTED_SCHEDULE_RE.search(raw_config):
+        if _INDENTED_SCHEDULE_RE.search(effective_config):
             messages.append(t("scheduler.cron_health_indented_schedule"))
 
-        if not tasks and "schedule:" in raw_config:
+        if not tasks and "schedule:" in effective_config:
             messages.append(t("scheduler.cron_health_unrecognized_schedule"))
 
         if messages:

@@ -61,6 +61,8 @@ class PipelineResult:
     animation_paths: dict[str, Path] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    retry_after: str | None = None
+    retryable: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -74,7 +76,48 @@ class PipelineResult:
             "animations": {k: str(v) for k, v in self.animation_paths.items()},
             "errors": self.errors,
             "skipped": self.skipped,
+            "retry_after": self.retry_after,
+            "retryable": self.retryable,
         }
+
+
+def _append_image_error(result: PipelineResult, step: str, exc: BaseException) -> None:
+    """Append a user-facing image error and retain retry metadata."""
+    from core.i18n import t
+    from core.tools.image.codex import codex_retry_after, is_codex_usage_limit
+
+    raw = str(exc)
+    raw_lower = raw.lower()
+    missing_backend = (
+        "no image generation backend configured" in raw_lower
+        or "fal_key required" in raw_lower
+        or "novelai_token" in raw_lower
+        or "requires credential 'fal'" in raw_lower
+    )
+    usage_limit = bool(getattr(exc, "codex_usage_limit", False)) or is_codex_usage_limit(raw)
+    if usage_limit and missing_backend:
+        retry_after = getattr(exc, "retry_after", None) or codex_retry_after(raw)
+        result.retry_after = retry_after
+        result.retryable = True
+        retry_after_text = retry_after or _retry_after_placeholder()
+        result.errors.append(
+            t(
+                "image_generation.codex_usage_limit",
+                step=step,
+                retry_after=retry_after_text,
+            )
+        )
+    elif missing_backend:
+        result.errors.append(t("image_generation.no_backend", step=step))
+    else:
+        result.errors.append(f"{step}: {exc}")
+
+
+def _retry_after_placeholder() -> str:
+    """Return a localized placeholder when Codex gives no reset time."""
+    from core.paths import _get_locale
+
+    return {"ja": "後ほど", "ko": "나중에"}.get(_get_locale(), "later")
 
 
 # ── ImageGenPipeline ───────────────────────────────────────
@@ -459,7 +502,7 @@ class ImageGenPipeline:
                     logger.info("Step 1 complete: %s", fullbody_path)
                     _notify("fullbody", "completed", 100)
                 except Exception as exc:
-                    result.errors.append(f"fullbody: {exc}")
+                    _append_image_error(result, "fullbody", exc)
                     logger.error("Step 1 failed: %s", exc)
                     _notify("fullbody", "error", 0)
         elif fullbody_path.exists():
@@ -510,7 +553,7 @@ class ImageGenPipeline:
                         result.bustup_paths["neutral"] = path
                         result.bustup_path = path
                 except Exception as exc:
-                    result.errors.append(f"bustup_neutral: {exc}")
+                    _append_image_error(result, "bustup_neutral", exc)
                     logger.error("Bustup neutral failed: %s", exc)
             elif neutral_path.exists():
                 # neutral not requested but exists on disk — use as reference
@@ -536,7 +579,7 @@ class ImageGenPipeline:
                     if path:
                         result.bustup_paths[expr] = path
                 except Exception as exc:
-                    result.errors.append(f"bustup_{expr}: {exc}")
+                    _append_image_error(result, f"bustup_{expr}", exc)
                     logger.error("Bustup expression '%s' failed: %s", expr, exc)
 
             if not result.bustup_path and result.bustup_paths:
@@ -584,7 +627,7 @@ class ImageGenPipeline:
                         )
                     _notify("icon", "completed", 100)
                 except Exception as exc:
-                    result.errors.append(f"icon: {exc}")
+                    _append_image_error(result, "icon", exc)
                     logger.error("Icon generation failed: %s", exc)
                     _notify("icon", "error", 0)
 
@@ -609,7 +652,7 @@ class ImageGenPipeline:
                     logger.info("Step 4 complete: %s", chibi_path)
                     _notify("chibi", "completed", 100)
                 except Exception as exc:
-                    result.errors.append(f"chibi: {exc}")
+                    _append_image_error(result, "chibi", exc)
                     logger.error("Step 4 failed: %s", exc)
                     _notify("chibi", "error", 0)
 

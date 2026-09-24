@@ -74,13 +74,24 @@ class TestCheckCronParseHealth:
         assert "2" in content  # task_count=2
 
     def test_indented_schedule_detected(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
-        raw = "```yaml\n  schedule: 0 9 * * *\n```"
-        tasks = [_make_task("t1")]
-        scheduler_mgr._check_cron_parse_health(raw, tasks, registered=0)
+        raw = "## Good\nschedule: 0 9 * * *\n## Example\n  schedule: 0 10 * * *"
+        tasks = [_make_task("good", "0 9 * * *")]
+        scheduler_mgr._check_cron_parse_health(raw, tasks, registered=1)
         files = _notif_files(tmp_path)
         assert len(files) == 1
         content = files[0].read_text(encoding="utf-8")
         assert "schedule:" in content
+
+    def test_template_documentation_does_not_trigger_warning(
+        self, scheduler_mgr: SchedulerManager, tmp_path: Path
+    ) -> None:
+        from core.schedule_parser import parse_cron_md
+
+        template_path = Path(__file__).parents[4] / "templates" / "ja" / "anima_templates" / "_blank" / "cron.md"
+        raw = template_path.read_text(encoding="utf-8").replace("{name}", "test_anima")
+        tasks = parse_cron_md(raw)
+        scheduler_mgr._check_cron_parse_health(raw, tasks, registered=len(tasks))
+        assert _notif_files(tmp_path) == []
 
     def test_indented_schedule_detected_even_with_valid_jobs(
         self, scheduler_mgr: SchedulerManager, tmp_path: Path
@@ -107,6 +118,11 @@ class TestCheckCronParseHealth:
         scheduler_mgr._check_cron_parse_health(raw, tasks=[], registered=0)
         files = _notif_files(tmp_path)
         assert len(files) == 1
+
+    def test_documentation_only_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
+        raw = "<!--\n  schedule: 0 9 * * *\n-->\n```yaml\n  schedule: 0 10 * * *\n```"
+        scheduler_mgr._check_cron_parse_health(raw, tasks=[], registered=0)
+        assert _notif_files(tmp_path) == []
 
     def test_empty_config_no_notification(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         scheduler_mgr._check_cron_parse_health("", tasks=[], registered=0)
@@ -187,9 +203,7 @@ class TestSetupCronTasksHealthIntegration:
         assert result["rejected"] == [{"name": "Invalid", "reason": "Invalid cron expression"}]
         assert "contains a code block" in caplog.text
 
-    def test_registration_write_failure_does_not_stop_registration(
-        self, scheduler_mgr: SchedulerManager
-    ) -> None:
+    def test_registration_write_failure_does_not_stop_registration(self, scheduler_mgr: SchedulerManager) -> None:
         scheduler_mgr._anima.memory.read_cron_config.return_value = (
             "## Daily\nschedule: 0 9 * * *\ntype: llm\nDo something\n"
         )

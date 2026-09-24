@@ -117,20 +117,27 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 ### Generation Procedure
 
-Follow the **image_gen** (`generate_character_assets`) usage documented in the "External Tools" section of the system prompt.
+Follow the **image_gen** (`generate_character_assets`) usage documented in the "External Tools" section of the system prompt. Do not pass a `steps` argument; the selected style determines the asset set.
+
+**Realistic style:** use a natural-language photographic prompt. Generate only the full-body photograph, bust-up photographs with expression variants, and the icon. Do **not** generate chibi artwork, a 3D model, rigging, or animations.
+
+Generated realistic files are saved to `assets/`:
+- `avatar_fullbody_realistic.png` — Full-body photograph
+- `avatar_bustup_realistic.png` and `avatar_bustup_{emotion}_realistic.png` — Bust-up and expression variants
+- `icon_realistic.png` — Icon
+
+**Anime style:** use the anime tags converted by the rules above. Generate the complete anime set:
+- `avatar_fullbody.png` — Full-body standing (NovelAI V4.5)
+- `avatar_bustup.png` — Bust-up (Flux Kontext)
+- `avatar_chibi.png` — Chibi character (Flux Kontext)
+- `avatar_chibi.glb` — 3D model (Meshy Image-to-3D)
+- `avatar_chibi_rigged.glb` — Rigged 3D model (Meshy Rigging)
+- `anim_walking.glb`, `anim_running.glb` — Basic animations
+- `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — Additional animations
 
 Arguments:
-- `prompt`: Anime tags converted per the rules above
+- `prompt`: Style-appropriate prompt described above
 - `negative_prompt`: Recommended negative prompt
 - `anima_dir`: Target Anima's directory (your own or another's)
-- **Do not specify** `steps` (all 6 steps run by default)
 
-Generated files are saved to `assets/`:
-   - `avatar_fullbody.png` — Full body standing (NovelAI V4.5)
-   - `avatar_bustup.png` — Bust-up (Flux Kontext)
-   - `avatar_chibi.png` — Chibi character (Flux Kontext)
-   - `avatar_chibi.glb` — 3D model (Meshy Image-to-3D)
-   - `avatar_chibi_rigged.glb` — Rigged 3D model (Meshy Rigging)
-   - `anim_walking.glb`, `anim_running.glb` — Basic animations (included with rigging)
-   - `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — Additional animations (Meshy Animations)
-3. If any step fails, record the error and use only successful outputs
+If any step fails, record the error and use only successful outputs.

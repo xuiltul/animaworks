@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,7 @@ import httpx
 import pytest
 
 from core.tools._base import ToolConfigError
+from core.tools._image_pipeline import _append_image_error
 from core.tools.image_gen import (
     FluxKontextClient,
     ImageGenPipeline,
@@ -25,7 +27,6 @@ from core.tools.image_gen import (
     _retry,
     get_tool_schemas,
 )
-
 
 # ── _image_to_data_uri ───────────────────────────────────────────
 
@@ -280,6 +281,26 @@ class TestMeshyClient:
 # ── PipelineResult ────────────────────────────────────────────────
 
 
+class TestImageGenerationErrorReporting:
+    def test_codex_limit_with_missing_fallback_key_is_retryable(self) -> None:
+        result = PipelineResult()
+        exc = RuntimeError("FAL_KEY required (codex: ERROR: You've hit your usage limit; try again at 12:06 PM.)")
+        _append_image_error(result, "fullbody", exc)
+
+        assert result.retryable is True
+        assert result.retry_after == "12:06 PM"
+        assert "12:06 PM" in result.errors[0]
+        assert "API" in result.errors[0]
+
+    def test_missing_backend_is_user_facing(self) -> None:
+        result = PipelineResult()
+        _append_image_error(result, "fullbody", RuntimeError("No image generation backend configured"))
+
+        assert result.retryable is False
+        assert "Codex" in result.errors[0]
+        assert "backend configured" not in result.errors[0]
+
+
 class TestPipelineResult:
     def test_defaults(self):
         r = PipelineResult()
@@ -450,7 +471,6 @@ class TestImageGenPipeline:
 
     def test_generate_all_warns_missing_style_reference(self, tmp_path: Path, monkeypatch, caplog):
         monkeypatch.setenv("NOVELAI_TOKEN", "test-token")
-        import logging
         from core.config.models import ImageGenConfig
 
         cfg = ImageGenConfig(image_style="anime", style_reference="/nonexistent/path/style.png")

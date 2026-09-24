@@ -101,20 +101,27 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 ### 생성 절차
 
-시스템 프롬프트의 "외부 도구" 섹션에 문서화된 **image_gen** (`generate_character_assets`) 사용법을 따르세요.
+시스템 프롬프트의 "외부 도구" 섹션에 문서화된 **image_gen** (`generate_character_assets`) 사용법을 따르세요. `steps` 인수는 지정하지 마세요. 선택한 스타일에 따라 생성 에셋이 결정됩니다.
+
+**realistic 스타일:** 자연어 사진 프롬프트를 사용합니다. 전신 사진, 표정별 버스트업 사진, 아이콘만 생성합니다. 치비, 3D 모델, 리깅, 애니메이션은 생성하지 **않습니다**.
+
+realistic 결과물은 `assets/`에 저장됩니다:
+- `avatar_fullbody_realistic.png` — 전신 사진
+- `avatar_bustup_realistic.png`, `avatar_bustup_{emotion}_realistic.png` — 버스트업 및 표정 차이
+- `icon_realistic.png` — 아이콘
+
+**anime 스타일:** 위 변환 규칙의 애니메 태그를 사용하고 전체 애니메 에셋을 생성합니다:
+- `avatar_fullbody.png` — 전신 입상 (NovelAI V4.5)
+- `avatar_bustup.png` — 버스트업 (Flux Kontext)
+- `avatar_chibi.png` — 치비 캐릭터 (Flux Kontext)
+- `avatar_chibi.glb` — 3D 모델 (Meshy Image-to-3D)
+- `avatar_chibi_rigged.glb` — 리깅된 3D 모델 (Meshy Rigging)
+- `anim_walking.glb`, `anim_running.glb` — 기본 애니메이션
+- `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — 추가 애니메이션
 
 인수:
-- `prompt`: 위 규칙에 따라 변환한 애니메 태그
+- `prompt`: 위 규칙에 따른 스타일별 프롬프트
 - `negative_prompt`: 권장 네거티브 프롬프트
 - `anima_dir`: 대상 Anima의 디렉토리 (자기 자신 또는 다른 사람의 것)
-- `steps`는 **지정하지 마세요** (기본값으로 6단계 모두 실행됩니다)
 
-생성된 파일은 `assets/`에 저장됩니다:
-   - `avatar_fullbody.png` — 전신 입상 (NovelAI V4.5)
-   - `avatar_bustup.png` — 버스트업 (Flux Kontext)
-   - `avatar_chibi.png` — 치비 캐릭터 (Flux Kontext)
-   - `avatar_chibi.glb` — 3D 모델 (Meshy Image-to-3D)
-   - `avatar_chibi_rigged.glb` — 리깅된 3D 모델 (Meshy Rigging)
-   - `anim_walking.glb`, `anim_running.glb` — 기본 애니메이션 (리깅에 포함)
-   - `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — 추가 애니메이션 (Meshy Animations)
-3. 특정 단계가 실패하면 에러를 기록하고 성공한 출력만 사용하세요
+특정 단계가 실패하면 에러를 기록하고 성공한 출력만 사용하세요.

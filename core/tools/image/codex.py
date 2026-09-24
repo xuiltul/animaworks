@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import subprocess
 import tempfile
@@ -23,6 +24,15 @@ from core.tools._base import logger
 
 _CODEX_TIMEOUT = 900  # seconds; generous margin for one image
 
+_USAGE_LIMIT_RE = re.compile(
+    r"(?:usage\s+limit|hit\s+(?:your\s+)?usage\s+limit|rate\s+limit)",
+    re.IGNORECASE,
+)
+_RETRY_AFTER_RE = re.compile(
+    r"try\s+again\s+at\s+(.+?)(?=(?:[.!?]|$))",
+    re.IGNORECASE,
+)
+
 _ASPECT_SIZES: dict[str, tuple[int, int]] = {
     "1:1": (1024, 1024),
     "3:4": (1024, 1365),
@@ -32,6 +42,19 @@ _ASPECT_SIZES: dict[str, tuple[int, int]] = {
 def codex_available() -> bool:
     """Return True if the codex CLI is installed on PATH."""
     return shutil.which("codex") is not None
+
+
+def is_codex_usage_limit(value: BaseException | str | bytes) -> bool:
+    """Return whether *value* reports a Codex usage-limit failure."""
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+    return bool(_USAGE_LIMIT_RE.search(text))
+
+
+def codex_retry_after(value: BaseException | str | bytes) -> str | None:
+    """Extract the timestamp from a Codex ``try again at ...`` message."""
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+    match = _RETRY_AFTER_RE.search(text)
+    return match.group(1).strip() if match else None
 
 
 def _codex_stderr_reason(stderr: bytes | str) -> str:
@@ -273,7 +296,10 @@ class CodexFirstClient:
             try:
                 return self._get_fallback().generate_fullbody(*args, **kwargs)
             except Exception as fallback_exc:
-                raise RuntimeError(f"{fallback_exc} (codex: {codex_reason})") from fallback_exc
+                error = RuntimeError(f"{fallback_exc} (codex: {codex_reason})")
+                error.codex_usage_limit = is_codex_usage_limit(codex_reason)  # type: ignore[attr-defined]
+                error.retry_after = codex_retry_after(codex_reason)  # type: ignore[attr-defined]
+                raise error from fallback_exc
 
     def generate_from_reference(self, *args: Any, **kwargs: Any) -> bytes:
         try:
@@ -284,4 +310,7 @@ class CodexFirstClient:
             try:
                 return self._get_fallback().generate_from_reference(*args, **kwargs)
             except Exception as fallback_exc:
-                raise RuntimeError(f"{fallback_exc} (codex: {codex_reason})") from fallback_exc
+                error = RuntimeError(f"{fallback_exc} (codex: {codex_reason})")
+                error.codex_usage_limit = is_codex_usage_limit(codex_reason)  # type: ignore[attr-defined]
+                error.retry_after = codex_retry_after(codex_reason)  # type: ignore[attr-defined]
+                raise error from fallback_exc

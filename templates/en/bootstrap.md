@@ -47,9 +47,9 @@ Hints for thinking:
 
 Read existing heartbeat.md and cron.md, and rewrite them from the template to fit your role.
 
-## Step 2: Generate Avatar Images and 3D Models
+## Step 2: Generate Avatar Assets
 
-Once identity.md appearance is finalized (whether generated from skeleton or from existing settings), **always** generate avatar images and 3D models.
+Once identity.md appearance is finalized (whether generated from skeleton or from existing settings), generate the avatar assets for the selected image style. Realistic style does not generate a 3D model.
 
 Check `external_tools` in your `permissions.json`. Do not generate if `deny` contains `image_gen`. The tool is permitted when `allow_all` is true or `allow` contains `image_gen`. If `allow_all` is false and `allow` is empty, tools not in `deny` are also permitted. Do not look for legacy `yes` / `no` values or a standalone `image_gen` key.
 
@@ -59,6 +59,8 @@ If `image_gen` is permitted:
 3. Declare to the user "I'll create my appearance!" and execute — **no need to wait for permission**
 4. A full image set takes several minutes. From the CLI, always use `animaworks-tool submit image_gen pipeline "image prompt" --anima-dir "$ANIMAWORKS_ANIMA_DIR"` (add other arguments from the generation guide). Keep the returned `task_id` and let generation continue in the background. Do not block the conversation with a polling loop or a direct `image_gen pipeline` call
 5. Explain that images are being generated and will appear as they become available, then continue your introduction and the remaining setup. Submission is not completion. Check the completion notification, log failed steps, and use successful outputs. If asked about the status, check `status` and `result.errors` in `state/background_tasks/<task_id>.json`; do not infer it from the presence or absence of a lock file
+
+Check `result.errors` and `result.retry_after` in the completion notification. If Codex reports a usage limit and `retry_after` is present, tell the user that the assets will be regenerated automatically when the quota returns (after that time). Record “re-submit the image_gen pipeline after <time>” in `state/current_state.md`, then re-submit it yourself during the next heartbeat after the time has passed. Never ask the user for an API key or ask them to paste one. If no image-generation method is available, mention once and briefly that logging in to Codex (ChatGPT) is enough, without pressuring them.
 
 If the `external_tools` rules disallow `image_gen`:
 - Skip this step (no need to mention it to the user)

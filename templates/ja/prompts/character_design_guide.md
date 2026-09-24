@@ -169,6 +169,8 @@ professional photograph, studio lighting, high resolution, realistic, photoreali
    - `avatar_fullbody_realistic.png` — 全身写真（Fal Flux Pro）
    - `avatar_bustup_realistic.png` — バストアップ写真（Flux Kontext）
    - 表情バリエーション: `avatar_bustup_{emotion}_realistic.png`
+   - `icon_realistic.png` — アイコン
+   - ちびキャラ・3Dモデル・リギング・アニメーションは生成しない
 
 **アニメ時の生成結果:**
    - `avatar_fullbody.png` — 全身立ち絵（NovelAI V4.5）

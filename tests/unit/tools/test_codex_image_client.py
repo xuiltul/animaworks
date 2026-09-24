@@ -19,6 +19,8 @@ from core.tools.image.codex import (
     CodexFirstClient,
     CodexImageClient,
     codex_available,
+    codex_retry_after,
+    is_codex_usage_limit,
 )
 from core.tools.image_gen import _build_fullbody_client, _build_reference_client
 
@@ -59,6 +61,17 @@ def _mock_codex_writes_png(
         return result
 
     return _run
+
+
+class TestCodexFailureClassification:
+    def test_usage_limit_is_detected(self) -> None:
+        message = "ERROR: You've hit your usage limit; try again at 12:06 PM."
+        assert is_codex_usage_limit(message)
+        assert codex_retry_after(message) == "12:06 PM"
+
+    def test_unrelated_error_has_no_retry_time(self) -> None:
+        assert not is_codex_usage_limit("ERROR: not logged in")
+        assert codex_retry_after("ERROR: not logged in") is None
 
 
 class TestCodexAvailable:

@@ -47,9 +47,9 @@ identity.md の内容がスケルトン（「未定義」と書かれている�
 
 既存の heartbeat.md と cron.md を読んで、テンプレートを元に自分の役割に合った内容に書き換えてください。
 
-## ステップ2: アバター画像・3Dモデルの生成
+## ステップ2: アバターアセットの生成
 
-identity.md の外見設定が確定したら（スケルトンからの生成でも、既存の設定でも）、**必ず**アバター画像と3Dモデルを生成する。
+identity.md の外見設定が確定したら（スケルトンからの生成でも、既存の設定でも）、選択した画像スタイルに応じたアバターアセットを生成する。realistic では3Dモデルを生成しない。
 
 自分の `permissions.json` の `external_tools` を確認する。`deny` に `image_gen` があれば生成しない。`allow_all: true`、または `allow` に `image_gen` がある場合は使用可能。`allow_all: false` でも `allow` が空なら、`deny` にないツールは使用可能。旧形式の `yes` / `no` や、`image_gen` キー単体の有無で判断しない。
 
@@ -59,6 +59,8 @@ identity.md の外見設定が確定したら（スケルトンからの生成�
 3. ユーザーには「私の姿を作りますね！」と宣言して実行する — **ユーザーの許可を待つ必要はない**
 4. 画像一式の生成には数分かかるため、CLIでは必ず `animaworks-tool submit image_gen pipeline "画像プロンプト" --anima-dir "$ANIMAWORKS_ANIMA_DIR"` を使う（追加引数は生成手順に従う）。返された `task_id` を控え、生成はバックグラウンドで続ける。完了待ちのループや通常の `image_gen pipeline` で会話を止めない
 5. 「画像は生成中です。できたものから表示されます」と伝え、自己紹介と残りの初期設定へ進む。投入成功を生成完了とは言わない。完了通知で結果を確認し、失敗したステップがあればエラーを記録して成功したものだけ使用する。状況を聞かれたら `state/background_tasks/<task_id>.json` の `status` と `result.errors` を確認して答え、ロックファイルの有無で推測しない
+
+完了通知の `result.errors` と `result.retry_after` を確認する。Codex の利用上限エラーで `retry_after` があれば、ユーザーには「枠が戻り次第（その時刻以降）自動で作り直します」と伝え、API キーを尋ねたり貼り付けさせたりしない。`state/current_state.md` に「<時刻> 以降に image_gen pipeline を再投入」と記録し、次の heartbeat 以降に時刻を過ぎていれば自分で再投入する。画像生成手段がない場合は一度だけ「Codex（ChatGPT）にログインすれば作成できます」と短く伝え、押し付けない。
 
 `image_gen` が `external_tools` のルールで使用不可の場合:
 - このステップをスキップする（ユーザーに言及しなくてよい）

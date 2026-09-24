@@ -10,6 +10,19 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "image_generation.codex_usage_limit": {
+        "ja": ("{step}: Codex の利用上限に達しています（{retry_after}以降に再試行できます）。API キーは不要です。"),
+        "en": ("{step}: Codex usage limit reached (you can retry after {retry_after}). No API key is required."),
+        "ko": (
+            "{step}: Codex 사용 한도에 도달했습니다({retry_after} 이후 다시 시도할 수 있습니다). "
+            "API 키는 필요하지 않습니다."
+        ),
+    },
+    "image_generation.no_backend": {
+        "ja": "{step}: 画像生成には Codex（ChatGPT）へのログイン、または画像生成 API キーの設定が必要です。",
+        "en": "{step}: Image generation requires logging in to Codex (ChatGPT) or configuring an image-generation API key.",
+        "ko": "{step}: 이미지를 생성하려면 Codex(ChatGPT)에 로그인하거나 이미지 생성 API 키를 설정해야 합니다.",
+    },
     "tooling.task_update_failed": {
         "ja": "エラー: タスクの更新に失敗しました: {error}",
         "en": "Error: failed to update task: {error}",

@@ -42,9 +42,9 @@ identity.md의 내용이 스켈레톤("미정의"라고 적혀 있음)인 경우
 
 기존 heartbeat.md와 cron.md를 읽고, 템플릿을 바탕으로 자신의 역할에 맞는 내용으로 수정하세요.
 
-## 스텝 2: 아바타 이미지 및 3D 모델 생성
+## 스텝 2: 아바타 에셋 생성
 
-identity.md의 외모 설정이 확정되면 (스켈레톤에서 생성했든, 기존 설정이든), **반드시** 아바타 이미지와 3D 모델을 생성합니다.
+identity.md의 외모 설정이 확정되면 (스켈레톤에서 생성했든, 기존 설정이든), 선택한 이미지 스타일에 맞는 아바타 에셋을 생성합니다. realistic 스타일에서는 3D 모델을 생성하지 않습니다.
 
 자신의 `permissions.json`에서 `external_tools`를 확인하세요. `deny`에 `image_gen`이 있으면 생성하지 마세요. `allow_all: true`이거나 `allow`에 `image_gen`이 있으면 사용할 수 있습니다. `allow_all: false`여도 `allow`가 비어 있으면 `deny`에 없는 도구는 사용할 수 있습니다. 구형 `yes` / `no` 값이나 독립적인 `image_gen` 키의 유무로 판단하지 마세요.
 
@@ -54,6 +54,8 @@ identity.md의 외모 설정이 확정되면 (스켈레톤에서 생성했든, �
 3. 사용자에게 "제 모습을 만들겠습니다!"라고 선언하고 실행 — **사용자의 허가를 기다릴 필요 없음**
 4. 이미지 전체 생성에는 몇 분이 걸립니다. CLI에서는 반드시 `animaworks-tool submit image_gen pipeline "이미지 프롬프트" --anima-dir "$ANIMAWORKS_ANIMA_DIR"`를 사용하세요 (추가 인수는 생성 가이드를 따름). 반환된 `task_id`를 기록하고 백그라운드에서 생성을 계속하세요. 반복적인 완료 확인이나 일반 `image_gen pipeline` 호출로 대화를 중단하지 마세요
 5. 이미지가 생성 중이며 준비되는 대로 표시된다고 안내한 뒤 자기소개와 나머지 초기 설정을 진행하세요. 제출 성공을 생성 완료라고 말하지 마세요. 완료 알림에서 결과를 확인하고 실패한 단계의 오류를 기록한 뒤 성공한 결과만 사용하세요. 상황을 물으면 `state/background_tasks/<task_id>.json`의 `status`와 `result.errors`를 확인해 답하고, 잠금 파일의 유무로 추측하지 마세요
+
+완료 알림의 `result.errors`와 `result.retry_after`를 확인하세요. Codex 사용 한도 오류이고 `retry_after`가 있으면 사용자에게 한도가 돌아오는 시각 이후 자동으로 다시 생성한다고 안내하고, `state/current_state.md`에 "<시각> 이후 image_gen pipeline 재투입"을 기록하세요. 다음 heartbeat에서 그 시각이 지났으면 스스로 재투입하세요. 사용자에게 API 키를 묻거나 붙여 넣게 하지 마세요. 이미지 생성 수단이 없으면 Codex(ChatGPT)에 로그인하면 된다고 한 번만 짧게 알리고 강요하지 마세요.
 
 `external_tools` 규칙이 `image_gen` 사용을 허용하지 않는 경우:
 - 이 스텝을 건너뜁니다 (사용자에게 언급하지 않아도 됨)
