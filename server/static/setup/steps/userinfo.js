@@ -18,7 +18,7 @@ function render() {
     <p class="step-section-desc" data-i18n="userinfo.desc">${t("userinfo.desc")}</p>
 
     <div class="form-group">
-      <label class="form-label" data-i18n="userinfo.name">${t("userinfo.name")}</label>
+      <label class="form-label" for="userinfoName" data-i18n="userinfo.name">${t("userinfo.name")}</label>
       <input type="text" class="form-input" id="userinfoName"
         pattern="[a-zA-Z0-9_]+"
         data-i18n-placeholder="userinfo.name.placeholder"
@@ -30,7 +30,7 @@ function render() {
     </div>
 
     <div class="form-group">
-      <label class="form-label" data-i18n="userinfo.displayname">${t("userinfo.displayname")}</label>
+      <label class="form-label" for="userinfoDisplayName" data-i18n="userinfo.displayname">${t("userinfo.displayname")}</label>
       <input type="text" class="form-input" id="userinfoDisplayName"
         data-i18n-placeholder="userinfo.displayname.placeholder"
         placeholder="${t("userinfo.displayname.placeholder")}"
@@ -39,7 +39,7 @@ function render() {
     </div>
 
     <div class="form-group">
-      <label class="form-label" data-i18n="userinfo.bio">${t("userinfo.bio")}</label>
+      <label class="form-label" for="userinfoBio" data-i18n="userinfo.bio">${t("userinfo.bio")}</label>
       <textarea class="form-input userinfo-bio" id="userinfoBio"
         data-i18n-placeholder="userinfo.bio.placeholder"
         placeholder="${t("userinfo.bio.placeholder")}"

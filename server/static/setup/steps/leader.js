@@ -9,7 +9,7 @@ export function initLeaderStep(panel) {
     <h2 class="step-section-title" data-i18n="leader.title">${t("leader.title")}</h2>
     <p class="step-section-desc" data-i18n="leader.desc">${t("leader.desc")}</p>
     <div class="leader-name-input">
-      <label class="form-label" data-i18n="leader.label">${t("leader.label")}</label>
+      <label class="form-label" for="leaderNameInput" data-i18n="leader.label">${t("leader.label")}</label>
       <input type="text" class="form-input" id="leaderNameInput"
         pattern="[a-zA-Z]+"
         data-i18n-placeholder="leader.placeholder"

@@ -169,6 +169,10 @@ class TestGetEnvironment:
         with (
             patch("core.config.load_config", return_value=mock_config),
             patch("core.platform.claude_code.is_claude_code_available", return_value=True),
+            patch(
+                "server.routes.setup.get_claude_auth_status",
+                return_value={"installed": True, "logged_in": True, "subscription_type": "max"},
+            ),
             patch("server.routes.setup.is_codex_cli_available", return_value=True),
             patch("server.routes.setup.is_codex_login_available", return_value=True),
         ):
@@ -178,6 +182,8 @@ class TestGetEnvironment:
         assert resp.status_code == 200
         data = resp.json()
         assert data["claude_code_available"] is True
+        assert data["claude_code_authenticated"] is True
+        assert data["claude_subscription_type"] == "max"
         assert data["codex_cli_available"] is True
         assert data["codex_login_available"] is True
         assert data["locale"] == "ja"
@@ -194,6 +200,10 @@ class TestGetEnvironment:
         with (
             patch("core.config.load_config", return_value=mock_config),
             patch("core.platform.claude_code.is_claude_code_available", return_value=False),
+            patch(
+                "server.routes.setup.get_claude_auth_status",
+                return_value={"installed": False, "logged_in": False, "subscription_type": None},
+            ),
             patch("server.routes.setup.is_codex_cli_available", return_value=False),
             patch("server.routes.setup.is_codex_login_available", return_value=False),
         ):
@@ -217,6 +227,10 @@ class TestGetEnvironment:
         with (
             patch("core.config.load_config", return_value=mock_config),
             patch("core.platform.claude_code.is_claude_code_available", return_value=False),
+            patch(
+                "server.routes.setup.get_claude_auth_status",
+                return_value={"installed": False, "logged_in": False, "subscription_type": None},
+            ),
             patch("server.routes.setup.is_codex_cli_available", return_value=False),
             patch("server.routes.setup.is_codex_login_available", return_value=False),
             patch("server.routes.setup.is_cursor_agent_available", return_value=True),
@@ -293,6 +307,40 @@ class TestValidateKey:
         assert resp.status_code == 200
         data = resp.json()
         assert data["valid"] is True
+
+    async def test_claude_code_login_validation_not_logged_in(self):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("core.platform.claude_code.is_claude_code_available", return_value=True),
+            patch(
+                "server.routes.setup.get_claude_auth_status",
+                return_value={"installed": True, "logged_in": False, "subscription_type": None},
+            ),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post("/api/setup/validate-key", json={"provider": "claude_code"})
+
+        assert resp.json()["valid"] is False
+        assert resp.json()["code"] == "not_logged_in"
+
+    async def test_claude_code_login_validation_ready(self):
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("core.platform.claude_code.is_claude_code_available", return_value=True),
+            patch(
+                "server.routes.setup.get_claude_auth_status",
+                return_value={"installed": True, "logged_in": True, "subscription_type": "max"},
+            ),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post("/api/setup/validate-key", json={"provider": "claude_code"})
+
+        assert resp.json()["valid"] is True
+        assert resp.json()["code"] == "ready"
 
     async def test_anthropic_invalid(self):
         app = _make_test_app()
@@ -613,6 +661,36 @@ class TestCompleteSetup:
         assert resp.status_code == 200
         assert mock_config.credentials["openai"].type == "codex_login"
         assert mock_config.credentials["openai"].api_key == ""
+
+    async def test_complete_with_codex_provider(self):
+        mock_config = MagicMock()
+        mock_config.locale = "ja"
+        mock_config.credentials = {}
+        mock_config.animas = {}
+
+        app = _make_test_app()
+        transport = ASGITransport(app=app)
+
+        with (
+            patch("core.config.load_config", return_value=mock_config),
+            patch("core.config.save_config"),
+            patch("core.config.invalidate_cache"),
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/setup/complete",
+                    json={
+                        "locale": "ja",
+                        "provider": "codex",
+                        "credentials": {"openai": {"type": "codex_login"}},
+                    },
+                )
+
+        assert resp.status_code == 200
+        assert mock_config.credentials["openai"].type == "codex_login"
+        assert mock_config.credentials["openai"].api_key == ""
+        assert mock_config.anima_defaults.credential == "openai"
+        assert mock_config.anima_defaults.model == "codex/test-account-default"
 
     async def test_complete_with_blank_anima(self, tmp_path: Path):
         mock_config = MagicMock()

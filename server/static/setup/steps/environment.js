@@ -6,44 +6,37 @@ import { t } from "../setup.js";
 let container = null;
 let envData = {
   claude_code_available: false,
+  claude_code_authenticated: false,
+  claude_subscription_type: null,
   codex_cli_available: false,
   codex_login_available: false,
   cursor_agent_available: false,
   cursor_agent_authenticated: false,
   gemini_cli_available: false,
   gemini_authenticated: false,
-  python_version: "",
-  os_info: "",
 };
 let selectedProvider = "";
-let anthropicAuthMode = "api_key";
-let openaiAuthMode = "api_key";
+let otherExpanded = false;
 let apiKey = "";
-let apiKeyValid = null; // null = unchecked, true/false
-let codexLoginValid = null; // null = unchecked, true/false
+let apiKeyValid = null;
+let claudeCodeValid = null;
+let claudeCodeCode = null;
+let codexLoginValid = null;
+let codexLoginCode = null;
 let codexDeviceLogin = null;
 let cursorAgentValid = null;
 let geminiCliValid = null;
 let ollamaUrl = "http://localhost:11434";
 let selectedImageStyle = "realistic";
-let imageKeys = {
-  novelai: "",
-  fal: "",
-  meshy: "",
-};
-let imageKeyStatus = {
-  novelai: null,
-  fal: null,
-  meshy: null,
-};
+let imageKeys = { novelai: "", fal: "", meshy: "" };
+let imageKeyStatus = { novelai: null, fal: null, meshy: null };
 
 const PROVIDERS = [
-  { id: "claude_code", keyRequired: false },
+  { id: "anthropic", keyRequired: true },
+  { id: "openai", keyRequired: true },
+  { id: "google", keyRequired: true },
   { id: "cursor_agent", keyRequired: false },
   { id: "gemini_cli", keyRequired: false },
-  { id: "anthropic", keyRequired: true, keyEnv: "ANTHROPIC_API_KEY" },
-  { id: "openai", keyRequired: true, keyEnv: "OPENAI_API_KEY" },
-  { id: "google", keyRequired: true, keyEnv: "GOOGLE_API_KEY" },
   { id: "ollama", keyRequired: false },
 ];
 
@@ -56,31 +49,22 @@ export function initEnvironmentStep(el) {
 async function fetchEnvironment() {
   try {
     const res = await fetch(`${basePath}/api/setup/environment`);
-    if (res.ok) {
-      const data = await res.json();
-      envData = { ...envData, ...data };
+    if (!res.ok) return;
+    envData = { ...envData, ...(await res.json()) };
 
-      // Auto-select provider based on detection
-      if (envData.claude_code_available && !selectedProvider) {
-        selectedProvider = "claude_code";
-      }
-      if (selectedProvider === "openai" && envData.codex_login_available && !apiKey) {
-        openaiAuthMode = "codex_login";
-      }
-      render();
+    if (!selectedProvider) {
+      if (envData.claude_code_authenticated) selectedProvider = "claude_code";
+      else if (envData.codex_login_available) selectedProvider = "codex";
+      else if (envData.claude_code_available) selectedProvider = "claude_code";
+      else if (envData.codex_cli_available) selectedProvider = "codex";
     }
+    render();
   } catch {
-    // Use defaults
+    // Use the default detection state.
   }
 }
 
 function render() {
-  const provider = PROVIDERS.find((p) => p.id === selectedProvider);
-  const isAnthropic = selectedProvider === "anthropic";
-  const isOpenAI = selectedProvider === "openai";
-  const needsKey = provider?.keyRequired
-    && !(isOpenAI && openaiAuthMode === "codex_login")
-    && !(isAnthropic && anthropicAuthMode === "claude_code_login");
   const isOllama = selectedProvider === "ollama";
 
   container.innerHTML = `
@@ -88,56 +72,26 @@ function render() {
     <p style="color: #8888aa; font-size: 0.85rem; margin-top: 4px;" data-i18n="env.desc">${t("env.desc")}</p>
 
     <div class="env-section" style="margin-top: 20px;">
-      <div class="env-section-title" data-i18n="env.detection">${t("env.detection")}</div>
-      <div class="env-detection">
-        <div class="env-detection-icon">${envData.claude_code_available ? "\u2705" : "\u2b1c"}</div>
-        <div class="env-detection-text">
-          <div class="env-detection-name" data-i18n="env.claude_code">${t("env.claude_code")}</div>
-          <div class="env-detection-status ${envData.claude_code_available ? "found" : "not-found"}"
-               data-i18n="env.claude_code.${envData.claude_code_available ? "found" : "notfound"}">
-            ${envData.claude_code_available ? t("env.claude_code.found") : t("env.claude_code.notfound")}
-          </div>
-        </div>
+      <div class="env-detection-header">
+        <div class="env-section-title" data-i18n="env.detection">${t("env.detection")}</div>
+        <button class="btn-validate" id="btnRecheck" data-i18n="btn.recheck">${t("btn.recheck")}</button>
       </div>
-      <div class="env-detection">
-        <div class="env-detection-icon">${envData.cursor_agent_available ? "\u2705" : "\u2b1c"}</div>
-        <div class="env-detection-text">
-          <div class="env-detection-name" data-i18n="env.cursor_agent">${t("env.cursor_agent")}</div>
-          <div class="env-detection-status ${envData.cursor_agent_available ? "found" : "not-found"}"
-               data-i18n="env.cursor_agent.${envData.cursor_agent_available ? "found" : "notfound"}">
-            ${envData.cursor_agent_available ? t("env.cursor_agent.found") : t("env.cursor_agent.notfound")}
-          </div>
-        </div>
+      <div class="env-detection-list">
+        ${renderDetectionRow("env.claude_code", envData.claude_code_available, envData.claude_code_authenticated, envData.claude_subscription_type)}
+        ${renderDetectionRow("env.codex_cli", envData.codex_cli_available, envData.codex_login_available)}
+        ${renderDetectionRow("env.cursor_agent", envData.cursor_agent_available, envData.cursor_agent_authenticated)}
+        ${renderDetectionRow("env.gemini_cli", envData.gemini_cli_available, envData.gemini_authenticated)}
       </div>
-      <div class="env-detection">
-        <div class="env-detection-icon">${envData.gemini_cli_available ? "\u2705" : "\u2b1c"}</div>
-        <div class="env-detection-text">
-          <div class="env-detection-name" data-i18n="env.gemini_cli">${t("env.gemini_cli")}</div>
-          <div class="env-detection-status ${envData.gemini_cli_available ? "found" : "not-found"}"
-               data-i18n="env.gemini_cli.${envData.gemini_cli_available ? "found" : "notfound"}">
-            ${envData.gemini_cli_available ? t("env.gemini_cli.found") : t("env.gemini_cli.notfound")}
-          </div>
-        </div>
-      </div>
+      ${!envData.claude_code_available && !envData.codex_cli_available ? renderInstallHint() : ""}
     </div>
 
     <div class="env-section">
-      <div class="env-section-title" data-i18n="env.provider.title">${t("env.provider.title")}</div>
-      <div class="provider-cards">
-        ${renderProviders()}
-      </div>
-      ${isAnthropic ? renderAnthropicAuthModes() : ""}
-      ${isAnthropic && anthropicAuthMode === "claude_code_login" ? renderClaudeCodeLoginInput() : ""}
-      ${isOpenAI ? renderOpenAIAuthModes() : ""}
-      ${isOpenAI && openaiAuthMode === "codex_login" ? renderCodexLoginInput() : ""}
-      ${needsKey ? renderApiKeyInput() : ""}
-      ${isOllama ? renderOllamaInput() : ""}
-      ${selectedProvider === "cursor_agent" ? renderCursorAgentStatus() : ""}
-      ${selectedProvider === "gemini_cli" ? renderGeminiCliStatus() : ""}
+      ${renderProviders()}
     </div>
 
     <div class="env-section">
       <div class="env-section-title" data-i18n="env.imagegen.title">${t("env.imagegen.title")}</div>
+      <div class="env-section-desc" data-i18n="env.imagegen.desc">${t("env.imagegen.desc")}</div>
       <div class="env-section-desc" data-i18n="env.imagestyle.desc">${t("env.imagestyle.desc")}</div>
       <div class="image-style-cards">
         <div class="image-style-card${selectedImageStyle === "realistic" ? " selected" : ""}" data-style="realistic">
@@ -155,10 +109,7 @@ function render() {
           </div>
         </div>
       </div>
-
-      <div class="image-key-section">
-        ${renderImageKeysForStyle()}
-      </div>
+      <div class="image-key-section">${renderImageKeysForStyle()}</div>
     </div>
 
     <div id="envError"></div>
@@ -167,46 +118,107 @@ function render() {
   bindEvents();
 }
 
-function renderProviders() {
-  return PROVIDERS.map((p) => {
-    // Hide claude_code option if not detected
-    if (p.id === "claude_code" && !envData.claude_code_available) return "";
-    if (p.id === "cursor_agent" && !envData.cursor_agent_available) return "";
-    if (p.id === "gemini_cli" && !envData.gemini_cli_available) return "";
-
-    const selected = p.id === selectedProvider ? " selected" : "";
-    const badge = p.id === "claude_code" && envData.claude_code_available
-      ? `<span class="provider-badge">${t("env.recommended")}</span>`
-      : "";
-
-    return `
-      <div class="provider-card${selected}" data-provider="${p.id}">
-        <div class="provider-radio"></div>
-        <div>
-          <div class="provider-name">${t(`env.provider.${p.id}`)}</div>
-          <div class="provider-desc">${t(`env.provider.${p.id}.desc`)}</div>
-        </div>
-        ${badge}
-      </div>
-    `;
-  }).join("");
-}
-
-function renderApiKeyInput() {
-  let statusHtml = "";
-  if (apiKeyValid === true) {
-    statusHtml = `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`;
-  } else if (apiKeyValid === false) {
-    statusHtml = `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>`;
+function renderDetectionRow(nameKey, available, authenticated, plan = null) {
+  let icon = "\u2b1c";
+  let statusClass = "not-found";
+  let status = t("env.status.not_installed");
+  if (authenticated) {
+    icon = "\u2705";
+    statusClass = "found";
+    status = plan ? t("env.status.logged_in_plan").replace("{plan}", plan) : t("env.status.logged_in");
+  } else if (available) {
+    icon = "\u26a0\ufe0f";
+    statusClass = "warn";
+    status = t("env.status.not_logged_in");
   }
 
   return `
+    <div class="env-detection">
+      <div class="env-detection-icon">${icon}</div>
+      <div class="env-detection-text">
+        <div class="env-detection-name">${t(nameKey)}</div>
+        <div class="env-detection-status ${statusClass}">${status}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderInstallHint() {
+  return `
+    <div class="env-install-hint">
+      <strong>${t("env.install.title")}</strong>
+      <div>${formatInlineCode(t("env.install.claude"))}</div>
+      <div>${formatInlineCode(t("env.install.codex"))}</div>
+    </div>
+  `;
+}
+
+const SUBSCRIPTION_PROVIDERS = ["claude_code", "codex"];
+
+function renderProviders() {
+  const subscription = [];
+  if (envData.claude_code_available) subscription.push(renderProviderCard("claude_code", envData.claude_code_authenticated));
+  if (envData.codex_cli_available) {
+    subscription.push(renderProviderCard("codex", envData.codex_login_available && !envData.claude_code_authenticated));
+  }
+
+  const other = PROVIDERS
+    .filter((provider) => provider.id !== "cursor_agent" || envData.cursor_agent_available)
+    .filter((provider) => provider.id !== "gemini_cli" || envData.gemini_cli_available)
+    .map((provider) => renderProviderCard(provider.id))
+    .join("");
+
+  const details = renderProviderDetails();
+  const selectedIsSubscription = SUBSCRIPTION_PROVIDERS.includes(selectedProvider);
+  const collapsible = subscription.length > 0;
+  const expanded = !collapsible || otherExpanded || (selectedProvider && !selectedIsSubscription);
+  const toggle = collapsible
+    ? `<button type="button" class="provider-group-toggle${expanded ? " expanded" : ""}" id="btnToggleOther" aria-expanded="${expanded}">
+         <span class="provider-group-caret">${expanded ? "\u25be" : "\u25b8"}</span>${t("env.provider.group.other")}
+       </button>`
+    : `<div class="provider-group-title">${t("env.provider.group.other")}</div>`;
+
+  return `
+    ${subscription.length ? `<div class="provider-group-title">${t("env.provider.group.subscription")}</div><div class="provider-cards">${subscription.join("")}</div>${selectedIsSubscription ? details : ""}` : ""}
+    ${toggle}
+    ${expanded ? `<div class="provider-cards">${other}</div>${selectedIsSubscription ? "" : details}` : ""}
+  `;
+}
+
+function renderProviderCard(providerId, recommended = false) {
+  const selected = providerId === selectedProvider ? " selected" : "";
+  const badge = recommended ? `<span class="provider-badge">${t("env.recommended")}</span>` : "";
+  return `
+    <div class="provider-card${selected}" data-provider="${providerId}">
+      <div class="provider-radio"></div>
+      <div>
+        <div class="provider-name">${t(`env.provider.${providerId}`)}</div>
+        <div class="provider-desc">${t(`env.provider.${providerId}.desc`)}</div>
+      </div>
+      ${badge}
+    </div>
+  `;
+}
+
+function renderProviderDetails() {
+  if (selectedProvider === "claude_code") return renderClaudeCodeDetails();
+  if (selectedProvider === "codex") return renderCodexDetails();
+  if (selectedProvider === "cursor_agent") return renderCursorAgentStatus();
+  if (selectedProvider === "gemini_cli") return renderGeminiCliStatus();
+  if (selectedProvider === "ollama") return renderOllamaInput();
+  if (["anthropic", "openai", "google"].includes(selectedProvider)) return renderApiKeyInput();
+  return "";
+}
+
+function renderApiKeyInput() {
+  const statusHtml = apiKeyValid === true
+    ? `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`
+    : apiKeyValid === false ? `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>` : "";
+  return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.apikey">${t("env.apikey")}</label>
+      <label class="form-label" for="apiKeyInput" data-i18n="env.apikey">${t("env.apikey")}</label>
       <div class="api-key-row">
-        <input type="password" class="api-key-input" id="apiKeyInput"
-               data-i18n-placeholder="env.apikey.placeholder"
-               placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(apiKey)}">
+        <input type="password" class="api-key-input" id="apiKeyInput" data-i18n-placeholder="env.apikey.placeholder" placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(apiKey)}">
         <button class="btn-validate" id="btnValidateKey" data-i18n="btn.validate">${t("btn.validate")}</button>
       </div>
       <div id="apiKeyStatus">${statusHtml}</div>
@@ -214,165 +226,59 @@ function renderApiKeyInput() {
   `;
 }
 
-function renderAnthropicAuthModes() {
-  return `
-    <div class="api-key-section">
-      <label class="form-label" data-i18n="env.anthropic.auth.title">${t("env.anthropic.auth.title")}</label>
-      <div class="provider-cards">
-        <div class="provider-card${anthropicAuthMode === "api_key" ? " selected" : ""}" data-anthropic-auth="api_key">
-          <div class="provider-radio"></div>
-          <div>
-            <div class="provider-name" data-i18n="env.anthropic.auth.api_key">${t("env.anthropic.auth.api_key")}</div>
-            <div class="provider-desc" data-i18n="env.anthropic.auth.api_key.desc">${t("env.anthropic.auth.api_key.desc")}</div>
-          </div>
-        </div>
-        <div class="provider-card${anthropicAuthMode === "claude_code_login" ? " selected" : ""}" data-anthropic-auth="claude_code_login">
-          <div class="provider-radio"></div>
-          <div>
-            <div class="provider-name" data-i18n="env.anthropic.auth.subscription">${t("env.anthropic.auth.subscription")}</div>
-            <div class="provider-desc" data-i18n="env.anthropic.auth.subscription.desc">${t("env.anthropic.auth.subscription.desc")}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderClaudeCodeLoginInput() {
-  let statusMessage = "";
-  let statusClass = "checking";
-
-  if (envData.claude_code_available) {
-    statusMessage = t("env.anthropic.status.ready");
-    statusClass = "valid";
-  } else {
-    statusMessage = t("env.anthropic.status.not_installed");
-    statusClass = "invalid";
+function renderCliStatus(prefix, available, authenticated, valid, code, plan = null) {
+  if (valid === true || authenticated) {
+    const text = prefix === "claude_code"
+      ? t("env.claude_code.status.ready")
+      : t(`env.${prefix}.status.ready`);
+    return `<div class="validation-status valid">\u2713 ${text}</div>`;
   }
+  const statusCode = code || (available ? "not_logged_in" : "not_installed");
+  const text = prefix === "claude_code"
+    ? t(`env.claude_code.status.${statusCode}`)
+    : t(`env.${prefix}.status.${statusCode}`);
+  return `<div class="validation-status invalid">\u2717 ${text}</div>`;
+}
 
+function renderClaudeCodeDetails() {
+  const authenticated = envData.claude_code_authenticated || claudeCodeValid === true;
   return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.anthropic.auth.subscription">${t("env.anthropic.auth.subscription")}</label>
-      <div class="api-key-row">
-        <div class="api-key-input" style="display:flex;align-items:center;">
-          ${statusMessage}
-        </div>
-        <button class="btn-validate" id="btnValidateClaudeCode" data-i18n="btn.validate">${t("btn.validate")}</button>
-      </div>
-      <div id="claudeCodeLoginStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
+      ${renderCliStatus("claude_code", envData.claude_code_available, authenticated, claudeCodeValid, claudeCodeCode)}
+      ${!authenticated ? `<div class="form-hint">${formatInlineCode(t("env.claude_code.login_hint"))}</div><button class="btn-validate" id="btnValidateClaudeCode" data-i18n="btn.reverify">${t("btn.reverify")}</button>` : ""}
     </div>
   `;
 }
 
-function renderOpenAIAuthModes() {
+function renderCodexDetails() {
+  const authenticated = envData.codex_login_available || codexLoginValid === true;
   return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.openai.auth.title">${t("env.openai.auth.title")}</label>
-      <div class="provider-cards">
-        <div class="provider-card${openaiAuthMode === "api_key" ? " selected" : ""}" data-openai-auth="api_key">
-          <div class="provider-radio"></div>
-          <div>
-            <div class="provider-name" data-i18n="env.openai.auth.api_key">${t("env.openai.auth.api_key")}</div>
-            <div class="provider-desc" data-i18n="env.openai.auth.api_key.desc">${t("env.openai.auth.api_key.desc")}</div>
-          </div>
+      ${renderCliStatus("codex", envData.codex_cli_available, authenticated, codexLoginValid, codexLoginCode)}
+      ${!authenticated ? `<div class="form-hint">${formatInlineCode(t("env.codex.login_hint"))}</div>
+        <div class="api-key-row">
+          <button class="btn-validate" id="btnStartCodexBrowserLogin" data-i18n="btn.browser_login">${t("btn.browser_login")}</button>
+          <button class="btn-validate" id="btnValidateCodexLogin" data-i18n="btn.reverify">${t("btn.reverify")}</button>
         </div>
-        <div class="provider-card${openaiAuthMode === "codex_login" ? " selected" : ""}" data-openai-auth="codex_login">
-          <div class="provider-radio"></div>
-          <div>
-            <div class="provider-name" data-i18n="env.openai.auth.codex_login">${t("env.openai.auth.codex_login")}</div>
-            <div class="provider-desc" data-i18n="env.openai.auth.codex_login.desc">${t("env.openai.auth.codex_login.desc")}</div>
-          </div>
-        </div>
-      </div>
+        <div id="codexDeviceLoginInfo">${renderCodexDeviceLoginInfo()}</div>` : ""}
     </div>
   `;
 }
 
 function renderCursorAgentStatus() {
-  let statusMessage = "";
-  let statusClass = "checking";
-
-  if (cursorAgentValid === true || envData.cursor_agent_authenticated) {
-    statusMessage = t("env.cursor_agent.status.ready");
-    statusClass = "valid";
-  } else if (!envData.cursor_agent_available) {
-    statusMessage = t("env.cursor_agent.status.not_installed");
-    statusClass = "invalid";
-  } else if (cursorAgentValid === false || !envData.cursor_agent_authenticated) {
-    statusMessage = t("env.cursor_agent.status.not_logged_in");
-    statusClass = "invalid";
-  }
-
   return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.provider.cursor_agent">${t("env.provider.cursor_agent")}</label>
-      <div class="api-key-row">
-        <div class="api-key-input" style="display:flex;align-items:center;">
-          ${statusMessage}
-        </div>
-        <button class="btn-validate" id="btnValidateCursorAgent" data-i18n="btn.validate">${t("btn.validate")}</button>
-      </div>
-      <div id="cursorAgentStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
+      ${renderCliStatus("cursor_agent", envData.cursor_agent_available, envData.cursor_agent_authenticated, cursorAgentValid)}
+      <button class="btn-validate" id="btnValidateCursorAgent" data-i18n="btn.validate">${t("btn.validate")}</button>
     </div>
   `;
 }
 
 function renderGeminiCliStatus() {
-  let statusMessage = "";
-  let statusClass = "checking";
-
-  if (geminiCliValid === true || envData.gemini_authenticated) {
-    statusMessage = t("env.gemini_cli.status.ready");
-    statusClass = "valid";
-  } else if (!envData.gemini_cli_available) {
-    statusMessage = t("env.gemini_cli.status.not_installed");
-    statusClass = "invalid";
-  } else if (geminiCliValid === false || !envData.gemini_authenticated) {
-    statusMessage = t("env.gemini_cli.status.not_logged_in");
-    statusClass = "invalid";
-  }
-
   return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.provider.gemini_cli">${t("env.provider.gemini_cli")}</label>
-      <div class="api-key-row">
-        <div class="api-key-input" style="display:flex;align-items:center;">
-          ${statusMessage}
-        </div>
-        <button class="btn-validate" id="btnValidateGeminiCli" data-i18n="btn.validate">${t("btn.validate")}</button>
-      </div>
-      <div id="geminiCliStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
-    </div>
-  `;
-}
-
-function renderCodexLoginInput() {
-  let statusMessage = "";
-  let statusClass = "checking";
-
-  if (codexLoginValid === true || envData.codex_login_available) {
-    statusMessage = t("env.codex.status.ready");
-    statusClass = "valid";
-  } else if (!envData.codex_cli_available) {
-    statusMessage = t("env.codex.status.not_installed");
-    statusClass = "invalid";
-  } else if (codexLoginValid === false || !envData.codex_login_available) {
-    statusMessage = t("env.codex.status.not_logged_in");
-    statusClass = "invalid";
-  }
-
-  return `
-    <div class="api-key-section">
-      <label class="form-label" data-i18n="env.openai.auth.codex_login">${t("env.openai.auth.codex_login")}</label>
-      <div class="api-key-row">
-        <div class="api-key-input" style="display:flex;align-items:center;">
-          ${statusMessage}
-        </div>
-        <button class="btn-validate" id="btnValidateCodexLogin" data-i18n="btn.validate">${t("btn.validate")}</button>
-        <button class="btn-validate" id="btnStartCodexBrowserLogin" data-i18n="btn.browser_login">${t("btn.browser_login")}</button>
-      </div>
-      <div id="codexLoginStatus">${statusMessage ? `<div class="validation-status ${statusClass}">${statusClass === "valid" ? "\u2713" : "\u2717"} ${statusMessage}</div>` : ""}</div>
-      <div id="codexDeviceLoginInfo">${renderCodexDeviceLoginInfo()}</div>
+      ${renderCliStatus("gemini_cli", envData.gemini_cli_available, envData.gemini_authenticated, geminiCliValid)}
+      <button class="btn-validate" id="btnValidateGeminiCli" data-i18n="btn.validate">${t("btn.validate")}</button>
     </div>
   `;
 }
@@ -385,7 +291,6 @@ function renderCodexDeviceLoginInfo() {
   if (!codexDeviceLogin.ok) {
     return `<div class="validation-status invalid">\u2717 ${escapeHtml(codexDeviceLogin.message || t("env.codex.browser.failed"))}</div>`;
   }
-
   const loginUrl = escapeHtml(codexDeviceLogin.login_url || "");
   const deviceCode = escapeHtml(codexDeviceLogin.device_code || "");
   return `
@@ -400,11 +305,9 @@ function renderCodexDeviceLoginInfo() {
 function renderOllamaInput() {
   return `
     <div class="api-key-section">
-      <label class="form-label" data-i18n="env.ollama.url">${t("env.ollama.url")}</label>
+      <label class="form-label" for="ollamaUrlInput" data-i18n="env.ollama.url">${t("env.ollama.url")}</label>
       <div class="api-key-row">
-        <input type="text" class="api-key-input" id="ollamaUrlInput"
-               data-i18n-placeholder="env.ollama.url.placeholder"
-               placeholder="${t("env.ollama.url.placeholder")}" value="${escapeAttr(ollamaUrl)}">
+        <input type="text" class="api-key-input" id="ollamaUrlInput" data-i18n-placeholder="env.ollama.url.placeholder" placeholder="${t("env.ollama.url.placeholder")}" value="${escapeAttr(ollamaUrl)}">
         <button class="btn-validate" id="btnValidateOllama" data-i18n="btn.validate">${t("btn.validate")}</button>
       </div>
       <div id="ollamaStatus"></div>
@@ -414,7 +317,7 @@ function renderOllamaInput() {
 
 function renderImageKeysForStyle() {
   if (selectedImageStyle === "realistic") {
-    return renderImageKey("fal", t("env.fal"), t("env.fal.desc"), t("env.recommended"));
+    return renderImageKey("fal", t("env.fal"), t("env.fal.desc"), t("env.optional"));
   }
   return [
     renderImageKey("novelai", t("env.novelai"), t("env.novelai.desc"), t("env.recommended")),
@@ -424,27 +327,17 @@ function renderImageKeysForStyle() {
 }
 
 function renderImageKey(id, label, hint, badge) {
-  const val = imageKeys[id] || "";
   const status = imageKeyStatus[id];
-  let statusHtml = "";
-  if (status === true) {
-    statusHtml = `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`;
-  } else if (status === false) {
-    statusHtml = `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>`;
-  }
-
+  const statusHtml = status === true
+    ? `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`
+    : status === false ? `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>` : "";
   const badgeClass = badge === t("env.recommended") ? "provider-badge" : "image-key-optional";
   return `
     <div class="image-key-item">
-      <div class="image-key-label">
-        ${label}
-        <span class="${badgeClass}">${badge}</span>
-      </div>
+      <div class="image-key-label">${label}<span class="${badgeClass}">${badge}</span></div>
       <div class="form-hint">${hint}</div>
       <div class="api-key-row" style="margin-top: 4px;">
-        <input type="password" class="api-key-input" data-image-key="${id}"
-               data-i18n-placeholder="env.apikey.placeholder"
-               placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(val)}">
+        <input type="password" class="api-key-input" data-image-key="${id}" data-i18n-placeholder="env.apikey.placeholder" placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(imageKeys[id] || "")}">
       </div>
       <div class="image-key-status" data-image-status="${id}">${statusHtml}</div>
     </div>
@@ -452,7 +345,6 @@ function renderImageKey(id, label, hint, badge) {
 }
 
 function bindEvents() {
-  // Image style selection
   container.querySelectorAll(".image-style-card").forEach((card) => {
     card.addEventListener("click", () => {
       selectedImageStyle = card.dataset.style;
@@ -460,39 +352,15 @@ function bindEvents() {
     });
   });
 
-  // Provider selection
   container.querySelectorAll(".provider-card").forEach((card) => {
     card.addEventListener("click", () => {
-      if (card.dataset.openaiAuth || card.dataset.anthropicAuth) return;
       selectedProvider = card.dataset.provider;
+      otherExpanded = !SUBSCRIPTION_PROVIDERS.includes(selectedProvider);
       apiKeyValid = null;
+      claudeCodeValid = null;
+      claudeCodeCode = null;
       codexLoginValid = null;
-      codexDeviceLogin = null;
-      cursorAgentValid = null;
-      geminiCliValid = null;
-      if (selectedProvider === "anthropic") {
-        anthropicAuthMode = envData.claude_code_available ? "claude_code_login" : "api_key";
-      }
-      if (selectedProvider === "openai") {
-        openaiAuthMode = envData.codex_login_available ? "codex_login" : "api_key";
-      }
-      render();
-    });
-  });
-
-  container.querySelectorAll("[data-anthropic-auth]").forEach((card) => {
-    card.addEventListener("click", () => {
-      anthropicAuthMode = card.dataset.anthropicAuth;
-      apiKeyValid = null;
-      render();
-    });
-  });
-
-  container.querySelectorAll("[data-openai-auth]").forEach((card) => {
-    card.addEventListener("click", () => {
-      openaiAuthMode = card.dataset.openaiAuth;
-      apiKeyValid = null;
-      codexLoginValid = null;
+      codexLoginCode = null;
       codexDeviceLogin = null;
       cursorAgentValid = null;
       geminiCliValid = null;
@@ -500,142 +368,116 @@ function bindEvents() {
     });
   });
 
-  // API key validation
-  const validateBtn = container.querySelector("#btnValidateKey");
-  if (validateBtn) {
-    validateBtn.addEventListener("click", () => validateApiKey());
-  }
+  const toggleOther = container.querySelector("#btnToggleOther");
+  if (toggleOther) toggleOther.addEventListener("click", () => {
+    otherExpanded = !otherExpanded;
+    render();
+  });
 
-  const validateClaudeCodeBtn = container.querySelector("#btnValidateClaudeCode");
-  if (validateClaudeCodeBtn) {
-    validateClaudeCodeBtn.addEventListener("click", () => validateClaudeCodeLogin());
-  }
+  const recheck = container.querySelector("#btnRecheck");
+  if (recheck) recheck.addEventListener("click", fetchEnvironment);
 
-  const validateCodexBtn = container.querySelector("#btnValidateCodexLogin");
-  if (validateCodexBtn) {
-    validateCodexBtn.addEventListener("click", () => validateCodexLogin());
-  }
-
-  const startCodexLoginBtn = container.querySelector("#btnStartCodexBrowserLogin");
-  if (startCodexLoginBtn) {
-    startCodexLoginBtn.addEventListener("click", () => startCodexBrowserLogin());
-  }
-
-  const validateCursorBtn = container.querySelector("#btnValidateCursorAgent");
-  if (validateCursorBtn) {
-    validateCursorBtn.addEventListener("click", () => validateCursorAgent());
-  }
-
-  const validateGeminiBtn = container.querySelector("#btnValidateGeminiCli");
-  if (validateGeminiBtn) {
-    validateGeminiBtn.addEventListener("click", () => validateGeminiCli());
-  }
+  const validateKey = container.querySelector("#btnValidateKey");
+  if (validateKey) validateKey.addEventListener("click", validateApiKey);
+  const validateClaude = container.querySelector("#btnValidateClaudeCode");
+  if (validateClaude) validateClaude.addEventListener("click", validateClaudeCodeLogin);
+  const validateCodex = container.querySelector("#btnValidateCodexLogin");
+  if (validateCodex) validateCodex.addEventListener("click", validateCodexLogin);
+  const startCodex = container.querySelector("#btnStartCodexBrowserLogin");
+  if (startCodex) startCodex.addEventListener("click", startCodexBrowserLogin);
+  const validateCursor = container.querySelector("#btnValidateCursorAgent");
+  if (validateCursor) validateCursor.addEventListener("click", validateCursorAgent);
+  const validateGemini = container.querySelector("#btnValidateGeminiCli");
+  if (validateGemini) validateGemini.addEventListener("click", validateGeminiCli);
+  const validateOllamaButton = container.querySelector("#btnValidateOllama");
+  if (validateOllamaButton) validateOllamaButton.addEventListener("click", validateOllamaUrl);
 
   const apiInput = container.querySelector("#apiKeyInput");
-  if (apiInput) {
-    apiInput.addEventListener("input", (e) => {
-      apiKey = e.target.value;
-      apiKeyValid = null;
-    });
-  }
-
-  // Ollama URL
+  if (apiInput) apiInput.addEventListener("input", (event) => {
+    apiKey = event.target.value;
+    apiKeyValid = null;
+  });
   const ollamaInput = container.querySelector("#ollamaUrlInput");
-  if (ollamaInput) {
-    ollamaInput.addEventListener("input", (e) => {
-      ollamaUrl = e.target.value;
-    });
-  }
+  if (ollamaInput) ollamaInput.addEventListener("input", (event) => { ollamaUrl = event.target.value; });
 
-  const validateOllama = container.querySelector("#btnValidateOllama");
-  if (validateOllama) {
-    validateOllama.addEventListener("click", () => validateOllamaUrl());
-  }
-
-  // Image keys
   container.querySelectorAll("[data-image-key]").forEach((input) => {
-    input.addEventListener("input", (e) => {
-      const key = e.target.dataset.imageKey;
-      imageKeys[key] = e.target.value;
+    input.addEventListener("input", (event) => {
+      const key = event.target.dataset.imageKey;
+      imageKeys[key] = event.target.value;
       imageKeyStatus[key] = null;
     });
-
-    input.addEventListener("blur", (e) => {
-      const key = e.target.dataset.imageKey;
+    input.addEventListener("blur", (event) => {
+      const key = event.target.dataset.imageKey;
       if (imageKeys[key]) validateImageKey(key);
     });
   });
 }
 
+async function postValidation(payload) {
+  const res = await fetch(`${basePath}/api/setup/validate-key`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
 async function validateApiKey() {
   if (!apiKey.trim()) return;
-
   const statusEl = container.querySelector("#apiKeyStatus");
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: selectedProvider, auth_mode: openaiAuthMode, api_key: apiKey }),
-    });
-    const data = await res.json();
+    const data = await postValidation({ provider: selectedProvider, api_key: apiKey });
     apiKeyValid = data.valid;
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.apikey.invalid")}</div>`;
-    }
+    statusEl.innerHTML = data.valid
+      ? `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`
+      : `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>`;
   } catch {
-    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
     apiKeyValid = false;
+    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
+  }
+}
+
+async function validateClaudeCodeLogin() {
+  const statusEl = container.querySelector(".api-key-section .validation-status");
+  if (statusEl) statusEl.innerHTML = `<span class="loading-spinner"></span> ${t("btn.validating")}`;
+  try {
+    const data = await postValidation({ provider: "claude_code" });
+    claudeCodeValid = data.valid;
+    claudeCodeCode = data.code;
+    if (data.valid) envData.claude_code_authenticated = true;
+    render();
+  } catch {
+    claudeCodeValid = false;
+    claudeCodeCode = "not_logged_in";
+    render();
   }
 }
 
 async function validateCodexLogin() {
-  const statusEl = container.querySelector("#codexLoginStatus");
-  if (!statusEl) return;
-
-  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
+  const section = container.querySelector(".api-key-section");
+  if (section) section.querySelector(".validation-status").innerHTML = `<span class="loading-spinner"></span> ${t("btn.validating")}`;
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "openai", auth_mode: "codex_login" }),
-    });
-    const data = await res.json();
+    const data = await postValidation({ provider: "codex" });
     codexLoginValid = data.valid;
-    envData.codex_login_available = !!data.valid;
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.codex.status.ready")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.codex.status.not_logged_in")}</div>`;
-    }
+    codexLoginCode = data.code;
+    if (data.valid) envData.codex_login_available = true;
+    render();
   } catch {
-    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
     codexLoginValid = false;
+    codexLoginCode = "not_logged_in";
+    render();
   }
 }
 
 async function startCodexBrowserLogin() {
   const infoEl = container.querySelector("#codexDeviceLoginInfo");
   if (!infoEl) return;
-
   infoEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
   try {
-    const res = await fetch(`${basePath}/api/setup/codex/device-login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    const data = await res.json();
-    codexDeviceLogin = data;
-    if (data.login_url) {
-      window.open(data.login_url, "_blank", "noopener,noreferrer");
-    }
+    const res = await fetch(`${basePath}/api/setup/codex/device-login`, { method: "POST", headers: { "Content-Type": "application/json" } });
+    codexDeviceLogin = await res.json();
+    if (codexDeviceLogin.login_url) window.open(codexDeviceLogin.login_url, "_blank", "noopener,noreferrer");
     infoEl.innerHTML = renderCodexDeviceLoginInfo();
   } catch {
     codexDeviceLogin = { ok: false, message: t("error.network") };
@@ -643,100 +485,36 @@ async function startCodexBrowserLogin() {
   }
 }
 
-async function validateClaudeCodeLogin() {
-  const statusEl = container.querySelector("#claudeCodeLoginStatus");
-  if (!statusEl) return;
-
-  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
-  try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "anthropic", auth_mode: "claude_code_login" }),
-    });
-    const data = await res.json();
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.anthropic.status.ready")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.anthropic.status.not_installed")}</div>`;
-    }
-  } catch {
-    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
-  }
-}
-
 async function validateCursorAgent() {
-  const statusEl = container.querySelector("#cursorAgentStatus");
-  if (!statusEl) return;
-
-  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
-  try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "cursor_agent" }),
-    });
-    const data = await res.json();
-    cursorAgentValid = data.valid;
-    envData.cursor_agent_authenticated = !!data.valid;
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.cursor_agent.status.ready")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.cursor_agent.status.not_logged_in")}</div>`;
-    }
-  } catch {
-    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
-    cursorAgentValid = false;
-  }
+  await validateCli("cursor_agent", "cursorAgentValid", "cursor_agent_authenticated");
 }
 
 async function validateGeminiCli() {
-  const statusEl = container.querySelector("#geminiCliStatus");
-  if (!statusEl) return;
+  await validateCli("gemini_cli", "geminiCliValid", "gemini_authenticated");
+}
 
-  statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
+async function validateCli(provider, validName, authName) {
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "gemini_cli" }),
-    });
-    const data = await res.json();
-    geminiCliValid = data.valid;
-    envData.gemini_authenticated = !!data.valid;
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${data.message || t("env.gemini_cli.status.ready")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.gemini_cli.status.not_logged_in")}</div>`;
-    }
+    const data = await postValidation({ provider });
+    if (validName === "cursorAgentValid") cursorAgentValid = data.valid;
+    if (validName === "geminiCliValid") geminiCliValid = data.valid;
+    envData[authName] = !!data.valid;
+    render();
   } catch {
-    statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
-    geminiCliValid = false;
+    if (validName === "cursorAgentValid") cursorAgentValid = false;
+    if (validName === "geminiCliValid") geminiCliValid = false;
+    render();
   }
 }
 
 async function validateOllamaUrl() {
   const statusEl = container.querySelector("#ollamaStatus");
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: "ollama", ollama_url: ollamaUrl }),
-    });
-    const data = await res.json();
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.apikey.invalid")}</div>`;
-    }
+    const data = await postValidation({ provider: "ollama", ollama_url: ollamaUrl });
+    statusEl.innerHTML = data.valid
+      ? `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`
+      : `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>`;
   } catch {
     statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${t("error.network")}</div>`;
   }
@@ -745,23 +523,13 @@ async function validateOllamaUrl() {
 async function validateImageKey(key) {
   const statusEl = container.querySelector(`[data-image-status="${key}"]`);
   if (!statusEl) return;
-
   statusEl.innerHTML = `<div class="validation-status checking"><span class="loading-spinner"></span> ${t("btn.validating")}</div>`;
-
   try {
-    const res = await fetch(`${basePath}/api/setup/validate-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: key, api_key: imageKeys[key] }),
-    });
-    const data = await res.json();
+    const data = await postValidation({ provider: key, api_key: imageKeys[key] });
     imageKeyStatus[key] = data.valid;
-
-    if (data.valid) {
-      statusEl.innerHTML = `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`;
-    } else {
-      statusEl.innerHTML = `<div class="validation-status invalid">\u2717 ${data.message || t("env.apikey.invalid")}</div>`;
-    }
+    statusEl.innerHTML = data.valid
+      ? `<div class="validation-status valid">\u2713 ${t("env.apikey.valid")}</div>`
+      : `<div class="validation-status invalid">\u2717 ${t("env.apikey.invalid")}</div>`;
   } catch {
     statusEl.innerHTML = "";
   }
@@ -769,56 +537,39 @@ async function validateImageKey(key) {
 
 export function validateEnvironment() {
   const errorEl = container.querySelector("#envError");
-
   if (!selectedProvider) {
-    errorEl.innerHTML = `<div class="error-message">${t("error.provider_required")}</div>`;
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.provider_required"))}</div>`;
     return false;
   }
-
-  const provider = PROVIDERS.find((p) => p.id === selectedProvider);
-  if (selectedProvider === "anthropic" && anthropicAuthMode === "claude_code_login") {
-    if (!envData.claude_code_available) {
-      errorEl.innerHTML = `<div class="error-message">${t("error.claude_code_login_required")}</div>`;
-      return false;
-    }
-  }
-  if (selectedProvider === "openai" && openaiAuthMode === "codex_login") {
-    if (!(envData.codex_login_available || codexLoginValid === true)) {
-      errorEl.innerHTML = `<div class="error-message">${t("error.codex_login_required")}</div>`;
-      return false;
-    }
-  }
-  if (selectedProvider === "cursor_agent") {
-    if (!(envData.cursor_agent_authenticated || cursorAgentValid === true)) {
-      errorEl.innerHTML = `<div class="error-message">${t("error.cursor_agent_auth_required")}</div>`;
-      return false;
-    }
-  }
-  if (selectedProvider === "gemini_cli") {
-    if (!(envData.gemini_authenticated || geminiCliValid === true)) {
-      errorEl.innerHTML = `<div class="error-message">${t("error.gemini_auth_required")}</div>`;
-      return false;
-    }
-  }
-  if (provider?.keyRequired
-    && !(selectedProvider === "openai" && openaiAuthMode === "codex_login")
-    && !(selectedProvider === "anthropic" && anthropicAuthMode === "claude_code_login")
-    && !apiKey.trim()) {
-    errorEl.innerHTML = `<div class="error-message">${t("error.apikey_required")}</div>`;
+  if (selectedProvider === "claude_code" && !(envData.claude_code_authenticated || claudeCodeValid === true)) {
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.claude_code_login_required"))}</div>`;
     return false;
   }
-
-  if (errorEl) errorEl.innerHTML = "";
+  if (selectedProvider === "codex" && !(envData.codex_login_available || codexLoginValid === true)) {
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.codex_login_required"))}</div>`;
+    return false;
+  }
+  if (selectedProvider === "cursor_agent" && !(envData.cursor_agent_authenticated || cursorAgentValid === true)) {
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.cursor_agent_auth_required"))}</div>`;
+    return false;
+  }
+  if (selectedProvider === "gemini_cli" && !(envData.gemini_authenticated || geminiCliValid === true)) {
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.gemini_auth_required"))}</div>`;
+    return false;
+  }
+  const provider = PROVIDERS.find((item) => item.id === selectedProvider);
+  if (provider?.keyRequired && !apiKey.trim()) {
+    errorEl.innerHTML = `<div class="error-message">${formatInlineCode(t("error.apikey_required"))}</div>`;
+    return false;
+  }
+  errorEl.innerHTML = "";
   return true;
 }
 
 export function getEnvironmentData() {
-  const authMode = selectedProvider === "openai" ? openaiAuthMode
-    : selectedProvider === "anthropic" ? anthropicAuthMode
-    : "api_key";
   return {
     provider: selectedProvider,
-    auth_mode: authMode,
+    auth_mode: selectedProvider === "claude_code" ? "claude_code_login" : selectedProvider === "codex" ? "codex_login" : "api_key",
     api_key: apiKey || undefined,
     ollama_url: selectedProvider === "ollama" ? ollamaUrl : undefined,
     image_style: selectedImageStyle,
@@ -830,8 +581,12 @@ export function getEnvironmentData() {
   };
 }
 
+function formatInlineCode(text) {
+  return text.replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
 function escapeAttr(s) {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function escapeHtml(s) {

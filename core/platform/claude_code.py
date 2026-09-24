@@ -6,6 +6,7 @@ from __future__ import annotations
 
 """Cross-platform helpers for Claude Code CLI discovery."""
 
+import json
 import logging
 import os
 import platform
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,39 @@ def is_claude_code_available() -> bool:
     return get_claude_executable() is not None
 
 
+def get_claude_auth_status() -> dict[str, Any]:
+    """Return the Claude Code CLI installation and login status."""
+    exe = get_claude_executable()
+    if exe is None:
+        return {"installed": False, "logged_in": False, "subscription_type": None}
+
+    try:
+        result = subprocess.run(
+            [exe, "auth", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            env=os.environ.copy(),
+        )
+        if result.returncode != 0:
+            raise subprocess.SubprocessError(f"auth status exited with {result.returncode}")
+        data = json.loads(result.stdout)
+        return {
+            "installed": True,
+            "logged_in": bool(data.get("loggedIn")),
+            "subscription_type": data.get("subscriptionType"),
+            "auth_method": data.get("authMethod"),
+        }
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        logger.debug("Claude Code auth status check failed: %s", exc)
+        return {"installed": True, "logged_in": False, "subscription_type": None}
+
+
+def is_claude_code_authenticated() -> bool:
+    """Return True when Claude Code CLI is installed and logged in."""
+    return get_claude_auth_status()["logged_in"]
+
+
 def _find_git_bash() -> str | None:
     """Return the Windows-native path to Git Bash's bash.exe, or None.
 
@@ -152,6 +187,8 @@ def _find_git_bash() -> str | None:
 __all__ = [
     "get_claude_executable",
     "is_claude_code_available",
+    "get_claude_auth_status",
+    "is_claude_code_authenticated",
     "_find_sdk_bundled_cli",
     "_find_git_bash",
 ]

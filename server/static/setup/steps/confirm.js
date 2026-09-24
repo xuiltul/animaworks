@@ -2,6 +2,7 @@
 
 import { basePath } from "/shared/base-path.js";
 import { t, goToStep } from "../setup.js";
+import { LANGUAGES } from "./language.js";
 
 let confirmPanel = null;
 
@@ -22,10 +23,10 @@ export function populateConfirm(data) {
   const userName = data.userinfo?.username || "-";
   const userDisplayName = data.userinfo?.display_name || "";
   const provider = data.environment?.provider || "-";
-  const authMode = data.environment?.auth_mode || "api_key";
   const imageStyle = data.environment?.image_style || "realistic";
   const leaderName = data.leader?.name || "-";
   const imageKeys = data.environment?.image_keys || {};
+  const language = LANGUAGES.find((item) => item.code === locale)?.native || locale;
 
   // Build API key summary rows
   const keyEntries = Object.entries(imageKeys).filter(([, v]) => v);
@@ -37,7 +38,7 @@ export function populateConfirm(data) {
         </div>
       `).join("")
     : `<div class="confirm-row">
-        <span class="confirm-key">${t("confirm.apikeys")}</span>
+        <span class="confirm-key">${t("confirm.imagekeys")}</span>
         <span class="confirm-value">${t("confirm.not_configured")}</span>
       </div>`;
 
@@ -52,7 +53,7 @@ export function populateConfirm(data) {
         </div>
         <div class="confirm-row">
           <span class="confirm-key">${t("confirm.language")}</span>
-          <span class="confirm-value">${locale === "ja" ? t("lang.ja") : t("lang.en")}</span>
+          <span class="confirm-value">${language}</span>
         </div>
       </div>
 
@@ -78,9 +79,15 @@ export function populateConfirm(data) {
           <span class="confirm-key">${t("confirm.provider")}</span>
           <span class="confirm-value">${t(`env.provider.${provider}`) || provider}</span>
         </div>
-        ${provider === "anthropic" || provider === "openai" ? `<div class="confirm-row">
+        ${provider === "claude_code" ? `<div class="confirm-row">
           <span class="confirm-key">${t("confirm.auth")}</span>
-          <span class="confirm-value">${authMode === "claude_code_login" ? t("confirm.subscription") : authMode === "codex_login" ? t("confirm.codex_login") : t("confirm.api_key")}</span>
+          <span class="confirm-value">${t("confirm.auth.claude_code")}</span>
+        </div>` : provider === "codex" ? `<div class="confirm-row">
+          <span class="confirm-key">${t("confirm.auth")}</span>
+          <span class="confirm-value">${t("confirm.auth.codex")}</span>
+        </div>` : ["anthropic", "openai", "google"].includes(provider) ? `<div class="confirm-row">
+          <span class="confirm-key">${t("confirm.auth")}</span>
+          <span class="confirm-value">${t("confirm.api_key")}</span>
         </div>` : ""}
         <div class="confirm-row">
           <span class="confirm-key">${t("confirm.imagestyle")}</span>
@@ -131,13 +138,10 @@ export async function completeSetup(data) {
   const env = data.environment || {};
   if (env.provider === "claude_code") {
     payload.credentials.anthropic = { type: "claude_code_login" };
-  } else if (env.provider && (env.api_key || env.auth_mode === "codex_login" || env.auth_mode === "claude_code_login")) {
-    payload.credentials[env.provider] = {
-      type: env.auth_mode === "codex_login" ? "codex_login"
-        : env.auth_mode === "claude_code_login" ? "claude_code_login"
-        : "api_key",
-      ...(env.api_key ? { api_key: env.api_key } : {}),
-    };
+  } else if (env.provider === "codex") {
+    payload.credentials.openai = { type: "codex_login" };
+  } else if (["anthropic", "openai", "google"].includes(env.provider) && env.api_key) {
+    payload.credentials[env.provider] = { type: "api_key", api_key: env.api_key };
   }
   // Add image generation keys
   const imageKeys = env.image_keys || {};

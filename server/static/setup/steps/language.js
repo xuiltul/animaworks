@@ -8,7 +8,7 @@ let selectedLang = "ja";
 let dropdownOpen = false;
 let filterText = "";
 
-const LANGUAGES = [
+export const LANGUAGES = [
   { code: "en", native: "English" },
   { code: "ja", native: "日本語" },
   { code: "zh-CN", native: "简体中文" },

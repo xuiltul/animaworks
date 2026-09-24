@@ -429,6 +429,17 @@ body {
   border-bottom: 1px solid #2a2a4a;
 }
 
+.env-detection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.env-detection-header .env-section-title {
+  flex: 1;
+}
+
 .env-detection {
   display: flex;
   align-items: center;
@@ -466,6 +477,65 @@ body {
 
 .env-detection-status.not-found {
   color: #888;
+}
+
+.env-detection-status.warn {
+  color: #f0b429;
+}
+
+.env-install-hint {
+  margin-top: 12px;
+  padding: 16px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  border: 1px solid #2a2a4a;
+  color: #c0c0e0;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.env-install-hint strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #e4e4e4;
+}
+
+.env-install-hint code {
+  color: #9fc1ff;
+  font-family: monospace;
+}
+
+.provider-group-title {
+  color: #c0c0e0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+
+.provider-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 16px 0 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #8888aa;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-group-toggle:hover,
+.provider-group-toggle.expanded {
+  color: #c0c0e0;
+}
+
+.provider-group-caret {
+  display: inline-block;
+  width: 12px;
 }
 
 .provider-cards {

@@ -14,6 +14,7 @@ const state = {
   totalSteps: 5,
   locale: "ja",
   translations: {},
+  fallback: {},
 };
 
 // ── i18n ────────────────────────────────────
@@ -33,20 +34,20 @@ async function loadTranslations(locale) {
 function applyTranslations() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.getAttribute("data-i18n");
-    const val = state.translations[key];
-    if (val) el.textContent = val;
+    const val = state.translations[key] ?? state.fallback[key];
+    if (val !== undefined) el.textContent = val;
   });
 
   // Update placeholder attributes
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
     const key = el.getAttribute("data-i18n-placeholder");
-    const val = state.translations[key];
-    if (val) el.placeholder = val;
+    const val = state.translations[key] ?? state.fallback[key];
+    if (val !== undefined) el.placeholder = val;
   });
 }
 
 export function t(key) {
-  return state.translations[key] || key;
+  return state.translations[key] ?? state.fallback[key] ?? key;
 }
 
 export function getLocale() {
@@ -158,6 +159,16 @@ function gatherAllData() {
 
 // ── Initialization ──────────────────────────
 
+async function loadFallbackTranslations() {
+  try {
+    const res = await fetch(`${basePath}/setup/i18n/en.json`);
+    if (!res.ok) throw new Error("Failed to load fallback translations");
+    state.fallback = await res.json();
+  } catch (err) {
+    console.warn("i18n fallback load error:", err);
+  }
+}
+
 async function init() {
   // Create step panels
   stepContent.innerHTML = `
@@ -168,7 +179,8 @@ async function init() {
     <div class="step-panel" id="stepConfirm"></div>
   `;
 
-  // Load default translations
+  // Load English first so every locale has a complete fallback.
+  await loadFallbackTranslations();
   await loadTranslations(state.locale);
 
   // Initialize step modules
@@ -181,6 +193,15 @@ async function init() {
   // Bind navigation
   btnNext.addEventListener("click", goNext);
   btnBack.addEventListener("click", goBack);
+
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (event.key !== "Enter" || event.isComposing || state.currentStep === state.totalSteps - 1) return;
+    if (!(target instanceof HTMLInputElement) || !target.matches('input[type="text"], input[type="password"]')) return;
+    if (target.closest(".lang-dropdown-wrapper")) return;
+    event.preventDefault();
+    goNext();
+  });
 
   updateStepUI();
 }

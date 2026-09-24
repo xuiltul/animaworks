@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.platform.claude_code import get_claude_auth_status
 from core.platform.codex import (
     get_codex_device_login,
     is_codex_cli_available,
@@ -116,9 +117,9 @@ class UserSetup(BaseModel):
 
 class SetupCompleteRequest(BaseModel):
     locale: str = "ja"
-    provider: Literal["claude_code", "anthropic", "openai", "google", "cursor_agent", "gemini_cli", "ollama"] | None = (
-        None
-    )
+    provider: (
+        Literal["claude_code", "codex", "anthropic", "openai", "google", "cursor_agent", "gemini_cli", "ollama"] | None
+    ) = None
     ollama_url: str = ""
     credentials: dict[str, dict[str, str]] = {}
     anima: AnimaSetup | None = None
@@ -152,11 +153,14 @@ def create_setup_router() -> APIRouter:
         from core.platform.claude_code import is_claude_code_available
 
         claude_available = is_claude_code_available()
+        claude_auth_status = get_claude_auth_status()
         codex_available = is_codex_cli_available()
         codex_logged_in = is_codex_login_available()
 
         return {
             "claude_code_available": claude_available,
+            "claude_code_authenticated": claude_auth_status["logged_in"],
+            "claude_subscription_type": claude_auth_status["subscription_type"],
             "codex_cli_available": codex_available,
             "codex_login_available": codex_logged_in,
             "cursor_agent_available": is_cursor_agent_available(),
@@ -188,7 +192,11 @@ def create_setup_router() -> APIRouter:
         provider = body.provider
         api_key = body.api_key
 
-        if provider == "anthropic":
+        if provider == "claude_code":
+            return _validate_claude_code_login()
+        elif provider == "codex":
+            return _validate_codex_login()
+        elif provider == "anthropic":
             if body.auth_mode == "claude_code_login":
                 return _validate_claude_code_login()
             return await _validate_anthropic_key(api_key)
@@ -266,7 +274,9 @@ def create_setup_router() -> APIRouter:
             # Compatibility with clients that sent only credentials.
             provider = next((p["id"] for p in AVAILABLE_PROVIDERS if p["id"] in body.credentials), None)
         if provider:
-            credential_name = "anthropic" if provider == "claude_code" else provider
+            credential_name = (
+                "anthropic" if provider == "claude_code" else "openai" if provider == "codex" else provider
+            )
             credential = config.credentials.get(credential_name)
             if credential is None:
                 credential = CredentialConfig()
@@ -275,6 +285,10 @@ def create_setup_router() -> APIRouter:
                 credential.type = "claude_code_login"
                 model = AVAILABLE_PROVIDERS[0]["models"][0]
                 config.anima_defaults.mode_s_auth = "max"
+            elif provider == "codex":
+                credential.type = "codex_login"
+                credential.api_key = ""
+                model = await _resolve_codex_setup_model()
             elif provider == "openai" and credential.type == "codex_login":
                 model = await _resolve_codex_setup_model()
             else:
@@ -527,37 +541,53 @@ async def _validate_openai_key(api_key: str) -> dict[str, Any]:
 def _validate_codex_login() -> dict[str, Any]:
     """Validate that Codex CLI is installed and already logged in."""
     if not is_codex_cli_available():
-        return {"valid": False, "message": "Codex CLI is not installed"}
+        return {"valid": False, "code": "not_installed", "message": "Codex CLI is not installed"}
     if not is_codex_login_available():
-        return {"valid": False, "message": "Codex login is not ready. Use browser login to sign in."}
-    return {"valid": True, "message": "Codex login is available"}
+        return {
+            "valid": False,
+            "code": "not_logged_in",
+            "message": "Codex login is not ready. Use browser login to sign in.",
+        }
+    return {"valid": True, "code": "ready", "message": "Codex login is available"}
 
 
 def _validate_claude_code_login() -> dict[str, Any]:
-    """Validate that Claude Code CLI is installed for subscription auth."""
+    """Validate that Claude Code CLI is installed and logged in."""
     from core.platform.claude_code import is_claude_code_available
 
     if not is_claude_code_available():
-        return {"valid": False, "message": "Claude Code CLI is not installed"}
-    return {"valid": True, "message": "Claude Code CLI is available for subscription auth"}
+        return {"valid": False, "code": "not_installed", "message": "Claude Code CLI is not installed"}
+    auth_status = get_claude_auth_status()
+    if not auth_status["logged_in"]:
+        return {
+            "valid": False,
+            "code": "not_logged_in",
+            "message": "Claude Code CLI is installed but not logged in. Run `claude` in a terminal and sign in.",
+        }
+    return {
+        "valid": True,
+        "code": "ready",
+        "message": "Claude Code CLI is logged in",
+        "subscription_type": auth_status.get("subscription_type"),
+    }
 
 
 def _validate_cursor_agent() -> dict[str, Any]:
     """Validate that Cursor Agent CLI is installed and authenticated."""
     if not is_cursor_agent_available():
-        return {"valid": False, "message": "Cursor Agent CLI is not installed"}
+        return {"valid": False, "code": "not_installed", "message": "Cursor Agent CLI is not installed"}
     if not is_cursor_agent_authenticated():
-        return {"valid": False, "message": "Run `agent login` first"}
-    return {"valid": True, "message": "Cursor Agent CLI is available and authenticated"}
+        return {"valid": False, "code": "not_logged_in", "message": "Run `agent login` first"}
+    return {"valid": True, "code": "ready", "message": "Cursor Agent CLI is available and authenticated"}
 
 
 def _validate_gemini_cli() -> dict[str, Any]:
     """Validate that Gemini CLI is installed and authenticated."""
     if not is_gemini_cli_available():
-        return {"valid": False, "message": "Gemini CLI is not installed"}
+        return {"valid": False, "code": "not_installed", "message": "Gemini CLI is not installed"}
     if not is_gemini_authenticated():
-        return {"valid": False, "message": "Run `gemini auth login` or set GEMINI_API_KEY"}
-    return {"valid": True, "message": "Gemini CLI is available and authenticated"}
+        return {"valid": False, "code": "not_logged_in", "message": "Run `gemini auth login` or set GEMINI_API_KEY"}
+    return {"valid": True, "code": "ready", "message": "Gemini CLI is available and authenticated"}
 
 
 async def _validate_google_key(api_key: str) -> dict[str, Any]:
