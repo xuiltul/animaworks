@@ -125,6 +125,14 @@ def _resolve_voice_model_config(model_config: Any, voice_mode: bool) -> Any:
     return model_config.model_copy(update={"thinking_effort": effort})
 
 
+def _build_chat_background_notification_context(owner: Any) -> str:
+    """Drain completed background-task notices for the next chat turn."""
+    notifications = owner.drain_chat_background_notifications()
+    if not notifications:
+        return ""
+    return load_prompt("fragments/bg_task_notification") + "\n\n" + "\n\n".join(notifications)
+
+
 def _apply_chat_model_override(
     owner: Any,
     base_config: Any,
@@ -851,6 +859,11 @@ class MessagingMixin:
                     )
                     primary_model_config = base_model_config
 
+                # Drain completed background-task notices at the start of this
+                # chat turn. Keep them out of persisted human content and add
+                # them only to the prompt sent to the agent.
+                bg_notification_context = _build_chat_background_notification_context(self)
+
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)
                 await conv_memory.compress_if_needed()
@@ -871,6 +884,8 @@ class MessagingMixin:
                     )
                 else:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
+                if bg_notification_context:
+                    prompt = f"{bg_notification_context}\n\n{prompt}"
 
                 # Pre-save: persist user input before agent execution
                 conv_memory.append_turn(
@@ -1193,6 +1208,11 @@ class MessagingMixin:
                     )
                     primary_model_config = base_model_config
 
+                # Drain completed background-task notices at the start of this
+                # chat turn. Keep them out of persisted human content and add
+                # them only to the prompt sent to the agent.
+                bg_notification_context = _build_chat_background_notification_context(self)
+
                 # Build history-aware prompt via conversation memory
                 conv_memory = ConversationMemory(self.anima_dir, base_model_config, thread_id=thread_id)
                 if conv_memory.needs_compression():
@@ -1216,6 +1236,8 @@ class MessagingMixin:
                     )
                 else:
                     prompt = conv_memory.build_chat_prompt(content, from_person)
+                if bg_notification_context:
+                    prompt = f"{bg_notification_context}\n\n{prompt}"
 
                 # Pre-save: persist user input before agent execution
                 conv_memory.append_turn(

@@ -494,16 +494,37 @@ class DigitalAnima(
         return events
 
     def drain_background_notifications(self) -> list[str]:
-        """Read and remove all pending background task notifications.
+        """Read and remove all pending background notifications.
 
         Returns list of notification texts for inclusion in heartbeat context.
         """
+        return self._drain_background_notifications(
+            lambda _path: True,
+        )
+
+    def drain_chat_background_notifications(self) -> list[str]:
+        """Read task-completion notifications intended for a chat turn.
+
+        Cron-health and token-budget notices are operational context for the
+        heartbeat, not background task results requested by the user.  Leave
+        those files for the existing heartbeat drain so they are not silently
+        consumed by a normal chat turn.
+        """
+        excluded_prefixes = ("cron_health_", "cron_guard_", "token_budget_")
+        return self._drain_background_notifications(
+            lambda path: not path.name.startswith(excluded_prefixes),
+        )
+
+    def _drain_background_notifications(self, predicate: Callable[[Path], bool]) -> list[str]:
+        """Read and remove matching pending background notification files."""
         notif_dir = self.agent.anima_dir / "state" / "background_notifications"
         if not notif_dir.is_dir():
             return []
 
         notifications: list[str] = []
         for path in sorted(notif_dir.glob("*.md")):
+            if not predicate(path):
+                continue
             try:
                 notifications.append(path.read_text(encoding="utf-8"))
                 path.unlink()

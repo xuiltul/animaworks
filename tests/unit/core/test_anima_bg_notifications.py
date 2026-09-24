@@ -8,7 +8,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-
 from core.background import BackgroundTask, TaskStatus
 
 
@@ -61,7 +60,8 @@ class TestDrainBackgroundNotifications:
         notif_dir.mkdir(parents=True)
 
         (notif_dir / "task1.md").write_text(
-            "# Task 1 done\n\nDetails here.", encoding="utf-8",
+            "# Task 1 done\n\nDetails here.",
+            encoding="utf-8",
         )
 
         anima = self._make_anima_with_dir(anima_dir)
@@ -104,6 +104,26 @@ class TestDrainBackgroundNotifications:
 
         assert not (notif_dir / "task1.md").exists()
         assert not (notif_dir / "task2.md").exists()
+
+    def test_chat_drain_keeps_operational_notifications(self, tmp_path):
+        """Chat consumes task results but leaves heartbeat-only notices."""
+        anima_dir = tmp_path / "animas" / "test"
+        notif_dir = anima_dir / "state" / "background_notifications"
+        notif_dir.mkdir(parents=True)
+        (notif_dir / "task1.md").write_text("# Done", encoding="utf-8")
+        (notif_dir / "cron_health_2026.md").write_text("# Cron health", encoding="utf-8")
+        (notif_dir / "token_budget_exceeded_2026-09.md").write_text(
+            "# Budget",
+            encoding="utf-8",
+        )
+
+        anima = self._make_anima_with_dir(anima_dir)
+        result = anima.drain_chat_background_notifications()
+
+        assert result == ["# Done"]
+        assert not (notif_dir / "task1.md").exists()
+        assert (notif_dir / "cron_health_2026.md").exists()
+        assert (notif_dir / "token_budget_exceeded_2026-09.md").exists()
 
     def test_second_drain_returns_empty(self, tmp_path):
         """Draining twice: second call returns empty after files are deleted."""
@@ -215,6 +235,24 @@ class TestDrainBackgroundNotifications:
         assert len(result) == 1
         assert result[0] == content
 
+    def test_chat_assembly_includes_header_and_removes_notification(self, tmp_path):
+        """A chat turn receives the standard header and drains the task file."""
+        from core._anima_messaging import _build_chat_background_notification_context
+
+        anima_dir = tmp_path / "animas" / "test"
+        notif_dir = anima_dir / "state" / "background_notifications"
+        notif_dir.mkdir(parents=True)
+        notification = "# Image generation failed\n\n- error: FAL_KEY required"
+        task_path = notif_dir / "task123.md"
+        task_path.write_text(notification, encoding="utf-8")
+
+        anima = self._make_anima_with_dir(anima_dir)
+        context = _build_chat_background_notification_context(anima)
+
+        assert "バックグラウンドタスク完了通知" in context
+        assert notification in context
+        assert not task_path.exists()
+
 
 # ── TestOnBackgroundTaskComplete ─────────────────────────────
 
@@ -315,9 +353,9 @@ class TestOnBackgroundTaskComplete:
         content = (notif_dir / "xyz789abc.md").read_text(encoding="utf-8")
 
         # Verify all required fields are present
-        assert "xyz789abc" in content            # task_id
-        assert "transcribe" in content           # tool_name
-        assert "completed" in content            # status
+        assert "xyz789abc" in content  # task_id
+        assert "transcribe" in content  # tool_name
+        assert "completed" in content  # status
         assert "Transcription: Hello world" in content  # result in summary
 
     async def test_completed_task_has_completed_subject(self, tmp_path):

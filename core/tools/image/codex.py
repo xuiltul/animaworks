@@ -34,6 +34,35 @@ def codex_available() -> bool:
     return shutil.which("codex") is not None
 
 
+def _codex_stderr_reason(stderr: bytes | str) -> str:
+    """Return a concise, useful reason from codex stderr.
+
+    Codex often reports actionable failures as ``ERROR: ...`` lines.  Keep the
+    last distinct such line rather than returning the whole CLI transcript (or
+    the image spec that may have appeared nearby); otherwise the fallback error
+    can hide the original cause behind an unrelated configuration error.
+    """
+    text = stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else stderr
+    error_lines: list[str] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        marker = line.find("ERROR:")
+        if marker < 0:
+            continue
+        candidate = line[marker:].strip()
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            error_lines.append(candidate)
+    if error_lines:
+        return error_lines[-1]
+    return text.strip()[-300:]
+
+
+def _codex_failure_reason(exc: Exception) -> str:
+    """Extract the concise codex reason from a client exception."""
+    return _codex_stderr_reason(str(exc)) or type(exc).__name__
+
+
 def _cover_crop_resize(image_bytes: bytes, target_size: tuple[int, int]) -> bytes:
     """Resize with cover-crop so output matches *target_size* without stretch."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
@@ -207,13 +236,13 @@ class CodexImageClient:
                 raise RuntimeError(f"codex image generation timed out after {_CODEX_TIMEOUT}s") from exc
 
             if completed.returncode != 0:
-                stderr_tail = (completed.stderr or b"")[-500:].decode("utf-8", errors="replace")
-                raise RuntimeError(f"codex image generation failed (rc={completed.returncode}): {stderr_tail}")
+                reason = _codex_stderr_reason(completed.stderr or b"")
+                raise RuntimeError(f"codex image generation failed (rc={completed.returncode}): {reason}")
 
             out_path = tmp_path / "out.png"
             if not out_path.exists() or out_path.stat().st_size == 0:
-                stderr_tail = (completed.stderr or b"")[-500:].decode("utf-8", errors="replace")
-                raise RuntimeError(f"codex did not produce out.png: {stderr_tail}")
+                reason = _codex_stderr_reason(completed.stderr or b"")
+                raise RuntimeError(f"codex did not produce out.png: {reason}")
 
             return _cover_crop_resize(out_path.read_bytes(), target_size)
 
@@ -238,13 +267,21 @@ class CodexFirstClient:
     def generate_fullbody(self, *args: Any, **kwargs: Any) -> bytes:
         try:
             return CodexImageClient(self._image_config).generate_fullbody(*args, **kwargs)
-        except Exception as exc:
-            logger.warning("codex image generation failed, falling back to API: %s", exc)
-            return self._get_fallback().generate_fullbody(*args, **kwargs)
+        except Exception as codex_exc:
+            codex_reason = _codex_failure_reason(codex_exc)
+            logger.warning("codex image generation failed, falling back to API: %s", codex_exc)
+            try:
+                return self._get_fallback().generate_fullbody(*args, **kwargs)
+            except Exception as fallback_exc:
+                raise RuntimeError(f"{fallback_exc} (codex: {codex_reason})") from fallback_exc
 
     def generate_from_reference(self, *args: Any, **kwargs: Any) -> bytes:
         try:
             return CodexImageClient(self._image_config).generate_from_reference(*args, **kwargs)
-        except Exception as exc:
-            logger.warning("codex image generation failed, falling back to API: %s", exc)
-            return self._get_fallback().generate_from_reference(*args, **kwargs)
+        except Exception as codex_exc:
+            codex_reason = _codex_failure_reason(codex_exc)
+            logger.warning("codex image generation failed, falling back to API: %s", codex_exc)
+            try:
+                return self._get_fallback().generate_from_reference(*args, **kwargs)
+            except Exception as fallback_exc:
+                raise RuntimeError(f"{fallback_exc} (codex: {codex_reason})") from fallback_exc

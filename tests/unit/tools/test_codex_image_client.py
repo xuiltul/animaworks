@@ -122,6 +122,27 @@ class TestCodexImageClient:
         ):
             client.generate_fullbody(prompt="x")
 
+    def test_error_reason_prefers_last_distinct_error_line(self) -> None:
+        client = CodexImageClient()
+
+        def _run(_cmd: list[str], **_kwargs: Any) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 1
+            result.stdout = b""
+            result.stderr = (
+                b"debug output\n"
+                b"ERROR: an earlier error\n"
+                b"ERROR: You've hit your usage limit; try again at 12:06 PM.\n"
+                b"ERROR: You've hit your usage limit; try again at 12:06 PM.\n"
+            )
+            return result
+
+        with (
+            patch("core.tools.image.codex.subprocess.run", side_effect=_run),
+            pytest.raises(RuntimeError, match="ERROR: You've hit your usage limit; try again at 12:06 PM."),
+        ):
+            client.generate_fullbody(prompt="x")
+
     def test_vibe_and_face_refs_attached(self) -> None:
         client = CodexImageClient()
         captured: dict[str, Any] = {}
@@ -195,6 +216,29 @@ class TestCodexFirstClient:
             out = client.generate_fullbody(prompt="ok", width=64, height=64)
         assert _decode_size(out) == (64, 64)
         factory.assert_not_called()
+
+    def test_fallback_failure_preserves_codex_reason(self) -> None:
+        fallback = MagicMock()
+        fallback.generate_fullbody.side_effect = RuntimeError("FAL_KEY required")
+        client = CodexFirstClient(fallback_factory=lambda: fallback)
+
+        def _run(_cmd: list[str], **_kwargs: Any) -> MagicMock:
+            result = MagicMock()
+            result.returncode = 1
+            result.stdout = b""
+            result.stderr = b"ERROR: You've hit your usage limit; try again at 12:06 PM.\n"
+            return result
+
+        with (
+            patch("core.tools.image.codex.subprocess.run", side_effect=_run),
+            pytest.raises(RuntimeError) as caught,
+        ):
+            client.generate_fullbody(prompt="x")
+
+        assert str(caught.value) == (
+            "FAL_KEY required (codex: ERROR: You've hit your usage limit; try again at 12:06 PM.)"
+        )
+        assert isinstance(caught.value.__cause__, RuntimeError)
 
 
 class TestClientBuilders:
