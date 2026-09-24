@@ -30,6 +30,14 @@ export function createChatRenderer(ctx) {
   const { state, deps } = ctx;
   const { api, t, escapeHtml, renderMarkdown, smartTimestamp, timeStr, renderChatImages } = deps;
 
+  // Detached element reused to sanitize activity-bundle HTML.
+  // Unclosed raw HTML elements (e.g. <div>, <table>) inside DM messages
+  // can leave the bundle's wrapper tags unbalanced, causing all subsequent
+  // chat messages to nest inside the collapsed (display:none) bundle body
+  // and become invisible.  Round-tripping through a detached element forces
+  // the browser to auto-close every tag.
+  const _bundleSanitizer = document.createElement("div");
+
   // ── Smart Scroll (sticky-bottom with floating button) ──
   const NEAR_BOTTOM_PX = 80;
   let _userDetached = false;
@@ -302,7 +310,10 @@ export function createChatRenderer(ctx) {
 
     const flushActivityRun = () => {
       if (activityRun.length === 0) return false;
-      sessionsHtml += _sharedRenderCollapsibleActivityBundle(activityRun, opts);
+      const rawHtml = _sharedRenderCollapsibleActivityBundle(activityRun, opts);
+      // Round-trip through DOM to guarantee balanced HTML.
+      _bundleSanitizer.innerHTML = rawHtml;
+      sessionsHtml += _bundleSanitizer.innerHTML;
       activityRun = [];
       return true;
     };
