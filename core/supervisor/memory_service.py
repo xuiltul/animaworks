@@ -428,7 +428,21 @@ class MemoryService:
             if filter_metadata is not None and not isinstance(filter_metadata, dict):
                 raise ValueError("filter_metadata must be an object or null")
             query = getattr(store, "_query_once", store.query)
-            return {"results": self._search_results(query(collection, embedding, top_k, filter_metadata))}
+            try:
+                return {"results": self._search_results(query(collection, embedding, top_k, filter_metadata))}
+            except Exception as exc:
+                # Missing collections are expected for scopes that have never
+                # been populated (e.g. facts before first extraction).  Return
+                # empty results instead of propagating an error that triggers
+                # noisy IPCConnectionError logs across the fleet.
+                from core.memory.rag.store import _is_missing_collection_error
+                if _is_missing_collection_error(exc):
+                    logger.debug(
+                        "Query on missing collection %s for %s, returning empty results",
+                        collection, self.anima_name,
+                    )
+                    return {"results": []}
+                raise
         if method == "memory.list_collections_checked":
             listing = getattr(store, "_list_collections_once", store.list_collections)
             return {"collections": list(listing())}

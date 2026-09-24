@@ -190,16 +190,19 @@ class FactExtractor:
         system_prompt: str,
         user_prompt: str,
     ) -> str:
-        """Call LLM with retry logic.
+        """Call LLM with retry logic and Agent SDK fallback.
 
         Uses litellm.acompletion for async calls.  Retries up to
-        ``max_retries`` on failure.
+        ``max_retries`` on non-auth failure.  When litellm fails with an
+        authentication error (e.g. missing API key), immediately falls back
+        to Agent SDK for Anthropic models instead of burning remaining
+        retries on a guaranteed-failure path.
 
         Returns:
             Raw text response.
 
         Raises:
-            Exception: If all retry attempts fail.
+            Exception: If all backends (litellm + Agent SDK) fail.
         """
         import litellm
 
@@ -240,6 +243,15 @@ class FactExtractor:
                 return text
             except Exception as exc:
                 last_exc = exc
+                # Authentication errors are permanent — skip remaining
+                # retries and proceed directly to Agent SDK fallback.
+                if isinstance(exc, litellm.AuthenticationError):
+                    logger.debug(
+                        "LLM auth error on attempt %d, skipping retries for Agent SDK fallback: %s",
+                        attempt + 1,
+                        exc,
+                    )
+                    break
                 logger.debug(
                     "LLM call attempt %d/%d failed: %s",
                     attempt + 1,
@@ -249,6 +261,25 @@ class FactExtractor:
                 )
                 if attempt < self._max_retries - 1:
                     await asyncio.sleep(0.5 * (attempt + 1))
+
+        # Fallback: Agent SDK for Anthropic models (e.g. when ANTHROPIC_API_KEY
+        # is not configured but the Claude Agent SDK session is available).
+        from core.memory._llm_utils import _is_anthropic_model
+
+        if _is_anthropic_model(resolved_model):
+            try:
+                from core.memory._llm_utils import _try_agent_sdk
+
+                result = await _try_agent_sdk(
+                    user_prompt,
+                    system_prompt=system_prompt,
+                    model=resolved_model,
+                    max_tokens=2048,
+                )
+                if result is not None:
+                    return result
+            except Exception as sdk_exc:
+                logger.debug("Agent SDK fallback also failed: %s", sdk_exc)
 
         raise last_exc  # type: ignore[misc]
 
