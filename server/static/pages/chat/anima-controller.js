@@ -265,11 +265,16 @@ export function createAnimaController(ctx) {
       const { createHistoryState, applyHistoryData } = await import("../../shared/chat/session-manager.js");
       const hs = createHistoryState();
       applyHistoryData(hs, conv);
+      hs.loaded = true;
       mgr.setHistoryState(name, tid, hs);
       resolveHistoryAvatars(conv.sessions);
     } else if (needConv) {
       const { createHistoryState } = await import("../../shared/chat/session-manager.js");
-      mgr.setHistoryState(name, tid, createHistoryState());
+      const hs = createHistoryState();
+      // A successful (empty) fetch is a confirmed empty history; a failed
+      // fetch (conv === null) must not look like one.
+      if (conv) hs.loaded = true;
+      mgr.setHistoryState(name, tid, hs);
     }
 
     if (sessionsData) mergeThreadsFromSessions(ctx, name, sessionsData);
