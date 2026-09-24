@@ -101,7 +101,7 @@ function paneHtml() {
             disabled
           ></textarea>
           <div class="chat-input-actions">
-            <button type="button" class="chat-attach-btn" data-chat-id="chatPageAttachBtn" title="${t("chat.attach_image")}">+</button>
+            <button type="button" class="chat-attach-btn" data-chat-id="chatPageAttachBtn" title="${t("chat.attach_file")}">+</button>
             <select class="chat-model-select" data-chat-id="chatPageModel" data-i18n-title="chat.model_selector" title="${t("chat.model_selector")}">
               <option value=""></option>
             </select>
@@ -121,7 +121,7 @@ function paneHtml() {
             </button>
           </div>
         </div>
-        <input type="file" data-chat-id="chatPageFileInput" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none" />
+        <input type="file" data-chat-id="chatPageFileInput" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,text/csv,.pdf,.csv" multiple style="display:none" />
       </form>
     </div>
   `;

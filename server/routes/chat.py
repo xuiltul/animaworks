@@ -18,6 +18,7 @@ from core.i18n import t
 from server.events import emit, emit_notification
 from server.routes.chat_chunk_handler import _chunk_to_event, _format_sse, _handle_chunk
 from server.routes.chat_emotion import _EMOTION_PATTERN, extract_emotion
+from server.routes.chat_files import _validate_files, save_files
 from server.routes.chat_images import _validate_images, build_content_blocks, save_images
 from server.routes.chat_models import (
     MAX_CHAT_MESSAGE_SIZE,
@@ -58,12 +59,14 @@ __all__ = [
     "_handle_chunk",
     "_handle_resume",
     "_to_image_data",
+    "_validate_files",
     "_validate_images",
     "_emit_ws_side_effects",
     "_run_producer",
     "build_content_blocks",
     "create_chat_router",
     "extract_emotion",
+    "save_files",
     "save_images",
 ]
 
@@ -76,7 +79,15 @@ def create_chat_router() -> APIRouter:
         # Override from_person with authenticated user
         if hasattr(request.state, "user"):
             body.from_person = request.state.user.username
-        logger.info("chat_request anima=%s user=%s msg_len=%d", name, body.from_person, len(body.message))
+        logger.info(
+            "chat_request anima=%s user=%s msg_len=%d image_count=%d file_count=%d content_length=%s",
+            name,
+            body.from_person,
+            len(body.message),
+            len(body.images),
+            len(body.files),
+            request.headers.get("content-length", "unknown"),
+        )
         supervisor = request.app.state.supervisor
 
         # Guard: reject if anima is bootstrapping
@@ -109,8 +120,15 @@ def create_chat_router() -> APIRouter:
             if img_error:
                 return JSONResponse({"error": img_error}, status_code=413)
 
-        # Save images to disk and build IPC params
+        # Guard: validate document attachments
+        if body.files:
+            file_error = _validate_files(body.files)
+            if file_error:
+                return JSONResponse({"error": file_error}, status_code=413)
+
+        # Save validated attachments to disk and build IPC params
         saved_paths = save_images(name, body.images) if body.images else []
+        saved_paths.extend(save_files(name, body.files) if body.files else [])
 
         await emit(request, "anima.status", {"name": name, "status": "thinking"})
 
@@ -228,7 +246,15 @@ def create_chat_router() -> APIRouter:
         # Override from_person with authenticated user
         if hasattr(request.state, "user"):
             body.from_person = request.state.user.username
-        logger.info("chat_stream_request anima=%s user=%s msg_len=%d", name, body.from_person, len(body.message))
+        logger.info(
+            "chat_stream_request anima=%s user=%s msg_len=%d image_count=%d file_count=%d content_length=%s",
+            name,
+            body.from_person,
+            len(body.message),
+            len(body.images),
+            len(body.files),
+            request.headers.get("content-length", "unknown"),
+        )
         supervisor = request.app.state.supervisor
 
         # Verify anima exists before starting the stream
@@ -264,8 +290,26 @@ def create_chat_router() -> APIRouter:
 
                 raise HTTPException(status_code=413, detail=img_error)
 
-        # Save images to disk
+        # Guard: validate document attachments
+        if body.files:
+            file_error = _validate_files(body.files)
+            if file_error:
+                from fastapi import HTTPException
+
+                raise HTTPException(status_code=413, detail=file_error)
+
+        # Save validated attachments to disk
         saved_paths = save_images(name, body.images) if body.images else []
+        saved_paths.extend(save_files(name, body.files) if body.files else [])
+        logger.info(
+            "chat_stream_attachments anima=%s images=%d files=%d saved=%d image_media_types=%s file_media_types=%s",
+            name,
+            len(body.images),
+            len(body.files),
+            len(saved_paths),
+            [image.media_type for image in body.images],
+            [file.media_type for file in body.files],
+        )
 
         # Guard: return immediately if anima is bootstrapping
         if supervisor.is_bootstrapping(name):

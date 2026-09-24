@@ -176,6 +176,31 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "未対応の画像形式です: {media_type}",
         "en": "Unsupported image format: {media_type}",
     },
+    "chat.file_payload_too_large": {
+        "ja": "添付ファイルの合計サイズが大きすぎます（上限32MB）。",
+        "en": "The total attachment payload is too large (max 32MB).",
+        "ko": "첨부 파일의 총 크기가 너무 큽니다 (최대 32MB).",
+    },
+    "chat.unsupported_file_format": {
+        "ja": "対応していないファイル形式です。PDFまたはCSVを選択してください。",
+        "en": "Unsupported file format. Choose a PDF or CSV.",
+        "ko": "지원하지 않는 파일 형식입니다. PDF 또는 CSV를 선택하세요.",
+    },
+    "chat.invalid_file_data": {
+        "ja": "添付ファイルの形式または内容が無効です。",
+        "en": "The attachment format or content is invalid.",
+        "ko": "첨부 파일의 형식 또는 내용이 올바르지 않습니다.",
+    },
+    "chat.file_too_large": {
+        "ja": "ファイルは1件15MB以下にしてください。",
+        "en": "Each file must be 15MB or smaller.",
+        "ko": "파일은 각각 15MB 이하여야 합니다.",
+    },
+    "chat.csv_encoding_invalid": {
+        "ja": "CSVはUTF-8形式で保存してください。",
+        "en": "Save the CSV as UTF-8.",
+        "ko": "CSV를 UTF-8 형식으로 저장하세요.",
+    },
     "workspace.dir_not_found": {
         "ja": "ワークスペースディレクトリ '{path}' が存在しません。",
         "en": "Workspace directory '{path}' does not exist.",
