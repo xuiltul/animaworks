@@ -243,6 +243,26 @@ export function createChatRenderer(ctx) {
 
   // ── Main Chat Rendering ──
 
+  async function requestFirstMeeting(name) {
+    try {
+      const result = await api(`/api/animas/${encodeURIComponent(name)}/greet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "first_meeting" }),
+      });
+      const response = typeof result?.response === "string" ? result.response.trim() : "";
+      if (!response) throw new Error("First-meeting greeting returned an empty response");
+
+      state.firstMeetingResponses.set(name, response);
+      await state.manager.loadHistory(name, "default", CONSTANTS.HISTORY_PAGE_SIZE);
+      if (state.selectedAnima === name) renderChat();
+    } catch (error) {
+      logger.warn("First-meeting greeting failed", { anima: name, error: error?.message });
+      state.firstMeetingFailed.add(name);
+      if (state.selectedAnima === name) renderChat();
+    }
+  }
+
   // compensatePrepend: keep viewport stable when older messages are prepended
   // (infinite scroll). For all other non-sticky renders, leave scrollTop alone —
   // adjusting by the height delta on bottom-of-page changes (e.g. streaming
@@ -279,9 +299,27 @@ export function createChatRenderer(ctx) {
         messagesEl.innerHTML = renderDemoSuggestedCards(state.selectedAnima);
         return;
       }
-      const emptyMessage = currentAnima?.needs_user_input
-        ? t("chat.bootstrap_welcome", { name: currentAnima.name })
-        : t("chat.messages_empty");
+      if (currentAnima?.needs_user_input && !state.demoMode && !isMeeting) {
+        const animaName = currentAnima.name;
+        const response = state.firstMeetingResponses.get(animaName);
+        if (response) {
+          messagesEl.innerHTML = renderHistoryMessage({ role: "assistant", content: response });
+          return;
+        }
+        if (state.firstMeetingFailed.has(animaName)) {
+          messagesEl.innerHTML = `<div class="chat-empty">${escapeHtml(t("chat.bootstrap_welcome", { name: animaName }))}</div>`;
+          return;
+        }
+        messagesEl.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${escapeHtml(t("chat.first_meeting_waiting", { name: animaName }))}</div>`;
+        // Only ask for the greeting once the history fetch has actually
+        // finished empty; a render before the fetch must not trigger it.
+        if (hs.loaded && !state.firstMeetingRequested.has(animaName)) {
+          state.firstMeetingRequested.add(animaName);
+          void requestFirstMeeting(animaName);
+        }
+        return;
+      }
+      const emptyMessage = t("chat.messages_empty");
       messagesEl.innerHTML = `<div class="chat-empty">${escapeHtml(emptyMessage)}</div>`;
       return;
     }

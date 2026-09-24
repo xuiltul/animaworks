@@ -146,6 +146,9 @@ export class ChatSessionManager extends EventTarget {
     } catch {
       session.historyState = createHistoryState();
     }
+    // Marks that at least one full load finished, so callers can tell
+    // "no history" apart from "history not fetched yet".
+    session.historyState.loaded = true;
     this.#dispatch("history-loaded", { anima, thread });
     return session.historyState;
   }

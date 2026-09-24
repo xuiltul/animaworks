@@ -237,6 +237,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "[デスクを訪問]",
         "en": "[Desk visit]",
     },
+    "anima.first_meeting_marker": {
+        "ja": "ユーザーがセットアップを終え、初めてあなたのチャットを開きました",
+        "en": "The user finished setup and opened your chat for the first time",
+        "ko": "사용자가 설정을 마치고 처음으로 당신의 채팅을 열었습니다",
+    },
+    "anima.first_meeting_default_user": {
+        "ja": "ユーザー",
+        "en": "the user",
+        "ko": "사용자",
+    },
     "model_config.credential_auto_switch": {
         "ja": "モデルファミリー変更を検出: credential を '{old}' → '{new}' に自動切替しました",
         "en": "Model family change detected: auto-switched credential from '{old}' to '{new}'",

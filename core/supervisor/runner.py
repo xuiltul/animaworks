@@ -922,7 +922,11 @@ class AnimaRunner:
                 raise AnimaNotRunningError("Chat task runner supervisor is unavailable")
             return await supervisor.run_chat(kind="greet", payload=params)
 
-        return await self.anima.process_greet()
+        return await self.anima.process_greet(
+            mode=params.get("mode", "visit"),
+            user_name=params.get("user_name", ""),
+            user_id=params.get("user_id", ""),
+        )
 
     async def _handle_run_bootstrap(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle run_bootstrap request (background bootstrap execution)."""

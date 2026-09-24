@@ -178,6 +178,22 @@ async def test_phase3_nonstream_chat_contracts_use_child(
 
 
 @pytest.mark.asyncio
+async def test_isolated_greet_forwards_first_meeting_payload(tmp_path: Path) -> None:
+    anima = MagicMock()
+    anima.process_greet = AsyncMock(return_value={"response": "hello", "cached": False})
+
+    result = await task_runner.execute_chat_contract(
+        anima,
+        kind="greet",
+        payload={"mode": "first_meeting", "user_name": "Taro", "user_id": "taro"},
+        send_stream_event=AsyncMock(),
+    )
+
+    assert result["response"] == "hello"
+    anima.process_greet.assert_awaited_once_with(mode="first_meeting", user_name="Taro", user_id="taro")
+
+
+@pytest.mark.asyncio
 async def test_second_chat_interrupts_then_waits_for_lane_lock(tmp_path: Path) -> None:
     supervisor = TaskRunnerSupervisor("sakura", tmp_path / "animas" / "sakura", tmp_path / "shared")
     first_started = asyncio.Event()

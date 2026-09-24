@@ -1502,17 +1502,24 @@ class MessagingMixin:
         finally:
             self._notify_lock_released()
 
-    async def process_greet(self) -> dict[str, str | bool]:
-        """Generate a greeting response when user clicks the character.
+    async def process_greet(
+        self, *, mode: str = "visit", user_name: str = "", user_id: str = ""
+    ) -> dict[str, str | bool]:
+        """Generate a greeting response for a desk visit or first meeting.
 
-        Returns a cached response if called within the cooldown period.
+        Visit greetings use the normal cooldown cache.  First-meeting greetings
+        intentionally bypass that cache because they are tied to the newly
+        created anima's initial conversation.
 
         Returns:
             Dict with keys: response, emotion, cached.
         """
-        # Check cooldown
+        is_first_meeting = mode == "first_meeting"
+
+        # First-meeting greetings must always be generated.  The frontend owns
+        # the duplicate-request guard for this one-shot flow.
         now = time.time()
-        if (
+        if not is_first_meeting and (
             self._last_greet_at is not None
             and (now - self._last_greet_at) < self._GREET_COOLDOWN
             and self._last_greet_text is not None
@@ -1537,23 +1544,42 @@ class MessagingMixin:
             prev_task = self._task_slots.get("conversation:default", "")
             _session_token = self.agent._tool_handler.set_active_session_type("chat")
 
-            # Build greet prompt with current state (use primary to include background)
-            status_text = self.primary_status if self.primary_status != "idle" else t("anima.status_idle")
-            task_text = self.primary_task if self.primary_task else t("anima.task_none")
-            prompt = load_prompt(
-                "greet",
-                status=status_text,
-                active_label=task_text,
-            )
+            # Build the prompt with current state (use primary to include background)
+            if is_first_meeting:
+                prompt = load_prompt(
+                    "first_meeting",
+                    user_name=user_name or t("anima.first_meeting_default_user"),
+                )
+            else:
+                status_text = self.primary_status if self.primary_status != "idle" else t("anima.status_idle")
+                task_text = self.primary_task if self.primary_task else t("anima.task_none")
+                prompt = load_prompt(
+                    "greet",
+                    status=status_text,
+                    active_label=task_text,
+                )
 
             self._status_slots["conversation:default"] = "greeting"
             self._task_slots["conversation:default"] = "Greeting user"
 
             conv_memory = ConversationMemory(self.anima_dir, self.model_config)
 
-            # Record visit marker (user turn) before greeting
-            visit_text = t("anima.visit_desk")
-            conv_memory.append_turn("system", visit_text)
+            # A first meeting happens once.  If the anima already spoke in this
+            # conversation (e.g. the page was reloaded while the first greeting
+            # was in flight), return that utterance instead of generating a
+            # second introduction.
+            if is_first_meeting:
+                existing = next(
+                    (turn for turn in reversed(list(conv_memory.load().turns)) if turn.role == "assistant"),
+                    None,
+                )
+                if existing is not None:
+                    logger.info("[%s] process_greet first_meeting already answered; reusing", self.name)
+                    return {"response": existing.content, "emotion": "neutral", "cached": True}
+
+            # Record the event marker before greeting.
+            marker = t("anima.first_meeting_marker") if is_first_meeting else t("anima.visit_desk")
+            conv_memory.append_turn("system", marker)
             conv_memory.save()
 
             try:
@@ -1563,7 +1589,7 @@ class MessagingMixin:
                     self.agent._tool_handler.set_session_origin(ORIGIN_HUMAN)
                     result = await self.agent.run_cycle(
                         prompt,
-                        trigger="greet:user",
+                        trigger="greet:first_meeting" if is_first_meeting else "greet:user",
                     )
                 self._last_activity = now_local()
 
@@ -1574,10 +1600,28 @@ class MessagingMixin:
                 conv_memory.append_turn("assistant", clean_text)
                 conv_memory.save()
 
-                # Update greet cache
-                self._last_greet_at = time.time()
-                self._last_greet_text = clean_text
-                self._last_greet_emotion = emotion
+                # The chat UI builds its history from the activity log, so a
+                # first-meeting greeting must be recorded there as well or the
+                # page would re-request it on every reload.
+                if is_first_meeting:
+                    self._activity.log(
+                        "response_sent",
+                        content=clean_text,
+                        to_person=user_id or user_name,
+                        channel="chat",
+                        summary=clean_text[:200],
+                        meta={
+                            "thread_id": "default",
+                            "greet_mode": "first_meeting",
+                            "request_id": getattr(result, "request_id", "") or "",
+                        },
+                    )
+
+                # Update the visit cache only; first-meeting greetings bypass it.
+                if not is_first_meeting:
+                    self._last_greet_at = time.time()
+                    self._last_greet_text = clean_text
+                    self._last_greet_emotion = emotion
 
                 logger.info(
                     "[%s] process_greet END duration_ms=%d",

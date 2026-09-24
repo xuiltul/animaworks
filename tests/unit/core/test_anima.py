@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -454,6 +455,72 @@ class TestProcessGreet:
             assert result2["response"] == result1["response"]
             # LLM should only be called once
             assert dp.agent.run_cycle.await_count == 1
+
+    async def test_first_meeting_bypasses_cache_and_uses_prompt(self, data_dir, make_anima):
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core.anima.MemoryManager") as MockMM,
+            patch("core.anima.Messenger"),
+            patch("core._anima_messaging.ConversationMemory") as MockConv,
+            patch("core._anima_messaging.load_prompt", return_value="first meeting prompt") as mock_load_prompt,
+        ):
+            MockMM.return_value.read_model_config.return_value = MagicMock()
+            MockConv.return_value.append_turn = MagicMock()
+            MockConv.return_value.save = MagicMock()
+
+            from core.anima import DigitalAnima
+
+            dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
+            previous_greet_at = time.time() - 10
+            dp._last_greet_at = previous_greet_at
+            dp._last_greet_text = "cached visit"
+            dp._last_greet_emotion = "neutral"
+            dp.agent.run_cycle = AsyncMock(return_value=_make_cycle_result(summary="はじめまして！"))
+
+            result = await dp.process_greet(mode="first_meeting", user_name="太郎")
+
+            assert result["cached"] is False
+            assert dp.agent.run_cycle.await_count == 1
+            assert dp._last_greet_at == previous_greet_at
+            mock_load_prompt.assert_called_once_with("first_meeting", user_name="太郎")
+            MockConv.return_value.append_turn.assert_any_call(
+                "system", "ユーザーがセットアップを終え、初めてあなたのチャットを開きました"
+            )
+
+    async def test_first_meeting_reuses_existing_assistant_turn(self, data_dir, make_anima):
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+
+        with (
+            patch("core.anima.AgentCore"),
+            patch("core.anima.MemoryManager") as MockMM,
+            patch("core.anima.Messenger"),
+            patch("core._anima_messaging.ConversationMemory") as MockConv,
+            patch("core._anima_messaging.load_prompt", return_value="first meeting prompt"),
+        ):
+            MockMM.return_value.read_model_config.return_value = MagicMock()
+            MockConv.return_value.append_turn = MagicMock()
+            MockConv.return_value.save = MagicMock()
+            MockConv.return_value.load.return_value.turns = [
+                SimpleNamespace(role="system", content="marker"),
+                SimpleNamespace(role="assistant", content="はじめまして（前回）"),
+            ]
+
+            from core.anima import DigitalAnima
+
+            dp = DigitalAnima(anima_dir, shared_dir)
+            _wire_session_type(dp)
+            dp.agent.run_cycle = AsyncMock(return_value=_make_cycle_result(summary="二度目"))
+
+            result = await dp.process_greet(mode="first_meeting", user_name="太郎")
+
+            assert result == {"response": "はじめまして（前回）", "emotion": "neutral", "cached": True}
+            dp.agent.run_cycle.assert_not_awaited()
+            MockConv.return_value.append_turn.assert_not_called()
 
     async def test_greet_cache_expires(self, data_dir, make_anima):
         anima_dir = make_anima("alice")

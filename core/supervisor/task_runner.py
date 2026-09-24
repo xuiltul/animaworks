@@ -299,7 +299,11 @@ async def execute_chat_contract(
     """Execute one legacy chat contract inside a disposable child."""
     try:
         if kind == "greet":
-            return await anima.process_greet()
+            return await anima.process_greet(
+                mode=payload.get("mode", "visit"),
+                user_name=payload.get("user_name", ""),
+                user_id=payload.get("user_id", ""),
+            )
         if kind == "bootstrap":
             result = await anima.run_bootstrap()
             return {"status": "completed", "summary": result.summary, "duration_ms": result.duration_ms}

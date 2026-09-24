@@ -63,6 +63,12 @@ class TestResolveTemplatePath:
         assert path == TEMPLATES_DIR / "ja" / "prompts" / "messaging.md"
         assert path.exists()
 
+    @pytest.mark.parametrize("locale", ["ja", "en", "ko"])
+    def test_resolves_first_meeting_prompt_for_all_locales(self, locale):
+        path = resolve_template_path("prompts", "first_meeting.md", locale=locale)
+        assert path == TEMPLATES_DIR / locale / "prompts" / "first_meeting.md"
+        assert "{user_name}" in path.read_text(encoding="utf-8")
+
     def test_raises_when_template_not_found(self):
         """FileNotFoundError when template does not exist in any fallback."""
         with pytest.raises(FileNotFoundError) as excinfo:

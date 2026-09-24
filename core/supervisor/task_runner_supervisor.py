@@ -242,7 +242,8 @@ class TaskRunnerSupervisor:
 
     async def run_chat(self, *, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Run a chat contract, steering an active Mode S stream when possible."""
-        if kind == "greet" and self._greet_cache is not None:
+        is_first_meeting = payload.get("mode") == "first_meeting"
+        if kind == "greet" and not is_first_meeting and self._greet_cache is not None:
             cached_at, cached = self._greet_cache
             if asyncio.get_running_loop().time() - cached_at < 3600:
                 return {**cached, "cached": True}
@@ -267,7 +268,7 @@ class TaskRunnerSupervisor:
                 log_context=f"kind={kind}",
                 display_lane="chat",
             )
-            if kind == "greet" and not result.get("cached"):
+            if kind == "greet" and not is_first_meeting and not result.get("cached"):
                 self._greet_cache = (asyncio.get_running_loop().time(), result)
             return result
 
