@@ -240,14 +240,44 @@ class TestResumeTimeoutConstant:
     """RESUME_TIMEOUT_SEC is defined with a reasonable value."""
 
     def test_resume_timeout_defined(self) -> None:
+        """Fix 4a: default raised from 15s to 60s (15s was routinely exceeded
+        on a loaded host, discarding valid sessions)."""
         from core.execution.agent_sdk import RESUME_TIMEOUT_SEC
 
-        assert RESUME_TIMEOUT_SEC == 15.0
+        assert RESUME_TIMEOUT_SEC == 60.0
 
     def test_resume_timeout_is_positive(self) -> None:
         from core.execution.agent_sdk import RESUME_TIMEOUT_SEC
 
         assert RESUME_TIMEOUT_SEC > 0
+
+    def test_resume_timeout_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Fix 4a: the timeout is configurable via env var."""
+        from core.execution._sdk_session import _resume_timeout_from_env
+
+        monkeypatch.setenv("ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC", "90")
+        assert _resume_timeout_from_env() == 90.0
+
+    def test_resume_timeout_env_invalid_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.execution._sdk_session import _resume_timeout_from_env
+
+        monkeypatch.setenv("ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC", "not-a-number")
+        assert _resume_timeout_from_env() == 60.0
+        monkeypatch.setenv("ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC", "-5")
+        assert _resume_timeout_from_env() == 60.0
+
+    def test_codex_resume_timeout_matches(self) -> None:
+        """Fix 4a: codex_sdk shares the same default and env knob."""
+        from core.execution.agent_sdk import RESUME_TIMEOUT_SEC as CLAUDE_TIMEOUT
+        from core.execution.codex_sdk import RESUME_TIMEOUT_SEC as CODEX_TIMEOUT
+
+        assert CODEX_TIMEOUT == CLAUDE_TIMEOUT == 60.0
+
+    def test_resume_max_attempts_defined(self) -> None:
+        """Fix 4c: one retry before the session id is discarded."""
+        from core.execution._sdk_session import RESUME_MAX_ATTEMPTS
+
+        assert RESUME_MAX_ATTEMPTS == 2
 
 
 class TestNonChatSessionCleanup:
@@ -484,9 +514,11 @@ class TestResumeTimeoutGuard:
         )
 
     @pytest.mark.asyncio
-    async def test_clear_session_id_called_on_resume_timeout(self, model_config: ModelConfig, anima_dir: Path) -> None:
-        """When resume times out, _clear_session_id is called and falls back to
-        fresh session."""
+    async def test_clear_session_id_called_when_all_resume_attempts_time_out(
+        self, model_config: ModelConfig, anima_dir: Path
+    ) -> None:
+        """Fix 4c: when every resume attempt times out, _clear_session_id is
+        called once (after RESUME_MAX_ATTEMPTS) and falls back to fresh session."""
         from core.execution.agent_sdk import _save_session_id
         from tests.helpers.mocks import MockAssistantMessage, MockResultMessage, MockStreamEvent, MockTextBlock
 
@@ -513,14 +545,15 @@ class TestResumeTimeoutGuard:
             if original_clear:
                 original_clear(anima_dir_arg, session_type, **kwargs)
 
-        call_count = [0]
+        guard_timeouts = [0]
 
-        async def _timeout_on_first_then_succeed(coro, timeout=None, **kwargs):
-            """Raise TimeoutError on the first call (resume), succeed thereafter."""
+        async def _always_timeout_resume_guard(coro, timeout=None, **kwargs):
+            """Raise TimeoutError on every resume-guard call, succeed otherwise."""
             from core.execution.agent_sdk import RESUME_TIMEOUT_SEC
 
-            if timeout == RESUME_TIMEOUT_SEC and call_count[0] == 0:
-                call_count[0] += 1
+            if timeout == RESUME_TIMEOUT_SEC:
+                guard_timeouts[0] += 1
+                coro.close()
                 raise TimeoutError("resume timed out")
             return await coro
 
@@ -534,7 +567,7 @@ class TestResumeTimeoutGuard:
             tracker = ContextTracker(model="claude-sonnet-4-6")
 
             with (
-                patch("asyncio.wait_for", side_effect=_timeout_on_first_then_succeed),
+                patch("asyncio.wait_for", side_effect=_always_timeout_resume_guard),
                 patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
             ):
                 events = []
@@ -545,8 +578,267 @@ class TestResumeTimeoutGuard:
                 ):
                     events.append(event)
 
-        # _clear_session_id should have been called for the chat session type
+        from core.execution._sdk_session import RESUME_MAX_ATTEMPTS
+
+        # All attempts were made before discarding the session id
+        assert guard_timeouts[0] == RESUME_MAX_ATTEMPTS, (
+            f"Expected {RESUME_MAX_ATTEMPTS} resume attempts, got {guard_timeouts[0]}"
+        )
         assert len(clear_calls) >= 1, (
             f"Expected _clear_session_id to be called on resume timeout, but got: {clear_calls}"
         )
         assert "chat" in clear_calls, f"Expected 'chat' session to be cleared, got: {clear_calls}"
+
+    @pytest.mark.asyncio
+    async def test_transient_timeout_retried_without_discarding_session(
+        self, model_config: ModelConfig, anima_dir: Path
+    ) -> None:
+        """Fix 4c: a single transient timeout is retried; the session id is
+        NOT cleared and the resumed session streams normally."""
+        from core.execution.agent_sdk import _save_session_id
+        from tests.helpers.mocks import MockAssistantMessage, MockResultMessage, MockStreamEvent, MockTextBlock
+
+        _save_session_id(anima_dir, "transient-timeout-session", "chat")
+
+        messages = [
+            MockStreamEvent(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "resumed fine"},
+                    "index": 0,
+                }
+            ),
+            MockAssistantMessage([MockTextBlock("resumed fine")]),
+            MockResultMessage(usage={"input_tokens": 100, "output_tokens": 50}),
+        ]
+
+        clear_calls: list[str] = []
+
+        def _spy_clear(anima_dir_arg, session_type, **kwargs):
+            clear_calls.append(session_type)
+
+        guard_calls = [0]
+
+        async def _timeout_on_first_guard_only(coro, timeout=None, **kwargs):
+            from core.execution.agent_sdk import RESUME_TIMEOUT_SEC
+
+            if timeout == RESUME_TIMEOUT_SEC:
+                guard_calls[0] += 1
+                if guard_calls[0] == 1:
+                    coro.close()
+                    raise TimeoutError("transient load spike")
+            return await coro
+
+        with _patch_sdk_for_streaming(messages):
+            from core.execution.agent_sdk import AgentSDKExecutor
+            from core.prompt.context import ContextTracker
+
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            tracker = ContextTracker(model="claude-sonnet-4-6")
+
+            with (
+                patch("asyncio.wait_for", side_effect=_timeout_on_first_guard_only),
+                patch("core.execution._sdk_session._clear_session_id", side_effect=_spy_clear),
+            ):
+                events = []
+                async for event in executor.execute_streaming(
+                    system_prompt="sys",
+                    prompt="test",
+                    tracker=tracker,
+                ):
+                    events.append(event)
+
+        assert guard_calls[0] == 2, f"Expected a retry after the transient timeout, got {guard_calls[0]} calls"
+        assert clear_calls == [], f"Session id must NOT be cleared on a retried transient timeout: {clear_calls}"
+        text = "".join(e.get("text", "") for e in events if e.get("type") == "text_delta")
+        assert "resumed fine" in text
+
+
+# ── Resume fallback context recovery (Fix 4b) ─────────────────
+
+
+def _write_chat_activity_log(anima_dir: Path, thread_id: str = "default") -> None:
+    """Write a minimal chat exchange into today's activity_log file."""
+    from core.time_utils import now_local
+
+    log_dir = anima_dir / "activity_log"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    entries = [
+        {
+            "ts": "2026-09-19T21:50:00+09:00",
+            "type": "message_received",
+            "content": "monthly usage table please",
+            "meta": {"from_type": "human", "thread_id": thread_id},
+        },
+        {
+            "ts": "2026-09-19T21:50:30+09:00",
+            "type": "response_sent",
+            "content": "Here is the monthly usage table with the average column.",
+            "meta": {"thread_id": thread_id},
+        },
+    ]
+    log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+    log_file.write_text(
+        "\n".join(json.dumps(e, ensure_ascii=False) for e in entries) + "\n",
+        encoding="utf-8",
+    )
+
+
+class TestResumeFallbackHandoff:
+    """_build_resume_fallback_handoff() — Fix 4b graceful degradation."""
+
+    def test_digest_returned_and_shortterm_saved(self, anima_dir: Path) -> None:
+        from core.execution.agent_sdk import _build_resume_fallback_handoff
+        from core.memory.shortterm import ShortTermMemory
+
+        _write_chat_activity_log(anima_dir)
+
+        digest = _build_resume_fallback_handoff(anima_dir, "chat", "default", "sess-lost")
+
+        assert "monthly usage table" in digest
+        state = ShortTermMemory(anima_dir, session_type="chat", thread_id="default").load()
+        assert state is not None
+        assert state.trigger == "resume_fallback"
+        assert "sess-lost" in state.notes
+        assert "monthly usage table" in state.accumulated_response
+
+    def test_pending_high_fidelity_handoff_not_overwritten(self, anima_dir: Path) -> None:
+        """A pending context-threshold handoff must survive (same protection
+        as Fix 1); the digest is still returned for prompt injection."""
+        from core.execution.agent_sdk import _build_resume_fallback_handoff
+        from core.memory.shortterm import SessionState, ShortTermMemory
+
+        _write_chat_activity_log(anima_dir)
+        shortterm = ShortTermMemory(anima_dir, session_type="chat", thread_id="default")
+        shortterm.save(
+            SessionState(
+                accumulated_response="high fidelity full transcript",
+                trigger="chat",
+                timestamp="2026-09-19T21:00:00+09:00",
+            )
+        )
+
+        digest = _build_resume_fallback_handoff(anima_dir, "chat", "default", "sess-lost")
+
+        assert digest  # still injected into the prompt
+        state = shortterm.load()
+        assert state is not None
+        assert state.trigger == "chat"
+        assert state.accumulated_response == "high fidelity full transcript"
+
+    def test_stale_resume_fallback_state_is_replaced(self, anima_dir: Path) -> None:
+        from core.execution.agent_sdk import _build_resume_fallback_handoff
+        from core.memory.shortterm import SessionState, ShortTermMemory
+
+        _write_chat_activity_log(anima_dir)
+        shortterm = ShortTermMemory(anima_dir, session_type="chat", thread_id="default")
+        shortterm.save(
+            SessionState(
+                accumulated_response="old fallback digest",
+                trigger="resume_fallback",
+                timestamp="2026-09-18T10:00:00+09:00",
+            )
+        )
+
+        digest = _build_resume_fallback_handoff(anima_dir, "chat", "default", "sess-lost-2")
+
+        assert digest
+        state = shortterm.load()
+        assert state is not None
+        assert state.trigger == "resume_fallback"
+        assert "monthly usage table" in state.accumulated_response
+
+    def test_non_chat_session_returns_empty(self, anima_dir: Path) -> None:
+        from core.execution.agent_sdk import _build_resume_fallback_handoff
+
+        _write_chat_activity_log(anima_dir)
+        assert _build_resume_fallback_handoff(anima_dir, "heartbeat", "default", "s") == ""
+
+    def test_empty_activity_log_returns_empty_and_saves_nothing(self, anima_dir: Path) -> None:
+        from core.execution.agent_sdk import _build_resume_fallback_handoff
+        from core.memory.shortterm import ShortTermMemory
+
+        assert _build_resume_fallback_handoff(anima_dir, "chat", "default", "s") == ""
+        assert ShortTermMemory(anima_dir, session_type="chat", thread_id="default").load() is None
+
+    def test_inject_recovered_context_wraps_prompt(self) -> None:
+        from core.execution.agent_sdk import _inject_recovered_context
+
+        out = _inject_recovered_context("original prompt", "THE DIGEST")
+        assert out.startswith("<recovered_context>")
+        assert "THE DIGEST" in out
+        assert out.rstrip().endswith("original prompt")
+
+
+class TestResumeFallbackInjectionE2E:
+    """Exhausted resume attempts → fresh session prompt carries the digest."""
+
+    @pytest.mark.asyncio
+    async def test_fresh_session_prompt_contains_recovered_context(
+        self, model_config: ModelConfig, anima_dir: Path
+    ) -> None:
+        from core.execution import _sdk_stream
+        from core.execution.agent_sdk import _save_session_id
+        from tests.helpers.mocks import MockAssistantMessage, MockResultMessage, MockStreamEvent, MockTextBlock
+
+        _save_session_id(anima_dir, "doomed-session", "chat")
+        _write_chat_activity_log(anima_dir)
+
+        fresh_messages = [
+            MockStreamEvent(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": "degraded but alive"},
+                    "index": 0,
+                }
+            ),
+            MockAssistantMessage([MockTextBlock("degraded but alive")]),
+            MockResultMessage(usage={"input_tokens": 100, "output_tokens": 50}),
+        ]
+
+        async def _always_timeout_resume_guard(coro, timeout=None, **kwargs):
+            from core.execution.agent_sdk import RESUME_TIMEOUT_SEC
+
+            if timeout == RESUME_TIMEOUT_SEC:
+                coro.close()
+                raise TimeoutError("resume timed out")
+            return await coro
+
+        prompts: list[str] = []
+        orig_psm = _sdk_stream.process_stream_messages
+
+        def _spy_psm(client, ctx, state):
+            prompts.append(ctx.prompt)
+            return orig_psm(client, ctx, state)
+
+        with _patch_sdk_for_streaming(fresh_messages):
+            from core.execution.agent_sdk import AgentSDKExecutor
+            from core.prompt.context import ContextTracker
+
+            executor = AgentSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+            tracker = ContextTracker(model="claude-sonnet-4-6")
+
+            with (
+                patch("asyncio.wait_for", side_effect=_always_timeout_resume_guard),
+                patch("core.execution.agent_sdk.process_stream_messages", side_effect=_spy_psm),
+            ):
+                events = []
+                async for event in executor.execute_streaming(
+                    system_prompt="sys",
+                    prompt="continue please",
+                    tracker=tracker,
+                ):
+                    events.append(event)
+
+        assert prompts, "process_stream_messages was never called"
+        fresh_prompt = prompts[-1]
+        assert "<recovered_context>" in fresh_prompt
+        assert "monthly usage table" in fresh_prompt
+        assert fresh_prompt.rstrip().endswith("continue please")
+
+        # The digest was also persisted as a shortterm handoff
+        from core.memory.shortterm import ShortTermMemory
+
+        state = ShortTermMemory(anima_dir, session_type="chat", thread_id="default").load()
+        assert state is not None
+        assert state.trigger == "resume_fallback"

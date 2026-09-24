@@ -43,6 +43,12 @@ from pathlib import Path
 
 from core.exceptions import ExecutionError, LLMAPIError, MemoryWriteError  # noqa: F401
 from core.execution import _sdk_session
+from core.execution._claude_auth_lock import (
+    ClaudeOAuthCircuitOpen,
+    claude_execution_lock,
+    trip_claude_oauth_circuit,
+    trip_claude_oauth_circuit_from_result,
+)
 from core.execution._sdk_patch import apply_sdk_transport_patch
 
 apply_sdk_transport_patch()
@@ -53,6 +59,7 @@ from core.execution._sdk_hooks import (  # noqa: F401
     _build_pre_compact_hook,
     _build_pre_tool_hook,
     _cache_subordinate_paths,
+    _read_status_json,
 )
 from core.execution._sdk_interrupt import (  # noqa: F401
     _graceful_interrupt_blocking,
@@ -82,6 +89,7 @@ from core.execution._sdk_session import (  # noqa: F401
     _RESUMABLE_SESSION_TYPES,
     _SDK_MAX_BUFFER_SIZE,
     INTERRUPT_TIMEOUT_SEC,
+    RESUME_MAX_ATTEMPTS,
     RESUME_TIMEOUT_SEC,
     SESSION_TYPE_CHAT,
     SESSION_TYPE_CRON,
@@ -296,6 +304,89 @@ def _kill_sdk_process(pid: int | None, create_time: float | None) -> None:
         logger.debug("SDK cleanup: unexpected error for pid=%s", pid, exc_info=True)
 
 
+# ── Resume fallback context recovery (Fix 4b) ────────────────
+
+
+def _build_resume_fallback_handoff(
+    anima_dir: Path,
+    session_type: str,
+    thread_id: str,
+    failed_session_id: str | None,
+) -> str:
+    """Recover conversation context after a failed SDK session resume.
+
+    Fix 4b: mid-conversation (below the context threshold, before idle
+    compaction fires) the SDK session transcript is the *only* holder of
+    the conversation memory — no shortterm handoff exists.  When a resume
+    fails, falling back to a plain fresh session therefore loses the whole
+    conversation ("total amnesia").
+
+    This reuses ``session_compactor._extract_recent_chat_context`` to build
+    an activity_log digest of the recent conversation, persists it as a
+    shortterm handoff with ``trigger="resume_fallback"`` (so the context
+    also survives if the fresh session itself fails), and returns a
+    rendered digest block for injection into the fresh-session prompt —
+    turning total loss into graceful degradation.
+
+    A pending higher-fidelity handoff (e.g. the context-threshold save) is
+    never overwritten (same protection as Fix 1); the digest is then only
+    injected into the current prompt.
+
+    Best-effort: returns ``""`` when there is nothing to recover or on any
+    error, in which case the fresh session proceeds exactly as before.
+    """
+    if session_type != SESSION_TYPE_CHAT:
+        # The digest extractor scans chat activity_log entries only.
+        return ""
+    try:
+        from core.memory.shortterm import SessionState, ShortTermMemory
+        from core.session_compactor import _extract_recent_chat_context
+
+        extracted = _extract_recent_chat_context(anima_dir, thread_id=thread_id)
+        if not (extracted.get("accumulated_response") or extracted.get("tool_uses")):
+            return ""
+        digest_state = SessionState(
+            accumulated_response=extracted.get("accumulated_response", ""),
+            tool_uses=extracted.get("tool_uses", []),
+            original_prompt=extracted.get("original_prompt", ""),
+            timestamp=extracted.get("timestamp", ""),
+            trigger="resume_fallback",
+            notes=(f"Auto-extracted from activity_log after SDK resume failure (session_id={failed_session_id})"),
+        )
+        shortterm = ShortTermMemory(anima_dir, session_type=session_type, thread_id=thread_id)
+        existing = shortterm.load()
+        if existing is not None and existing.trigger not in ("", "idle_compaction", "resume_fallback"):
+            logger.info(
+                "resume_fallback: pending shortterm preserved (trigger=%s); digest injected without save (thread=%s)",
+                existing.trigger,
+                thread_id,
+            )
+        else:
+            shortterm.save(digest_state)
+            logger.info(
+                "resume_fallback: shortterm digest saved from activity_log (session_id=%s, thread=%s)",
+                failed_session_id,
+                thread_id,
+            )
+        return shortterm._render_markdown(digest_state)
+    except Exception:
+        logger.warning("resume_fallback: context recovery failed", exc_info=True)
+        return ""
+
+
+def _inject_recovered_context(prompt: str, recovered: str) -> str:
+    """Prepend the recovered conversation digest to the fresh-session prompt."""
+    return (
+        "<recovered_context>\n"
+        "The previous session could not be resumed. The following digest was "
+        "recovered from the activity log. Treat it as the immediately "
+        "preceding conversation and continue seamlessly.\n\n"
+        f"{recovered}\n"
+        "</recovered_context>\n\n"
+        f"{prompt}"
+    )
+
+
 # ── AgentSDKExecutor ─────────────────────────────────────────
 
 
@@ -351,8 +442,8 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         }
 
     def _should_retry_sdk_auth_failure(self) -> bool:
-        """Return True when auth failures should trigger a fresh-session retry."""
-        return (self._model_config.mode_s_auth or "max") == "max"
+        """Do not multiply SDK processes after a shared-OAuth auth failure."""
+        return False
 
     def _rate_guard_preflight(self) -> None:
         """Log when this model's realm is rate-guarded (start-time suppression only).
@@ -431,6 +522,11 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                 sdk_error = getattr(message, "error", None)
                 if isinstance(sdk_error, str) and sdk_error:
                     session_stats["sdk_error"] = sdk_error
+                    assistant_error_text = "\n".join(
+                        block.text for block in message.content if isinstance(block, TextBlock)
+                    )
+                    if assistant_error_text:
+                        session_stats.setdefault("assistant_error_text", []).append(assistant_error_text)
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         response_text.append(block.text)
@@ -520,7 +616,10 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         async def _run_blocking_client(run_options, *, log_label: str) -> ResultMessage | None:
             nonlocal sdk_pid, sdk_pid_create_time
             logger.info("ClaudeSDKClient connecting (%s, resume=%s)", log_label, getattr(run_options, "resume", None))
-            async with ClaudeSDKClient(options=run_options) as client:
+            async with (
+                claude_execution_lock(getattr(run_options, "env", None)),
+                ClaudeSDKClient(options=run_options) as client,
+            ):
                 logger.info("ClaudeSDKClient connected")
                 sdk_pid = _extract_sdk_pid(client)
                 sdk_pid_create_time = None
@@ -533,12 +632,25 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                             sdk_pid,
                             exc_info=True,
                         )
-                return await self._process_blocking_messages(client, **_msg_args)
+                result = await self._process_blocking_messages(client, **_msg_args)
+                trip_claude_oauth_circuit_from_result(
+                    getattr(run_options, "env", None),
+                    result,
+                    "\n".join(response_text),
+                    "\n".join(session_stats.get("assistant_error_text", ())),
+                )
+                return result
 
         try:
             result_message = await _run_blocking_client(options, log_label="blocking mode")
             logger.debug("ClaudeSDKClient disconnected")
         except (ProcessError, ClaudeSDKError) as e:
+            if trip_claude_oauth_circuit(getattr(options, "env", None), str(e)):
+                logger.error("Claude OAuth revoked; fleet-wide circuit opened")
+                return ExecutionResult(
+                    text=f"[Agent SDK Error: {e}]",
+                    tool_call_records=_finalize_pending_records(pending_records),
+                )
             if session_id_to_resume:
                 logger.warning("SDK session resume failed (session_id=%s): %s", session_id_to_resume, e)
                 _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -575,9 +687,17 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
 
-        auth_failure = _detect_sdk_auth_failure(
+        auth_failure_text = (
             _sdk_failure_text(result_message, "\n".join(response_text), session_stats.get("sdk_error")) or ""
         )
+        auth_failure = _detect_sdk_auth_failure(auth_failure_text)
+        if trip_claude_oauth_circuit_from_result(
+            getattr(options, "env", None),
+            result_message,
+            "\n".join(response_text),
+            "\n".join(session_stats.get("assistant_error_text", ())),
+        ):
+            logger.error("Claude OAuth revoked; fleet-wide circuit opened")
         if auth_failure and self._should_retry_sdk_auth_failure():
             logger.warning("Claude SDK returned auth failure text; retrying fresh session once")
             response_text.clear()
@@ -585,6 +705,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             result_message = None
             usage_acc = TokenUsage()
             session_stats.pop("sdk_error", None)
+            session_stats.pop("assistant_error_text", None)
             _msg_args["usage_acc"] = usage_acc
             if session_type in _RESUMABLE_SESSION_TYPES:
                 _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -687,7 +808,10 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             )
             _prompt_files.extend(tfs)
             try:
-                async with ClaudeSDKClient(options=fresh_opts) as fc:
+                async with (
+                    claude_execution_lock(getattr(fresh_opts, "env", None)),
+                    ClaudeSDKClient(options=fresh_opts) as fc,
+                ):
                     logger.info("ClaudeSDKClient connected (fresh session retry)")
                     self._active_client = fc
                     sdk_pid = _extract_sdk_pid(fc)
@@ -704,11 +828,17 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     try:
                         async for ev in process_stream_messages(fc, ctx, state):
                             yield ev
+                        trip_claude_oauth_circuit_from_result(
+                            getattr(fresh_opts, "env", None),
+                            state.result_message,
+                            "\n".join(state.response_text),
+                            "\n".join(state.assistant_error_text),
+                        )
                     finally:
                         if self._active_client is fc:
                             self._active_client = None
             except BaseException as exc:
-                if isinstance(exc, (asyncio.CancelledError, GeneratorExit)):
+                if isinstance(exc, (asyncio.CancelledError, GeneratorExit, ClaudeOAuthCircuitOpen)):
                     raise
                 logger.exception("Agent SDK streaming error (fresh session retry)")
                 raise StreamDisconnectedError(
@@ -718,7 +848,10 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
 
         async def _run_stream_options(run_options, *, resume_guard: bool) -> AsyncGenerator[dict[str, Any], None]:
             nonlocal emitted_text_delta, sdk_pid, sdk_pid_create_time
-            async with ClaudeSDKClient(options=run_options) as client:
+            async with (
+                claude_execution_lock(getattr(run_options, "env", None)),
+                ClaudeSDKClient(options=run_options) as client,
+            ):
                 logger.info("ClaudeSDKClient connected")
                 self._active_client = client
                 sdk_pid = _extract_sdk_pid(client)
@@ -740,7 +873,10 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                         except TimeoutError:
                             logger.warning("Resume timed out (session_id=%s)", session_id_to_resume)
                             await gen.aclose()
-                            _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                            # Fix 4c: do NOT clear the session id here — the
+                            # session file in ~/.claude survives a first-event
+                            # timeout, so the caller retries the resume before
+                            # discarding the id for good.
                             raise
                         except StopAsyncIteration:
                             logger.warning("Resume stream empty (session_id=%s)", session_id_to_resume)
@@ -754,6 +890,12 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                         if ev.get("type") == "text_delta":
                             emitted_text_delta = True
                         yield ev
+                    trip_claude_oauth_circuit_from_result(
+                        getattr(run_options, "env", None),
+                        state.result_message,
+                        "\n".join(state.response_text),
+                        "\n".join(state.assistant_error_text),
+                    )
                 finally:
                     if self._active_client is client:
                         self._active_client = None
@@ -762,24 +904,78 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             logger.info("ClaudeSDKClient connecting (streaming, resume=%s)", session_id_to_resume)
             if session_id_to_resume:
                 fell_back = False
-                try:
-                    async for ev in _run_stream_options(options, resume_guard=True):
-                        yield ev
-                except (TimeoutError, StopAsyncIteration):
-                    fell_back = True
-                except (ProcessError, ClaudeSDKError) as e:
-                    logger.warning("SDK resume failed (session_id=%s): %s", session_id_to_resume, e)
-                    _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
-                    fell_back = True
-                except Exception as e:
-                    if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+                for resume_attempt in range(1, RESUME_MAX_ATTEMPTS + 1):
+                    resume_yielded = False
+                    try:
+                        async for ev in _run_stream_options(options, resume_guard=True):
+                            resume_yielded = True
+                            yield ev
+                        break
+                    except TimeoutError:
+                        if resume_yielded:
+                            # Mid-stream timeout after the resume handshake
+                            # succeeded — not a resume failure; keep the old
+                            # behavior (fresh-session fallback, no retry).
+                            fell_back = True
+                            break
+                        # Fix 4c: first-event timeout — retry the resume once
+                        # before discarding the session id (the session file
+                        # in ~/.claude is still intact; the timeout is usually
+                        # transient host load, not a broken session).
+                        if resume_attempt < RESUME_MAX_ATTEMPTS:
+                            logger.warning(
+                                "Resume attempt %d/%d timed out; retrying (session_id=%s)",
+                                resume_attempt,
+                                RESUME_MAX_ATTEMPTS,
+                                session_id_to_resume,
+                            )
+                            continue
+                        logger.warning(
+                            "Resume failed after %d attempts; discarding session_id=%s",
+                            RESUME_MAX_ATTEMPTS,
+                            session_id_to_resume,
+                        )
+                        _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                        fell_back = True
+                        break
+                    except StopAsyncIteration:
+                        fell_back = True
+                        break
+                    except (ProcessError, ClaudeSDKError) as e:
+                        if trip_claude_oauth_circuit(getattr(options, "env", None), str(e)):
+                            logger.error("Claude OAuth revoked; fleet-wide circuit opened")
+                            raise StreamDisconnectedError(
+                                f"Agent SDK stream error ({type(e).__name__}): {e}",
+                                partial_text="\n".join(state.response_text),
+                            ) from e
+                        logger.warning("SDK resume failed (session_id=%s): %s", session_id_to_resume, e)
+                        _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                        fell_back = True
+                        break
+                    except ClaudeOAuthCircuitOpen:
                         raise
-                    logger.warning(
-                        "SDK resume failed with unexpected error (session_id=%s): %s", session_id_to_resume, e
-                    )
-                    _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
-                    fell_back = True
+                    except Exception as e:
+                        logger.warning(
+                            "SDK resume failed with unexpected error (session_id=%s): %s", session_id_to_resume, e
+                        )
+                        _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
+                        fell_back = True
+                        break
                 if fell_back:
+                    # Fix 4b: recover the recent conversation from the
+                    # activity_log so the fresh session does not start with
+                    # total amnesia. Best-effort — on failure the fallback
+                    # behaves exactly as before.
+                    recovered = _build_resume_fallback_handoff(
+                        self._anima_dir,
+                        session_type,
+                        thread_id,
+                        session_id_to_resume,
+                    )
+                    if recovered:
+                        from dataclasses import replace as _dc_replace
+
+                        ctx = _dc_replace(ctx, prompt=_inject_recovered_context(prompt, recovered))
                     async for ev in _fresh_session():
                         yield ev
             else:
@@ -787,7 +983,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     yield ev
             logger.debug("ClaudeSDKClient disconnected")
         except BaseException as e:
-            if isinstance(e, (asyncio.CancelledError, GeneratorExit)):
+            if isinstance(e, (asyncio.CancelledError, GeneratorExit, ClaudeOAuthCircuitOpen)):
                 raise
             logger.exception("Agent SDK streaming error")
             raise StreamDisconnectedError(
@@ -799,9 +995,17 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             _cleanup_tool_outputs(self._anima_dir)
             _cleanup_prompt_files(_prompt_files)
 
-        auth_failure = _detect_sdk_auth_failure(
+        auth_failure_text = (
             _sdk_failure_text(state.result_message, "\n".join(state.response_text), state.sdk_error) or ""
         )
+        auth_failure = _detect_sdk_auth_failure(auth_failure_text)
+        if trip_claude_oauth_circuit_from_result(
+            getattr(options, "env", None),
+            state.result_message,
+            "\n".join(state.response_text),
+            "\n".join(state.assistant_error_text),
+        ):
+            logger.error("Claude OAuth revoked; fleet-wide circuit opened")
         if auth_failure and self._should_retry_sdk_auth_failure() and not emitted_text_delta:
             logger.warning("Claude SDK returned auth failure text during streaming; retrying fresh session once")
             if session_type in _RESUMABLE_SESSION_TYPES:

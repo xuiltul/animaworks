@@ -58,7 +58,43 @@ _PROMPT_FILE_THRESHOLD = 0 if sys.platform == "win32" else 100_000
 # SDK Issue #387: invalid session ID causes SDK to hang for ~60s before
 # raising an error.  We wrap the first-event receive in asyncio.wait_for
 # so that a stale/invalid resume fails fast and falls back to a fresh session.
-RESUME_TIMEOUT_SEC = 15.0
+#
+# Fix 4a (2026-09-19): the original 15 s guard was too aggressive.  On a
+# loaded host (40+ runners) the first stream event of a resumed
+# large-context session routinely takes longer than 15 s, and the timeout
+# then discarded a perfectly valid session — losing the entire in-session
+# conversation memory.  Default raised to 60 s and made configurable via
+# the ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC environment variable.
+_RESUME_TIMEOUT_ENV = "ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC"
+_RESUME_TIMEOUT_DEFAULT_SEC = 60.0
+
+
+def _resume_timeout_from_env() -> float:
+    """Resolve the SDK resume first-event timeout (seconds) from the env."""
+    raw = os.environ.get(_RESUME_TIMEOUT_ENV, "").strip()
+    if raw:
+        try:
+            value = float(raw)
+            if value > 0:
+                return value
+        except ValueError:
+            pass
+        logger.warning(
+            "Invalid %s=%r; using default %.0fs",
+            _RESUME_TIMEOUT_ENV,
+            raw,
+            _RESUME_TIMEOUT_DEFAULT_SEC,
+        )
+    return _RESUME_TIMEOUT_DEFAULT_SEC
+
+
+RESUME_TIMEOUT_SEC = _resume_timeout_from_env()
+
+# Fix 4c (2026-09-19): number of resume attempts before the session id is
+# discarded.  A first-event timeout does not invalidate the session file in
+# ~/.claude, so one retry absorbs transient host-load spikes instead of
+# irreversibly dropping the conversation.
+RESUME_MAX_ATTEMPTS = 2
 
 # /compact processes the entire session transcript — this takes significantly
 # longer than a simple resume handshake.

@@ -43,6 +43,7 @@ from core.prompt.assembler import (
 from core.prompt.messaging import (
     _build_human_notification_guidance,  # noqa: F401
     _build_messaging_section,
+    _build_recent_tool_section,
     _load_a_reflection,  # noqa: F401 -- compatibility export
 )
 from core.prompt.org_context import (
@@ -107,6 +108,22 @@ def _read_default_workspace(anima_dir: Path) -> str:
     if resolved:
         return t("builder.default_workspace", path=str(resolved), alias=alias)
     return t("builder.default_workspace_unresolved", alias=alias)
+
+
+def _prompt_kind(
+    is_task: bool,
+    is_heartbeat: bool,
+    is_chat: bool,
+) -> Literal["chat", "heartbeat", "task", "inbox"]:
+    """Classify the prompt for trigger-specific L2 instructions."""
+    if is_heartbeat:
+        return "heartbeat"
+    if is_task:
+        return "task"
+    if is_chat:
+        return "chat"
+    # Cron and inbox both receive instructions from outside a chat session.
+    return "inbox"
 
 
 @dataclass
@@ -217,6 +234,21 @@ def _build_group1(
         _br = load_prompt_text("behavior_rules")
         if _br:
             _add(_br, "behavior_rules", 2)
+
+        # Trigger-specific procedures stay out of the stable L1 prompt.
+        prompt_kind = _prompt_kind(is_task, is_heartbeat, is_chat)
+        behavior_context: list[str] = []
+        if prompt_kind in ("chat", "inbox"):
+            behavior_context.append(load_prompt("builder/instruction_internalization"))
+        if prompt_kind == "chat":
+            behavior_context.append(load_prompt("builder/task_recording_chat"))
+        elif prompt_kind == "heartbeat":
+            behavior_context.append(load_prompt("builder/task_recording_heartbeat"))
+        _add("\n\n".join(behavior_context), "behavior_rules_ctx", 2)
+
+        _tdi = load_prompt("tool_data_interpretation")
+        if _tdi:
+            _add(_tdi, "tool_data_interpretation", 2)
 
     return out
 
@@ -425,7 +457,7 @@ def _build_group3(
         kind: str = "rigid",
         *,
         trim_from: Literal["head", "tail"] = "tail",
-        budget_group: Literal["framework", "recall"] = "framework",
+        budget_group: Literal["framework", "recall", "shortterm"] = "framework",
     ) -> None:
         if c and c.strip():
             out.append(
@@ -447,6 +479,18 @@ def _build_group3(
     _state_max = max(int(_CURRENT_STATE_MAX_CHARS * scale), 500)
     state = memory.read_current_state()
     state_content = ""
+    if state and state.strip() != "status: idle":
+        try:
+            from core.taskboard.attention_resolver import resolver_for_anima_dir
+
+            resolver = resolver_for_anima_dir(pd)
+            now = now_local()
+            if not resolver.should_inject_current_state(pd, now):
+                state = ""
+            else:
+                state = resolver.filter_current_state(pd, state, now)
+        except Exception:
+            logger.debug("TaskBoard current_state gate failed; using current_state as-is", exc_info=True)
     if state and state.strip() != "status: idle":
         state = _collapse_superseded_notes(state)
         if len(state) > _state_max:
@@ -494,9 +538,7 @@ def _build_group3(
         # importance from arbitrary memory prose or split a trust-boundary block.
         protected, recall = [], []
         for item in _split_content_items(priming_section):
-            if re.match(
-                r'<priming\b[^>]*\bsource="(?:resident_knowledge|pending_tasks|recent_outbound|action_rule)"', item
-            ):
+            if re.match(r'<priming\b[^>]*\bsource="(?:resident_knowledge|pending_tasks|recent_outbound)"', item):
                 protected.append(item)
             else:
                 recall.append(item)
@@ -504,8 +546,20 @@ def _build_group3(
         _add("\n\n".join(recall), "priming", 2, "elastic", budget_group="recall")
     if pending_human_notifications and (is_chat or is_heartbeat):
         _add(pending_human_notifications, "pending_human_notifications", 1, "rigid")
+    if is_chat and execution_mode.upper() == "B":
+        try:
+            recent = _build_recent_tool_section(pd, memory.read_model_config())
+            if recent:
+                _add(recent, "recent_tools", 3, "elastic")
+        except Exception:
+            logger.debug("Failed to inject recent tool results", exc_info=True)
     if shortterm_text:
-        _add(shortterm_text, "shortterm", 3, "elastic", trim_from="head")
+        # rigid (not elastic): the session handoff must never be trimmed away
+        # while the model still has context headroom. As priority-2 rigid it
+        # survives all target trims and elastic ceiling trims, and is evicted
+        # only in the last hard-ceiling pass together with other priority-2
+        # rigid sections (see _allocate_sections in assembler.py).
+        _add(shortterm_text, "shortterm", 2, "rigid", budget_group="shortterm")
     return out
 
 

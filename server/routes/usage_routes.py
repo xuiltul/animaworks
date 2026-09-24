@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -189,6 +190,148 @@ def _launch_claude_login_terminal(executable: str | None) -> bool:
         return False
 
 
+# ── macOS Keychain support ──────────────────────────────────────────────────
+
+_KEYCHAIN_SERVICE = "Claude Code-credentials"
+
+
+def _read_keychain_claude_credential() -> tuple[str | None, str | None, int]:
+    """Read Claude OAuth credentials from macOS Keychain.
+
+    Claude Code 2.0+ stores OAuth credentials in the macOS Keychain
+    instead of ``~/.claude/.credentials.json``.
+
+    Returns ``(access_token, refresh_token, expires_at_ms)``.
+    Never logs or outputs credential values.
+    """
+    if sys.platform != "darwin":
+        return None, None, 0
+
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None, None, 0
+
+        cred_data = json.loads(result.stdout.strip())
+        oauth = cred_data.get("claudeAiOauth", {})
+        token = oauth.get("accessToken")
+        refresh = oauth.get("refreshToken")
+        expires = oauth.get("expiresAt", 0)
+
+        if not token:
+            return None, None, 0
+
+        logger.debug("Read Claude credentials from macOS Keychain")
+        return token, refresh, expires
+    except Exception:
+        logger.debug("Failed to read Claude credentials from macOS Keychain")
+        return None, None, 0
+
+
+def _refresh_keychain_claude_token(refresh_token: str) -> str | None:
+    """Refresh Claude OAuth token and update macOS Keychain.
+
+    Uses the same OAuth endpoint as file-based refresh but writes the
+    new token back to the Keychain entry managed by Claude Code.
+    Never logs or outputs credential values.
+    """
+    if sys.platform != "darwin":
+        return None
+
+    try:
+        body = json.dumps(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": _ANTHROPIC_CLIENT_ID,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            _ANTHROPIC_TOKEN_URL,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "claude-code/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        new_access = data.get("access_token")
+        new_refresh = data.get("refresh_token", refresh_token)
+        expires_in = data.get("expires_in", 3600)
+        if not new_access:
+            return None
+
+        # Update Keychain with the refreshed token
+        _write_keychain_claude_credential(new_access, new_refresh, expires_in)
+        logger.info("Refreshed Claude OAuth token (Keychain)")
+        return new_access
+    except Exception as e:
+        logger.warning("Claude Keychain token refresh failed: %s", e)
+        return None
+
+
+def _write_keychain_claude_credential(
+    access_token: str, refresh_token: str, expires_in: int
+) -> None:
+    """Write refreshed Claude OAuth credentials back to macOS Keychain.
+
+    Reads the existing Keychain entry, updates OAuth fields, and writes
+    back using ``security add-generic-password -U``.
+    Never logs credential values.
+    """
+    if sys.platform != "darwin":
+        return
+
+    try:
+        # Read existing data to preserve non-OAuth fields
+        result = subprocess.run(
+            ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return
+
+        cred_data = json.loads(result.stdout.strip())
+        oauth = cred_data.setdefault("claudeAiOauth", {})
+        oauth["accessToken"] = access_token
+        oauth["refreshToken"] = refresh_token
+        oauth["expiresAt"] = int(time.time() * 1000) + expires_in * 1000
+
+        account = os.environ.get("USER", "")
+        if not account:
+            return
+
+        new_json = json.dumps(cred_data, ensure_ascii=False)
+        subprocess.run(
+            [
+                "security",
+                "add-generic-password",
+                "-U",
+                "-s",
+                _KEYCHAIN_SERVICE,
+                "-a",
+                account,
+                "-w",
+                new_json,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except Exception:
+        logger.debug("Failed to update Keychain credentials")
+
+
 # ── Claude (Anthropic OAuth) ─────────────────────────────────────────────────
 
 _ANTHROPIC_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -242,7 +385,12 @@ def _refresh_claude_token(cred_path: Path, refresh_token: str) -> str | None:
 
 
 def _select_best_claude_credential() -> tuple[Path | None, str | None, str | None, int]:
-    """Return (credential_path, access_token, refresh_token, expires_at_ms)."""
+    """Return (credential_path, access_token, refresh_token, expires_at_ms).
+
+    Checks file-based credentials first, then falls back to macOS
+    Keychain.  When credentials come from Keychain, *credential_path*
+    is ``None``.
+    """
     candidates = _discover_claude_cred_paths()
     cred_files: list[Path] = []
     for candidate in candidates:
@@ -276,6 +424,15 @@ def _select_best_claude_credential() -> tuple[Path | None, str | None, str | Non
         except Exception:
             logger.debug("Failed to read Claude credentials from %s", path, exc_info=True)
 
+    # macOS Keychain fallback — Claude Code 2.0+ stores credentials here
+    if not best_token:
+        kc_token, kc_refresh, kc_expires = _read_keychain_claude_credential()
+        if kc_token:
+            best_token = kc_token
+            best_refresh = kc_refresh
+            best_expires = kc_expires
+            # best_path remains None — indicates Keychain source
+
     return best_path, best_token, best_refresh, best_expires
 
 
@@ -286,10 +443,14 @@ def _read_claude_token() -> str | None:
         return None
 
     now_ms = int(time.time() * 1000)
-    if best_expires < now_ms and best_refresh and best_path:
+    if best_expires < now_ms and best_refresh:
         # Token expired — try refresh
         logger.info("Claude OAuth token expired, attempting refresh...")
-        refreshed = _refresh_claude_token(best_path, best_refresh)
+        if best_path:
+            refreshed = _refresh_claude_token(best_path, best_refresh)
+        else:
+            # Keychain source — refresh via API and write back to Keychain
+            refreshed = _refresh_keychain_claude_token(best_refresh)
         if refreshed:
             return refreshed
         logger.warning("Token refresh failed; returning expired token for error reporting")
@@ -301,32 +462,34 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
     """Try token refresh first; fall back to Claude Code CLI login guidance."""
     _clear_usage_cache("claude")
     executable = get_claude_executable()
-    login_cmd = f"{executable} /login" if executable else "claude login"
+    login_cmd = f"{executable} auth login" if executable else "claude auth login"
     if not executable:
         return (
             {
                 "success": False,
-                "message": f"Claude Code CLI not found. Install it, then run '{login_cmd}' in CMD.",
+                "message": f"Claude Code CLI not found. Install it, then run '{login_cmd}'.",
                 "manual_command": login_cmd,
             },
             400,
         )
 
     best_path, best_token, best_refresh, best_expires = _select_best_claude_credential()
-    if not best_path or not best_token:
+    if not best_token:
         launched = _launch_claude_login_terminal(executable)
         return (
             {
                 "success": launched,
-                "message": f"Opened a CMD window for '{login_cmd}'."
+                "message": f"Opened a terminal for '{login_cmd}'."
                 if launched
-                else f"No Claude credentials found. Run '{login_cmd}' in CMD.",
+                else f"No Claude credentials found. Run '{login_cmd}'.",
                 "manual_command": login_cmd,
                 "executable": executable,
                 "terminal_launched": launched,
             },
             200 if launched else 400,
         )
+
+    source = str(best_path) if best_path else "keychain"
 
     now_ms = int(time.time() * 1000)
     if best_expires > now_ms:
@@ -337,11 +500,11 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
                 "success": True,
                 "message": (
                     f"Claude token is already fresh (expires in ~{mins} min). "
-                    f"Opened a CMD window for '{login_cmd}' anyway so you can force re-auth manually."
+                    f"Opened a terminal for '{login_cmd}' anyway so you can force re-auth manually."
                     if launched
                     else f"Claude token is already fresh (expires in ~{mins} min). If usage still fails, it is likely a provider-side rate limit rather than expired auth."
                 ),
-                "file": str(best_path),
+                "source": source,
                 "executable": executable,
                 "terminal_launched": launched,
                 "manual_command": login_cmd,
@@ -354,25 +517,28 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
         return (
             {
                 "success": launched,
-                "message": f"Opened a CMD window for '{login_cmd}'."
+                "message": f"Opened a terminal for '{login_cmd}'."
                 if launched
-                else f"Claude token is expired and no refresh token is available. Run '{login_cmd}' in CMD.",
+                else f"Claude token is expired and no refresh token is available. Run '{login_cmd}'.",
                 "manual_command": login_cmd,
-                "file": str(best_path),
+                "source": source,
                 "executable": executable,
                 "terminal_launched": launched,
             },
             200 if launched else 400,
         )
 
-    refreshed = _refresh_claude_token(best_path, best_refresh)
+    if best_path:
+        refreshed = _refresh_claude_token(best_path, best_refresh)
+    else:
+        refreshed = _refresh_keychain_claude_token(best_refresh)
     _clear_usage_cache("claude")
     if refreshed:
         return (
             {
                 "success": True,
                 "message": "Claude token refresh succeeded.",
-                "file": str(best_path),
+                "source": source,
                 "executable": executable,
             },
             200,
@@ -382,9 +548,9 @@ def _relogin_claude() -> tuple[dict[str, Any], int]:
     return (
         {
             "success": launched,
-            "message": f"Claude token refresh failed, so a CMD window for '{login_cmd}' was opened."
-            if launched
-            else f"Claude token refresh failed. Run '{login_cmd}' in CMD.",
+            "message": f"Claude token refresh failed. Run '{login_cmd}' to re-authenticate."
+            if not launched
+            else f"Claude token refresh failed, opened a terminal for '{login_cmd}'.",
             "manual_command": login_cmd,
             "executable": executable,
             "terminal_launched": launched,

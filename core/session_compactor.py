@@ -42,6 +42,16 @@ _CHAT_ENTRY_TYPES = frozenset(
 _TOOL_INPUT_TRUNCATE = 500
 _TOOL_RESULT_TRUNCATE = 500
 _SCAN_DAYS = 2
+_MAX_RESPONSE_CHARS = 8000
+
+# ── Idle-compaction LLM summary constants ─────────────────
+# The summary input uses a wider extraction window than the saved
+# digest so the LLM can compress more history than the raw handoff
+# carries verbatim.
+_SUMMARY_MAX_CONVERSATION_ROUNDS = 10
+_SUMMARY_MAX_RESPONSE_CHARS = 16_000
+_SUMMARY_TIMEOUT_S = 60.0
+_SUMMARY_MAX_TOKENS = 1000
 
 # LRU limit for _timers (same as conversation_locks).
 _MAX_TIMERS = 20
@@ -236,6 +246,10 @@ class SessionCompactor:
 def _extract_recent_chat_context(
     anima_dir: Path,
     thread_id: str = "default",
+    *,
+    max_rounds: int = _MAX_CONVERSATION_ROUNDS,
+    max_tools: int = _MAX_TOOL_ENTRIES,
+    max_response_chars: int = _MAX_RESPONSE_CHARS,
 ) -> dict[str, Any]:
     """Extract recent chat context from the activity_log.
 
@@ -243,8 +257,8 @@ def _extract_recent_chat_context(
     reverse to collect the most recent chat session entries matching
     the given *thread_id*:
 
-    - Up to ``_MAX_CONVERSATION_ROUNDS`` user/assistant exchange rounds
-    - Up to ``_MAX_TOOL_ENTRIES`` tool_use + tool_result pairs
+    - Up to ``max_rounds`` user/assistant exchange rounds
+    - Up to ``max_tools`` tool_use + tool_result pairs
 
     Returns a dict with keys matching ``SessionState`` fields:
     ``accumulated_response``, ``tool_uses``, ``original_prompt``,
@@ -312,23 +326,19 @@ def _extract_recent_chat_context(
     for entry in reversed(raw_entries):
         etype = entry.get("type") or entry.get("event", "")
 
-        if etype == "message_received" and user_count < _MAX_CONVERSATION_ROUNDS:
+        if etype == "message_received" and user_count < max_rounds:
             turns.append({"role": "user", "content": entry.get("content", "")})
             user_count += 1
-        elif etype == "response_sent" and assistant_count < _MAX_CONVERSATION_ROUNDS:
+        elif etype == "response_sent" and assistant_count < max_rounds:
             content = entry.get("content", "") or entry.get("summary", "")
             turns.append({"role": "assistant", "content": content})
             assistant_count += 1
-        elif etype in ("tool_use", "tool_result") and tool_count < _MAX_TOOL_ENTRIES:
+        elif etype in ("tool_use", "tool_result") and tool_count < max_tools:
             meta = entry.get("meta") or {}
             turns.append({"role": etype, "entry": entry, "meta": meta})
             tool_count += 1
 
-        if (
-            user_count >= _MAX_CONVERSATION_ROUNDS
-            and assistant_count >= _MAX_CONVERSATION_ROUNDS
-            and tool_count >= _MAX_TOOL_ENTRIES
-        ):
+        if user_count >= max_rounds and assistant_count >= max_rounds and tool_count >= max_tools:
             break
 
     turns.reverse()
@@ -380,13 +390,84 @@ def _extract_recent_chat_context(
             break
 
     return {
-        "accumulated_response": "\n".join(conversation_parts)[:8000],
-        "tool_uses": tool_uses[-_MAX_TOOL_ENTRIES:],
+        "accumulated_response": "\n".join(conversation_parts)[:max_response_chars],
+        "tool_uses": tool_uses[-max_tools:] if max_tools > 0 else [],
         "original_prompt": first_user[:2000],
         "timestamp": now.isoformat(),
         "trigger": "idle_compaction",
         "notes": "Auto-extracted from activity_log (session discarded)",
     }
+
+
+# ── Idle-compaction LLM summary ───────────────────────────────
+
+
+async def _generate_idle_summary(anima_dir: Path, thread_id: str) -> str | None:
+    """Generate an LLM conversation summary for the idle-compaction handoff.
+
+    Re-extracts a wider activity_log window (``_SUMMARY_MAX_CONVERSATION_ROUNDS``
+    rounds, ``_SUMMARY_MAX_RESPONSE_CHARS`` chars) than the saved digest and
+    asks the consolidation LLM for a compact summary. The summary is stored
+    in the shortterm handoff so the next session inherits context that the
+    verbatim digest alone would lose.
+
+    Best-effort: returns ``None`` on empty context, LLM failure, empty
+    completion, or timeout (``_SUMMARY_TIMEOUT_S``). Callers must fall back
+    to the plain digest-only handoff.
+    """
+    from core.memory._llm_utils import one_shot_completion
+
+    ctx = _extract_recent_chat_context(
+        anima_dir,
+        thread_id=thread_id,
+        max_rounds=_SUMMARY_MAX_CONVERSATION_ROUNDS,
+        max_response_chars=_SUMMARY_MAX_RESPONSE_CHARS,
+    )
+    conversation = ctx.get("accumulated_response", "")
+    if not conversation.strip():
+        return None
+
+    tool_lines = "\n".join(
+        f"- {tu.get('name', '?')}: {str(tu.get('input', ''))[:200]}" for tu in ctx.get("tool_uses", [])
+    )
+    user_content = conversation
+    if tool_lines:
+        user_content += f"\n\n[tools used]\n{tool_lines}"
+
+    try:
+        from core.paths import load_prompt
+
+        system = load_prompt("memory/idle_compaction_summary")
+    except Exception:
+        logger.debug("idle_compaction_summary prompt template missing; using inline fallback", exc_info=True)
+        system = (
+            "Summarize the following conversation concisely as bullet points. "
+            "Keep topics, decisions, action items, open questions, key facts and names."
+        )
+
+    try:
+        summary = await asyncio.wait_for(
+            one_shot_completion(
+                user_content,
+                system_prompt=system,
+                max_tokens=_SUMMARY_MAX_TOKENS,
+            ),
+            timeout=_SUMMARY_TIMEOUT_S,
+        )
+    except TimeoutError:
+        logger.warning(
+            "_generate_idle_summary: LLM summary timed out after %.0fs (thread=%s)",
+            _SUMMARY_TIMEOUT_S,
+            thread_id,
+        )
+        return None
+    except Exception:
+        logger.warning("_generate_idle_summary: LLM summary failed (thread=%s)", thread_id, exc_info=True)
+        return None
+
+    if not summary or not summary.strip():
+        return None
+    return summary.strip()
 
 
 # ── Mode-specific compaction ──────────────────────────────────
@@ -408,17 +489,48 @@ async def _compact_mode_s_shared(
     ctx = _extract_recent_chat_context(anima_dir, thread_id=thread_id)
     if ctx.get("accumulated_response") or ctx.get("tool_uses"):
         shortterm = ShortTermMemory(anima_dir, session_type="chat", thread_id=thread_id)
-        shortterm.save(
-            SessionState(
-                accumulated_response=ctx.get("accumulated_response", ""),
-                tool_uses=ctx.get("tool_uses", []),
-                original_prompt=ctx.get("original_prompt", ""),
-                timestamp=ctx.get("timestamp", ""),
-                trigger=trigger,
-                notes=notes or ctx.get("notes", ""),
+        existing = shortterm.load()
+        if existing is not None and existing.trigger != "idle_compaction":
+            # A higher-fidelity handoff is already pending (e.g. the
+            # context-threshold save from _agent_cycle, which carries the
+            # full accumulated response, tool context and usage ratio).
+            # Overwriting it with the lossy activity_log digest would
+            # archive/replace that handoff before the next message can
+            # inject it — the race that caused recent-conversation
+            # amnesia. Keep the pending state and skip the save.
+            logger.info(
+                "_compact_mode_s: pending shortterm preserved "
+                "(trigger=%s, ts=%s); skipping activity_log overwrite "
+                "(anima=%s, thread=%s)",
+                existing.trigger,
+                existing.timestamp,
+                anima_name,
+                thread_id,
             )
-        )
-        logger.info("_compact_mode_s: shortterm saved from activity_log")
+        else:
+            # Fix 3: enrich the handoff with an LLM conversation summary so
+            # the next session inherits context beyond the verbatim digest.
+            # Best-effort — on failure the digest-only handoff is saved as before.
+            summary = await _generate_idle_summary(anima_dir, thread_id)
+            notes = ctx.get("notes", "")
+            if summary:
+                header = "[LLM conversation summary]"
+                notes = f"{header}\n{summary}\n\n{notes}" if notes else f"{header}\n{summary}"
+            shortterm.save(
+                SessionState(
+                    accumulated_response=ctx.get("accumulated_response", ""),
+                    tool_uses=ctx.get("tool_uses", []),
+                    original_prompt=ctx.get("original_prompt", ""),
+                    timestamp=ctx.get("timestamp", ""),
+                    trigger=ctx.get("trigger", trigger),
+                    notes=notes,
+                )
+            )
+            logger.info(
+                "_compact_mode_s: shortterm saved from activity_log (llm_summary=%s)",
+                bool(summary),
+            )
+
     _clear_session_id(anima_dir, SESSION_TYPE_CHAT, thread_id)
     logger.info("_compact_mode_s: session_id cleared (anima=%s, thread=%s)", anima_name, thread_id)
     return True

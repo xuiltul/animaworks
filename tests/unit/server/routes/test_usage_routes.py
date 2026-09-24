@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import urllib.error
 from pathlib import Path
 
@@ -146,3 +147,170 @@ def test_fetch_openai_usage_refreshes_after_401(monkeypatch):
     assert result["5h"]["remaining"] == 88
     assert result["Week"]["remaining"] == 66
     assert len(calls) == 2
+
+
+# ── macOS Keychain tests ──────────────────────────────────────────────────
+
+
+def _keychain_json(access_token: str = "sk-test", refresh_token: str = "rt-test", expires_at: int = 9999999999999) -> str:
+    return json.dumps(
+        {
+            "claudeAiOauth": {
+                "accessToken": access_token,
+                "refreshToken": refresh_token,
+                "expiresAt": expires_at,
+            }
+        }
+    )
+
+
+def _fake_security_run(keychain_json: str):
+    """Return a callable that simulates ``security find-generic-password -w``."""
+
+    def _run(cmd, *, capture_output=False, text=False, timeout=None):
+        result = subprocess.CompletedProcess(cmd, 0, stdout=keychain_json + "\n", stderr="")
+        return result
+
+    return _run
+
+
+def test_read_keychain_claude_credential_returns_token(monkeypatch):
+    kc_json = _keychain_json("sk-abc", "rt-xyz", 1700000000000)
+    monkeypatch.setattr(usage_routes.sys, "platform", "darwin")
+    monkeypatch.setattr(usage_routes.subprocess, "run", _fake_security_run(kc_json))
+
+    token, refresh, expires = usage_routes._read_keychain_claude_credential()
+
+    assert token == "sk-abc"
+    assert refresh == "rt-xyz"
+    assert expires == 1700000000000
+
+
+def test_read_keychain_credential_returns_none_on_non_darwin(monkeypatch):
+    monkeypatch.setattr(usage_routes.sys, "platform", "linux")
+
+    token, refresh, expires = usage_routes._read_keychain_claude_credential()
+
+    assert token is None
+    assert refresh is None
+    assert expires == 0
+
+
+def test_read_keychain_credential_returns_none_on_security_failure(monkeypatch):
+    monkeypatch.setattr(usage_routes.sys, "platform", "darwin")
+
+    def _failing_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="not found")
+
+    monkeypatch.setattr(usage_routes.subprocess, "run", _failing_run)
+
+    token, refresh, expires = usage_routes._read_keychain_claude_credential()
+
+    assert token is None
+
+
+def test_select_best_claude_credential_falls_back_to_keychain(monkeypatch):
+    """When no .credentials.json exists, Keychain provides the token."""
+    # Make file discovery return nothing
+    monkeypatch.setattr(usage_routes, "_discover_claude_cred_paths", lambda: [])
+    # Provide Keychain credentials
+    kc_json = _keychain_json("sk-kc", "rt-kc", 2000000000000)
+    monkeypatch.setattr(usage_routes.sys, "platform", "darwin")
+    monkeypatch.setattr(usage_routes.subprocess, "run", _fake_security_run(kc_json))
+
+    path, token, refresh, expires = usage_routes._select_best_claude_credential()
+
+    assert path is None  # Keychain source indicated by None path
+    assert token == "sk-kc"
+    assert refresh == "rt-kc"
+    assert expires == 2000000000000
+
+
+def test_select_best_credential_prefers_file_over_keychain(monkeypatch, tmp_path):
+    """File-based credentials take priority over Keychain."""
+    cred_file = tmp_path / ".credentials.json"
+    cred_file.write_text(
+        json.dumps(
+            {
+                "claudeAiOauth": {
+                    "accessToken": "sk-file",
+                    "refreshToken": "rt-file",
+                    "expiresAt": 3000000000000,
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(usage_routes, "_discover_claude_cred_paths", lambda: [str(cred_file)])
+    # Keychain also has credentials but should NOT be used
+    kc_json = _keychain_json("sk-kc-should-not-be-used", "rt-kc", 1000000000000)
+    monkeypatch.setattr(usage_routes.sys, "platform", "darwin")
+    monkeypatch.setattr(usage_routes.subprocess, "run", _fake_security_run(kc_json))
+
+    path, token, refresh, expires = usage_routes._select_best_claude_credential()
+
+    assert path == cred_file
+    assert token == "sk-file"
+
+
+def test_read_claude_token_uses_keychain_refresh(monkeypatch):
+    """When token is expired and from Keychain, refresh via Keychain path."""
+    expired_ms = 1000  # long expired
+    monkeypatch.setattr(
+        usage_routes,
+        "_select_best_claude_credential",
+        lambda: (None, "sk-expired", "rt-kc", expired_ms),
+    )
+    monkeypatch.setattr(
+        usage_routes,
+        "_refresh_keychain_claude_token",
+        lambda rt: "sk-refreshed" if rt == "rt-kc" else None,
+    )
+
+    token = usage_routes._read_claude_token()
+
+    assert token == "sk-refreshed"
+
+
+def test_fetch_claude_usage_works_with_keychain(monkeypatch):
+    """End-to-end: Keychain token → successful usage fetch."""
+    monkeypatch.setattr(usage_routes, "_CACHE", {})
+    monkeypatch.setattr(
+        usage_routes,
+        "_read_claude_token",
+        lambda: "sk-kc-token",
+    )
+
+    def fake_urlopen(req, timeout=0):
+        assert "Bearer sk-kc-token" in req.headers.get("Authorization", "")
+        return _FakeResponse(
+            {
+                "five_hour": {"utilization": 25, "resets_at": "2026-09-14T02:00:00+00:00"},
+                "seven_day": {"utilization": 60, "resets_at": "2026-09-20T00:00:00+00:00"},
+            }
+        )
+
+    monkeypatch.setattr(usage_routes.urllib.request, "urlopen", fake_urlopen)
+
+    result = usage_routes._fetch_claude_usage(skip_cache=True)
+
+    assert result["provider"] == "claude"
+    assert result["five_hour"]["remaining"] == 75
+    assert result["seven_day"]["remaining"] == 40
+
+
+def test_keychain_credential_values_not_in_logs(monkeypatch, caplog):
+    """Ensure credential values are never logged."""
+    import logging
+
+    kc_json = _keychain_json("sk-secret-token-value", "rt-secret-refresh", 9999999999999)
+    monkeypatch.setattr(usage_routes.sys, "platform", "darwin")
+    monkeypatch.setattr(usage_routes.subprocess, "run", _fake_security_run(kc_json))
+
+    with caplog.at_level(logging.DEBUG, logger="animaworks.routes.usage"):
+        token, _, _ = usage_routes._read_keychain_claude_credential()
+
+    assert token == "sk-secret-token-value"
+    # Credential values must not appear in log output
+    for record in caplog.records:
+        assert "sk-secret-token-value" not in record.getMessage()
+        assert "rt-secret-refresh" not in record.getMessage()

@@ -59,8 +59,6 @@ logger = logging.getLogger("animaworks.execution.codex_sdk")
 
 __all__ = ["CodexSDKExecutor", "clear_codex_thread_id", "clear_codex_thread_ids", "is_codex_sdk_available"]
 
-RESUME_TIMEOUT_SEC = 15.0
-
 
 def _idle_timeout_from_env(env_name: str, default: float) -> float:
     raw = os.environ.get(env_name, "").strip()
@@ -80,6 +78,12 @@ def _idle_timeout_from_env(env_name: str, default: float) -> float:
 # 検知するため、ここは緩めでよい。時間より正確性優先の運用方針 (2026-07-10)。
 _BACKGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env("ANIMAWORKS_CODEX_BG_IDLE_TIMEOUT_SEC", 600.0)
 _FOREGROUND_EVENT_IDLE_TIMEOUT_SEC = _idle_timeout_from_env("ANIMAWORKS_CODEX_FG_IDLE_TIMEOUT_SEC", 1200.0)
+
+# Fix 4a (2026-09-19): first-event timeout when resuming a thread.  The
+# original 15 s was routinely exceeded on a loaded host (40+ runners),
+# discarding valid sessions.  Shares the same knob as the Claude SDK resume
+# guard so one env var controls both executors.
+RESUME_TIMEOUT_SEC = _idle_timeout_from_env("ANIMAWORKS_SDK_RESUME_TIMEOUT_SEC", 60.0)
 
 # asyncio.StreamReader default limit is 64 KB.  Codex CLI may echo the full
 # context (including system prompt) in a single JSONL line during thread

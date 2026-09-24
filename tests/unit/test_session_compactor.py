@@ -371,6 +371,15 @@ class TestModeSpecificCompaction:
             context_threshold=0.50,
         )
 
+    @pytest.fixture(autouse=True)
+    def _no_llm_summary(self):  # type: ignore[no-untyped-def]
+        """Keep mode-S tests hermetic: never call the real LLM summary."""
+        with patch(
+            "core.session_compactor._generate_idle_summary",
+            new=AsyncMock(return_value=None),
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_compact_mode_a_calls_compress_and_finalize(self, anima_dir: Path, model_config: ModelConfig) -> None:
         """_compact_mode_a calls compress_if_needed and finalize_if_session_ended."""
@@ -585,6 +594,120 @@ class TestModeSpecificCompaction:
         assert not session_file.exists()
 
     @pytest.mark.asyncio
+    async def test_compact_mode_s_preserves_pending_threshold_shortterm(self, anima_dir: Path) -> None:
+        """_compact_mode_s must NOT overwrite a pending threshold-save handoff.
+
+        When _agent_cycle saved a high-fidelity shortterm state on context
+        threshold (trigger != "idle_compaction") and it has not yet been
+        consumed by the next message, idle compaction must keep it instead
+        of replacing it with the lossy activity_log digest.
+        """
+        from core.time_utils import now_local
+
+        # Pending high-fidelity handoff from a context-threshold save
+        pending_dir = anima_dir / "shortterm" / "chat"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        pending_state = {
+            "session_id": "sess-thresh",
+            "timestamp": "2026-04-13T11:59:00+09:00",
+            "trigger": "chat",
+            "original_prompt": "long-running request",
+            "accumulated_response": "HIGH-FIDELITY HANDOFF CONTENT",
+            "tool_uses": [],
+            "context_usage_ratio": 0.92,
+            "turn_count": 42,
+            "notes": "",
+        }
+        (pending_dir / "session_state.json").write_text(
+            json.dumps(pending_state, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        # Non-empty activity_log so the idle-compaction ctx is non-empty
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+            {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "Hi there.", "meta": {"thread_id": "default"}},
+        ]
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+        session_file = anima_dir / "state" / "current_session_chat.json"
+        session_file.write_text(
+            json.dumps({"session_id": "sess-123", "timestamp": "2026-04-13T12:00:00Z"}),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        # Pending handoff preserved verbatim (not archived / overwritten)
+        state = json.loads((pending_dir / "session_state.json").read_text(encoding="utf-8"))
+        assert state["trigger"] == "chat"
+        assert state["accumulated_response"] == "HIGH-FIDELITY HANDOFF CONTENT"
+        assert state["context_usage_ratio"] == 0.92
+        # No archive entry was created by an overwrite
+        archive_dir = pending_dir / "archive"
+        assert not archive_dir.exists() or not any(archive_dir.iterdir())
+        # Session is still cleared so the next chat starts fresh
+        assert not session_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_overwrites_previous_idle_compaction_state(self, anima_dir: Path) -> None:
+        """A stale idle_compaction-trigger state is refreshed (same fidelity)."""
+        from core.time_utils import now_local
+
+        pending_dir = anima_dir / "shortterm" / "chat"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        stale_state = {
+            "session_id": "",
+            "timestamp": "2026-04-12T09:00:00+09:00",
+            "trigger": "idle_compaction",
+            "original_prompt": "old prompt",
+            "accumulated_response": "STALE IDLE DIGEST",
+            "tool_uses": [],
+            "context_usage_ratio": 0.0,
+            "turn_count": 0,
+            "notes": "",
+        }
+        (pending_dir / "session_state.json").write_text(
+            json.dumps(stale_state, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Fresh message", "meta": {"from_type": "human", "thread_id": "default"}},
+            {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "Fresh reply.", "meta": {"thread_id": "default"}},
+        ]
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        state = json.loads((pending_dir / "session_state.json").read_text(encoding="utf-8"))
+        assert state["trigger"] == "idle_compaction"
+        assert "Fresh message" in state["accumulated_response"]
+        assert "STALE IDLE DIGEST" not in state["accumulated_response"]
+
+    @pytest.mark.asyncio
     async def test_compact_mode_s_empty_log_clears_session_only(self, anima_dir: Path) -> None:
         """_compact_mode_s with empty activity_log clears session without saving shortterm."""
         session_file = anima_dir / "state" / "current_session_chat.json"
@@ -618,6 +741,206 @@ class TestModeSpecificCompaction:
         await _compact_mode_s(anima, "default")
 
         mock_executor.compact_session.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_includes_llm_summary_in_notes(self, anima_dir: Path) -> None:
+        """Fix 3: when the LLM summary succeeds it is prepended to the notes."""
+        from core.time_utils import now_local
+
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Deploy the site", "meta": {"from_type": "human", "thread_id": "default"}},
+            {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "Deployed to staging.", "meta": {"thread_id": "default"}},
+        ]
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        summary_mock = AsyncMock(return_value="- staging deploy done\n- production pending approval")
+        with patch("core.session_compactor._generate_idle_summary", new=summary_mock):
+            result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        summary_mock.assert_awaited_once_with(anima_dir, "default")
+        state = json.loads(
+            (anima_dir / "shortterm" / "chat" / "session_state.json").read_text(encoding="utf-8")
+        )
+        assert state["notes"].startswith("[LLM conversation summary]")
+        assert "staging deploy done" in state["notes"]
+        # Original extraction note is preserved after the summary
+        assert "Auto-extracted from activity_log" in state["notes"]
+        # Digest fields unchanged
+        assert "Deploy the site" in state["accumulated_response"]
+        assert state["trigger"] == "idle_compaction"
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_falls_back_to_digest_when_summary_fails(self, anima_dir: Path) -> None:
+        """Fix 3: LLM failure (None) keeps the plain digest-only handoff."""
+        from core.time_utils import now_local
+
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+            {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "Hi.", "meta": {"thread_id": "default"}},
+        ]
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        # autouse fixture already patches _generate_idle_summary → None
+        result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        state = json.loads(
+            (anima_dir / "shortterm" / "chat" / "session_state.json").read_text(encoding="utf-8")
+        )
+        assert "[LLM conversation summary]" not in state["notes"]
+        assert state["notes"] == "Auto-extracted from activity_log (session discarded)"
+
+    @pytest.mark.asyncio
+    async def test_compact_mode_s_no_summary_call_when_pending_handoff_preserved(self, anima_dir: Path) -> None:
+        """Fix 3: the preserve branch (Fix 1) must not spend an LLM call."""
+        from core.time_utils import now_local
+
+        pending_dir = anima_dir / "shortterm" / "chat"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        (pending_dir / "session_state.json").write_text(
+            json.dumps(
+                {
+                    "session_id": "sess-thresh",
+                    "timestamp": "2026-04-13T11:59:00+09:00",
+                    "trigger": "chat",
+                    "original_prompt": "req",
+                    "accumulated_response": "HANDOFF",
+                    "tool_uses": [],
+                    "context_usage_ratio": 0.92,
+                    "turn_count": 42,
+                    "notes": "",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        log_dir = anima_dir / "activity_log"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"{now_local().date().isoformat()}.jsonl"
+        entries = [
+            {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+        ]
+        log_file.write_text(json.dumps(entries[0], ensure_ascii=False), encoding="utf-8")
+
+        anima = MagicMock()
+        anima.anima_dir = anima_dir
+        anima.name = "test"
+
+        summary_mock = AsyncMock(return_value="should not be used")
+        with patch("core.session_compactor._generate_idle_summary", new=summary_mock):
+            result = await _compact_mode_s(anima, "default")
+
+        assert result is True
+        summary_mock.assert_not_awaited()
+
+
+# ── _generate_idle_summary ────────────────────────────────────────────────────
+
+
+class TestGenerateIdleSummary:
+    """Fix 3: LLM conversation summary for the idle-compaction handoff."""
+
+    @pytest.fixture
+    def anima_dir(self, tmp_path: Path) -> Path:
+        d = tmp_path / "animas" / "test"
+        (d / "activity_log").mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _write_log(self, anima_dir: Path, entries: list[dict]) -> None:
+        from core.time_utils import now_local
+
+        log_file = anima_dir / "activity_log" / f"{now_local().date().isoformat()}.jsonl"
+        log_file.write_text(
+            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries),
+            encoding="utf-8",
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_context(self, anima_dir: Path) -> None:
+        """Empty activity_log → None, without any LLM call."""
+        from core.session_compactor import _generate_idle_summary
+
+        llm_mock = AsyncMock(side_effect=AssertionError("LLM must not be called"))
+        with patch("core.memory._llm_utils.one_shot_completion", new=llm_mock):
+            assert await _generate_idle_summary(anima_dir, "default") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_summary_on_success(self, anima_dir: Path) -> None:
+        """Conversation text is passed to the LLM and its output returned."""
+        from core.session_compactor import _generate_idle_summary
+
+        self._write_log(
+            anima_dir,
+            [
+                {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Fix the login bug", "meta": {"from_type": "human", "thread_id": "default"}},
+                {"ts": "2026-04-13T12:00:30+09:00", "type": "response_sent", "content": "Patched auth.py.", "meta": {"thread_id": "default"}},
+            ],
+        )
+
+        llm_mock = AsyncMock(return_value="  - login bug fixed in auth.py  ")
+        with patch("core.memory._llm_utils.one_shot_completion", new=llm_mock):
+            summary = await _generate_idle_summary(anima_dir, "default")
+
+        assert summary == "- login bug fixed in auth.py"
+        llm_mock.assert_awaited_once()
+        user_content = llm_mock.await_args.args[0]
+        assert "Fix the login bug" in user_content
+        assert "Patched auth.py." in user_content
+        assert llm_mock.await_args.kwargs.get("system_prompt")
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_llm_returns_empty(self, anima_dir: Path) -> None:
+        from core.session_compactor import _generate_idle_summary
+
+        self._write_log(
+            anima_dir,
+            [
+                {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+            ],
+        )
+
+        for value in (None, "", "   \n"):
+            llm_mock = AsyncMock(return_value=value)
+            with patch("core.memory._llm_utils.one_shot_completion", new=llm_mock):
+                assert await _generate_idle_summary(anima_dir, "default") is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_llm_exception_or_timeout(self, anima_dir: Path) -> None:
+        from core.session_compactor import _generate_idle_summary
+
+        self._write_log(
+            anima_dir,
+            [
+                {"ts": "2026-04-13T12:00:00+09:00", "type": "message_received", "content": "Hello", "meta": {"from_type": "human", "thread_id": "default"}},
+            ],
+        )
+
+        for exc in (TimeoutError(), RuntimeError("backend down")):
+            llm_mock = AsyncMock(side_effect=exc)
+            with patch("core.memory._llm_utils.one_shot_completion", new=llm_mock):
+                assert await _generate_idle_summary(anima_dir, "default") is None
 
 
 # ── _extract_recent_chat_context ──────────────────────────────────────────────
