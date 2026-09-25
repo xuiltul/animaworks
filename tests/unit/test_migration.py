@@ -702,3 +702,15 @@ class TestRegisterAllSteps:
             < ids.index("v0141_harness_diet_r2_resync")
             < ids.index("update_version")
         )
+
+    def test_step_v0142_registered_after_v0141(self, tmp_path: Path) -> None:
+        from core.migrations.steps import register_all_steps
+
+        runner = MigrationRunner(tmp_path)
+        register_all_steps(runner)
+        ids = [item["id"] for item in runner.list_steps()]
+        assert (
+            ids.index("v0141_harness_diet_r2_resync")
+            < ids.index("v0142_tool_guide_dedup_resync")
+            < ids.index("update_version")
+        )
