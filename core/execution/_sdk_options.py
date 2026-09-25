@@ -48,12 +48,16 @@ logger = logging.getLogger("animaworks.execution.agent_sdk")
 # request.  Measured on this fleet, the tool block is ~69K tokens of a
 # 200K window — three quarters of what an anima carries before a word of
 # conversation.  This is the set the animas actually call (counted from
-# ``ToolResult captured`` across the fleet's logs) plus ``Skill``, which
-# the skill loader needs even where the sample showed no call.  Dropped:
-# DesignSync, EnterWorktree, ExitWorktree, NotebookEdit, RemoteTrigger,
-# ReportFindings, ScheduleWakeup, Workflow and the Task / Task* subagent
-# and background-job family — the Mode S tool guide already tells animas
-# that subagents are off and to delegate through the ``aw`` MCP tools.
+# ``ToolResult captured`` across the fleet's logs).  ``Skill`` has almost
+# no real usage.  ``SendMessage`` and ``ListAgents`` are Claude Code's
+# session-to-session tools, not anima communication: they fail to reach
+# other animas (and can suggest unrelated host sessions).  Anima-to-anima
+# communication uses the aw MCP ``send_message`` tool.  Removing these
+# three saves ~3.2K tokens per request (measured: 10,847 → 7,685).
+# Other dropped tools: DesignSync, EnterWorktree, ExitWorktree, NotebookEdit,
+# RemoteTrigger, ReportFindings, ScheduleWakeup, Workflow and the Task / Task*
+# subagent and background-job family — the Mode S tool guide already tells
+# animas that subagents are off and to delegate through the ``aw`` MCP tools.
 #
 # ``ToolSearch`` has to stay: it is what lets the CLI send tool *names*
 # and fetch schemas on demand.  Dropping it re-sends every schema in full
@@ -65,9 +69,6 @@ BUILTIN_TOOLS: tuple[str, ...] = (
     "Edit",
     "WebSearch",
     "WebFetch",
-    "Skill",
-    "SendMessage",
-    "ListAgents",
     "ToolSearch",
 )
 

@@ -289,7 +289,7 @@ class MemoryManager:
             logger.warning("Failed to read %s", resolved, exc_info=True)
             return ""
 
-    def read_company_vision(self) -> str:
+    def _company_vision_path(self) -> tuple[Path, str]:
         from core.company import get_company
 
         company = get_company(self.anima_dir.name, animas_dir=self.anima_dir.parent)
@@ -299,8 +299,22 @@ class MemoryManager:
             if company_dir.parent == companies_dir:
                 vision_path = company_dir / "vision.md"
                 if vision_path.is_file():
-                    return self._read(vision_path)
-        return self._read(self.company_dir / "vision.md")
+                    return vision_path, str(vision_path)
+        legacy_path = self.company_dir / "vision.md"
+        return legacy_path, str(legacy_path.resolve())
+
+    def read_company_vision(self) -> str:
+        return self._read(self._company_vision_path()[0])
+
+    def read_company_vision_summary(self) -> tuple[str, str] | None:
+        """Read a concise company vision and its full-text memory pointer, if present."""
+        vision_path, reference_path = self._company_vision_path()
+        if not vision_path.is_file():
+            return None
+        summary = self._read(vision_path.with_name("vision_summary.md")).strip()
+        if not summary:
+            return None
+        return summary, reference_path
 
     def read_identity(self) -> str:
         """Read identity.md, stripping YAML frontmatter if present."""
@@ -665,6 +679,21 @@ class MemoryManager:
             entries.append(entry)
         entries.reverse()
         return entries
+
+    def filter_resolutions_by_company(self, resolutions: list[dict[str, str]]) -> list[dict[str, str]]:
+        """Keep resolutions whose resolver belongs to this anima's company."""
+        from core.company import get_company
+
+        animas_dir = self.anima_dir.parent
+        company = get_company(self.anima_dir.name, animas_dir=animas_dir)
+        cache: dict[str, str | None] = {}
+
+        def _company_of(resolver: str) -> str | None:
+            if resolver not in cache:
+                cache[resolver] = get_company(resolver, animas_dir=animas_dir)
+            return cache[resolver]
+
+        return [r for r in resolutions if _company_of(r.get("resolver", "")) == company]
 
     # ── Facade: RAGMemorySearch ───────────────────────────
 

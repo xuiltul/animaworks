@@ -160,6 +160,8 @@ def cmd_config_set(args: argparse.Namespace) -> None:
         "credential",
         "context_threshold",
         "context_absolute_ceiling",
+        "task_compaction_tokens",
+        "task_compaction_max",
         "max_session_age_hours",
         "max_chains",
         "conversation_history_threshold",

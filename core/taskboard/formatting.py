@@ -8,6 +8,7 @@ from pathlib import Path
 from core.i18n import t
 from core.memory.task_queue import (
     _STALE_TASK_THRESHOLD_SEC,
+    _TERMINAL_STATUSES,
     TaskQueueManager,
     _elapsed_seconds,
     _format_elapsed_from_sec,
@@ -34,7 +35,7 @@ def format_tasks_for_priming(
     for task in board_tasks:
         if task.queue_status == "delegated":
             delegated.append(task)
-        else:
+        elif task.queue_status not in _TERMINAL_STATUSES:
             active.append(task)
 
     active.sort(key=lambda task: (0 if task.source == "human" else 1, task.queue_updated_at or ""))

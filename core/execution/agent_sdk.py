@@ -81,6 +81,7 @@ from core.execution._sdk_session import (  # noqa: F401
     _PROMPT_FILE_THRESHOLD,
     _RESUMABLE_SESSION_TYPES,
     _SDK_MAX_BUFFER_SIZE,
+    COMPACT_TIMEOUT_SEC,
     INTERRUPT_TIMEOUT_SEC,
     RESUME_TIMEOUT_SEC,
     SESSION_TYPE_CHAT,
@@ -336,14 +337,27 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         await client.query(message)
         return True
 
-    def _init_session_stats(self, system_prompt: str, prompt: str, trigger: str) -> dict[str, Any]:
+    def _init_session_stats(
+        self,
+        system_prompt: str,
+        prompt: str,
+        trigger: str,
+        *,
+        task_compaction_count: int = 0,
+    ) -> dict[str, Any]:
         """Build the mutable session-stats dict shared with PreToolUse hook."""
+        is_task = trigger.startswith("task:")
         return {
             "tool_call_count": 0,
             "total_result_bytes": 0,
             "system_prompt_tokens": estimate_tokens(system_prompt),
             "user_prompt_tokens": estimate_tokens(prompt),
             "force_chain": False,
+            "task_compact_requested": False,
+            "task_compaction_tokens": self._model_config.task_compaction_tokens if is_task else 0,
+            "task_compaction_count": task_compaction_count,
+            "task_compaction_max": self._model_config.task_compaction_max if is_task else 0,
+            "last_context_tokens": 0,
             "trigger": trigger,
             "start_time": time.monotonic(),
             "hb_soft_warned": False,
@@ -621,6 +635,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             replied_to_from_transcript=replied_to,
             tool_call_records=all_tool_records,
             force_chain=session_stats.get("force_chain", False),
+            task_compact_requested=session_stats.get("task_compact_requested", False),
             usage=usage_acc,
             error=failure is not None,
         )
@@ -636,15 +651,24 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         prior_messages: list[dict[str, Any]] | None = None,
         trigger: str = "",
         thread_id: str = "default",
+        task_compaction_count: int = 0,
+        resume_session_id: str | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Stream events from Claude Agent SDK."""
         from claude_agent_sdk import ClaudeSDKClient, ClaudeSDKError, ProcessError
 
         self._rate_guard_preflight()
         _cw = self._resolve_cw()
-        session_stats = self._init_session_stats(system_prompt, prompt, trigger)
+        session_stats = self._init_session_stats(
+            system_prompt,
+            prompt,
+            trigger,
+            task_compaction_count=task_compaction_count,
+        )
         session_type = _resolve_session_type(trigger)
-        if session_type in _RESUMABLE_SESSION_TYPES:
+        if resume_session_id:
+            session_id_to_resume = resume_session_id
+        elif session_type in _RESUMABLE_SESSION_TYPES:
             session_id_to_resume = _load_session_id(self._anima_dir, session_type, thread_id=thread_id)
         else:
             _sdk_session.clear_session_id_for_type(self._anima_dir, session_type, thread_id=thread_id)
@@ -780,6 +804,11 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
                     _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
                     fell_back = True
                 if fell_back:
+                    if resume_session_id:
+                        raise StreamDisconnectedError(
+                            f"Task SDK session resume failed (session_id={resume_session_id})",
+                            partial_text="\n".join(state.response_text),
+                        )
                     async for ev in _fresh_session():
                         yield ev
             else:
@@ -802,7 +831,7 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
         auth_failure = _detect_sdk_auth_failure(
             _sdk_failure_text(state.result_message, "\n".join(state.response_text), state.sdk_error) or ""
         )
-        if auth_failure and self._should_retry_sdk_auth_failure() and not emitted_text_delta:
+        if auth_failure and self._should_retry_sdk_auth_failure() and not emitted_text_delta and not resume_session_id:
             logger.warning("Claude SDK returned auth failure text during streaming; retrying fresh session once")
             if session_type in _RESUMABLE_SESSION_TYPES:
                 _sdk_session._clear_session_id(self._anima_dir, session_type, thread_id=thread_id)
@@ -852,8 +881,75 @@ class AgentSDKExecutor(SDKOptionsMixin, BaseExecutor):
             "replied_to_from_transcript": replied_to,
             "tool_call_records": [asdict(r) for r in all_tool_records],
             "force_chain": session_stats.get("force_chain", False),
+            "task_compact_requested": session_stats.get("task_compact_requested", False),
+            "session_id": getattr(state.result_message, "session_id", None),
             "usage": state.usage_acc.to_dict(),
         }
+
+    async def compact_session_by_id(
+        self,
+        session_id: str,
+        *,
+        system_prompt: str,
+        trigger: str,
+        summary_instructions: str,
+    ) -> bool:
+        """Compact an active task session while retaining its SDK configuration."""
+        from claude_agent_sdk import ClaudeSDKClient
+
+        if not session_id:
+            return False
+
+        prompt = f"/compact {summary_instructions}"
+        session_stats = self._init_session_stats(system_prompt, prompt, trigger)
+        # The compact command itself must not recursively request task compaction.
+        session_stats["task_compaction_tokens"] = 0
+        options, temp_files = self._build_sdk_options(
+            system_prompt,
+            self._resolve_cw(),
+            session_stats,
+            resume=session_id,
+            include_partial_messages=True,
+        )
+        sdk_pid: int | None = None
+        sdk_pid_create_time: float | None = None
+        active_client: Any = None
+        compacted = False
+        try:
+            async with asyncio.timeout(COMPACT_TIMEOUT_SEC):
+                async with ClaudeSDKClient(options=options) as client:
+                    active_client = client
+                    self._active_client = client
+                    sdk_pid = _extract_sdk_pid(client)
+                    if sdk_pid is not None:
+                        try:
+                            sdk_pid_create_time = float(psutil.Process(sdk_pid).create_time())
+                        except Exception:
+                            logger.debug("failed to read create_time for SDK subprocess pid=%s", sdk_pid, exc_info=True)
+                    await client.query(prompt)
+                    async for message in client.receive_messages():
+                        if type(message).__name__ == "ResultMessage":
+                            compacted = bool(getattr(message, "session_id", None))
+                            break
+            logger.info(
+                "Task SDK session compaction %s (session=%s, task_id=%s)",
+                "completed" if compacted else "did not return a session id",
+                session_id,
+                trigger.removeprefix("task:"),
+            )
+            return compacted
+        except Exception:
+            logger.exception(
+                "Task SDK session compaction failed (session=%s, task_id=%s)",
+                session_id,
+                trigger.removeprefix("task:"),
+            )
+            return False
+        finally:
+            if self._active_client is active_client:
+                self._active_client = None
+            _kill_sdk_process(sdk_pid, sdk_pid_create_time)
+            _cleanup_prompt_files(temp_files)
 
     async def compact_session(
         self,

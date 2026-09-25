@@ -39,6 +39,68 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "ストリームが{retry_count}回切断されました。最大リトライ回数に達しました。",
         "en": "Stream disconnected {retry_count} time(s). Max retries reached.",
     },
+    "task.compaction_summary_instructions": {
+        "ja": (
+            "次の見出しで要約してください。\n"
+            "## タスクの目的と完了条件\n"
+            "## 完了した手順（結果・根拠となるID/コミット/URL/数値を正確に）\n"
+            "## 進行中の手順と次にやること\n"
+            "## 判明した事実・制約・失敗した試行とその理由\n"
+            "## 読んだファイル\n"
+            "## 変更したファイル\n"
+            "## 未解決の疑問\n"
+            "固有名詞・ID・パス・コマンドは省略せず原文のまま残してください。"
+        ),
+        "en": (
+            "Summarize using these headings:\n"
+            "## Task purpose and completion criteria\n"
+            "## Completed steps (preserve results and exact evidence IDs/commits/URLs/numbers)\n"
+            "## In-progress steps and next actions\n"
+            "## Discovered facts, constraints, and failed attempts with reasons\n"
+            "## Files read\n"
+            "## Files changed\n"
+            "## Unresolved questions\n"
+            "Do not omit or alter proper nouns, IDs, paths, or commands; preserve them verbatim."
+        ),
+        "ko": (
+            "다음 제목으로 요약하세요:\n"
+            "## 작업 목적 및 완료 조건\n"
+            "## 완료한 단계(결과와 근거 ID/커밋/URL/수치를 정확히 보존)\n"
+            "## 진행 중인 단계와 다음 작업\n"
+            "## 확인된 사실, 제약, 실패한 시도와 그 이유\n"
+            "## 읽은 파일\n"
+            "## 변경한 파일\n"
+            "## 해결되지 않은 질문\n"
+            "고유명사, ID, 경로, 명령은 생략하거나 바꾸지 말고 원문 그대로 보존하세요."
+        ),
+    },
+    "task.compacted_activity_summary": {
+        "ja": "タスク実行中の文脈を圧縮しました",
+        "en": "Compacted task execution context",
+        "ko": "작업 실행 문맥을 압축했습니다",
+    },
+    "task.compacted_after_activity_summary": {
+        "ja": "文脈圧縮後に同一タスクセッションを再開しました",
+        "en": "Resumed the same task session after context compaction",
+        "ko": "문맥 압축 후 동일한 작업 세션을 재개했습니다",
+    },
+    "task.compaction_continue_prompt": {
+        "ja": (
+            "文脈を圧縮しました。以下が元のタスク指示です。圧縮前の続きから作業を再開し、"
+            "完了済みの手順は繰り返さないでください。\n\n"
+            "## 元のタスク指示\n{original_prompt}"
+        ),
+        "en": (
+            "The context has been compacted. The original task instructions are below. Resume from where "
+            "you left off before compaction, and do not repeat steps that are already complete.\n\n"
+            "## Original task instructions\n{original_prompt}"
+        ),
+        "ko": (
+            "문맥을 압축했습니다. 아래는 원래 작업 지시입니다. 압축 전 진행하던 지점부터 다시 시작하고, "
+            "이미 완료한 단계는 반복하지 마세요.\n\n"
+            "## 원래 작업 지시\n{original_prompt}"
+        ),
+    },
     "assisted.tool_exec_error": {
         "ja": "ツール実行エラー: {error}",
         "en": "Tool execution error: {error}",

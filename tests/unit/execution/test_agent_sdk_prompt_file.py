@@ -294,10 +294,13 @@ class TestMcpIsolation:
                 {},
             )
         assert options.extra_args["tools"] == ",".join(BUILTIN_TOOLS)
-        # Bash carries almost all real tool traffic; Skill is what the
-        # skill loader needs.  Losing either would be silent.
+        # Bash carries almost all real tool traffic. Skill has almost no
+        # usage; SendMessage/ListAgents are Claude-session tools, not anima
+        # communication (which uses aw MCP send_message).
         assert "Bash" in BUILTIN_TOOLS
-        assert "Skill" in BUILTIN_TOOLS
+        assert "Skill" not in BUILTIN_TOOLS
+        assert "SendMessage" not in BUILTIN_TOOLS
+        assert "ListAgents" not in BUILTIN_TOOLS
         # Losing ToolSearch re-sends every schema in full (+11K measured).
         assert "ToolSearch" in BUILTIN_TOOLS
         # Subagents are off for animas; delegation goes through aw MCP.

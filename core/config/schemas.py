@@ -122,6 +122,8 @@ class AnimaDefaults(BaseModel):
     credential: str = "anthropic"
     context_threshold: float = 0.50
     context_absolute_ceiling: float = 0.75
+    task_compaction_tokens: int = 0
+    task_compaction_max: int = 6
     max_session_age_hours: float = 24.0
     max_chains: int = 2
     conversation_history_threshold: float = 0.30
@@ -925,8 +927,13 @@ class HeartbeatConfig(BaseModel):
         ge=0,
         description="Max chars for current_state.md before trim; 0 = disabled",
     )
+    current_state_cleanup_chars: int = Field(
+        default=2000,
+        ge=0,
+        description="Soft cleanup threshold for current_state.md; 0 = 80% of current_state_max_chars",
+    )
     heartbeat_md_max_bytes: int = Field(
-        default=20000,
+        default=8000,
         ge=0,
         description=(
             "Max bytes of heartbeat.md before a compaction instruction is "

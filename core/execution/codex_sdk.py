@@ -1542,10 +1542,15 @@ class CodexSDKExecutor(BaseExecutor):
             "codex_reasoning_effort"
         ) or self._model_config.thinking_effort
         effort_line = f'model_reasoning_effort = "{esc(reasoning_effort)}"\n' if reasoning_effort else ""
+        task_compaction_tokens = self._model_config.task_compaction_tokens
+        task_compaction_line = (
+            f"model_auto_compact_token_limit = {task_compaction_tokens}\n" if task_compaction_tokens > 0 else ""
+        )
 
         config_toml = (
             f'model = "{esc(provider_config.model)}"\n'
             f"{effort_line}"
+            f"{task_compaction_line}"
             f'model_provider = "{esc(provider_config.provider)}"\n'
             f'model_instructions_file = "{esc(str(instructions_file))}"\n'
             f'developer_instructions = "{esc(self._CODEX_DEVELOPER_INSTRUCTIONS)}"\n'

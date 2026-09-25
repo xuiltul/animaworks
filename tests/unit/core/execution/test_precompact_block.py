@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -48,8 +49,7 @@ from core.prompt.context import CHARS_PER_TOKEN  # noqa: E402
 def anima_dir(tmp_path: Path) -> Path:
     """Create a minimal anima directory for hook construction."""
     d = tmp_path / "animas" / "test-precompact"
-    for sub in ("state", "episodes", "knowledge", "procedures",
-                "skills", "shortterm", "activity_log"):
+    for sub in ("state", "episodes", "knowledge", "procedures", "skills", "shortterm", "activity_log"):
         (d / sub).mkdir(parents=True)
     (d / "identity.md").write_text("# Test", encoding="utf-8")
     (d / "injection.md").write_text("", encoding="utf-8")
@@ -65,9 +65,63 @@ def _make_session_stats(**overrides: Any) -> dict[str, Any]:
         "system_prompt_tokens": 1000,
         "user_prompt_tokens": 500,
         "force_chain": False,
+        "start_time": time.monotonic(),
+        "hb_soft_warned": False,
+        "hb_soft_timeout": 300,
     }
     defaults.update(overrides)
     return defaults
+
+
+# ── Task context compaction hook ────────────────────────────
+
+
+class TestTaskContextCompactionHook:
+    @pytest.mark.asyncio
+    async def test_task_threshold_stops_at_next_tool_and_sets_request(self, anima_dir: Path):
+        stats = _make_session_stats(
+            trigger="task:task-123",
+            task_compaction_tokens=50_000,
+            task_compaction_count=1,
+            task_compaction_max=6,
+            last_context_tokens=50_000,
+            task_compact_requested=False,
+        )
+        hook = _build_pre_tool_hook(anima_dir, session_stats=stats)
+
+        result = await hook({"tool_name": "Read", "tool_input": {}}, "tool-1", {})
+
+        assert result.get("continue_") is False
+        assert stats["task_compact_requested"] is True
+
+    @pytest.mark.parametrize(
+        ("trigger", "limit", "count", "last_tokens"),
+        [
+            ("task:task-1", 0, 0, 100_000),
+            ("task:task-1", 50_000, 6, 100_000),
+            ("task:task-1", 50_000, 0, 49_999),
+            ("chat", 50_000, 0, 100_000),
+            ("heartbeat", 50_000, 0, 100_000),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_non_task_disabled_below_threshold_and_at_limit_continue(
+        self, anima_dir: Path, trigger: str, limit: int, count: int, last_tokens: int
+    ):
+        stats = _make_session_stats(
+            trigger=trigger,
+            task_compaction_tokens=limit,
+            task_compaction_count=count,
+            task_compaction_max=6,
+            last_context_tokens=last_tokens,
+            task_compact_requested=False,
+        )
+        hook = _build_pre_tool_hook(anima_dir, session_stats=stats)
+
+        result = await hook({"tool_name": "Read", "tool_input": {}}, "tool-1", {})
+
+        assert result.get("continue_") is not False
+        assert stats["task_compact_requested"] is False
 
 
 # ── PreCompact hook: blocking tests ──────────────────────────
@@ -80,9 +134,7 @@ class TestPreCompactBlock:
     async def test_blocks_auto_compact(self, anima_dir: Path):
         """PreCompact returns decision='block' for auto trigger."""
         stats = _make_session_stats()
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=200_000
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=200_000)
         result = await hook({"trigger": "auto"}, None, {})
 
         assert result.get("decision") == "block"
@@ -93,9 +145,7 @@ class TestPreCompactBlock:
     async def test_sets_compaction_blocked_flag(self, anima_dir: Path):
         """After blocking, compaction_blocked flag is True in session_stats."""
         stats = _make_session_stats()
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=200_000
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=200_000)
         await hook({"trigger": "auto"}, None, {})
 
         assert stats["compaction_blocked"] is True
@@ -103,9 +153,7 @@ class TestPreCompactBlock:
     @pytest.mark.asyncio
     async def test_no_session_stats_does_not_crash(self, anima_dir: Path):
         """When session_stats is None, hook blocks but doesn't crash."""
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=None, context_window=200_000
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=None, context_window=200_000)
         result = await hook({"trigger": "auto"}, None, {})
 
         assert result.get("decision") == "block"
@@ -123,9 +171,7 @@ class TestPreCompactRecoverySafetyValve:
             user_prompt_tokens=50_000,
             total_result_bytes=10_000 * CHARS_PER_TOKEN,
         )
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=context_window
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=context_window)
         result = await hook({"trigger": "auto"}, None, {})
 
         assert result.get("decision") is None
@@ -140,9 +186,7 @@ class TestPreCompactRecoverySafetyValve:
             user_prompt_tokens=10_000,
             total_result_bytes=0,
         )
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=context_window
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=context_window)
         result = await hook({"trigger": "auto"}, None, {})
 
         assert result.get("decision") == "block"
@@ -158,9 +202,7 @@ class TestPreCompactRecoverySafetyValve:
             user_prompt_tokens=0,
             total_result_bytes=0,
         )
-        hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=context_window
-        )
+        hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=context_window)
         result = await hook({"trigger": "auto"}, None, {})
 
         assert result.get("decision") == "block"
@@ -260,9 +302,7 @@ class TestTwoStageIntegration:
         """PreCompact blocks → PreToolUse ends session with force_chain."""
         stats = _make_session_stats()
 
-        compact_hook = _build_pre_compact_hook(
-            anima_dir, session_stats=stats, context_window=200_000
-        )
+        compact_hook = _build_pre_compact_hook(anima_dir, session_stats=stats, context_window=200_000)
         compact_result = await compact_hook({"trigger": "auto"}, None, {})
         assert compact_result.get("decision") == "block"
         assert stats["compaction_blocked"] is True

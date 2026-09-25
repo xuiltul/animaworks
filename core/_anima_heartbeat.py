@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import re
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -418,22 +419,23 @@ class HeartbeatMixin:
             len(trimmed),
         )
 
-    def _build_state_cleanup_instruction(self) -> str | None:
-        """Return a self-cleanup instruction when current_state.md nears the limit.
+    def _get_current_state_cleanup_chars(self) -> int:
+        try:
+            from core.config.models import load_config
 
-        Triggers at 80% of ``heartbeat.current_state_max_chars``: the
-        post-session hard trim leaves the file just *under* the limit, so a
-        trigger at 100% would never fire again once trimming starts — the
-        anima would stay in a machine-trim equilibrium and never see the
-        instruction.  Returns ``None`` when trimming is disabled or the
-        state is below the soft threshold.
-        """
+            return load_config().heartbeat.current_state_cleanup_chars
+        except Exception:
+            return 0
+
+    def _build_state_cleanup_instruction(self) -> str | None:
+        """Return a self-cleanup instruction when current_state.md nears the limit."""
         max_chars = self._get_current_state_max_chars()
         if max_chars <= 0:
             return None
         state = self.memory.read_current_state()
         state_len = len(state)
-        soft_threshold = int(max_chars * 0.8)
+        cleanup_chars = self._get_current_state_cleanup_chars()
+        soft_threshold = cleanup_chars if cleanup_chars > 0 else int(max_chars * 0.8)
         if state_len <= soft_threshold:
             return None
         logger.info(
@@ -446,8 +448,9 @@ class HeartbeatMixin:
         return t(
             "heartbeat.current_state_cleanup_required",
             current_chars=state_len,
+            cleanup_chars=soft_threshold,
             max_chars=max_chars,
-            target_chars=max_chars // 2,
+            target_chars=(cleanup_chars // 2) if cleanup_chars > 0 else (max_chars // 2),
         )
 
     def _get_heartbeat_md_max_bytes(self) -> int:
@@ -458,14 +461,30 @@ class HeartbeatMixin:
         except Exception:
             return 0
 
+    def _archive_heartbeat_md_before_cleanup(self) -> str | None:
+        """Keep one pre-cleanup heartbeat.md snapshot per local calendar day."""
+        source = self.anima_dir / "heartbeat.md"
+        archive_dir = self.anima_dir / "archive" / "heartbeat"
+        archive_path = archive_dir / f"heartbeat.md.{now_local().strftime('%Y%m%d')}"
+        try:
+            if not source.is_file():
+                raise FileNotFoundError(f"heartbeat.md not found at {source}")
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            if not archive_path.exists():
+                shutil.copy2(source, archive_path)
+            if not archive_path.is_file():
+                raise OSError(f"archive target is not a file: {archive_path}")
+            return f"archive/heartbeat/{archive_path.name}"
+        except OSError:
+            logger.warning("[%s] Failed to archive heartbeat.md before cleanup", self.name, exc_info=True)
+            return None
+
     def _build_heartbeat_md_cleanup_instruction(self, hb_config: str) -> str | None:
         """Return a compaction instruction when heartbeat.md grows past the limit.
 
         heartbeat.md is re-read into every heartbeat prompt, so a bloated
-        checklist (dated case notes, per-PR gates, duplicated rules) costs
-        tokens on every run and buries the recurring steps.  Above
-        ``heartbeat.heartbeat_md_max_bytes`` the anima is asked to rewrite
-        it down to roughly half the limit before doing anything else.
+        checklist costs tokens on every run. Above the configured limit, the
+        anima is asked to rewrite it down to roughly half the limit.
         Disabled when the limit is 0.
         """
         max_bytes = self._get_heartbeat_md_max_bytes()
@@ -480,11 +499,14 @@ class HeartbeatMixin:
             current_bytes,
             max_bytes,
         )
+        archived_path = self._archive_heartbeat_md_before_cleanup()
+        archive_notice = t("heartbeat.heartbeat_md_archive_notice", path=archived_path) if archived_path else ""
         return t(
             "heartbeat.heartbeat_md_cleanup_required",
             current_kb=f"{current_bytes / 1024:.1f}",
             max_kb=f"{max_bytes / 1024:.0f}",
             target_kb=f"{max_bytes / 2048:.0f}",
+            archive_notice=archive_notice,
         )
 
     async def _build_heartbeat_prompt(self) -> list[str]:

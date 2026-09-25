@@ -75,6 +75,8 @@ def load_model_config(anima_dir: Path) -> ModelConfig:
         api_base_url=credential.base_url,
         context_threshold=resolved.context_threshold,
         context_absolute_ceiling=resolved.context_absolute_ceiling,
+        task_compaction_tokens=resolved.task_compaction_tokens,
+        task_compaction_max=resolved.task_compaction_max,
         max_session_age_hours=resolved.max_session_age_hours,
         max_chains=resolved.max_chains,
         conversation_history_threshold=resolved.conversation_history_threshold,

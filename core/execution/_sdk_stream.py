@@ -428,6 +428,7 @@ async def process_stream_messages(
                 usage = event.get("message", {}).get("usage", {})
                 if usage:
                     ctx.tracker.update_from_message_start(usage)
+                    ctx.session_stats["last_context_tokens"] = ctx.tracker._input_tokens
                     state.usage_acc.cache_read_tokens += usage.get("cache_read_input_tokens", 0) or 0
                     state.usage_acc.cache_write_tokens += usage.get("cache_creation_input_tokens", 0) or 0
                     yield {

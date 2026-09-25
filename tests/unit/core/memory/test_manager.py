@@ -192,6 +192,15 @@ class TestReadCompanyVision:
     def test_reads_vision(self, mm, data_dir):
         assert "Company Vision" in mm.read_company_vision() or mm.read_company_vision() == ""
 
+    def test_reads_company_vision_summary_and_memory_pointer(self, mm, anima_dir, data_dir):
+        (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+        company_dir = data_dir / "companies" / "alpha"
+        company_dir.mkdir(parents=True)
+        (company_dir / "vision.md").write_text("Full company vision", encoding="utf-8")
+        (company_dir / "vision_summary.md").write_text("  One-line summary.  \n", encoding="utf-8")
+
+        assert mm.read_company_vision_summary() == ("One-line summary.", str(company_dir / "vision.md"))
+
     def test_prefers_assigned_company_vision_then_falls_back(self, mm, anima_dir, data_dir):
         (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
         company_dir = data_dir / "companies" / "alpha"
@@ -212,6 +221,41 @@ class TestReadCompanyVision:
 
 
 # ── List helpers ──────────────────────────────────────────
+
+
+class TestResolutionCompanyBoundary:
+    def test_keeps_same_company_and_unassigned_resolvers_only(self, mm, anima_dir, tmp_path):
+        (anima_dir / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+        root = anima_dir.parent
+        for name, company in (("colleague", "alpha"), ("outsider", "beta")):
+            anima = root / name
+            anima.mkdir()
+            (anima / "status.json").write_text(json.dumps({"company": company}), encoding="utf-8")
+        (root / "unassigned").mkdir()
+
+        resolutions = [
+            {"resolver": "colleague", "issue": "same company"},
+            {"resolver": "outsider", "issue": "other company"},
+            {"resolver": "unassigned", "issue": "unassigned resolver"},
+            {"resolver": "human operator", "issue": "human resolver"},
+        ]
+
+        assert mm.filter_resolutions_by_company(resolutions) == [resolutions[0]]
+
+    def test_unassigned_anima_keeps_only_unassigned_resolvers(self, mm, anima_dir, tmp_path):
+        root = anima_dir.parent
+        (root / "unassigned").mkdir()
+        company_anima = root / "assigned"
+        company_anima.mkdir()
+        (company_anima / "status.json").write_text(json.dumps({"company": "alpha"}), encoding="utf-8")
+
+        resolutions = [
+            {"resolver": "unassigned", "issue": "no company"},
+            {"resolver": "assigned", "issue": "company assigned"},
+            {"resolver": "unknown", "issue": "unknown resolver"},
+        ]
+
+        assert mm.filter_resolutions_by_company(resolutions) == [resolutions[0], resolutions[2]]
 
 
 class TestListFiles:

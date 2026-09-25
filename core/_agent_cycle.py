@@ -1194,6 +1194,7 @@ class CycleMixin:
     ) -> AsyncGenerator[dict, None]:
         """Streaming implementation scoped by ``run_cycle_streaming``."""
         start = time.monotonic()
+        original_task_prompt = prompt
         active_model_config = model_config_override or self.model_config
         if primary_config is None:
             primary_config = active_model_config
@@ -1399,6 +1400,10 @@ class CycleMixin:
         current_prompt = prompt
         current_system_prompt = system_prompt
         retry_count = 0
+        task_compaction_enabled = trigger.startswith("task:") and active_model_config.task_compaction_tokens > 0
+        task_compaction_count = 0
+        task_resume_session_id: str | None = None
+        task_compaction_after_pending: int | None = None
 
         while True:
             completed_tools: list[dict[str, Any]] = []
@@ -1407,6 +1412,7 @@ class CycleMixin:
             attempt_usage: dict[str, int] = {}
             attempt_started = time.monotonic()
             attempt_turns = 0
+            attempt_task_compact_requested = False
 
             def record_usage(usage: dict[str, int] | None, acc: dict[str, int] = attempt_usage) -> None:
                 _merge_stream_usage(_stream_usage, usage)
@@ -1415,6 +1421,16 @@ class CycleMixin:
             try:
                 self._active_streaming_executor = active_executor
                 try:
+                    stream_kwargs: dict[str, Any] = {}
+                    if (
+                        task_compaction_enabled
+                        and mode == "s"
+                        and callable(getattr(active_executor, "compact_session_by_id", None))
+                    ):
+                        stream_kwargs = {
+                            "task_compaction_count": task_compaction_count,
+                            "resume_session_id": task_resume_session_id,
+                        }
                     async for chunk in active_executor.execute_streaming(
                         current_system_prompt,
                         current_prompt,
@@ -1423,6 +1439,7 @@ class CycleMixin:
                         prior_messages=prior_messages,
                         trigger=trigger,
                         thread_id=thread_id,
+                        **stream_kwargs,
                     ):
                         if chunk["type"] in {"tool_start", "tool_end"} or (
                             chunk["type"] == "text_delta" and chunk.get("text")
@@ -1447,6 +1464,8 @@ class CycleMixin:
                                 self._tool_handler.merge_replied_to(transcript_replied)
                             if chunk.get("force_chain", False):
                                 _stream_force_chain = True
+                            if chunk.get("task_compact_requested", False):
+                                attempt_task_compact_requested = True
                             if chunk.get("truncated", False):
                                 stream_truncated = True
                             stream_stop_kind = str(chunk.get("stop_kind") or "normal")
@@ -1490,6 +1509,26 @@ class CycleMixin:
                                 text_parts_this_attempt.append(chunk.get("text", ""))
                             elif chunk["type"] == "thinking_delta":
                                 thinking_text_parts.append(chunk.get("text", ""))
+                            if chunk["type"] == "context_update" and task_compaction_after_pending is not None:
+                                from core.memory.activity import ActivityLogger
+
+                                ActivityLogger(self.anima_dir).log(
+                                    "task_compacted_after",
+                                    summary=t("task.compacted_after_activity_summary"),
+                                    meta={
+                                        "task_id": trigger.removeprefix("task:"),
+                                        "tokens_after": chunk.get("input_tokens", 0),
+                                        "compaction_number": task_compaction_after_pending,
+                                    },
+                                    safe=True,
+                                )
+                                logger.info(
+                                    "Task context compaction resumed (task_id=%s, compaction=%d, tokens_after=%d)",
+                                    trigger.removeprefix("task:"),
+                                    task_compaction_after_pending,
+                                    chunk.get("input_tokens", 0),
+                                )
+                                task_compaction_after_pending = None
                             yield chunk
                 finally:
                     if self._active_streaming_executor is active_executor:
@@ -1652,6 +1691,68 @@ class CycleMixin:
                     usage=attempt_usage,
                     duration_ms=int((time.monotonic() - attempt_started) * 1000),
                     turns=attempt_turns,
+                )
+
+            if (
+                attempt_task_compact_requested
+                and stream_succeeded
+                and task_compaction_enabled
+                and task_compaction_count < active_model_config.task_compaction_max
+            ):
+                task_compaction_count += 1
+                session_id = getattr(result_message, "session_id", None) or chunk.get("session_id")
+                compacted = False
+                compact_fn = getattr(active_executor, "compact_session_by_id", None)
+                if session_id and callable(compact_fn):
+                    try:
+                        compacted = await compact_fn(
+                            session_id,
+                            system_prompt=current_system_prompt,
+                            trigger=trigger,
+                            summary_instructions=t("task.compaction_summary_instructions"),
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Task context compaction call failed (task_id=%s, compaction=%d)",
+                            trigger.removeprefix("task:"),
+                            task_compaction_count,
+                        )
+                logger.info(
+                    "Task context compaction attempt %s (task_id=%s, compaction=%d, tokens_before=%d)",
+                    "succeeded" if compacted else "failed",
+                    trigger.removeprefix("task:"),
+                    task_compaction_count,
+                    tracker._input_tokens,
+                )
+                try:
+                    from core.memory.activity import ActivityLogger
+
+                    ActivityLogger(self.anima_dir).log(
+                        "task_compacted",
+                        summary=t("task.compacted_activity_summary"),
+                        meta={
+                            "task_id": trigger.removeprefix("task:"),
+                            "tokens_before": tracker._input_tokens,
+                            "compaction_number": task_compaction_count,
+                            "success": compacted,
+                        },
+                        safe=True,
+                    )
+                except Exception:
+                    logger.warning("Failed to record task_compacted activity", exc_info=True)
+
+                if session_id:
+                    task_resume_session_id = session_id
+                    current_prompt = t(
+                        "task.compaction_continue_prompt",
+                        original_prompt=original_task_prompt,
+                    )
+                    tracker.reset()
+                    task_compaction_after_pending = task_compaction_count
+                    continue
+                logger.warning(
+                    "Cannot resume task after compaction request because SDK session id is missing (task_id=%s)",
+                    trigger.removeprefix("task:"),
                 )
 
             if terminal_error_message and not fallback_swapped and getattr(primary_config, "fallback_models", None):

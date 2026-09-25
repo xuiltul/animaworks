@@ -264,9 +264,17 @@ def _build_group2(
     b = memory.read_bootstrap()
     if b:
         _add(b, "bootstrap", 3)
-    v = memory.read_company_vision()
-    if v and not _is_placeholder_vision(v):
-        _add(v, "vision", 3)
+    summary_info = memory.read_company_vision_summary()
+    if isinstance(summary_info, tuple) and len(summary_info) == 2:
+        summary, reference_path = summary_info
+        summary = summary.strip()
+        if summary:
+            reference = t("memory.company_vision_summary_reference", path=reference_path)
+            _add(f"{summary}\n{reference}", "vision", 3)
+    else:
+        v = memory.read_company_vision()
+        if v and not _is_placeholder_vision(v):
+            _add(v, "vision", 3)
     if not is_background_auto:
         sp = memory.read_specialty_prompt()
         if sp:
@@ -471,6 +479,8 @@ def _build_group3(
 
     try:
         resolutions = memory.read_resolutions(days=7)
+        if resolutions:
+            resolutions = memory.filter_resolutions_by_company(resolutions)
         if resolutions:
             seen: dict[str, dict] = {}
             for r in resolutions:

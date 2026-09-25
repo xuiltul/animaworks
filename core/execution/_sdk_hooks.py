@@ -194,6 +194,32 @@ def _build_pre_tool_hook(
                     )
                 )
 
+        # ── Task context compaction — end the current SDK turn for same-session resume ──
+        if session_stats is not None and str(session_stats.get("trigger", "")).startswith("task:"):
+            compaction_limit = session_stats.get("task_compaction_tokens", 0)
+            compaction_count = session_stats.get("task_compaction_count", 0)
+            compaction_max = session_stats.get("task_compaction_max", 0)
+            context_tokens = session_stats.get("last_context_tokens", 0)
+            if (
+                isinstance(compaction_limit, int)
+                and compaction_limit > 0
+                and isinstance(compaction_count, int)
+                and isinstance(compaction_max, int)
+                and compaction_count < compaction_max
+                and isinstance(context_tokens, int)
+                and context_tokens >= compaction_limit
+            ):
+                session_stats["task_compact_requested"] = True
+                logger.info(
+                    "Task context threshold reached (task_id=%s, tokens=%d, threshold=%d, next_compaction=%d/%d)",
+                    str(session_stats.get("trigger", "")).removeprefix("task:"),
+                    context_tokens,
+                    compaction_limit,
+                    compaction_count + 1,
+                    compaction_max,
+                )
+                return SyncHookJSONOutput(continue_=False)
+
         # ── Compaction blocked — end session for AnimaWorks chaining ──
         if session_stats is not None and session_stats.get("compaction_blocked"):
             session_stats["compaction_blocked"] = False

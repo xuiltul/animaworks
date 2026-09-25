@@ -555,6 +555,8 @@ class ExecutionResult:
             regardless of the ContextTracker state.  Set by the S executor
             when PreCompact blocks SDK auto-compact and the subsequent
             PreToolUse returns ``continue_=False``.
+        task_compact_requested: When True, a task hit its configured context
+            limit and should be compacted then resumed in the same SDK session.
         usage: Token usage for this session.  Populated by each executor.
         truncated: True when execution ended through runaway-guard
             finalization, external interruption, or another abnormal path
@@ -567,6 +569,7 @@ class ExecutionResult:
     unconfirmed_sends: list[dict] = field(default_factory=list)
     tool_call_records: list[ToolCallRecord] = field(default_factory=list)
     force_chain: bool = False
+    task_compact_requested: bool = False
     usage: TokenUsage | None = None
     session_rotated: bool = False
     session_rotation_pending: bool = False

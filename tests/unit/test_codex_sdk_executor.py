@@ -692,6 +692,21 @@ class TestConfigWriting:
         assert parsed["mcp_servers"]["aw"]["command"] == sys.executable
         assert parsed["mcp_servers"]["aw"]["args"] == ["-m", "core.mcp.server"]
 
+    def test_write_codex_config_sets_task_auto_compaction_limit(self, model_config, anima_dir):
+        model_config.task_compaction_tokens = 75_000
+        executor = CodexSDKExecutor(model_config=model_config, anima_dir=anima_dir)
+
+        executor._write_codex_config("prompt")
+
+        config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
+        assert tomllib.loads(config_toml)["model_auto_compact_token_limit"] == 75_000
+
+    def test_write_codex_config_omits_task_auto_compaction_limit_when_disabled(self, executor, anima_dir):
+        executor._write_codex_config("prompt")
+
+        config_toml = (anima_dir / ".codex_home" / "config.toml").read_text(encoding="utf-8")
+        assert "model_auto_compact_token_limit" not in tomllib.loads(config_toml)
+
     def test_write_codex_config_restricted_sandbox(self, model_config, anima_dir, tmp_path):
         """Restricted file_roots produces workspace-write with writable_roots."""
         import json
@@ -1644,9 +1659,7 @@ class TestStreamingExecution:
 
         with patch.object(executor, "_create_codex_client", return_value=mock_codex):
             tracker = ContextTracker(model="codex/o4-mini")
-            async for _ev in executor.execute_streaming(
-                system_prompt="test", prompt="run", tracker=tracker
-            ):
+            async for _ev in executor.execute_streaming(system_prompt="test", prompt="run", tracker=tracker):
                 pass
 
         entries = _read_activity_jsonl(anima_dir)
@@ -1680,15 +1693,11 @@ class TestStreamingExecution:
 
         with patch.object(executor, "_create_codex_client", return_value=mock_codex):
             tracker = ContextTracker(model="codex/o4-mini")
-            async for _ev in executor.execute_streaming(
-                system_prompt="test", prompt="search", tracker=tracker
-            ):
+            async for _ev in executor.execute_streaming(system_prompt="test", prompt="search", tracker=tracker):
                 pass
 
         entries = _read_activity_jsonl(anima_dir)
-        logged = [
-            e for e in entries if e.get("type") in ("tool_use", "tool_result")
-        ]
+        logged = [e for e in entries if e.get("type") in ("tool_use", "tool_result")]
         assert logged == []
 
     @pytest.mark.asyncio
@@ -1709,9 +1718,7 @@ class TestStreamingExecution:
 
         with patch.object(executor, "_create_codex_client", return_value=mock_codex):
             tracker = ContextTracker(model="codex/o4-mini")
-            async for _ev in executor.execute_streaming(
-                system_prompt="test", prompt="edit", tracker=tracker
-            ):
+            async for _ev in executor.execute_streaming(system_prompt="test", prompt="edit", tracker=tracker):
                 pass
 
         entries = _read_activity_jsonl(anima_dir)

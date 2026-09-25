@@ -637,6 +637,8 @@ _MODEL_FIELDS_TO_MIGRATE = frozenset(
         "credential",
         "context_threshold",
         "context_absolute_ceiling",
+        "task_compaction_tokens",
+        "task_compaction_max",
         "max_session_age_hours",
         "max_chains",
         "conversation_history_threshold",

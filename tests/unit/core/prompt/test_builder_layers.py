@@ -244,8 +244,27 @@ def test_substantive_vision_is_injected() -> None:
     memory = MagicMock()
     memory.read_bootstrap.return_value = ""
     memory.read_company_vision.return_value = vision
+    memory.read_company_vision_summary.return_value = None
     memory.read_specialty_prompt.return_value = ""
 
     sections = builder._build_group2(memory, "", False, False, {})
 
     assert next(section.content for section in sections if section.id == "vision") == vision
+
+
+def test_company_vision_summary_includes_full_vision_pointer() -> None:
+    memory = MagicMock()
+    memory.read_bootstrap.return_value = ""
+    memory.read_company_vision_summary.return_value = (
+        "  Build reliable systems every day.  ",
+        "companies/alpha/vision.md",
+    )
+    memory.read_specialty_prompt.return_value = ""
+
+    sections = builder._build_group2(memory, "", False, False, {})
+
+    content = next(section.content for section in sections if section.id == "vision")
+    assert content == (
+        "Build reliable systems every day.\n"
+        + builder.t("memory.company_vision_summary_reference", path="companies/alpha/vision.md")
+    )
