@@ -145,17 +145,28 @@ _markedRenderer.code = function (token) {
 const _markedOptions = { breaks: true, renderer: _markedRenderer };
 
 // ── Foster-parenting prevention ──────────────────
-// An unclosed <table> in the HTML string makes the HTML5 parser enter
-// "in table" mode where non-table end tags (</div>) are ignored.
-// This causes subsequent chat-msg-row elements to nest inside the
-// previous bubble.  Round-tripping through a detached element forces
-// the browser to auto-close every tag, producing well-formed HTML.
+// An unclosed <table> or <select> in the HTML string makes the HTML5
+// parser enter a special insertion mode where non-table/select end tags
+// (</div>) are ignored.  An unclosed <div> shifts nesting so that
+// subsequent closing tags close the wrong elements.  Either case causes
+// chat-msg-row elements to nest inside the previous bubble or, worse,
+// inside a collapsed activity bundle body (display:none), making all
+// following messages invisible.
+//
+// Round-tripping through a detached element forces the browser to
+// auto-close every tag, producing well-formed HTML.
 const _sanitizerEl = document.createElement("div");
 
 function _ensureClosedTags(html) {
-  if (!html || !html.includes("<table")) return html;
-  _sanitizerEl.innerHTML = html;
-  return _sanitizerEl.innerHTML;
+  if (!html) return html;
+  // Case-insensitive check for block elements that commonly appear as
+  // raw HTML in Anima messages and can break the surrounding structure
+  // when left unclosed.
+  if (/<(?:table|select|div|details)\b/i.test(html)) {
+    _sanitizerEl.innerHTML = html;
+    return _sanitizerEl.innerHTML;
+  }
+  return html;
 }
 
 export function renderMarkdown(text, animaName) {
