@@ -122,6 +122,28 @@ class TestCodexImageClient:
             out = client.generate_from_reference(reference_image=ref, prompt="bust", aspect_ratio="3:4")
         assert _decode_size(out) == (1024, 1365)
 
+    def test_generate_from_reference_aspect_2_3(self) -> None:
+        client = CodexImageClient(ImageGenConfig(image_style="realistic"))
+        with patch("core.integrations.image.codex.subprocess.run", side_effect=_mock_codex_writes_png((100, 100))):
+            out = client.generate_from_reference(reference_image=_png_bytes(32, 48), prompt="photo", aspect_ratio="2:3")
+        assert _decode_size(out) == (1024, 1536)
+
+    def test_realistic_reference_role_does_not_pin_anime_colors(self) -> None:
+        client = CodexImageClient(ImageGenConfig(image_style="realistic"))
+        with patch.object(client, "_run", return_value=b"x") as run:
+            client.generate_from_reference(reference_image=b"r", prompt="photo")
+        spec = run.call_args.args[0]
+        assert "hair color, eyes" not in spec
+        assert "follow the Subject section" in spec
+
+    def test_style_image_is_second_reference(self) -> None:
+        client = CodexImageClient()
+        with patch.object(client, "_run", return_value=b"x") as run:
+            client.generate_from_reference(reference_image=b"id", prompt="p", style_image=b"style")
+        spec, refs, _ = run.call_args.args
+        assert refs == [b"id", b"style"]
+        assert "rendering style of reference image 2" in spec
+
     def test_missing_out_png_raises_runtime_error(self) -> None:
         client = CodexImageClient()
         with (

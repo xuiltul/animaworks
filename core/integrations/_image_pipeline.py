@@ -31,6 +31,7 @@ from core.integrations._image_glb import (
     optimize_glb,
     strip_mesh_from_glb,
 )
+from core.integrations.image.prompts import _REALISTIC_FROM_ANIME_PROMPT
 from core.platform.locks import file_lock
 
 if TYPE_CHECKING:
@@ -148,6 +149,39 @@ def _serialize_generation(
     return wrapped
 
 
+_FULLBODY_FRAMING_TAGS = frozenset({"full body", "full-body", "standing", "full body shot"})
+
+
+def _strip_framing_tags(prompt: str) -> str:
+    """Remove full-body framing tags from a comma-separated character prompt."""
+    tags = [t.strip() for t in prompt.split(",")]
+    return ", ".join(t for t in tags if t and t.lower() not in _FULLBODY_FRAMING_TAGS)
+
+
+def _crop_upper_body(image: bytes, ratio: float = 0.5) -> bytes:
+    """Crop a full-body image to the top *ratio* of the figure (head to waist)."""
+    import io
+
+    from PIL import Image, ImageOps
+
+    try:
+        with Image.open(io.BytesIO(image)) as src:
+            img = src.convert("RGB")
+    except Exception:
+        logger.debug("Upper-body crop skipped: unreadable image", exc_info=True)
+        return image
+    # Bounding box of the non-background figure (background is near-white).
+    mask = ImageOps.invert(img.convert("L")).point(lambda v: 255 if v > 24 else 0)
+    bbox = mask.getbbox() or (0, 0, img.width, img.height)
+    left, top, right, bottom = bbox
+    crop_bottom = top + int((bottom - top) * ratio)
+    pad = int((right - left) * 0.1)
+    box = (max(0, left - pad), max(0, top - pad), min(img.width, right + pad), min(img.height, crop_bottom))
+    buf = io.BytesIO()
+    img.crop(box).save(buf, format="PNG")
+    return buf.getvalue()
+
+
 class ImageGenPipeline:
     """Orchestrates the full character asset generation pipeline.
 
@@ -221,6 +255,31 @@ class ImageGenPipeline:
             return _resolve_prompt(self._anima_dir, style) or ""
         except Exception:
             return ""
+
+    def _realistic_fullbody_from_anime(self, anime_fullbody: bytes, style_image: bytes | None = None) -> bytes:
+        """Generate the realistic full-body by photographing the anime full-body.
+
+        ``style_image`` (e.g. a photo of another Anima) sets the photographic look.
+        """
+        from core.integrations.image_gen import _build_reference_client
+
+        prompt = _REALISTIC_FROM_ANIME_PROMPT
+        char_prompt = self._resolve_character_prompt()
+        if char_prompt:
+            prompt = f"{prompt} Character notes: {char_prompt}"
+        if self._config.style_prefix:
+            prompt = self._config.style_prefix + prompt
+        if self._config.style_suffix:
+            prompt = prompt + self._config.style_suffix
+        client = _build_reference_client(self._config)
+        logger.info("Step 1: Generating realistic full-body from anime reference with %s …", type(client).__name__)
+        return client.generate_from_reference(
+            reference_image=anime_fullbody,
+            prompt=prompt,
+            aspect_ratio="2:3",
+            guidance_scale=4.0,
+            **({"style_image": style_image} if style_image else {}),
+        )
 
     @staticmethod
     def _append_prompt_clause(prompt: str, clause: str) -> str:
@@ -320,7 +379,8 @@ class ImageGenPipeline:
             prompt = _EXPRESSION_PROMPTS[expression]
 
         # Prepend character appearance so the model preserves ethnicity/features
-        char_prompt = self._resolve_character_prompt()
+        # Drop the full-body framing tags so they do not fight the bust-up composition.
+        char_prompt = _strip_framing_tags(self._resolve_character_prompt())
         if char_prompt:
             prompt = char_prompt + ", " + prompt
 
@@ -350,6 +410,9 @@ class ImageGenPipeline:
         # lower strength for expression variants to preserve character identity.
         if self._use_diffusers:
             extra_kwargs["strength"] = 0.50 if is_from_fullbody else 0.20
+        elif is_from_fullbody:
+            # Edit-style backends keep the reference's framing; hand them the upper body only.
+            reference_image = _crop_upper_body(reference_image)
 
         result_bytes = kontext.generate_from_reference(
             reference_image=reference_image,
@@ -438,69 +501,84 @@ class ImageGenPipeline:
             else:
                 try:
                     _notify("fullbody", "generating", 0)
-                    client = _build_fullbody_client(self._config)
-                    logger.info("Step 1: Generating full-body with %s …", type(client).__name__)
-
-                    # ── A: Load style reference for Vibe Transfer ──
-                    # Direct vibe_image parameter takes precedence over config.
-                    # When face_reference_image is provided, skip vibe transfer
-                    # entirely to avoid existing style (clothing/background)
-                    # bleeding into the face-referenced generation.
-                    effective_vibe: bytes | None = None
-                    if face_reference_image is not None:
-                        logger.debug("Skipping vibe transfer — face reference takes priority")
+                    anime_fullbody = self._assets_dir / self.ASSET_NAMES["fullbody"]
+                    if (
+                        self._is_realistic
+                        and face_reference_image is None
+                        and not self._use_diffusers
+                        and anime_fullbody.exists()
+                    ):
+                        # Photograph the existing anime character so both styles stay the same person.
+                        fullbody_bytes = self._realistic_fullbody_from_anime(
+                            anime_fullbody.read_bytes(),
+                            style_image=vibe_image,
+                        )
                     else:
-                        effective_vibe = vibe_image
-                        if effective_vibe is None and self._config.style_reference:
-                            style_path = Path(self._config.style_reference).expanduser()
-                            if style_path.exists():
-                                effective_vibe = style_path.read_bytes()
-                                logger.debug("Loaded style reference: %s", style_path)
-                            else:
-                                logger.warning("Style reference not found: %s", style_path)
+                        client = _build_fullbody_client(self._config)
+                        logger.info("Step 1: Generating full-body with %s …", type(client).__name__)
 
-                    effective_vibe_strength = vibe_strength if vibe_strength is not None else self._config.vibe_strength
-                    effective_vibe_info = (
-                        vibe_info_extracted if vibe_info_extracted is not None else self._config.vibe_info_extracted
-                    )
-
-                    # ── B: Apply style prefix/suffix to prompt ──
-                    styled_prompt = prompt
-                    if self._config.style_prefix:
-                        styled_prompt = self._config.style_prefix + styled_prompt
-                    if self._config.style_suffix:
-                        styled_prompt = styled_prompt + self._config.style_suffix
-
-                    styled_negative = negative_prompt
-                    if self._config.negative_prompt_extra:
-                        if styled_negative:
-                            styled_negative += ", " + self._config.negative_prompt_extra
+                        # ── A: Load style reference for Vibe Transfer ──
+                        # Direct vibe_image parameter takes precedence over config.
+                        # When face_reference_image is provided, skip vibe transfer
+                        # entirely to avoid existing style (clothing/background)
+                        # bleeding into the face-referenced generation.
+                        effective_vibe: bytes | None = None
+                        if face_reference_image is not None:
+                            logger.debug("Skipping vibe transfer — face reference takes priority")
                         else:
-                            styled_negative = self._config.negative_prompt_extra
+                            effective_vibe = vibe_image
+                            if effective_vibe is None and self._config.style_reference:
+                                style_path = Path(self._config.style_reference).expanduser()
+                                if style_path.exists():
+                                    effective_vibe = style_path.read_bytes()
+                                    logger.debug("Loaded style reference: %s", style_path)
+                                else:
+                                    logger.warning("Style reference not found: %s", style_path)
 
-                    styled_prompt, styled_negative = self._enforce_single_subject(
-                        styled_prompt,
-                        styled_negative,
-                    )
-                    styled_prompt, styled_negative = self._boost_prompt_quality(
-                        styled_prompt,
-                        styled_negative,
-                    )
+                        effective_vibe_strength = (
+                            vibe_strength if vibe_strength is not None else self._config.vibe_strength
+                        )
+                        effective_vibe_info = (
+                            vibe_info_extracted if vibe_info_extracted is not None else self._config.vibe_info_extracted
+                        )
 
-                    _fb_kwargs: dict[str, Any] = {
-                        "prompt": styled_prompt,
-                        "negative_prompt": styled_negative,
-                        "seed": seed,
-                        "vibe_image": effective_vibe,
-                        "vibe_strength": effective_vibe_strength,
-                        "vibe_info_extracted": effective_vibe_info,
-                        "face_reference_image": face_reference_image,
-                    }
-                    if self._use_diffusers:
-                        _fb_kwargs["step_callback"] = fullbody_step_callback
-                    if num_inference_steps is not None:
-                        _fb_kwargs["steps"] = num_inference_steps
-                    fullbody_bytes = client.generate_fullbody(**_fb_kwargs)
+                        # ── B: Apply style prefix/suffix to prompt ──
+                        styled_prompt = prompt
+                        if self._config.style_prefix:
+                            styled_prompt = self._config.style_prefix + styled_prompt
+                        if self._config.style_suffix:
+                            styled_prompt = styled_prompt + self._config.style_suffix
+
+                        styled_negative = negative_prompt
+                        if self._config.negative_prompt_extra:
+                            if styled_negative:
+                                styled_negative += ", " + self._config.negative_prompt_extra
+                            else:
+                                styled_negative = self._config.negative_prompt_extra
+
+                        styled_prompt, styled_negative = self._enforce_single_subject(
+                            styled_prompt,
+                            styled_negative,
+                        )
+                        styled_prompt, styled_negative = self._boost_prompt_quality(
+                            styled_prompt,
+                            styled_negative,
+                        )
+
+                        _fb_kwargs: dict[str, Any] = {
+                            "prompt": styled_prompt,
+                            "negative_prompt": styled_negative,
+                            "seed": seed,
+                            "vibe_image": effective_vibe,
+                            "vibe_strength": effective_vibe_strength,
+                            "vibe_info_extracted": effective_vibe_info,
+                            "face_reference_image": face_reference_image,
+                        }
+                        if self._use_diffusers:
+                            _fb_kwargs["step_callback"] = fullbody_step_callback
+                        if num_inference_steps is not None:
+                            _fb_kwargs["steps"] = num_inference_steps
+                        fullbody_bytes = client.generate_fullbody(**_fb_kwargs)
                     fullbody_path.write_bytes(fullbody_bytes)
                     result.fullbody_path = fullbody_path
                     fullbody_freshly_generated = True

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from typing import Any
 
 import httpx
@@ -88,6 +89,39 @@ _LOCALE_ETHNICITY: dict[str, str] = {
 _DANBOORU_PERSON_TAGS = frozenset({"1girl", "1boy", "2girls", "2boys"})
 
 
+# Anime-only hair colours mapped to shades a real person could plausibly have.
+# Order matters: the first group whose keyword appears in the tag wins.
+_NATURAL_HAIR_COLORS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("rose gold", "pink", "rose", "sakura", "peach"), "rose-brown"),
+    (("wine", "red", "crimson", "scarlet", "burgundy"), "dark burgundy-brown"),
+    (("orange", "copper", "ginger"), "copper-brown"),
+    (("violet", "purple", "lavender", "lilac"), "dark plum-brown"),
+    (("mint", "green", "teal", "emerald"), "dark brown-black with a subtle teal tint"),
+    (("sky blue", "light blue", "pale blue", "silver", "white", "gray", "grey"), "light ash-gray"),
+    (("aqua", "cyan", "blue", "navy"), "dark ash-blue black"),
+)
+# Kept when a hair colour is rewritten ("pink inner hair" -> "rose-brown inner hair").
+_HAIR_STRUCTURE_WORDS = frozenset({"inner", "streaked", "gradient", "two-tone", "multicolored", "tips"})
+_UNNATURAL_EYE_COLOR_RE = re.compile(
+    r"\b(?:blue|cyan|aqua|green|teal|emerald|purple|violet|red|crimson|pink|gold|golden|amber|yellow|silver|gray|grey)\b"
+)
+
+
+def _naturalize_color_tag(tag: str) -> str:
+    """Rewrite an anime-only hair/eye colour tag into a natural real-world shade."""
+    lower = tag.lower()
+    if lower.endswith(" hair"):
+        words = lower[: -len(" hair")].split()
+        structure = [w for w in words if w in _HAIR_STRUCTURE_WORDS]
+        colour = " ".join(w for w in words if w not in _HAIR_STRUCTURE_WORDS)
+        for keywords, natural in _NATURAL_HAIR_COLORS:
+            if any(re.search(rf"\b{re.escape(k)}\b", colour) for k in keywords):
+                return " ".join([natural, *structure, "hair"])
+    elif lower.endswith(" eyes") and _UNNATURAL_EYE_COLOR_RE.search(lower):
+        return "dark brown eyes"
+    return tag
+
+
 def _convert_anime_to_realistic(anime_prompt: str, locale: str | None = None) -> str:
     """Convert a Danbooru-style anime prompt to a photographic prompt.
 
@@ -123,7 +157,7 @@ def _convert_anime_to_realistic(anime_prompt: str, locale: str | None = None) ->
         if natural:
             converted.append(natural)
         else:
-            converted.append(tag)
+            converted.append(_naturalize_color_tag(tag))
 
     realistic_prefix = [
         "professional photograph",
