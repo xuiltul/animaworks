@@ -21,7 +21,10 @@ def test_elapsed_time_keeps_minutes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_response_indicator_runs_until_done() -> None:
+async def test_response_indicator_runs_until_done(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep the initial visible state stable while the app mounts; CI startup
+    # can take longer than the production 0.5-second blink interval.
+    monkeypatch.setattr(ResponseStatus, "BLINK_INTERVAL", 60)
     client = FakeClient()
     app = AnimaChatApp(client=client, anima_name="sora")
     async with app.run_test() as pilot:
