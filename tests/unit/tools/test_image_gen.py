@@ -566,3 +566,108 @@ class TestGetToolSchemas:
         schemas = get_tool_schemas()
         assert isinstance(schemas, list)
         assert schemas == []
+
+
+# ── Realistic style derived from the anime character ─────────────
+
+
+class TestRealisticFromAnime:
+    def test_realistic_fullbody_uses_anime_fullbody_as_reference(self, tmp_path: Path):
+        from core.config.models import ImageGenConfig
+
+        assets = tmp_path / "assets"
+        assets.mkdir()
+        (assets / "avatar_fullbody.png").write_bytes(b"ANIME")
+        pipe = ImageGenPipeline(tmp_path, config=ImageGenConfig(image_style="realistic"))
+
+        ref_client = MagicMock()
+        ref_client.generate_from_reference.return_value = b"PHOTO"
+        with (
+            patch("core.integrations.image_gen._build_reference_client", return_value=ref_client),
+            patch("core.integrations.image_gen._build_fullbody_client") as fb_builder,
+        ):
+            result = pipe.generate_all(prompt="ignored", skip_existing=False, steps=["fullbody"], vibe_image=b"STYLE")
+
+        fb_builder.assert_not_called()
+        kwargs = ref_client.generate_from_reference.call_args.kwargs
+        assert kwargs["reference_image"] == b"ANIME"
+        assert kwargs["aspect_ratio"] == "2:3"
+        assert kwargs["style_image"] == b"STYLE"
+        assert "natural shade" in kwargs["prompt"]
+        assert (assets / "avatar_fullbody_realistic.png").read_bytes() == b"PHOTO"
+        assert result.fullbody_path == assets / "avatar_fullbody_realistic.png"
+
+    def test_realistic_fullbody_without_anime_falls_back_to_text(self, tmp_path: Path):
+        from core.config.models import ImageGenConfig
+
+        pipe = ImageGenPipeline(tmp_path, config=ImageGenConfig(image_style="realistic"))
+        fb_client = MagicMock()
+        fb_client.generate_fullbody.return_value = b"PHOTO"
+        with (
+            patch("core.integrations.image_gen._build_reference_client") as ref_builder,
+            patch("core.integrations.image_gen._build_fullbody_client", return_value=fb_client),
+        ):
+            pipe.generate_all(prompt="a young woman", skip_existing=False, steps=["fullbody"])
+
+        ref_builder.assert_not_called()
+        fb_client.generate_fullbody.assert_called_once()
+
+
+class TestConvertAnimeToRealisticColors:
+    @pytest.mark.parametrize(
+        ("tag", "expected"),
+        [
+            ("aqua blue hair", "dark ash-blue black hair"),
+            ("sky blue hair", "light ash-gray hair"),
+            ("mint silver hair", "dark brown-black with a subtle teal tint hair"),
+            ("rose gold hair", "rose-brown hair"),
+            ("wine red hair", "dark burgundy-brown hair"),
+            ("violet hair", "dark plum-brown hair"),
+            ("burgundy inner hair", "dark burgundy-brown inner hair"),
+            ("cyan eyes", "dark brown eyes"),
+            ("gold hazel eyes", "dark brown eyes"),
+        ],
+    )
+    def test_unnatural_colors_become_natural(self, tag: str, expected: str):
+        from core.integrations.image.utils import _convert_anime_to_realistic
+
+        assert expected in _convert_anime_to_realistic(f"1girl, {tag}", locale="ja")
+
+    @pytest.mark.parametrize(
+        "tag",
+        ["black hair", "light brown hair", "platinum blonde hair", "long hair", "tired eyes", "purple hair ribbon"],
+    )
+    def test_natural_and_non_color_tags_untouched(self, tag: str):
+        from core.integrations.image.utils import _convert_anime_to_realistic
+
+        assert _convert_anime_to_realistic(f"1girl, {tag}", locale="ja").endswith(tag)
+
+
+class TestCropUpperBody:
+    def test_crops_to_upper_half_of_figure(self):
+        import io
+
+        from PIL import Image
+
+        from core.integrations._image_pipeline import _crop_upper_body
+
+        img = Image.new("RGB", (400, 1000), "white")
+        img.paste((40, 40, 40), (150, 100, 250, 900))  # figure spans y=100..900
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        with Image.open(io.BytesIO(_crop_upper_body(buf.getvalue()))) as out:
+            assert out.height < 500
+            assert out.width < 400
+
+    def test_unreadable_image_is_returned_unchanged(self):
+        from core.integrations._image_pipeline import _crop_upper_body
+
+        assert _crop_upper_body(b"not-an-image") == b"not-an-image"
+
+
+def test_strip_framing_tags_removes_full_body_only():
+    from core.integrations._image_pipeline import _strip_framing_tags
+
+    assert _strip_framing_tags("a young woman, white hoodie, full body, standing, looking at viewer") == (
+        "a young woman, white hoodie, looking at viewer"
+    )

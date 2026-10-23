@@ -36,6 +36,7 @@ _RETRY_AFTER_RE = re.compile(
 _ASPECT_SIZES: dict[str, tuple[int, int]] = {
     "1:1": (1024, 1024),
     "3:4": (1024, 1365),
+    "2:3": (1024, 1536),
 }
 
 
@@ -206,20 +207,40 @@ class CodexImageClient:
         reference_image: bytes,
         prompt: str,
         aspect_ratio: str = "1:1",
+        style_image: bytes | None = None,
         **_ignored: Any,
     ) -> bytes:
-        """Generate an image from a reference image via codex."""
+        """Generate an image from a reference image via codex.
+
+        ``style_image`` is an optional second reference whose rendering style
+        (not identity) the output should follow.
+        """
         target = _ASPECT_SIZES.get(aspect_ratio, (1024, 1024))
         tw, th = target
         orientation = "square" if tw == th else "portrait"
-        roles = ["Preserve the identity of the character in reference image 1 (hairstyle, hair color, eyes, outfit)"]
+        if self._image_style == "realistic":
+            roles = [
+                "Preserve the identity of the person in reference image 1 (face, hairstyle, outfit, accessories); "
+                "hair and eye colors follow the Subject section"
+            ]
+        else:
+            roles = [
+                "Preserve the identity of the character in reference image 1 (hairstyle, hair color, eyes, outfit)"
+            ]
+        refs = [reference_image]
+        if style_image:
+            refs.append(style_image)
+            roles.append(
+                "Match only the rendering style of reference image 2 (line work, coloring, shading, lighting, "
+                "face proportions); do not copy its person, hairstyle, hair accessories, or outfit"
+            )
         spec = _build_spec(
             prompt=prompt,
             image_style=self._image_style,
             orientation=orientation,
             reference_roles=roles,
         )
-        return self._run(spec, [reference_image], target)
+        return self._run(spec, refs, target)
 
     def _run(
         self,
@@ -319,7 +340,8 @@ class CodexFirstClient:
             codex_reason = _codex_failure_reason(codex_exc)
             logger.warning("codex image generation failed, falling back to API: %s", codex_exc)
             try:
-                return self._get_fallback().generate_from_reference(*args, **kwargs)
+                fallback_kwargs = {k: v for k, v in kwargs.items() if k != "style_image"}
+                return self._get_fallback().generate_from_reference(*args, **fallback_kwargs)
             except Exception as fallback_exc:
                 error = RuntimeError(f"{fallback_exc} (codex: {codex_reason})")
                 error.codex_usage_limit = is_codex_usage_limit(codex_reason)  # type: ignore[attr-defined]

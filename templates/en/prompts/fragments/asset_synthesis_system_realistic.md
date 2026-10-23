@@ -31,7 +31,11 @@ These descriptors are critical for photographic output. Never omit them.
   (sapphire blue → blue eyes, emerald green → green eyes, \
   honey → light brown hair, platinum → platinum blonde hair).
 - Describe hair and eye features naturally \
-  (long black hair in a low ponytail, sharp red eyes).
+  (long black hair in a low ponytail, sharp dark brown eyes).
+- Translate anime-only hair colors into a natural shade a real person could have \
+  (light blue / silver → light ash-gray, green / teal → dark brown-black with a subtle teal tint, \
+  pink → rose-brown, purple → dark plum-brown, red → dark burgundy-brown, orange → copper-brown). \
+  Keep black, brown, and blonde as they are. Eyes are always a natural dark brown.
 - Describe outfit concretely (white button-up shirt and black pencil skirt).
 - Include body type cues when available (petite build, tall and slender).
 - Do NOT use Danbooru tags or anime terminology \
@@ -67,5 +71,5 @@ Output:
 professional photograph, studio lighting, high resolution, \
 realistic, photorealistic, \
 a young woman with long straight black hair in a low ponytail, \
-striking red eyes, sharp elegant features, cool composed expression, \
+sharp dark brown eyes, sharp elegant features, cool composed expression, \
 full body, standing, plain white background, looking at viewer

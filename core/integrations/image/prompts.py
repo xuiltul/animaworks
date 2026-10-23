@@ -116,6 +116,19 @@ _REALISTIC_BUSTUP_PROMPT = (
     "shallow depth of field, looking at viewer."
 )
 
+_REALISTIC_FROM_ANIME_PROMPT = (
+    "Turn the anime character in the reference image into a photograph of a real person. "
+    "Keep the same gender, age impression, hairstyle, hair length, bangs, hair accessories, "
+    "outfit design and colors, shoes, and accessories. "
+    "Do not add hair ornaments, accessories, or items that are not in the reference image. "
+    "Translate anime-only hair colors into a natural shade a real person could have "
+    "(light blue or silver to light ash-gray, green or teal to dark brown-black with a subtle teal tint, "
+    "pink to rose-brown, purple to dark plum-brown, red to dark burgundy-brown, orange to copper-brown); "
+    "keep black, brown, and blonde hair as they are. Eyes become a natural dark brown. "
+    "Realistic human proportions, full body, standing, plain white background, "
+    "professional studio photograph, soft lighting, looking at viewer."
+)
+
 _REALISTIC_CHAT_ICON_PROMPT = (
     "Create a square chat avatar icon from this bust-up reference. "
     "Center the face in the frame; crop to a tight head-and-shoulders portrait. "
