@@ -86,6 +86,9 @@ def test_module_file_discovery_uses_current_worktree_files(tmp_path: Path, monke
     assert files == [tracked, untracked]
 
 
+# Builds every reference twice: about 15 s locally, and over 30 s in the
+# PyPI publish job on GitHub runners.
+@pytest.mark.timeout(120)
 def test_generation_is_byte_deterministic():
     for kind in gen_reference.KINDS:
         first, _ = gen_reference._make_reference(kind)
