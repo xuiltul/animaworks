@@ -209,9 +209,11 @@ def remember_anima_slack_post(
     overwritten, so a call_human thread stays with its original owner.
     Best effort: failures are logged and ignored.
     """
-    if not anima_name or not isinstance(response, dict):
+    # slack_sdk returns a SlackResponse, which is not a dict but has .get().
+    get = getattr(response, "get", None)
+    if not anima_name or not callable(get):
         return
-    key = str(thread_ts or response.get("ts") or "")
+    key = str(thread_ts or get("ts") or "")
     if not key:
         return
     try:
@@ -219,7 +221,7 @@ def remember_anima_slack_post(
             return
         save_notification_mapping_resilient(
             key,
-            str(response.get("channel") or channel),
+            str(get("channel") or channel),
             anima_name,
             notification_text=text[:2000],
         )

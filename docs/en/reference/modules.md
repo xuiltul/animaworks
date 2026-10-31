@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=62a3eda3a30d520bc930211b8ea0be04d70a11012abb75cd5e47b3ce1d28c636 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=2e3a7c14027d5e87a9bce838ccac411fc2c219d5eb75fd1312fe9e7e4c8b7956 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -752,7 +752,7 @@ Notification generation and delivery.
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 612 | — |
 | `core.notification.notifier` | 238 | — |
-| `core.notification.reply_routing` | 533 | — |
+| `core.notification.reply_routing` | 535 | — |
 | `core.notification.slack_names` | 67 | — |
 
 ## `core.notification.channels`

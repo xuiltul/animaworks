@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: fe220c4d772c54e23464dd6454307896e0261f774640b0133dc4c565ad27e08b -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: dee6c3204a7c6218794446618cb28c13494d388c2a00d4e1fd21e9d85c832eff -->
 
 # モジュール一覧
 
@@ -752,7 +752,7 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 612 | — |
 | `core.notification.notifier` | 238 | — |
-| `core.notification.reply_routing` | 533 | — |
+| `core.notification.reply_routing` | 535 | — |
 | `core.notification.slack_names` | 67 | — |
 
 ## `core.notification.channels`

@@ -46,7 +46,25 @@ def test_existing_owner_is_kept() -> None:
     assert lookup_notification_mapping("100.1")["anima"] == "librarian"
 
 
-@pytest.mark.parametrize("response", [None, {}, "ok"])
+def test_slack_sdk_response_is_accepted() -> None:
+    from slack_sdk.web.slack_response import SlackResponse
+
+    response = SlackResponse(
+        client=None,
+        http_verb="POST",
+        api_url="https://slack.com/api/chat.postMessage",
+        req_args={},
+        data={"ok": True, "ts": "400.4", "channel": "C1"},
+        headers={},
+        status_code=200,
+    )
+
+    remember_anima_slack_post("mei", "C1", response)
+
+    assert lookup_notification_mapping("400.4")["anima"] == "mei"
+
+
+@pytest.mark.parametrize("response", [None, {}, 7])
 def test_missing_ts_is_ignored(response: Any) -> None:
     remember_anima_slack_post("mei", "C1", response)
 
