@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/integrations/zoom.md -->
-<!-- i18n: source-sha256=1409948a4743338cc6c2e8ebdb8d5970b6458bf7229ed6f9e1459b7bf3d06632 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=1409948a4743338cc6c2e8ebdb8d5970b6458bf7229ed6f9e1459b7bf3d06632 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 581e20f1
 

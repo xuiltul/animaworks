@@ -857,7 +857,7 @@ class TestSetupWithUserInfo:
                 # Verify anima directory
                 anima_dir = data_dir / "animas" / "sakura"
                 assert anima_dir.exists()
-                assert (anima_dir / "identity.md").exists()
+                assert (anima_dir / "IDENTITY.md").exists()
 
                 # Verify user profile
                 profile_path = data_dir / "shared" / "users" / "alice" / "index.md"

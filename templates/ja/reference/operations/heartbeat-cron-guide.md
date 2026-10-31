@@ -59,14 +59,14 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 同時に動く Inbox 処理は 1 本だけで、実行中に届いたメッセージは次の 1 回にまとめて処理する。Provider エラー時は `rate_guard` の回復時間を待ち、未読メッセージを残す。
 受信 intent による起動フィルタやメッセージ起点の cooldown / cascade 抑止はない。了解・感謝だけのメッセージに返信しない行動ルールは Inbox プロンプトで指示する。
 
-## heartbeat.md の設定
+## HEARTBEAT.md の設定
 
-`heartbeat.md` は各 Anima の設定ファイルで、活動時間・チェック項目を定義する。
-ハートビートの実行間隔は `config.json` の `heartbeat.interval_minutes` で設定可能（1〜1440分、デフォルト30）。`heartbeat.md` では変更できない。
+`HEARTBEAT.md` は各 Anima の設定ファイルで、活動時間・チェック項目を定義する。
+ハートビートの実行間隔は `config.json` の `heartbeat.interval_minutes` で設定可能（1〜1440分、デフォルト30）。`HEARTBEAT.md` では変更できない。
 各 Anima には名前ベースの 0〜9 分オフセットが付与され、同時起動を分散する。
-ファイルパス: `~/.animaworks/animas/{name}/heartbeat.md`
+ファイルパス: `~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-上司が配下 Anima の `heartbeat.md` を編集する場合は、直接ファイル操作ではなく `read_memory_file` / `write_memory_file` を使い、`../{anima_name}/heartbeat.md` のような相対パスで指定する。
+上司が配下 Anima の `HEARTBEAT.md` を編集する場合は、直接ファイル操作ではなく `read_memory_file` / `write_memory_file` を使い、`../{anima_name}/HEARTBEAT.md` のような相対パスで指定する。
 
 ### フォーマット
 
@@ -90,7 +90,7 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ### 設定フィールド
 
 **実行間隔**:
-- `config.json` の `heartbeat.interval_minutes` で設定（1〜1440分、デフォルト30）。`heartbeat.md` での変更は不可
+- `config.json` の `heartbeat.interval_minutes` で設定（1〜1440分、デフォルト30）。`HEARTBEAT.md` での変更は不可
 
 **活動時間**（SHOULD）:
 - `HH:MM - HH:MM` 形式で記載する（例: `9:00 - 22:00`）
@@ -182,7 +182,7 @@ Chat（人間との対話）と TaskExec（実作業）はメインモデルを�
 
 ### ハートビート設定のホットリロード
 
-heartbeat.md をファイルシステム上で更新すると、次回のハートビート実行時に `_check_schedule_freshness()` が変更を検出し、SchedulerManager がスケジュールを自動リロードする。
+HEARTBEAT.md をファイルシステム上で更新すると、次回のハートビート実行時に `_check_schedule_freshness()` が変更を検出し、SchedulerManager がスケジュールを自動リロードする。
 サーバーの再起動は不要（MAY skip restart）。APScheduler のジョブが再登録される。
 
 ## Per-anima Heartbeat間隔設定
@@ -538,9 +538,9 @@ type: llm
 
 ## Cron 設定のホットリロード
 
-cron.md を更新すると、heartbeat.md と同様にスケジュールが自動リロードされる。
+cron.md を更新すると、HEARTBEAT.md と同様にスケジュールが自動リロードされる。
 Anima 自身が cron.md を書き換えた場合も即座に反映される（self-modify パターン）。
-上司は配下の `cron.md` / `heartbeat.md` を write memory ツールで編集できる。許可された上司からの `injection.md` 変更依頼も root に転送・認可される。`status.json` の変更には対応する上司向けツールまたは root CLI/API を使う。root 所有ファイルを Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクト等で直接書き込まない。
+上司は配下の `cron.md` / `HEARTBEAT.md` を write memory ツールで編集できる。許可された上司からの `AGENTS.md` 変更依頼も root に転送・認可される。`status.json` の変更には対応する上司向けツールまたは root CLI/API を使う。root 所有ファイルを Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクト等で直接書き込まない。
 
 リロード時の動作:
 1. 該当 Anima の既存 cron ジョブを全て削除

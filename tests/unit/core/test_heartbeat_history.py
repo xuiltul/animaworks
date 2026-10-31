@@ -40,7 +40,7 @@ def _make_digital_anima(anima_dir: Path, shared_dir: Path):
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "alice"
     d.mkdir(parents=True)
-    (d / "identity.md").write_text("# Alice", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
     return d
 
 

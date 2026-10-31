@@ -369,7 +369,7 @@ class TestPostToChannel:
         channel_file = shared_dir / "channels" / "general.jsonl"
         lines = channel_file.read_text(encoding="utf-8").strip().splitlines()
         # Filter out empty lines from the initial empty write
-        lines = [l for l in lines if l.strip()]
+        lines = [line for line in lines if line.strip()]
         assert len(lines) >= 1
         last = json.loads(lines[-1])
         assert last["text"] == "Hello from human"

@@ -476,7 +476,6 @@ class TestGenerateAll2StagePipeline:
     ):
         """Neutral should be generated first, using fullbody as reference."""
         fullbody_bytes = b"FULLBODY_PNG"
-        neutral_bytes = b"NEUTRAL_BUSTUP_PNG"
 
         mock_novelai = MagicMock()
         mock_novelai.generate_fullbody.return_value = fullbody_bytes

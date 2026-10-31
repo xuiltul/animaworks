@@ -51,11 +51,12 @@ Order is **personality → face type → appearance → speech**. Role is applie
 - Choose from personality, not from the department (finance ≠ navy by default)
 - Japanese color name + HEX code (e.g., Cherry blossom (#FFB7C5))
 
-### Canonical identity.md shape
+### Canonical Format for IDENTITY.md / SOUL.md
 
-`identity.md` is the only personality canon. Appearance that lives only in a character sheet or prompt is forbidden.
+`IDENTITY.md` is the source of truth for profile and appearance, and `SOUL.md` is the source of truth for personality (character, tone, values, and individuality). Appearance details that exist only in character_sheet or the prompt are prohibited.
 
-Required sections: profile (name, English name, age, birthday, zodiac, blood type, height, org, role, supervisor, face type), appearance, personality, individuality as AI employee.
+- Required sections for IDENTITY.md: Basic Profile (name, English name, age, birthday, zodiac sign, blood type, height, affiliation, title, supervisor, face type), Appearance, Image Colors, AI Model Information
+- Required sections for SOUL.md: Personality and Character, Tone and Values, Individuality as an AI Employee, Signature Lines
 
 ## Internal Consistency Check
 
@@ -75,41 +76,41 @@ After design is complete, verify:
 When character design is complete, generate a full set of avatar images with the `image_gen` tool.
 Only execute when `image_gen` is available (permissions.json allows image_gen).
 
-### Conversion to NovelAI Prompts
+### Converting to NovelAI Prompts
 
-Convert appearance settings from identity.md to NovelAI-compatible anime tags.
+Convert the appearance settings in IDENTITY.md into NovelAI-compatible anime tags.
 
-**Basic structure:**
+**Basic Structure:**
 
 ```
 masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl/1boy, {hair_color} hair, {hairstyle}, {eye_color} eyes, {outfit}, full body, standing, white background, looking at viewer
 ```
 
-**Conversion examples:**
+**Conversion Examples:**
 
-| identity.md appearance | NovelAI prompt |
+| Appearance in IDENTITY.md | NovelAI Prompt |
 |---|---|
-| 158cm, black long hair, red eyes, sailor uniform | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
-| 175cm, silver short hair, blue eyes, suit | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
+| 158 cm tall, long black hair, red eyes, sailor uniform | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
+| 175 cm tall, short silver hair, blue eyes, suit | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
 
-**Quality and style tags (prefix):**
+**Quality and Art Style Tags (add at the beginning):**
 
-Always include the following quality and art style tags at the start of the prompt.
+Always include the following quality and art style tags at the beginning of the prompt.
 
 - Quality: `masterpiece, best quality, very aesthetic, absurdres`
-- Style: `anime coloring, clean lineart, soft shading`
+- Art style: `anime coloring, clean lineart, soft shading`
 
-> Note: NovelAI's `qualityToggle` setting may auto-apply quality tags, but explicit inclusion in the prompt yields more stable quality.
+> Note: NovelAI's `qualityToggle` configuration automatically adds quality tags, but explicitly including them in the prompt results in more consistent quality.
 
-**Character attribute tags:**
+**Character Attribute Tags:**
 
 - Hair color: `black hair`, `brown hair`, `blonde hair`, `silver hair`, `red hair`, `blue hair`, `pink hair`, `white hair`
 - Hairstyle: `long hair`, `short hair`, `medium hair`, `ponytail`, `twintails`, `bob cut`, `braided hair`
 - Eye color: `{color} eyes` (use color names, not gemstone metaphors)
-- Outfit: Concrete item names (`school uniform`, `business suit`, `lab coat`, `hoodie`, `maid outfit`)
-- Required suffix tags: `full body, standing, white background, looking at viewer`
+- Clothing: Specific item names (`school uniform`, `business suit`, `lab coat`, `hoodie`, `maid outfit`)
+- Required ending tag: `full body, standing, white background, looking at viewer`
 
-**Negative prompt (recommended):**
+**Recommended Negative Prompt:**
 
 ```
 lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, worst quality, low quality, blurry, jpeg artifacts, cropped, multiple views, logo, too many watermarks
@@ -117,27 +118,67 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 ### Generation Procedure
 
-Follow the **image_gen** (`generate_character_assets`) usage documented in the "External Tools" section of the system prompt. Do not pass a `steps` argument; the selected style determines the asset set.
+> **Important**: Before generation, always check whether `assets/prompt_realistic.txt` (for realistic style) or `assets/prompt.txt` (for anime style) is available. If a cached prompt exists, use it.
 
-**Realistic style:** use a natural-language photographic prompt. Generate only the full-body photograph, bust-up photographs with expression variants, and the icon. Do **not** generate chibi artwork, a 3D model, rigging, or animations.
+**Step 1: Determine the Style**
 
-Generated realistic files are saved to `assets/`:
-- `avatar_fullbody_realistic.png` — Full-body photograph
-- `avatar_bustup_realistic.png` and `avatar_bustup_{emotion}_realistic.png` — Bust-up and expression variants
-- `icon_realistic.png` — Icon
+Check the system's image style. `image_style` is usually either `realistic` (photorealistic) or `anime`.
+The framework automatically detects and converts the style of the prompt passed to `generate_character_assets`, but it is preferable to use a prompt in the correct style from the start.
 
-**Anime style:** use the anime tags converted by the rules above. Generate the complete anime set:
-- `avatar_fullbody.png` — Full-body standing (NovelAI V4.5)
-- `avatar_bustup.png` — Bust-up (Flux Kontext)
-- `avatar_chibi.png` — Chibi character (Flux Kontext)
-- `avatar_chibi.glb` — 3D model (Meshy Image-to-3D)
-- `avatar_chibi_rigged.glb` — Rigged 3D model (Meshy Rigging)
-- `anim_walking.glb`, `anim_running.glb` — Basic animations
-- `anim_idle.glb`, `anim_sitting.glb`, `anim_waving.glb`, `anim_talking.glb` — Additional animations
+- If `assets/prompt_realistic.txt` exists → **Use as is** (highest priority)
+- If `assets/prompt.txt` exists → Use as is for anime style. If realistic style is needed, convert it according to the rules below
+- If neither exists → Create a new prompt from the appearance settings in IDENTITY.md
+
+**Step 2: Create the Prompt**
+
+**For realistic (photorealistic) style:**
+
+Generate a photorealistic image with Fal.ai Flux Pro. Use natural-language photographic descriptions rather than Danbooru tags.
+
+```
+professional photograph, studio lighting, high resolution, realistic, photorealistic, a young woman/man with {hair_description}, {eye_description}, {outfit_description}, full body, standing, plain white background, looking at viewer
+```
+
+Conversion rules (anime → realistic):
+
+| Anime tag | Realistic description |
+|---|---|
+| `masterpiece, best quality, ...` (quality tag) | Remove (replace with realistic quality tags) |
+| `anime coloring, clean lineart, soft shading` | Remove |
+| `1girl` | `a young woman` |
+| `1boy` | `a young man` |
+| `black hair, long hair, low ponytail` | `long black hair in a low ponytail` |
+| `red eyes, narrow eyes` | `sharp red eyes` |
+
+Quality and style tags (add at the beginning): `professional photograph, studio lighting, high resolution, realistic, photorealistic`
+
+**For anime style:**
+
+Create anime tags according to the rules in the section above, “Converting to NovelAI Prompts.”
+
+**Step 3: Run Generation**
+
+Call **image_gen** (`generate_character_assets`) according to the instructions in the “External Tools” section of the system prompt.
 
 Arguments:
-- `prompt`: Style-appropriate prompt described above
+- `prompt`: The prompt created in Step 2
 - `negative_prompt`: Recommended negative prompt
-- `anima_dir`: Target Anima's directory (your own or another's)
+- `anima_dir`: The directory of the target Anima (your own if it is yourself, or the other person's if it is someone else)
+- Do **not** specify `steps` (all steps run by default)
 
-If any step fails, record the error and use only successful outputs.
+**Generation Results for Realistic Style:**
+   - `avatar_fullbody_realistic.png` — Full-body photo (Fal Flux Pro)
+   - `avatar_bustup_realistic.png` — Bust-up photo (Flux Kontext)
+   - Expression variations: `avatar_bustup_{emotion}_realistic.png`
+   - `icon_realistic.png` — Icon
+   - Do not generate chibi characters, 3D models, rigging, or animations
+
+**Generation Results for Anime Style:**
+   - `avatar_fullbody.png` — Full-body standing illustration (NovelAI V4.5)
+   - `avatar_bustup.png` — Bust-up (Flux Kontext)
+   - `avatar_chibi.png` — Chibi character (Flux Kontext)
+   - `avatar_chibi.glb` — 3D model (Meshy Image-to-3D)
+   - `avatar_chibi_rigged.glb` — Rigged 3D model (Meshy Rigging)
+   - Animation (Meshy Animations)
+
+If any generation step fails, record the error and use only the successful results.

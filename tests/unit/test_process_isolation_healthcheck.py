@@ -378,7 +378,7 @@ class TestReconciliationAutoRecovery:
         animas_dir.mkdir(parents=True)
         anima_dir = animas_dir / name
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("identity", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("identity", encoding="utf-8")
         (anima_dir / "status.json").write_text(
             json.dumps({"enabled": enabled}),
             encoding="utf-8",
@@ -581,7 +581,7 @@ class TestFailureRecoveryCycle:
         animas_dir.mkdir(parents=True)
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",

@@ -25,12 +25,12 @@ def test_manager_read_returns_empty_on_oserror(tmp_path: Path) -> None:
     """Mock path.read_text to raise OSError. Verify _read() returns '' instead of crashing."""
     anima_dir = tmp_path / "anima"
     anima_dir.mkdir()
-    (anima_dir / "identity.md").write_text("content", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("content", encoding="utf-8")
 
     mm = MemoryManager(anima_dir)
 
     with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
-        result = mm._read(anima_dir / "identity.md")
+        result = mm._read(anima_dir / "IDENTITY.md")
 
     assert result == ""
 

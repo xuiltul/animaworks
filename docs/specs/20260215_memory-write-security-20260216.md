@@ -52,7 +52,7 @@ read_memory_file(path="../alice/episodes/2026-02-15.md")
 **シナリオ3: A1モードでの無制限アクセス**
 ```
 # Claude Code子プロセスが直接実行
-Bash: cat ~/.animaworks/animas/alice/identity.md
+Bash: cat ~/.animaworks/animas/alice/IDENTITY.md
 Write: ~/.animaworks/animas/bob/permissions.md に書き込み
 Edit: ~/.animaworks/config.json を変更
 ```
@@ -68,8 +68,9 @@ execute_command(command="cp ../other_person/permissions.md ./stolen.md")
 ```
 保護ファイル（自己書き換えブロック）:
 ├── permissions.md    ← 権限定義。即時反映のため最も危険
-├── identity.md       ← 人格の不変ベースライン
-└── bootstrap.md      ← 初回起動指示
+├── IDENTITY.md       ← 人格の不変ベースライン
+├── SOUL.md           ← 内面の価値観・原則
+└── BOOTSTRAP.md      ← 初回起動指示
 
 保護境界（他者アクセスブロック）:
 ├── ../other_person/  ← 他者のperson_dir全体
@@ -94,8 +95,9 @@ ToolHandler内の全書き込み系ツールに対して、保護ファイルブ
 # モジュールレベル定数
 _PROTECTED_FILES = frozenset({
     "permissions.md",
-    "identity.md",
-    "bootstrap.md",
+    "IDENTITY.md",
+    "SOUL.md",
+    "BOOTSTRAP.md",
 })
 
 
@@ -208,16 +210,16 @@ def _check_command_permission(self, command: str) -> str | None:
 ### テスト方針
 
 - `write_memory_file(path="permissions.md", ...)` → ブロック
-- `write_memory_file(path="identity.md", ...)` → ブロック
-- `write_memory_file(path="bootstrap.md", ...)` → ブロック
+- `write_memory_file(path="IDENTITY.md", ...)` → ブロック
+- `write_memory_file(path="BOOTSTRAP.md", ...)` → ブロック
 - `write_memory_file(path="../other/knowledge/x.md", ...)` → ブロック
 - `write_memory_file(path="knowledge/new.md", ...)` → 成功
-- `write_memory_file(path="heartbeat.md", ...)` → 成功
+- `write_memory_file(path="HEARTBEAT.md", ...)` → 成功
 - `write_memory_file(path="cron.md", ...)` → 成功
-- `read_memory_file(path="../other/identity.md")` → ブロック
+- `read_memory_file(path="../other/IDENTITY.md")` → ブロック
 - `read_memory_file(path="episodes/2026-02-15.md")` → 成功
 - `write_file` で自person_dirの `permissions.md` → ブロック
-- `edit_file` で自person_dirの `identity.md` → ブロック
+- `edit_file` で自person_dirの `IDENTITY.md` → ブロック
 - `write_file` で他者のperson_dir → ブロック（既存ロジックで対応済み）
 
 ---
@@ -297,7 +299,7 @@ async def _pre_tool_hook(
 #### 2. ファイルアクセス検査関数
 
 ```python
-_PROTECTED_FILES = frozenset({"permissions.md", "identity.md", "bootstrap.md"})
+_PROTECTED_FILES = frozenset({"permissions.md", "IDENTITY.md", "SOUL.md", "BOOTSTRAP.md"})
 
 def _check_a1_file_access(
     file_path: str, person_dir: Path, *, write: bool
@@ -398,7 +400,7 @@ options = ClaudeAgentOptions(
 ### テスト方針
 
 - A1モードで `Write` ツールが `permissions.md` を書き換えようとした場合 → deny
-- A1モードで `Edit` ツールが `identity.md` を編集しようとした場合 → deny
+- A1モードで `Edit` ツールが `IDENTITY.md` を編集しようとした場合 → deny
 - A1モードで `Read` ツールが `../other_person/episodes/` を読もうとした場合 → deny
 - A1モードで `Bash` ツールが `cp ../other_person/secret.md ./` を実行しようとした場合 → deny
 - A1モードで通常のファイル操作（`knowledge/` への書き込み等）→ allow

@@ -23,7 +23,6 @@ from server.stream_registry import (
     format_sse_with_id,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 
@@ -494,7 +493,7 @@ class TestFormatSSEWithId:
         payload = {"text": "hello", "count": 42}
         result = format_sse_with_id("test_event", payload, "id:1")
 
-        data_line = [l for l in result.split("\n") if l.startswith("data: ")][0]
+        data_line = [line for line in result.split("\n") if line.startswith("data: ")][0]
         data_json = data_line[len("data: "):]
         parsed = json.loads(data_json)
 
@@ -504,7 +503,7 @@ class TestFormatSSEWithId:
         payload = {"text": "こんにちは世界"}
         result = format_sse_with_id("text_delta", payload, "id:0")
 
-        data_line = [l for l in result.split("\n") if l.startswith("data: ")][0]
+        data_line = [line for line in result.split("\n") if line.startswith("data: ")][0]
         data_json = data_line[len("data: "):]
         parsed = json.loads(data_json)
 
@@ -513,7 +512,7 @@ class TestFormatSSEWithId:
     def test_handles_empty_payload(self):
         result = format_sse_with_id("done", {}, "resp:5")
 
-        data_line = [l for l in result.split("\n") if l.startswith("data: ")][0]
+        data_line = [line for line in result.split("\n") if line.startswith("data: ")][0]
         data_json = data_line[len("data: "):]
         parsed = json.loads(data_json)
 

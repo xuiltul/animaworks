@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/security.md -->
-<!-- i18n: source-sha256=34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Verified commit: 581e20f1
 

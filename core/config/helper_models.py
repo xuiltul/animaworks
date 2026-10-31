@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.schemas import (
     DEFAULT_CONSOLIDATION_MODEL,
     AnimaWorksConfig,
@@ -440,7 +441,7 @@ def validate_helper_model_credentials(
             anima_dirs.extend(
                 child
                 for child in sorted(root.iterdir())
-                if child.is_dir() and ((child / "status.json").is_file() or (child / "identity.md").is_file())
+                if child.is_dir() and ((child / "status.json").is_file() or (child / IDENTITY_FILE).is_file())
             )
 
     credentials = _get(config, "credentials", {})

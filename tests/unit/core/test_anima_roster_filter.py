@@ -48,11 +48,11 @@ def _make_layout(tmp_path: Path, *, anima_names: list[str], tombstone: str | Non
     shared.mkdir(parents=True)
     for name in anima_names:
         (animas / name).mkdir()
-        (animas / name / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+        (animas / name / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
     if tombstone:
         tdir = animas / tombstone
         tdir.mkdir(exist_ok=True)
-        (tdir / "identity.md").write_text(f"# {tombstone}\n", encoding="utf-8")
+        (tdir / "IDENTITY.md").write_text(f"# {tombstone}\n", encoding="utf-8")
         (tdir / "status.json").write_text(
             json.dumps({"enabled": False}, ensure_ascii=False),
             encoding="utf-8",

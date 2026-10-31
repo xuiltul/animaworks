@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from core.time_utils import now_jst
 import logging
 from unittest.mock import patch
 
@@ -13,8 +12,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from core.time_utils import now_jst
 from server.app import RequestLoggingMiddleware
-
 
 # ── RequestLoggingMiddleware ──────────────────────────────
 
@@ -73,8 +72,8 @@ class TestFrontendLogEndpoints:
     @pytest.fixture()
     def app(self, tmp_path):
         """Create a minimal FastAPI app with system routes for testing."""
-        from server.routes.system import create_system_router
         import server.routes.system as sys_module
+        from server.routes.system import create_system_router
 
         # Reset the frontend logger so it gets re-created with tmp_path
         sys_module._frontend_logger = None

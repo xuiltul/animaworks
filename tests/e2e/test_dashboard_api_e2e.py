@@ -87,7 +87,7 @@ def _write_cron_md(animas_dir: Path, name: str, content: str) -> None:
     """Write a cron.md file for an anima."""
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     (anima_dir / "cron.md").write_text(content, encoding="utf-8")
 
 
@@ -268,7 +268,7 @@ class TestSchedulerWithoutCronMd:
         # Create an anima without cron.md
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _create_app(tmp_path, anima_names=["alice"])
         transport = ASGITransport(app=app)
@@ -287,7 +287,7 @@ class TestSchedulerWithoutCronMd:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _create_app(tmp_path, anima_names=["alice"])
         transport = ASGITransport(app=app)
@@ -344,7 +344,7 @@ class TestConnectionsEndpoint:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _create_app(tmp_path, anima_names=["alice"], ws_connections=3)
         transport = ASGITransport(app=app)

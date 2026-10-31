@@ -39,10 +39,10 @@ def _setup_data_dir(tmp_path: Path) -> Path:
 
 
 def _create_anima(data_dir: Path, name: str, *, supervisor: str | None = None) -> Path:
-    """Create a minimal anima directory with identity.md and status.json."""
+    """Create a minimal anima directory with IDENTITY.md and status.json."""
     anima_dir = data_dir / "animas" / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
     (anima_dir / "activity_log").mkdir(exist_ok=True)
     (anima_dir / "state").mkdir(exist_ok=True)
 
@@ -281,7 +281,7 @@ class TestCmdAnimaRename:
         cmd_anima_rename(args)
 
         assert not (data_dir / "animas" / "sakura").exists()
-        assert (data_dir / "animas" / "hinata" / "identity.md").exists()
+        assert (data_dir / "animas" / "hinata" / "IDENTITY.md").exists()
 
         raw = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
         assert "hinata" in raw["animas"]

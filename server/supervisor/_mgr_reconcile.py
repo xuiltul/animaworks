@@ -13,6 +13,7 @@ import json
 import logging
 import time
 
+from core.anima.workspace_files import IDENTITY_FILE
 from server.supervisor._manager_protocols import _ReconcileMixinHost
 
 logger = logging.getLogger(__name__)
@@ -62,14 +63,14 @@ class ReconcileMixin:
 
         # Build desired state from disk
         on_disk: dict[str, bool] = {}  # name -> enabled
-        # Anima dirs that have identity.md but no status.json.
+        # Anima dirs that have IDENTITY.md but no status.json.
         # These are either legacy animas or factory-in-progress.
         # They must NOT be auto-started but must NOT be killed if running.
         on_disk_incomplete: set[str] = set()
         for anima_dir in sorted(self.animas_dir.iterdir()):
             if not anima_dir.is_dir():
                 continue
-            if not (anima_dir / "identity.md").exists():
+            if not (anima_dir / IDENTITY_FILE).exists():
                 continue
             # status.json is created as the final step of anima_factory.
             # Its absence means creation may still be in progress.
@@ -224,7 +225,7 @@ class ReconcileMixin:
                     )
 
         # removed from disk + running → stop
-        # Protect running animas whose directory exists (identity.md present)
+        # Protect running animas whose directory exists (IDENTITY.md present)
         # even if status.json is missing (legacy or factory-in-progress).
         for name in list(running):
             if name not in on_disk and name not in on_disk_incomplete:

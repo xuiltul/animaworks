@@ -17,7 +17,7 @@ from server.routes.internal import create_internal_router
 def _write_anima(name: str, *, supervisor: str | None) -> Path:
     anima_dir = get_animas_dir() / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"{name}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"{name}\n", encoding="utf-8")
     (anima_dir / "status.json").write_text(json.dumps({"supervisor": supervisor, "enabled": True}), encoding="utf-8")
     (anima_dir / "permissions.json").write_text(json.dumps({"version": 1, "file_roots": []}), encoding="utf-8")
     return anima_dir
@@ -84,7 +84,7 @@ async def test_prompt_settings_api_is_limited_to_bootstrap_self_and_ancestor_inj
 
     manager_dir = _write_anima("manager", supervisor=None)
     worker_dir = _write_anima("worker", supervisor="manager")
-    (worker_dir / "bootstrap.md").write_text("initial setup\n", encoding="utf-8")
+    (worker_dir / "BOOTSTRAP.md").write_text("initial setup\n", encoding="utf-8")
     write_bootstrap_state(worker_dir, {"state": STATE_PENDING_USER_INPUT})
     save_config(
         AnimaWorksConfig(
@@ -103,8 +103,8 @@ async def test_prompt_settings_api_is_limited_to_bootstrap_self_and_ancestor_inj
             json={"setting": "identity", "content": "Human-approved identity"},
         )
     assert self_update.status_code == 200
-    assert (worker_dir / "identity.md").read_text(encoding="utf-8") == "Human-approved identity"
-    (worker_dir / "bootstrap.md").unlink()
+    assert (worker_dir / "IDENTITY.md").read_text(encoding="utf-8") == "Human-approved identity"
+    (worker_dir / "BOOTSTRAP.md").unlink()
     write_bootstrap_state(worker_dir, {"state": "completed"})
     async with AsyncClient(transport=ASGITransport(app=self_app), base_url="http://test") as client:
         post_bootstrap = await client.post(
@@ -112,14 +112,14 @@ async def test_prompt_settings_api_is_limited_to_bootstrap_self_and_ancestor_inj
             json={"setting": "identity", "content": "unauthorized identity change"},
         )
     assert post_bootstrap.status_code == 403
-    assert (worker_dir / "identity.md").read_text(encoding="utf-8") == "Human-approved identity"
+    assert (worker_dir / "IDENTITY.md").read_text(encoding="utf-8") == "Human-approved identity"
     async with AsyncClient(transport=ASGITransport(app=self_app), base_url="http://test") as client:
         own_injection = await client.post(
             "/api/internal/animas/worker/prompt-settings",
             json={"setting": "injection", "content": "Self-maintained guidance"},
         )
     assert own_injection.status_code == 200
-    assert (worker_dir / "injection.md").read_text(encoding="utf-8") == "Self-maintained guidance"
+    assert (worker_dir / "AGENTS.md").read_text(encoding="utf-8") == "Self-maintained guidance"
 
     supervisor_app = _app(InternalCaller(kind="anima", name="manager"))
     async with AsyncClient(transport=ASGITransport(app=supervisor_app), base_url="http://test") as client:
@@ -128,7 +128,7 @@ async def test_prompt_settings_api_is_limited_to_bootstrap_self_and_ancestor_inj
             json={"setting": "injection", "content": "Updated task guidance"},
         )
     assert subordinate_update.status_code == 200
-    assert (worker_dir / "injection.md").read_text(encoding="utf-8") == "Updated task guidance"
+    assert (worker_dir / "AGENTS.md").read_text(encoding="utf-8") == "Updated task guidance"
 
     outsider_app = _app(InternalCaller(kind="anima", name="outsider"))
     async with AsyncClient(transport=ASGITransport(app=outsider_app), base_url="http://test") as client:

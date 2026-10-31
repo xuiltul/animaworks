@@ -46,7 +46,7 @@ async def test_grok_profile_enforces_deny_and_write_roots(
     denied_dir = runtime_root / "denied"
     anima_dir.mkdir(parents=True)
     denied_dir.mkdir()
-    (anima_dir / "identity.md").write_text("# Grok sandbox E2E\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Grok sandbox E2E\n", encoding="utf-8")
 
     secret = denied_dir / "secret.txt"
     secret.write_text("GROK_DENIED_CANARY\n", encoding="utf-8")

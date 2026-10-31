@@ -25,7 +25,7 @@ class TestDetectOrphanAnimas:
     """Tests for detect_orphan_animas."""
 
     def test_no_orphans_when_all_valid(self, data_dir, make_anima):
-        """Directories with valid identity.md are not flagged as orphans."""
+        """Directories with valid IDENTITY.md are not flagged as orphans."""
         make_anima("sakura")
         make_anima("rin", supervisor="sakura")
 
@@ -37,7 +37,7 @@ class TestDetectOrphanAnimas:
         assert orphans == []
 
     def test_nontrivial_orphan_archived(self, data_dir, make_anima):
-        """A directory without identity.md but with state/ is archived and removed."""
+        """A directory without IDENTITY.md but with state/ is archived and removed."""
         make_anima("sakura")
 
         orphan_dir = data_dir / "animas" / "rie"
@@ -103,12 +103,12 @@ class TestDetectOrphanAnimas:
         assert not orphan_dir.exists()
 
     def test_trivial_orphan_with_empty_identity(self, data_dir, make_anima):
-        """An orphan with empty identity.md and no other content is auto-removed."""
+        """An orphan with empty IDENTITY.md and no other content is auto-removed."""
         make_anima("sakura")
 
         orphan_dir = data_dir / "animas" / "rie"
         orphan_dir.mkdir()
-        (orphan_dir / "identity.md").write_text("", encoding="utf-8")
+        (orphan_dir / "IDENTITY.md").write_text("", encoding="utf-8")
 
         from core.org.org_sync import detect_orphan_animas
 
@@ -118,12 +118,12 @@ class TestDetectOrphanAnimas:
         assert not orphan_dir.exists()
 
     def test_trivial_orphan_with_undefined_identity(self, data_dir, make_anima):
-        """An orphan with identity.md containing '未定義' is auto-removed."""
+        """An orphan with IDENTITY.md containing '未定義' is auto-removed."""
         make_anima("sakura")
 
         orphan_dir = data_dir / "animas" / "rie"
         orphan_dir.mkdir()
-        (orphan_dir / "identity.md").write_text("未定義", encoding="utf-8")
+        (orphan_dir / "IDENTITY.md").write_text("未定義", encoding="utf-8")
 
         from core.org.org_sync import detect_orphan_animas
 

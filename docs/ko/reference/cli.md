@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=edd56b9e67c756fec1b4eeecac5494f1c0ef7cc4efff2cf7ee64a7501baa0b9f generated=2026-10-30 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d381aa269e104fc13b7413556212b1ae09c5385a36a4e4c9da2af55d9140c099 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -14,13 +14,13 @@
 
 ## `anima`
 
-애니마 프로세스 관리
+Anima 프로세스 관리
 
 `usage: animaworks anima [-h]
-                        {restart,status,create,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
+                        {restart,status,create,export,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
                         ...`
 
-| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
@@ -87,6 +87,18 @@
 | 이름 | 유형 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
 | anima | positional | — | — | 활성화할 애니마 이름 |
+
+## `anima export`
+
+Anima의 작업 공간을 OpenClaw / Hermes Agent 형식으로 내보내기
+
+`usage: animaworks anima export [-h] --format {openclaw,hermes} --out DIR anima`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| anima | 위치 인수 | — | — | 내보낼 Anima 이름 |
+| --format | 옵션 | — | openclaw, hermes | 대상 작업 공간 형식 |
+| --out | 옵션 | — | — | 출력 디렉터리 |
 
 ## `anima info`
 
@@ -686,14 +698,17 @@ anima용 stdio MCP 서버 실행
 
 런타임 데이터에 필요한 마이그레이션을 실행합니다.
 
-`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]`
+`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]
+                          [--rollback-standard-files] [--anima NAME]`
 
-| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
 | --dry-run | 플래그 | false | — | 아무것도 수정하지 않고 변경 사항 미리보기 |
-| --verbose | 플래그 | false | — | 파일 수준의 상세 변경 사항 표시 |
-| --list | 플래그 | false | — | 모든 마이그레이션 단계와 상태 나열 |
-| --force | 플래그 | false | — | 상태와 관계없이 모든 마이그레이션 재적용 |
+| --verbose | 플래그 | false | — | 파일별 상세 변경 사항 표시 |
+| --list | 플래그 | false | — | 모든 마이그레이션 단계와 상태 표시 |
+| --force | 플래그 | false | — | 상태와 관계없이 모든 마이그레이션 다시 적용 |
+| --rollback-standard-files | 플래그 | false | — | 최신 standard-files 아카이브에서 레거시 작업 공간 파일 복원 |
+| --anima | 옵션 | — | — | 롤백을 하나의 Anima로 제한 |
 
 ## `models`
 

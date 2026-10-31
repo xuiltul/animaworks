@@ -124,7 +124,7 @@ class TestCatalogUsesSkillIndex:
         skills_dir, common_skills_dir, procedures_dir = skill_dirs
         anima_dir = tmp_path / "anima_dir"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("I am Test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Test", encoding="utf-8")
         (anima_dir / "skills").symlink_to(skills_dir)
         (anima_dir / "procedures").symlink_to(procedures_dir)
 

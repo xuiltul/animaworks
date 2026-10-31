@@ -114,10 +114,10 @@ async def _exercise_semantic_operations(
     await writer.set_consolidation_mode(False)
     await writer.rotate_prompt_logs()
 
-    (anima_dir / "heartbeat.md").write_text("# Heartbeat\n", encoding="utf-8")
-    (anima_dir / "bootstrap.md").write_text("# Bootstrap\n", encoding="utf-8")
+    (anima_dir / "HEARTBEAT.md").write_text("# Heartbeat\n", encoding="utf-8")
+    (anima_dir / "BOOTSTRAP.md").write_text("# Bootstrap\n", encoding="utf-8")
     archived_heartbeat = await writer.archive_heartbeat_md_snapshot()
-    archived_bootstrap = await writer.archive_bootstrap_file("bootstrap.md")
+    archived_bootstrap = await writer.archive_bootstrap_file("BOOTSTRAP.md")
 
     await writer.archive_shortterm("chat", "default")
     legacy_dir = anima_dir / "shortterm"

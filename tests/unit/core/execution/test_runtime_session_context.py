@@ -24,7 +24,11 @@ def test_runtime_session_context_env_roundtrip(monkeypatch):
 
 
 def test_runtime_session_scope_resets():
-    from core.execution.session.session_context import RuntimeSessionContext, current_runtime_session, runtime_session_scope
+    from core.execution.session.session_context import (
+        RuntimeSessionContext,
+        current_runtime_session,
+        runtime_session_scope,
+    )
 
     ctx = RuntimeSessionContext.create(
         session_type="chat",

@@ -73,13 +73,13 @@ class TestSetupTeam:
     def test_creates_identity_md(self, runtime_dir, team_config):
         setup_team(team_config, runtime_dir=runtime_dir)
 
-        identity = (runtime_dir / "animas" / "test-arch" / "identity.md").read_text()
+        identity = (runtime_dir / "animas" / "test-arch" / "IDENTITY.md").read_text()
         assert "Test architect" in identity
 
     def test_creates_injection_md(self, runtime_dir, team_config):
         setup_team(team_config, runtime_dir=runtime_dir)
 
-        injection = (runtime_dir / "animas" / "test-inv" / "injection.md").read_text()
+        injection = (runtime_dir / "animas" / "test-inv" / "AGENTS.md").read_text()
         assert "## Role" in injection
 
     def test_creates_subdirectories(self, runtime_dir, team_config):

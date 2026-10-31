@@ -958,7 +958,7 @@ class TestStateFileLock:
         state_dir.mkdir(exist_ok=True)
         assert handler._is_state_file(state_dir / "current_state.md")
         assert not handler._is_state_file(state_dir / "pending.md")  # pending.md abolished
-        assert not handler._is_state_file(anima_dir / "identity.md")
+        assert not handler._is_state_file(anima_dir / "IDENTITY.md")
 
 
 # ── Wake Event ──────────────────────────────────────────────

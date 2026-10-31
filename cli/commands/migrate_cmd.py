@@ -35,6 +35,12 @@ def cmd_migrate(args: argparse.Namespace) -> None:
     verbose: bool = getattr(args, "verbose", False)
     force: bool = getattr(args, "force", False)
     list_mode: bool = getattr(args, "list", False)
+    rollback: bool = getattr(args, "rollback_standard_files", False)
+    anima_name: str | None = getattr(args, "anima", None)
+
+    if rollback:
+        _run_rollback(data_dir, anima_name=anima_name, dry_run=dry_run)
+        return
 
     runner = MigrationRunner(data_dir)
     register_all_steps(runner)
@@ -80,6 +86,37 @@ def cmd_migrate(args: argparse.Namespace) -> None:
             print(f"  - {e}")
 
 
+def _run_rollback(data_dir, *, anima_name: str | None, dry_run: bool) -> None:
+    """Roll back the standard workspace-file migration."""
+    from core.migrations.standard_files_rollback import rollback_standard_files
+
+    if dry_run:
+        print(t("migrate.rollback_dry_run_header"))
+        print()
+    result = rollback_standard_files(data_dir, anima_name=anima_name, dry_run=dry_run)
+    if not result.animas:
+        print(t("migrate.rollback_no_archives", anima=anima_name or "all"))
+        return
+
+    if dry_run:
+        for detail in result.details:
+            print(f"  {detail}")
+        print()
+    print(
+        t(
+            "migrate.rollback_complete",
+            animas=len(result.animas),
+            restored=len(result.restored_files),
+            moved=len(result.moved_new_files),
+        )
+    )
+    if result.tracker_entry_removed:
+        print(t("migrate.rollback_state_removed"))
+    for warning in result.warnings:
+        print(f"  WARNING: {warning}")
+    print(t("migrate.rollback_old_version_note"))
+
+
 def _print_list(runner: MigrationRunner) -> None:
     """Print migration step inventory."""
     print(t("migrate.list_header"))
@@ -111,4 +148,10 @@ def register_migrate_command(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--verbose", action="store_true", help="Show detailed file-level changes")
     p.add_argument("--list", action="store_true", help="List all migration steps and their status")
     p.add_argument("--force", action="store_true", help="Re-apply all migrations regardless of state")
+    p.add_argument(
+        "--rollback-standard-files",
+        action="store_true",
+        help="Restore legacy workspace files from the latest standard-files archive",
+    )
+    p.add_argument("--anima", metavar="NAME", help="Limit rollback to one anima")
     p.set_defaults(func=cmd_migrate)

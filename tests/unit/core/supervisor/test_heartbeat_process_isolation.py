@@ -10,10 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.schemas import CycleResult
 from core.runtime.ipc_v2 import IPCV2ConnectionState, IPCV2Identity
 from core.runtime.scheduler_manager import SchedulerManager
 from core.runtime.task_runner_supervisor import TaskRunnerJob, TaskRunnerSupervisor
+from core.schemas import CycleResult
 
 
 def _manager(tmp_path: Path) -> tuple[SchedulerManager, MagicMock]:
@@ -175,9 +175,9 @@ async def test_periodic_work_waits_for_initial_profile(tmp_path: Path) -> None:
 
     manager, anima = _manager(tmp_path)
     directory = manager._anima_dir
-    (directory / "identity.md").write_text("未定義", encoding="utf-8")
-    (directory / "injection.md").write_text("未定義", encoding="utf-8")
-    (directory / "bootstrap.md").write_text("First conversation", encoding="utf-8")
+    (directory / "IDENTITY.md").write_text("未定義", encoding="utf-8")
+    (directory / "AGENTS.md").write_text("未定義", encoding="utf-8")
+    (directory / "BOOTSTRAP.md").write_text("First conversation", encoding="utf-8")
     runner = manager._task_runner_supervisor
     if runner:
         runner.run_heartbeat = AsyncMock()
@@ -189,7 +189,7 @@ async def test_periodic_work_waits_for_initial_profile(tmp_path: Path) -> None:
     if runner:
         runner.run_heartbeat.assert_not_awaited()
     # Completing the profile re-enables the existing schedule automatically.
-    (directory / "identity.md").write_text("# Identity\nA helpful manager.", encoding="utf-8")
-    (directory / "injection.md").write_text("# Role\nCoordinate the team.", encoding="utf-8")
-    (directory / "bootstrap.md").unlink()
+    (directory / "IDENTITY.md").write_text("# Identity\nA helpful manager.", encoding="utf-8")
+    (directory / "AGENTS.md").write_text("# Role\nCoordinate the team.", encoding="utf-8")
+    (directory / "BOOTSTRAP.md").unlink()
     assert not manager._awaiting_initial_setup()

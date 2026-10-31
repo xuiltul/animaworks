@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.exceptions import AnimaWorksError  # noqa: F401
 from core.i18n import t
 from core.paths import load_prompt
@@ -66,7 +67,7 @@ def _prompt_source_fingerprint(anima_dir: Path, prompt: str | None = None) -> st
         return digest.hexdigest()
 
     for relative_path in (
-        "identity.md",
+        IDENTITY_FILE,
         "character_sheet.md",
         "assets/prompt.txt",
         "assets/prompt_realistic.txt",
@@ -243,7 +244,7 @@ def find_animas_with_missing_assets(
     for anima_dir in sorted(animas_dir.iterdir()):
         if not anima_dir.is_dir():
             continue
-        if not (anima_dir / "identity.md").exists():
+        if not (anima_dir / IDENTITY_FILE).exists():
             continue
         result = check_anima_assets(
             anima_dir,
@@ -275,7 +276,7 @@ async def reconcile_anima_assets(
     Args:
         anima_dir: Path to the anima's runtime directory.
         prompt: Character prompt for image generation.  If ``None``,
-            attempts to extract from identity.md.
+            attempts to extract from IDENTITY.md.
         enable_3d: Whether to include 3D model generation steps.
         image_style: Which image style to generate assets for.
 
@@ -631,16 +632,16 @@ async def _extract_prompt(
 
     Fallback chain:
       1. Regex match for explicit ``image_prompt:`` / ``外見:`` fields
-         (searches identity.md, then character_sheet.md)
+         (searches IDENTITY.md, then character_sheet.md)
       2. Cached ``assets/prompt.txt`` (or ``prompt_realistic.txt``)
          from a previous LLM synthesis
       3. LLM synthesis — pass the full character document to LLM which
          extracts visual appearance and converts to tags.
-         Tries character_sheet.md first, then identity.md.
+         Tries character_sheet.md first, then IDENTITY.md.
     """
-    # Collect candidate texts: identity.md first, then character_sheet.md
+    # Collect candidate texts: IDENTITY.md first, then character_sheet.md
     candidates: list[str] = []
-    for filename in ("identity.md", "character_sheet.md"):
+    for filename in (IDENTITY_FILE, "character_sheet.md"):
         path = anima_dir / filename
         if path.exists():
             candidates.append(path.read_text(encoding="utf-8"))
@@ -669,7 +670,7 @@ async def _extract_prompt(
         return cached
 
     # Step 3: Pass the richest available document to LLM for synthesis.
-    # Prefer character_sheet.md (has appearance info), fall back to identity.md.
+    # Prefer character_sheet.md (has appearance info), fall back to IDENTITY.md.
     for text in reversed(candidates):
         result = await _synthesize_prompt_via_llm(anima_dir, text, style=style)
         if result:

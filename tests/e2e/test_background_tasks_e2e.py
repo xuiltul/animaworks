@@ -279,7 +279,7 @@ class TestBackgroundTaskAPIEndpoint:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "api-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# API Anima", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# API Anima", encoding="utf-8")
 
         bg_dir = anima_dir / "state" / "background_tasks"
         _write_task_json(bg_dir, "task001", status="completed")
@@ -310,7 +310,7 @@ class TestBackgroundTaskAPIEndpoint:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "api-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# API Anima", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# API Anima", encoding="utf-8")
 
         bg_dir = anima_dir / "state" / "background_tasks"
         _write_task_json(bg_dir, "single001", status="completed")
@@ -338,7 +338,7 @@ class TestBackgroundTaskAPIEndpoint:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "api-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# API Anima", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# API Anima", encoding="utf-8")
 
         app = _create_test_app(tmp_path, anima_names=["api-anima"])
 
@@ -360,7 +360,7 @@ class TestBackgroundTaskAPIEndpoint:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "api-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# API Anima", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# API Anima", encoding="utf-8")
 
         app = _create_test_app(tmp_path, anima_names=["api-anima"])
 

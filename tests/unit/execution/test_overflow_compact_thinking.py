@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from core.llm.guard.error_classifier import FailoverReason, RecoveryHint
 from core.execution.loop_guards import call_llm_with_retry
+from core.llm.guard.error_classifier import FailoverReason, RecoveryHint
 
 # ── call_llm_with_retry: on_context_overflow ─────────────────
 

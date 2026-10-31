@@ -374,7 +374,7 @@ ChromaDBが未初期化 or 破損している場合:
 
 ### 注入しないもの
 
-- エージェントの identity.md, injection.md（既存の注入パスで処理済み）
+- エージェントの IDENTITY.md / SOUL.md, AGENTS.md（既存の注入パスで処理済み）
 - state/current_state.md, state/pending.md（既存の注入パスで処理済み）
 - 他のAnimaの内部記憶（カプセル化原則に違反）
 

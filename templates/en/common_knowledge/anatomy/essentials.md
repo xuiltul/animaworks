@@ -36,20 +36,20 @@ Chat and Heartbeat run on **separate locks**, so it can respond immediately to h
 
 ---
 
-## Heartbeat vs Cron — Two Autonomous Actions
+## Heartbeat vs Cron — Two Types of Autonomous Action
 
-Both are mechanisms that "run without human instruction," but their purposes are fundamentally different.
+Both are mechanisms that “operate without human instructions,” but their purposes are fundamentally different.
 
-| Perspective | Heartbeat (periodic patrol) | Cron (scheduled task) |
+| Aspect | Heartbeat (regular rounds) | Cron (scheduled tasks) |
 |------|---------------------|------------------|
-| **Analogy** | A security guard who patrols the office periodically | A newspaper delivery that arrives every morning at 9 |
-| **Purpose** | Situation check, planning, reflection | Execution of assigned work |
-| **Does it execute?** | **No**. If it finds a task, it only submits it via `submit_tasks` or `delegate_task` | **Yes**. LLM type thinks and executes; Command type executes immediately |
-| **Interval** | Fixed interval (default 30 minutes, varies with Activity Level) | Flexibly specified with cron syntax (every day at 9:00, every Friday at 17:00, etc.) |
-| **Configuration file** | `heartbeat.md` (checklist) | `cron.md` (task definition) |
-| **Typical examples** | Checking unread messages, detecting blockers, progress reflection | Morning work planning, weekly reports, running backups |
+| **Analogy** | A security guard who regularly patrols the office | Newspaper delivery that arrives at 9 a.m. every morning |
+| **Purpose** | Checking the situation, planning, and reflection | Executing predefined work |
+| **Does it execute?** | **No.** When it discovers a task, it only submits it via `submit_tasks` or `delegate_task` | **Yes.** An LLM-type thinks and executes; a Command-type executes immediately |
+| **Interval** | Fixed intervals (30 minutes by default, varies with Activity Level) | Flexible scheduling using cron expressions (every day at 9:00, every Friday at 17:00, etc.) |
+| **Configuration file** | `HEARTBEAT.md` (checklist) | `cron.md` (task definitions) |
+| **Typical examples** | Checking unread messages, detecting blockers, reviewing progress | Morning work plans, weekly reports, running backups |
 
-**If unsure**: "Just check and decide" → add to the Heartbeat checklist. "Do something at a fixed time" → define as a Cron task.
+**If you’re unsure**: “Just check and decide” → Add it to the Heartbeat checklist. “Do something at a set time” → Define it as a Cron task.
 
 → Details: `operations/heartbeat-cron-guide.md`
 

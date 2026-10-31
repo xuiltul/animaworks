@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.enclave.ops import check_gateway_health, count_today_egress_audits
 from core.runtime.cron_diagnostics import diagnose_cron_task
 from core.runtime.schedule_parser import parse_cron_md, parse_schedule
@@ -478,7 +479,7 @@ def create_system_router() -> APIRouter:
             for anima_dir in sorted(animas_dir.iterdir()):
                 if not anima_dir.is_dir():
                     continue
-                if not (anima_dir / "identity.md").exists():
+                if not (anima_dir / IDENTITY_FILE).exists():
                     continue
                 name = anima_dir.name
 

@@ -48,7 +48,7 @@ def anima_env(tmp_path: Path):
     def create_anima(name: str, *, enabled: bool = True, role: str = "general", supervisor: str | None = None):
         anima_dir = animas_dir / name
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(f"# {name.title()}\nPersonality text.", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(f"# {name.title()}\nPersonality text.", encoding="utf-8")
 
         status = {"enabled": enabled, "role": role}
         if supervisor:
@@ -105,7 +105,7 @@ class TestAnimaDeleteE2E:
         # Verify ZIP contents
         with zipfile.ZipFile(archives[0]) as zf:
             names = zf.namelist()
-            assert any("identity.md" in n for n in names)
+            assert any("IDENTITY.md" in n for n in names)
 
         # Verify config updated
         config = json.loads((env["data_dir"] / "config.json").read_text())
@@ -266,7 +266,7 @@ class TestAnimaListE2E:
     def test_list_skips_dirs_without_identity(self, anima_env, capsys):
         env = anima_env
         env["create_anima"]("alice")
-        # Create orphan dir without identity.md
+        # Create orphan dir without IDENTITY.md
         orphan = env["animas_dir"] / "orphan"
         orphan.mkdir()
 

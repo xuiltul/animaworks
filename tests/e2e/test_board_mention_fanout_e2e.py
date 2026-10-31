@@ -44,7 +44,7 @@ def _make_anima_dir(tmp_path: Path, name: str) -> Path:
     """Create a minimal anima directory with required files."""
     anima_dir = tmp_path / "animas" / name
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text(
+    (anima_dir / "IDENTITY.md").write_text(
         f"# {name}\n\nテスト用Anima。\n",
         encoding="utf-8",
     )

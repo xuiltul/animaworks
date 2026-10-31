@@ -260,7 +260,7 @@ class AnimaMergeService:
             if not anima_dir.is_dir():
                 errors.append(f"Anima directory does not exist: animas/{name}")
                 continue
-            for required in ("identity.md", "status.json"):
+            for required in ("IDENTITY.md", "status.json"):
                 if not (anima_dir / required).is_file():
                     errors.append(f"Missing required file: animas/{name}/{required}")
         if errors:

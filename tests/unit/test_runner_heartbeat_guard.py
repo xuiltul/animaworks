@@ -269,7 +269,7 @@ class TestRunnerHeartbeat24hDefault:
     """Verify SchedulerManager._setup_heartbeat respects 2-tier active hours resolution."""
 
     def test_default_24h_when_no_time_range(self, tmp_path):
-        """No time range in heartbeat.md => hour='*' (24h)."""
+        """No time range in HEARTBEAT.md => hour='*' (24h)."""
         mock_anima = MagicMock()
         mock_anima.memory.read_heartbeat_config.return_value = "- チェック項目A"
 
@@ -291,7 +291,7 @@ class TestRunnerHeartbeat24hDefault:
         assert hour_field == "*"
 
     def test_heartbeat_md_time_range_restricts_hours(self, tmp_path):
-        """Time range in heartbeat.md restricts heartbeat hours."""
+        """Time range in HEARTBEAT.md restricts heartbeat hours."""
         mock_anima = MagicMock()
         mock_anima.memory.read_heartbeat_config.return_value = "稼働時間: 8:00 - 20:00"
 

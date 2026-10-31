@@ -55,8 +55,8 @@ def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "test-autocompact"
     for sub in ("state", "episodes", "knowledge", "procedures", "skills", "shortterm", "activity_log"):
         (d / sub).mkdir(parents=True)
-    (d / "identity.md").write_text("# Test", encoding="utf-8")
-    (d / "injection.md").write_text("", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test", encoding="utf-8")
+    (d / "AGENTS.md").write_text("", encoding="utf-8")
     (d / "permissions.md").write_text("", encoding="utf-8")
     return d
 

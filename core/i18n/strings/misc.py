@@ -111,24 +111,24 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "builder.injection_size_warning": {
         "ja": (
-            "⚠️ あなたの injection.md が {size} 文字に肥大化しています（目標上限: {threshold} 文字）。\n"
-            "injection.md は「行動憲法 + 参照索引」として保つこと:\n"
+            "⚠️ あなたの AGENTS.md が {size} 文字に肥大化しています（目標上限: {threshold} 文字）。\n"
+            "AGENTS.md は「行動憲法 + 参照索引」として保つこと:\n"
             "1. 常駐させる: 役割定義、絶対遵守ルール、安全・承認・機密・二重実行防止\n"
             "2. 外へ逃がす: 手順の詳細は procedures/、学習知識や事例は knowledge/ に移す\n"
-            '3. injection.md には read_memory_file(path="...") のポインタを残す\n'
-            '4. consolidation では read_memory_file(path="injection.md") で確認し、'
+            '3. AGENTS.md には read_memory_file(path="...") のポインタを残す\n'
+            '4. consolidation では read_memory_file(path="AGENTS.md") で確認し、'
             "目標上限を超える場合は自分で外部参照化して上書き整理する"
         ),
         "en": (
-            "⚠️ Your injection.md has grown to {size} characters "
+            "⚠️ Your AGENTS.md has grown to {size} characters "
             "(target limit: {threshold}).\n"
-            "Keep injection.md as a constitution plus pointer index:\n"
+            "Keep AGENTS.md as a constitution plus pointer index:\n"
             "1. Keep resident: role definition, non-negotiable rules, safety, "
             "approval, confidentiality, and duplicate-action prevention\n"
             "2. Move out: procedural details to procedures/, learned knowledge "
             "and examples to knowledge/\n"
-            '3. Leave read_memory_file(path="...") pointers in injection.md\n'
-            '4. During consolidation, read_memory_file(path="injection.md") and, '
+            '3. Leave read_memory_file(path="...") pointers in AGENTS.md\n'
+            '4. During consolidation, read_memory_file(path="AGENTS.md") and, '
             "when it exceeds the target limit, rewrite it yourself with external "
             "references"
         ),
@@ -523,5 +523,20 @@ STRINGS: dict[str, dict[str, str]] = {
     "voice.delegation_still_running": {
         "ja": "[ask_anima job {job}: 30分以内に完了を確認できませんでした。依頼: {request}]",
         "en": "[ask_anima job {job}: still running after 30 minutes. Request: {request}]",
+    },
+    "cli.export_help": {
+        "ja": "Anima のワークスペースを OpenClaw / Hermes Agent 形式で書き出す",
+        "en": "Export an Anima workspace in OpenClaw or Hermes Agent format",
+        "ko": "Anima 워크스페이스를 OpenClaw / Hermes Agent 형식으로 내보내기",
+    },
+    "cli.export_complete": {
+        "ja": "{anima} を {format} 形式で書き出しました: {out} ({count} ファイル)",
+        "en": "Exported {anima} in {format} format: {out} ({count} files)",
+        "ko": "{anima}를 {format} 형식으로 내보냈습니다: {out} ({count}개 파일)",
+    },
+    "cli.export_failed": {
+        "ja": "エクスポートに失敗しました: {error}",
+        "en": "Export failed: {error}",
+        "ko": "내보내기 실패: {error}",
     },
 }

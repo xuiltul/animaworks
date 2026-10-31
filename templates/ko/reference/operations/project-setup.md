@@ -194,8 +194,8 @@ Anima 추가 방법은 3가지가 있다. 모두 `animaworks anima create` 또�
 
 ### 방법 1: 템플릿에서 생성
 
-사전 정의된 템플릿(`templates/ja/anima_templates/` 또는 `templates/en/anima_templates/` 하위)을 사용하는 방법.
-템플릿에는 identity.md, injection.md, permissions.json, 스킬 등이 포함되어 있다.
+사전 정의된 템플릿(`templates/ja/anima_templates/` 또는 `templates/en/anima_templates/` 아래)을 사용하는 방법입니다.
+템플릿에는 IDENTITY.md, SOUL.md, AGENTS.md, permissions.json, 스킬 등이 포함되어 있습니다.
 
 ```bash
 # テンプレートから作成（テンプレート名はディレクトリ名）
@@ -205,29 +205,29 @@ animaworks anima create --template <テンプレート名>
 animaworks anima create --template <テンプレート名> --name <anima名>
 ```
 
-템플릿이 가장 권장되는 방법이다. 이미 캐릭터 설정이 정비되어 있으며, bootstrap(최초 시작의 자기 정의)을 건너뛸 수 있다.
+템플릿을 사용하는 방법이 가장 권장됩니다. 캐릭터 설정이 이미 갖춰져 있어 bootstrap(최초 시작 시 자기 정의)을 건너뛸 수 있습니다.
 
 ### 방법 2: Markdown 파일에서 생성
 
-캐릭터 시트(Markdown)를 준비하고, 이를 기반으로 Anima를 생성한다.
+캐릭터 시트(Markdown)를 준비하고, 이를 바탕으로 Anima를 생성합니다.
 
 ```bash
 animaworks anima create --from-md /path/to/character.md [--name ken] [--role engineer] [--supervisor aoi]
 ```
 
-- `--name`: Anima 이름(생략 시 시트에서 추출)
+- `--name`: Anima 이름(생략하면 시트에서 추출)
 - `--role`: 역할 템플릿(engineer, researcher, manager, writer, ops, general). 기본값: general
-- `--supervisor`: 상급자 Anima 이름(캐릭터 시트의 「상급자」를 덮어씀)
+- `--supervisor`: 상급자 Anima 이름(캐릭터 시트의 ‘상급자’를 덮어씀)
 
-Markdown 파일은 `character_sheet.md`로 Anima 디렉터리에 복사된다.
-시트의 「인격」「역할·행동 방침」 섹션은 identity.md와 injection.md에 반영된다.
-역할 템플릿에서 permissions.json와 specialty_prompt.md가 적용된다.
+Markdown 파일은 `character_sheet.md`로 Anima 디렉터리에 복사됩니다.
+시트의 ‘기본 정보’는 IDENTITY.md에, ‘성격’은 SOUL.md에 반영됩니다(프로필 제목은 IDENTITY.md에 반영). ‘역할·행동 방침’은 AGENTS.md에 반영됩니다.
+역할 템플릿에서 permissions.json과 specialty_prompt.md가 적용됩니다.
 
-Markdown 파일에는 다음을 SHOULD로 포함:
-- `# Character: 名前` 형식의 제목, 또는 기본 정보 테이블의 「영문 이름」 행(이름 자동 추출에 사용)
-- `## 基本情報` — 영문 이름, 상급자, 모델 등의 테이블
-- `## 人格` — identity.md에 반영
-- `## 役割・行動方針` — injection.md에 반영
+Markdown 파일에는 다음 항목을 포함하는 것이 SHOULD입니다.
+- `# Character: 名前` 형식의 제목 또는 기본 정보 표의 ‘영문명’ 행(이름 자동 추출에 사용)
+- `## 基本情報` — 영문명, 상급자, 모델 등의 표. IDENTITY.md에 반영
+- `## 人格` — SOUL.md에 반영(프로필 관련 제목은 IDENTITY.md로 분류)
+- `## 役割・行動方針` — AGENTS.md에 반영
 
 ### 방법 3: 빈 생성
 
@@ -240,17 +240,18 @@ animaworks anima create --name aoi
 `--name`는 필수. 빈 생성에서는 `{name}` 플레이스홀더가 실명으로 치환된 스켈레톤 파일이 생성된다.
 최초 시작의 bootstrap에서 에이전트가 사용자와의 대화를 통해 캐릭터를 자기 정의한다.
 
-### 생성 후 디렉터리 구성
+### 생성 후 디렉터리 구조
 
-어떤 방법이든 다음 디렉터리와 파일이 생성된다:
+어떤 방법을 사용하든 다음 디렉터리와 파일이 생성됩니다.
 
 ```
 ~/.animaworks/animas/{name}/
-├── identity.md          # 人格定義（不変ベースライン）
-├── injection.md         # 役割・行動指針（可変）
-├── bootstrap.md         # 初回起動指示（完了後に削除）
+├── IDENTITY.md          # プロフィール・外見（不変ベースライン）
+├── SOUL.md              # 人格・価値観（不変ベースライン）
+├── AGENTS.md            # 役割・行動指針（可変）
+├── BOOTSTRAP.md         # 初回起動指示（完了後に削除）
 ├── permissions.json       # ツール・コマンド権限
-├── heartbeat.md         # ハートビート設定
+├── HEARTBEAT.md         # ハートビート設定
 ├── cron.md              # 定時タスク設定
 ├── episodes/            # エピソード記憶（日別ログ）
 ├── knowledge/           # 意味記憶（学んだ知識）

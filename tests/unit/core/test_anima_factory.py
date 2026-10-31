@@ -151,38 +151,38 @@ class TestInitStateFiles:
 
 class TestShouldCreateBootstrap:
     def test_no_identity(self, tmp_path):
-        """Bootstrap needed when identity.md doesn't exist."""
+        """Bootstrap needed when IDENTITY.md doesn't exist."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
         assert _should_create_bootstrap(anima_dir) is True
 
     def test_empty_identity(self, tmp_path):
-        """Bootstrap needed when identity.md is empty."""
+        """Bootstrap needed when IDENTITY.md is empty."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("", encoding="utf-8")
         assert _should_create_bootstrap(anima_dir) is True
 
     def test_identity_with_undefined(self, tmp_path):
-        """Bootstrap needed when identity.md contains '未定義'."""
+        """Bootstrap needed when IDENTITY.md contains '未定義'."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("名前: 未定義\n職業: 未定義", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("名前: 未定義\n職業: 未定義", encoding="utf-8")
         assert _should_create_bootstrap(anima_dir) is True
 
     def test_character_sheet_exists(self, tmp_path):
         """Bootstrap needed when character_sheet.md exists."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Defined identity", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Defined identity", encoding="utf-8")
         (anima_dir / "character_sheet.md").write_text("# Character details", encoding="utf-8")
         assert _should_create_bootstrap(anima_dir) is True
 
     def test_defined_identity_no_bootstrap(self, tmp_path):
-        """Bootstrap NOT needed when identity.md is fully defined."""
+        """Bootstrap NOT needed when IDENTITY.md is fully defined."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Anima Identity\n\nName: Alice\nRole: Developer", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Anima Identity\n\nName: Alice\nRole: Developer", encoding="utf-8")
         assert _should_create_bootstrap(anima_dir) is False
 
 
@@ -191,43 +191,43 @@ class TestShouldCreateBootstrap:
 
 class TestPlaceBootstrap:
     def test_copies_bootstrap(self, tmp_path):
-        """Bootstrap is copied when needed (no identity.md)."""
+        """Bootstrap is copied when needed (no IDENTITY.md)."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        bootstrap = tmp_path / "bootstrap.md"
+        bootstrap = tmp_path / "BOOTSTRAP.md"
         bootstrap.write_text("Bootstrap content", encoding="utf-8")
         with patch("core.anima.factory.BOOTSTRAP_TEMPLATE", bootstrap):
             _place_bootstrap(anima_dir)
-        assert (anima_dir / "bootstrap.md").exists()
-        assert (anima_dir / "bootstrap.md").read_text(encoding="utf-8") == "Bootstrap content"
+        assert (anima_dir / "BOOTSTRAP.md").exists()
+        assert (anima_dir / "BOOTSTRAP.md").read_text(encoding="utf-8") == "Bootstrap content"
 
     def test_resolves_data_dir_placeholder(self, tmp_path):
         anima_dir = tmp_path / "animas" / "hinata"
         anima_dir.mkdir(parents=True)
-        bootstrap = tmp_path / "bootstrap.md"
+        bootstrap = tmp_path / "BOOTSTRAP.md"
         bootstrap.write_text("Read {data_dir}/prompts/guide.md", encoding="utf-8")
         with patch("core.anima.factory.BOOTSTRAP_TEMPLATE", bootstrap):
             _place_bootstrap(anima_dir)
-        assert (anima_dir / "bootstrap.md").read_text(encoding="utf-8") == f"Read {tmp_path}/prompts/guide.md"
+        assert (anima_dir / "BOOTSTRAP.md").read_text(encoding="utf-8") == f"Read {tmp_path}/prompts/guide.md"
 
     def test_no_bootstrap_template(self, tmp_path):
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        fake = tmp_path / "nonexistent_bootstrap.md"
+        fake = tmp_path / "nonexistent_BOOTSTRAP.md"
         with patch("core.anima.factory.BOOTSTRAP_TEMPLATE", fake):
             _place_bootstrap(anima_dir)
-        assert not (anima_dir / "bootstrap.md").exists()
+        assert not (anima_dir / "BOOTSTRAP.md").exists()
 
     def test_skips_bootstrap_when_not_needed(self, tmp_path):
-        """Bootstrap is NOT copied when identity.md is fully defined."""
+        """Bootstrap is NOT copied when IDENTITY.md is fully defined."""
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Fully Defined\n\nName: Alice\nRole: Dev", encoding="utf-8")
-        bootstrap = tmp_path / "bootstrap.md"
+        (anima_dir / "IDENTITY.md").write_text("# Fully Defined\n\nName: Alice\nRole: Dev", encoding="utf-8")
+        bootstrap = tmp_path / "BOOTSTRAP.md"
         bootstrap.write_text("Bootstrap content", encoding="utf-8")
         with patch("core.anima.factory.BOOTSTRAP_TEMPLATE", bootstrap):
             _place_bootstrap(anima_dir)
-        assert not (anima_dir / "bootstrap.md").exists()
+        assert not (anima_dir / "BOOTSTRAP.md").exists()
 
 
 # ── list_anima_templates ─────────────────────────────────
@@ -261,7 +261,7 @@ class TestCreateFromTemplate:
         tpl_dir = tmp_path / "tpl"
         tpl_dir.mkdir()
         (tpl_dir / "dev").mkdir()
-        (tpl_dir / "dev" / "identity.md").write_text("I am dev", encoding="utf-8")
+        (tpl_dir / "dev" / "IDENTITY.md").write_text("I am dev", encoding="utf-8")
 
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
@@ -272,7 +272,7 @@ class TestCreateFromTemplate:
         ):
             anima_dir = create_from_template(animas_dir, "dev")
             assert anima_dir.exists()
-            assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "I am dev"
+            assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "I am dev"
             # Runtime subdirs should be created
             assert (anima_dir / "episodes").is_dir()
 
@@ -295,7 +295,7 @@ class TestCreateFromTemplate:
     def test_custom_name(self, tmp_path):
         tpl_dir = tmp_path / "tpl"
         (tpl_dir / "dev").mkdir(parents=True)
-        (tpl_dir / "dev" / "identity.md").write_text("dev id", encoding="utf-8")
+        (tpl_dir / "dev" / "IDENTITY.md").write_text("dev id", encoding="utf-8")
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
         with (
@@ -309,7 +309,7 @@ class TestCreateFromTemplate:
         """create_from_template() creates status.json with enabled=true."""
         tpl_dir = tmp_path / "tpl"
         (tpl_dir / "dev").mkdir(parents=True)
-        (tpl_dir / "dev" / "identity.md").write_text("dev id", encoding="utf-8")
+        (tpl_dir / "dev" / "IDENTITY.md").write_text("dev id", encoding="utf-8")
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
         with (
@@ -342,7 +342,7 @@ class TestCreateBlank:
     def test_blank_with_template(self, tmp_path):
         blank_dir = tmp_path / "blank"
         blank_dir.mkdir()
-        (blank_dir / "identity.md").write_text("I am {name}", encoding="utf-8")
+        (blank_dir / "IDENTITY.md").write_text("I am {name}", encoding="utf-8")
 
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
@@ -351,13 +351,13 @@ class TestCreateBlank:
             patch("core.anima.factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"),
         ):
             anima_dir = create_blank(animas_dir, "bob")
-            content = (anima_dir / "identity.md").read_text(encoding="utf-8")
+            content = (anima_dir / "IDENTITY.md").read_text(encoding="utf-8")
             assert content == "I am bob"
 
     def test_blank_root_owned_template_files_use_guarded_store(self, tmp_path, monkeypatch):
         blank_dir = tmp_path / "blank"
         blank_dir.mkdir()
-        (blank_dir / "identity.md").write_text("I am {name}", encoding="utf-8")
+        (blank_dir / "IDENTITY.md").write_text("I am {name}", encoding="utf-8")
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
         monkeypatch.setenv("ANIMAWORKS_PROCESS_ROLE", "anima")
@@ -657,15 +657,15 @@ Friendly.
         with pytest.raises(ValueError, match="役割・行動方針"):
             _validate_character_sheet(content)
 
-    def test_identity_md_redirect_counts_as_valid(self):
+    def test_soul_md_redirect_counts_as_valid(self):
         content = """\
 ## 基本情報
 
 | 英名 | sakura |
 
-→ identity.md
+→ SOUL.md
 
-→ injection.md
+→ AGENTS.md
 """
         # Both 人格 and 役割・行動方針 are satisfied by redirect markers
         _validate_character_sheet(content)
@@ -838,7 +838,7 @@ Backend development.
         md = """\
 ## 人格
 
-→ identity.md
+→ IDENTITY.md
 
 ## 役割・行動方針
 
@@ -852,7 +852,7 @@ Development.
 
 
 class TestApplyDefaultsFromSheet:
-    def test_writes_identity_md(self, tmp_path):
+    def test_writes_identity_and_soul_md(self, tmp_path):
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
         md = """\
@@ -865,9 +865,11 @@ Friendly and thoughtful.
 Backend development.
 """
         _apply_defaults_from_sheet(anima_dir, md)
-        identity = anima_dir / "identity.md"
+        identity = anima_dir / "IDENTITY.md"
         assert identity.exists()
-        assert "Friendly and thoughtful." in identity.read_text(encoding="utf-8")
+        assert "# Identity: anima" in identity.read_text(encoding="utf-8")
+        soul = anima_dir / "SOUL.md"
+        assert "Friendly and thoughtful." in soul.read_text(encoding="utf-8")
 
     def test_writes_injection_md(self, tmp_path):
         anima_dir = tmp_path / "anima"
@@ -882,7 +884,7 @@ Personality here.
 Backend development focus.
 """
         _apply_defaults_from_sheet(anima_dir, md)
-        injection = anima_dir / "injection.md"
+        injection = anima_dir / "AGENTS.md"
         assert injection.exists()
         assert "Backend development focus." in injection.read_text(encoding="utf-8")
 
@@ -915,7 +917,7 @@ Development.
     def test_does_not_overwrite_when_section_missing(self, tmp_path):
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Original identity", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("Original identity", encoding="utf-8")
         # MD with no 人格 section
         md = """\
 ## 役割・行動方針
@@ -923,7 +925,7 @@ Development.
 Development.
 """
         _apply_defaults_from_sheet(anima_dir, md)
-        assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "Original identity"
+        assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "Original identity"
 
 
 # ── create_from_md rollback ──────────────────────────────
@@ -1014,7 +1016,8 @@ class TestPublishedAnimaTemplates:
 
     def test_each_template_has_identity_and_valid_status(self):
         for label, d in self._template_dirs():
-            assert (d / "identity.md").is_file(), f"{label}: missing identity.md"
+            assert (d / "IDENTITY.md").is_file(), f"{label}: missing IDENTITY.md"
+            assert (d / "SOUL.md").is_file(), f"{label}: missing SOUL.md"
             status_path = d / "status.json"
             assert status_path.is_file(), f"{label}: missing status.json"
             data = json.loads(status_path.read_text(encoding="utf-8"))

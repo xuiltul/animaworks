@@ -115,12 +115,12 @@ class TestReconciliationStatusJsonGuard:
         supervisor,
         temp_dirs,
     ) -> None:
-        """identity.md exists but status.json missing -> creation in progress, skip."""
+        """IDENTITY.md exists but status.json missing -> creation in progress, skip."""
         animas_dir = temp_dirs["animas_dir"]
         animas_dir.mkdir(parents=True)
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
         # No status.json — simulates creation in progress
 
         supervisor.start_anima = AsyncMock()
@@ -139,12 +139,12 @@ class TestReconciliationStatusJsonGuard:
         supervisor,
         temp_dirs,
     ) -> None:
-        """identity.md AND status.json exist -> start normally."""
+        """IDENTITY.md AND status.json exist -> start normally."""
         animas_dir = temp_dirs["animas_dir"]
         animas_dir.mkdir(parents=True)
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",

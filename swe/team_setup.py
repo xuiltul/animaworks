@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core.anima.workspace_files import AGENTS_FILE, HEARTBEAT_FILE, IDENTITY_FILE, SOUL_FILE
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = Path(__file__).parent / "configs" / "team.json"
@@ -110,21 +112,21 @@ def setup_team(
             json.dumps(status, indent=2, ensure_ascii=False)
         )
 
-        # identity.md
-        (agent_dir / "identity.md").write_text(
-            f"# {name}\n\n{agent_cfg['identity']}\n"
-        )
+        # IDENTITY.md / SOUL.md
+        identity = agent_cfg["identity"]
+        (agent_dir / IDENTITY_FILE).write_text(f"# {name}\n\n{identity}\n")
+        (agent_dir / SOUL_FILE).write_text(f"# Soul: {name}\n\n{identity}\n")
 
-        # injection.md
-        (agent_dir / "injection.md").write_text(agent_cfg["injection"] + "\n")
+        # AGENTS.md
+        (agent_dir / AGENTS_FILE).write_text(agent_cfg["injection"] + "\n")
 
         # permissions.md
         (agent_dir / "permissions.md").write_text(
             "## Allowed Commands\n- All commands allowed for SWE-bench evaluation\n"
         )
 
-        # heartbeat.md — disable heartbeat for SWE agents
-        (agent_dir / "heartbeat.md").write_text(
+        # HEARTBEAT.md — disable heartbeat for SWE agents
+        (agent_dir / HEARTBEAT_FILE).write_text(
             "# Heartbeat\n\nHeartbeat disabled for SWE-bench evaluation.\n"
         )
 

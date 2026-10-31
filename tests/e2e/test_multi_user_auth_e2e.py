@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from core.auth.manager import hash_password, save_auth
 from core.auth.models import AuthConfig, AuthUser
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 
@@ -326,7 +325,7 @@ class TestUserDeletionRevokesSession:
         alice_client = TestClient(app)
         resp = alice_client.post("/api/auth/login", json={"username": "alice", "password": "alicepw"})
         assert resp.status_code == 200
-        alice_token = resp.cookies.get("session_token")
+        resp.cookies.get("session_token")
 
         # Login as admin and delete alice
         admin_client = TestClient(app)

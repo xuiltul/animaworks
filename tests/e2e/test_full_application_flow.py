@@ -49,8 +49,8 @@ async def full_anima_environment(tmp_path: Path):
     for subdir in ["knowledge", "episodes", "procedures", "skills", "state", "shortterm"]:
         (anima_dir / subdir).mkdir()
 
-    # Create identity.md
-    (anima_dir / "identity.md").write_text(
+    # Create IDENTITY.md
+    (anima_dir / "IDENTITY.md").write_text(
         """# Alice - AI Assistant
 
 ## Personality
@@ -64,8 +64,8 @@ Helpful, analytical, and detail-oriented AI assistant.
         encoding="utf-8",
     )
 
-    # Create injection.md
-    (anima_dir / "injection.md").write_text(
+    # Create AGENTS.md
+    (anima_dir / "AGENTS.md").write_text(
         """# Role
 AI Assistant for software development team.
 
@@ -430,7 +430,7 @@ async def test_multi_anima_isolation(tmp_path: Path, mock_llm):
             (anima_dir / subdir).mkdir()
 
         # Create unique identity
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             f"# {anima_name.title()}\n\nI am {anima_name.title()}.",
             encoding="utf-8",
         )
@@ -530,10 +530,10 @@ async def test_system_cron_integration(tmp_path: Path, data_dir: Path, mock_llm,
     for subdir in ["knowledge", "episodes", "skills", "state", "shortterm"]:
         (anima_dir / subdir).mkdir()
 
-    (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
-    (anima_dir / "injection.md").write_text("# Role\nAssistant", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("# Role\nAssistant", encoding="utf-8")
     (anima_dir / "permissions.md").write_text("# Permissions\n", encoding="utf-8")
-    (anima_dir / "heartbeat.md").write_text("# Heartbeat\n30分ごと (9:00-22:00)", encoding="utf-8")
+    (anima_dir / "HEARTBEAT.md").write_text("# Heartbeat\n30分ごと (9:00-22:00)", encoding="utf-8")
     (anima_dir / "cron.md").write_text("", encoding="utf-8")
 
     (anima_dir / "model_config.json").write_text(

@@ -38,7 +38,7 @@ def _make_handler(
 
     anima_dir = tmp_path / "animas" / anima_name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {anima_name}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {anima_name}\n", encoding="utf-8")
     (anima_dir / "activity_log").mkdir(exist_ok=True)
 
     memory = MagicMock(spec=MemoryManager)

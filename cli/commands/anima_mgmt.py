@@ -16,6 +16,7 @@ from typing import Any
 
 from cli._gateway import gateway_request
 from core.anima.settings_store import update_status
+from core.anima.workspace_files import IDENTITY_FILE
 
 logger = logging.getLogger(__name__)
 
@@ -339,8 +340,8 @@ def cmd_anima_delete(args: argparse.Namespace) -> None:
     data_dir = get_data_dir()
     animas_dir = get_animas_dir()
     anima_dir = animas_dir / name
-    if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-        print(f"Error: Anima '{name}' not found (missing identity.md)")
+    if not anima_dir.exists() or not (anima_dir / IDENTITY_FILE).exists():
+        print(f"Error: Anima '{name}' not found (missing IDENTITY.md)")
         sys.exit(1)
 
     if not getattr(args, "force", False):
@@ -415,8 +416,8 @@ def cmd_anima_disable(args: argparse.Namespace) -> None:
     anima_dir = animas_dir / name
 
     # Validate anima exists
-    if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-        print(f"Error: Anima '{name}' not found (missing identity.md)")
+    if not anima_dir.exists() or not (anima_dir / IDENTITY_FILE).exists():
+        print(f"Error: Anima '{name}' not found (missing IDENTITY.md)")
         sys.exit(1)
 
     # Check if server is running
@@ -457,8 +458,8 @@ def cmd_anima_enable(args: argparse.Namespace) -> None:
     anima_dir = animas_dir / name
 
     # Validate anima exists
-    if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-        print(f"Error: Anima '{name}' not found (missing identity.md)")
+    if not anima_dir.exists() or not (anima_dir / IDENTITY_FILE).exists():
+        print(f"Error: Anima '{name}' not found (missing IDENTITY.md)")
         sys.exit(1)
 
     # Check if server is running
@@ -506,8 +507,8 @@ def cmd_anima_set_role(args: argparse.Namespace) -> None:
         print(f"Error: Invalid role '{new_role}'. Valid roles: {', '.join(sorted(VALID_ROLES))}")
         sys.exit(1)
 
-    if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
-        print(f"Error: Anima '{name}' not found (missing identity.md)")
+    if not anima_dir.exists() or not (anima_dir / IDENTITY_FILE).exists():
+        print(f"Error: Anima '{name}' not found (missing IDENTITY.md)")
         sys.exit(1)
 
     if (data_dir / "server.pid").exists():
@@ -927,7 +928,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
     from core.activity.audit import AuditAggregator
 
     if audit_all:
-        dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / "identity.md").exists()])
+        dirs = sorted([d for d in animas_dir.iterdir() if d.is_dir() and (d / IDENTITY_FILE).exists()])
         if not dirs:
             print("No animas found.")
             sys.exit(1)
@@ -936,7 +937,7 @@ def cmd_anima_audit(args: argparse.Namespace) -> None:
 
     if name:
         anima_dir = animas_dir / name
-        if not anima_dir.exists() or not (anima_dir / "identity.md").exists():
+        if not anima_dir.exists() or not (anima_dir / IDENTITY_FILE).exists():
             print(f"Error: Anima '{name}' not found")
             sys.exit(1)
         agg = AuditAggregator(anima_dir)
@@ -963,8 +964,8 @@ def cmd_anima_rename(args: argparse.Namespace) -> None:
         print("Error: Old and new names are the same")
         sys.exit(1)
 
-    if not old_dir.exists() or not (old_dir / "identity.md").exists():
-        print(f"Error: Anima '{old_name}' not found (missing identity.md)")
+    if not old_dir.exists() or not (old_dir / IDENTITY_FILE).exists():
+        print(f"Error: Anima '{old_name}' not found (missing IDENTITY.md)")
         sys.exit(1)
 
     if new_dir.exists():
@@ -1149,7 +1150,7 @@ def cmd_anima_list(args: argparse.Namespace) -> None:
     for entry in sorted(animas_dir.iterdir()):
         if not entry.is_dir():
             continue
-        if not (entry / "identity.md").exists():
+        if not (entry / IDENTITY_FILE).exists():
             continue
 
         name = entry.name

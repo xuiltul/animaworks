@@ -10,6 +10,16 @@
 from __future__ import annotations
 
 STRINGS: dict[str, dict[str, str]] = {
+    "handler.memory_file_renamed": {
+        "ja": "{old} は {new} として扱いました",
+        "en": "Treated {old} as {new}",
+        "ko": "{old}을(를) {new}로 처리했습니다",
+    },
+    "handler.identity_write_rejected": {
+        "ja": "{old} は直接書き換えられません。人格は SOUL.md、プロフィールは IDENTITY.md に書き分けてください",
+        "en": "{old} cannot be written directly. Put personality in SOUL.md and profile in IDENTITY.md",
+        "ko": "{old}은(는) 직접 수정할 수 없습니다. 인격은 SOUL.md, 프로필은 IDENTITY.md에 작성하세요",
+    },
     "handler.activity_dm_history": {
         "ja": "DM履歴を確認",
         "en": "Checked DM history",
@@ -317,8 +327,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Descendant activity_log",
     },
     "handler.descendant_state": {
-        "ja": "配下のstatus.json, identity.md, injection.md, state/current_state.md, state/task_queue.jsonl, state/plans/",
-        "en": "Descendant status.json, identity.md, injection.md, state/current_state.md, state/task_queue.jsonl, state/plans/",
+        "ja": "配下のstatus.json, IDENTITY.md, AGENTS.md, state/current_state.md, state/task_queue.jsonl, state/plans/",
+        "en": "Descendant status.json, IDENTITY.md, AGENTS.md, state/current_state.md, state/task_queue.jsonl, state/plans/",
     },
     "handler.description_field_required": {
         "ja": "`description` フィールドが必要です。",

@@ -465,7 +465,7 @@ class DigitalAnima(
         self,
         fn: Callable[[str], Any] | None,
     ) -> None:
-        """Inject a callback fired when heartbeat.md or cron.md is modified."""
+        """Inject a callback fired when HEARTBEAT.md or cron.md is modified."""
         for agent in self._iter_lane_agents():
             agent.set_on_schedule_changed(fn)
 

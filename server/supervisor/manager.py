@@ -20,6 +20,7 @@ from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from core.anima.workspace_files import BOOTSTRAP_FILE
 from core.exceptions import (  # noqa: F401
     AnimaNotFoundError,
     ConfigError,
@@ -448,7 +449,7 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                             not needs_background
                             and bootstrap_state.get("state") == "failed"
                             and bootstrap_state.get("mode") == "character_sheet"
-                            and (self.animas_dir / anima_name / "bootstrap.md").exists()
+                            and (self.animas_dir / anima_name / BOOTSTRAP_FILE).exists()
                         ):
                             needs_background = True
                         if needs_background:
@@ -481,12 +482,12 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         Sends a ``run_bootstrap`` IPC request with a long timeout (600s)
         and broadcasts progress via WebSocket.  Tracks retry counts and
         disables further attempts after ``_bootstrap_max_retries`` failures
-        by renaming ``bootstrap.md`` to ``bootstrap.md.failed``.
+        by renaming ``BOOTSTRAP.md`` to ``BOOTSTRAP.md.failed``.
         """
         # Check retry limit before starting
         retry_count = self._bootstrap_retry_counts.get(anima_name, 0)
         if retry_count >= self._bootstrap_max_retries:
-            bootstrap_file = self.animas_dir / anima_name / "bootstrap.md"
+            bootstrap_file = self.animas_dir / anima_name / BOOTSTRAP_FILE
             failed_file = bootstrap_file.with_suffix(".md.failed")
             if bootstrap_file.exists():
                 bootstrap_file.rename(failed_file)
@@ -502,7 +503,7 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
                     logger.debug("Failed to mark bootstrap max retries for %s", anima_name, exc_info=True)
                 logger.error(
                     "Bootstrap retry limit reached for %s (%d/%d). "
-                    "Renamed bootstrap.md -> bootstrap.md.failed. "
+                    "Renamed BOOTSTRAP.md -> BOOTSTRAP.md.failed. "
                     "Manual intervention required.",
                     anima_name,
                     retry_count,
@@ -695,7 +696,7 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
         """Re-run a failed background bootstrap after a short pause."""
         await asyncio.sleep(self._bootstrap_retry_delay_s)
         anima_dir = self.animas_dir / anima_name
-        if anima_name in self._bootstrapping or not (anima_dir / "bootstrap.md").exists():
+        if anima_name in self._bootstrapping or not (anima_dir / BOOTSTRAP_FILE).exists():
             return
         handle = self.processes.get(anima_name)
         if not handle or handle.state != ProcessState.RUNNING:

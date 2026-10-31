@@ -16,7 +16,6 @@ from httpx import ASGITransport, AsyncClient
 from core.runtime.ipc import IPCResponse
 from server.stream_registry import StreamRegistry
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 
@@ -31,6 +30,7 @@ def _make_supervisor(**overrides):
 
 def _make_test_app(supervisor=None):
     from fastapi import FastAPI
+
     from server.routes.chat import create_chat_router
 
     app = FastAPI()

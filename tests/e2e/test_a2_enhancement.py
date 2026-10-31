@@ -36,7 +36,7 @@ def anima_dir(tmp_path: Path) -> Path:
         "## 外部ツール\n- chatwork: OK\n- slack: OK\n## ファイル操作\n## コマンド実行\n",
         encoding="utf-8",
     )
-    (d / "identity.md").write_text("# Test Anima", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Anima", encoding="utf-8")
     for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm"]:
         (d / sub).mkdir(exist_ok=True)
     return d

@@ -51,11 +51,12 @@
 - 성격에서 연상되는 색을 선택한다. 직능의 이미지 컬러(경리=남색)에 끌려가지 않는다
 - 일본어 색 이름 + HEX 코드 (예: 벚꽃색 (#FFB7C5))
 
-### identity.md 의 정본 서식
+### IDENTITY.md / SOUL.md의 정본 형식
 
-`identity.md` 이 유일한 인격 정본. character_sheet 이나 prompt 에만 있는 외모는 금지.
+`IDENTITY.md`은 프로필과 외모, `SOUL.md`은 인격(성격·말투·가치관·개성)의 정본이다. character_sheet나 prompt에만 있는 외모 정보는 금지한다.
 
-필수 섹션: 기본 프로필 (이름·영문 이름·나이·생일·별자리·혈액형·키·소속·직책·상급자·얼굴 타입), 외모, 성격·캐릭터, AI 사원으로서의 개성.
+- IDENTITY.md의 필수 섹션: 기본 프로필(이름·영문 이름·나이·생일·별자리·혈액형·키·소속·직책·상급자·얼굴 유형), 외모, 이미지 컬러, AI 모델 정보
+- SOUL.md의 필수 섹션: 성격·캐릭터, 말투·가치관, AI 직원으로서의 개성, 대표 대사
 
 ## 내부 정합성 체크
 
@@ -75,9 +76,9 @@
 캐릭터 설계가 완료되면, `image_gen` 도구로 아바타 이미지 일체를 생성한다.
 `image_gen` 이 사용 가능한 경우 (permissions.json 에서 image_gen 이 허가) 에만 실행할 것.
 
-### NovelAI 프롬프트로의 변환
+### NovelAI 프롬프트로 변환
 
-identity.md 의 외모 설정을 NovelAI 호환 애니메 태그로 변환한다.
+IDENTITY.md의 외모 설정을 NovelAI 호환 애니메이션 태그로 변환한다.
 
 **기본 구조:**
 
@@ -85,31 +86,31 @@ identity.md 의 외모 설정을 NovelAI 호환 애니메 태그로 변환한다
 masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl/1boy, {hair_color} hair, {hairstyle}, {eye_color} eyes, {outfit}, full body, standing, white background, looking at viewer
 ```
 
-**변환 예:**
+**변환 예시:**
 
-| identity.md 의 외모 | NovelAI 프롬프트 |
+| IDENTITY.md의 외모 | NovelAI 프롬프트 |
 |---|---|
-| 키 158cm·검은 머리 롱·빨간 눈·세일러복 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
-| 키 175cm·은발 숏·파란 눈·정장 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
+| 키 158cm·검은색 긴 머리·빨간 눈·세일러복 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
+| 키 175cm·은발 쇼트헤어·파란 눈·정장 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
 
-**품질·화풍 태그 (앞에 부여):**
+**품질·화풍 태그(앞부분에 추가):**
 
-프롬프트 앞에 다음 품질 태그와 아트 스타일 태그를 반드시 포함할 것.
+프롬프트 앞부분에 다음 품질 태그와 아트 스타일 태그를 반드시 포함한다.
 
 - 품질: `masterpiece, best quality, very aesthetic, absurdres`
 - 화풍: `anime coloring, clean lineart, soft shading`
 
-> 주의: NovelAI 의 `qualityToggle` 설정에서도 품질 태그가 자동 부여되지만, 프롬프트에 명시하면 더 안정적인 품질을 얻을 수 있다.
+> 참고: NovelAI의 `qualityToggle` 설정에서도 품질 태그가 자동으로 추가되지만, 프롬프트에 명시하면 품질을 더욱 안정적으로 얻을 수 있다.
 
 **캐릭터 속성 태그:**
 
 - 머리색: `black hair`, `brown hair`, `blonde hair`, `silver hair`, `red hair`, `blue hair`, `pink hair`, `white hair`
 - 헤어스타일: `long hair`, `short hair`, `medium hair`, `ponytail`, `twintails`, `bob cut`, `braided hair`
-- 눈동자 색: `{color} eyes` (보석의 비유가 아니라 색 이름을 사용)
-- 복장: 구체적인 아이템 이름 (`school uniform`, `business suit`, `lab coat`, `hoodie`, `maid outfit`)
+- 눈 색깔: `{color} eyes`(보석에 비유하지 말고 색상명을 사용)
+- 복장: 구체적인 아이템명(`school uniform`, `business suit`, `lab coat`, `hoodie`, `maid outfit`)
 - 필수 끝 태그: `full body, standing, white background, looking at viewer`
 
-**네거티브 프롬프트 (권장):**
+**네거티브 프롬프트(권장):**
 
 ```
 lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, worst quality, low quality, blurry, jpeg artifacts, cropped, multiple views, logo, too many watermarks
@@ -117,67 +118,67 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 ### 생성 절차
 
-> **중요**: 생성 전에 반드시 `assets/prompt_realistic.txt` (리얼리스틱용) 또는 `assets/prompt.txt` (애니메용) 의 유무를 확인할 것. 캐시된 프롬프트가 존재하면 그것을 사용한다.
+> **중요**: 생성 전에 반드시 `assets/prompt_realistic.txt`(실사 스타일용) 또는 `assets/prompt.txt`(애니메이션용)의 존재 여부를 확인한다. 캐시된 프롬프트가 있으면 해당 프롬프트를 사용한다.
 
-**스텝 1: 스타일 판정**
+**1단계: 스타일 판별**
 
-시스템의 이미지 스타일을 확인한다. `image_style` 은 보통 `realistic` (포토리얼리스틱) 또는 `anime` 중 하나.
-프레임워크가 `generate_character_assets` 에 전달된 프롬프트의 스타일을 자동 감지·변환하지만, 처음부터 올바른 스타일의 프롬프트를 사용하는 것이 바람직하다.
+시스템의 이미지 스타일을 확인한다. `image_style`은 일반적으로 `realistic`(포토리얼리스틱) 또는 `anime` 중 하나다.
+프레임워크가 `generate_character_assets`에 전달된 프롬프트의 스타일을 자동으로 감지하고 변환하지만, 처음부터 올바른 스타일의 프롬프트를 사용하는 것이 바람직하다.
 
-- `assets/prompt_realistic.txt` 이 존재 → **그대로 사용** (최우선)
-- `assets/prompt.txt` 이 존재 → 애니메 스타일이면 그대로 사용. 리얼리스틱이 필요하면 아래 규칙으로 변환
-- 모두 존재하지 않음 → identity.md 의 외모 설정에서 새로 작성
+- `assets/prompt_realistic.txt`이 존재함 → **그대로 사용**(최우선)
+- `assets/prompt.txt`이 존재함 → 애니메이션 스타일이면 그대로 사용. 실사 스타일이 필요하면 아래 규칙에 따라 변환
+- 둘 다 존재하지 않음 → IDENTITY.md의 외모 설정을 바탕으로 새로 작성
 
-**스텝 2: 프롬프트 작성**
+**2단계: 프롬프트 작성**
 
-**리얼리스틱 (사실적) 스타일의 경우:**
+**실사 스타일인 경우:**
 
-Fal.ai Flux Pro 로 포토리얼리스틱 이미지를 생성한다. 프롬프트는 Danbooru 태그가 아니라 자연 언어의 사진적 묘사를 사용한다.
+Fal.ai Flux Pro로 포토리얼리스틱 이미지를 생성한다. 프롬프트에는 Danbooru 태그가 아닌 자연어로 사진처럼 묘사한 문장을 사용한다.
 
 ```
 professional photograph, studio lighting, high resolution, realistic, photorealistic, a young woman/man with {hair_description}, {eye_description}, {outfit_description}, full body, standing, plain white background, looking at viewer
 ```
 
-변환 규칙 (애니메→리얼리스틱):
+변환 규칙(애니메이션 → 실사):
 
-| 애니메 태그 | 리얼리스틱 묘사 |
+| 애니메이션 태그 | 실사 묘사 |
 |---|---|
-| `masterpiece, best quality, ...` (품질 태그) | 삭제 (리얼리스틱 품질 태그로 치환) |
+| `masterpiece, best quality, ...`(품질 태그) | 삭제(실사 품질 태그로 대체) |
 | `anime coloring, clean lineart, soft shading` | 삭제 |
 | `1girl` | `a young woman` |
 | `1boy` | `a young man` |
 | `black hair, long hair, low ponytail` | `long black hair in a low ponytail` |
 | `red eyes, narrow eyes` | `sharp red eyes` |
 
-품질·스타일 태그 (앞에 부여): `professional photograph, studio lighting, high resolution, realistic, photorealistic`
+품질·스타일 태그(앞부분에 추가): `professional photograph, studio lighting, high resolution, realistic, photorealistic`
 
-**애니메 스타일의 경우:**
+**애니메이션 스타일인 경우:**
 
-위 'NovelAI 프롬프트로의 변환' 섹션의 규칙으로 애니메 태그를 작성한다.
+위의 「NovelAI 프롬프트로 변환」 섹션의 규칙에 따라 애니메이션 태그를 작성한다.
 
-**스텝 3: 생성 실행**
+**3단계: 생성 실행**
 
-시스템 프롬프트의 '외부 도구' 섹션에 기재된 **image_gen** (`generate_character_assets`) 의 사용 방법에 따라 호출한다.
+시스템 프롬프트의 「외부 도구」 섹션에 기재된 **image_gen**(`generate_character_assets`) 사용 방법에 따라 호출한다.
 
 인수:
-- `prompt`: 스텝 2에서 작성한 프롬프트
+- `prompt`: 2단계에서 작성한 프롬프트
 - `negative_prompt`: 권장 네거티브 프롬프트
-- `anima_dir`: 대상 Anima 의 디렉토리 (자신이면 자신의, 타인이면 타인의)
-- `steps` 은 **지정하지 않는다** (기본값으로 전체 스텝이 실행된다)
+- `anima_dir`: 대상 Anima의 디렉터리(자신의 이미지라면 자신의 디렉터리, 다른 사람의 이미지라면 해당 사람의 디렉터리)
+- `steps`는 **지정하지 않는다**(기본값으로 모든 단계가 실행됨)
 
-**리얼리스틱 시 생성 결과:**
-   - `avatar_fullbody_realistic.png` — 전신 사진 (Fal Flux Pro)
-   - `avatar_bustup_realistic.png` — 버스트업 사진 (Flux Kontext)
+**실사 스타일의 생성 결과:**
+   - `avatar_fullbody_realistic.png` — 전신 사진(Fal Flux Pro)
+   - `avatar_bustup_realistic.png` — 상반신 사진(Flux Kontext)
    - 표정 변형: `avatar_bustup_{emotion}_realistic.png`
    - `icon_realistic.png` — 아이콘
    - 치비 캐릭터·3D 모델·리깅·애니메이션은 생성하지 않는다
 
-**애니메 시 생성 결과:**
-   - `avatar_fullbody.png` — 전신 서 있는 그림 (NovelAI V4.5)
-   - `avatar_bustup.png` — 버스트업 (Flux Kontext)
-   - `avatar_chibi.png` — 치비 캐릭터 (Flux Kontext)
-   - `avatar_chibi.glb` — 3D 모델 (Meshy Image-to-3D)
-   - `avatar_chibi_rigged.glb` — 리그 포함 3D 모델 (Meshy Rigging)
-   - 애니메이션 (Meshy Animations)
+**애니메이션 스타일의 생성 결과:**
+   - `avatar_fullbody.png` — 전신 스탠딩 일러스트(NovelAI V4.5)
+   - `avatar_bustup.png` — 상반신 이미지(Flux Kontext)
+   - `avatar_chibi.png` — 치비 캐릭터(Flux Kontext)
+   - `avatar_chibi.glb` — 3D 모델(Meshy Image-to-3D)
+   - `avatar_chibi_rigged.glb` — 리그가 적용된 3D 모델(Meshy Rigging)
+   - 애니메이션(Meshy Animations)
 
-생성에 실패한 스텝이 있으면 오류를 기록하고, 성공한 것만 사용한다.
+생성에 실패한 단계가 있으면 오류를 기록하고, 성공한 항목만 사용한다.

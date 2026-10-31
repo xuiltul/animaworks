@@ -540,8 +540,8 @@ class TestRecoverStreamingJournal:
         anima_dir: Path,
     ):
         """A repeated recovery pass must not duplicate conversation or activity entries."""
-        from core.i18n import t
         from core.activity.logger import ActivityLogger
+        from core.i18n import t
         from core.memory.conversation.memory import ConversationMemory
 
         (anima_dir / "state").mkdir(exist_ok=True)

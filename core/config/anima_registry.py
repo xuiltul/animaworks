@@ -14,6 +14,7 @@ import logging
 import re
 from pathlib import Path
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.schemas import AnimaModelConfig
 
 logger = logging.getLogger("animaworks.config")
@@ -53,11 +54,11 @@ def _resolve_supervisor_name(raw: str) -> str | None:
 
 
 def read_anima_supervisor(anima_dir: Path) -> str | None:
-    """Read the supervisor field for an anima from status.json or identity.md.
+    """Read the supervisor field for an anima from status.json or IDENTITY.md.
 
     Tries two sources in order:
       1. ``status.json`` — looks for ``"supervisor"`` key.
-      2. ``identity.md`` — parses the Japanese table format ``| 上司 | name |``.
+      2. ``IDENTITY.md`` — parses the Japanese table format ``| 上司 | name |``.
 
     The raw value is resolved to an English anima name (e.g.
     ``"琴葉（kotoha）"`` → ``"kotoha"``).
@@ -82,8 +83,8 @@ def read_anima_supervisor(anima_dir: Path) -> str | None:
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("Failed to read %s: %s", status_path, exc)
 
-    # Source 2: identity.md table row  | 上司 | name |
-    identity_path = anima_dir / "identity.md"
+    # Source 2: IDENTITY.md table row  | 上司 | name |
+    identity_path = anima_dir / IDENTITY_FILE
     if identity_path.is_file():
         try:
             content = identity_path.read_text(encoding="utf-8")
@@ -145,7 +146,7 @@ def register_anima_in_config(
 ) -> None:
     """Register a newly created anima in config.json with supervisor synced.
 
-    Reads status.json / identity.md in the anima directory to extract the
+    Reads status.json / IDENTITY.md in the anima directory to extract the
     ``supervisor`` field and stores it in the :class:`AnimaModelConfig` entry
     inside config.json.  If the anima already exists in the config the call
     is a no-op.

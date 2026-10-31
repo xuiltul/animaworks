@@ -100,8 +100,9 @@ class TestKoDirectoryStructure:
 
 
 _HEADING_EXEMPT = {
-    "anima_templates/_blank/identity.md",
-    "anima_templates/_blank/injection.md",
+    "anima_templates/_blank/IDENTITY.md",
+    "anima_templates/_blank/SOUL.md",
+    "anima_templates/_blank/AGENTS.md",
     "anima_templates/_blank/cron.md",
     "prompts/builder/fallbacks.md",
     "prompts/builder/heartbeat_tool_instruction.md",

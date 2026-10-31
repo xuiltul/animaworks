@@ -26,10 +26,10 @@ def anima_dir(tmp_path: Path) -> Path:
     (tmp_path / "shared").mkdir()
 
     # Identity
-    (anima_dir / "identity.md").write_text("# Test Anima\nA test anima.")
+    (anima_dir / "IDENTITY.md").write_text("# Test Anima\nA test anima.")
 
     # Heartbeat config
-    (anima_dir / "heartbeat.md").write_text(
+    (anima_dir / "HEARTBEAT.md").write_text(
         "# Heartbeat: test-anima\n\n"
         "## 実行間隔\n10分ごと\n\n"
         "## 活動時間\n8:00 - 22:00（JST）\n\n"
@@ -67,12 +67,12 @@ class TestSchedulerManagerE2E:
 
     @pytest.mark.asyncio
     async def test_starts_scheduler_with_real_config(self, anima_dir, tmp_path):
-        """SchedulerManager should read heartbeat.md and cron.md and register jobs."""
+        """SchedulerManager should read HEARTBEAT.md and cron.md and register jobs."""
         mock_anima = MagicMock()
         mock_anima.name = "test-anima"
 
         # Use real file reading for config
-        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "heartbeat.md").read_text()
+        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "HEARTBEAT.md").read_text()
         mock_anima.memory.read_cron_config.return_value = (anima_dir / "cron.md").read_text()
         mock_anima.set_on_schedule_changed = MagicMock()
 
@@ -108,7 +108,7 @@ class TestSchedulerManagerE2E:
         """After config change, reload_schedule should update jobs."""
         mock_anima = MagicMock()
         mock_anima.name = "test-anima"
-        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "heartbeat.md").read_text()
+        mock_anima.memory.read_heartbeat_config.return_value = (anima_dir / "HEARTBEAT.md").read_text()
         mock_anima.memory.read_cron_config.return_value = (anima_dir / "cron.md").read_text()
         mock_anima.set_on_schedule_changed = MagicMock()
 

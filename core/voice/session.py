@@ -153,7 +153,7 @@ _MONOLOGUE_FRAME_JA = (
 )
 # The no-tool corner gets an explicit sub-topic that rotates per visit;
 # otherwise its prompt is byte-identical every time and a small model drifts
-# to the same persona hobby (identity.md) on every pass.
+# to the same persona hobby (IDENTITY.md) on every pass.
 _MONOLOGUE_ZAKKAN_SEEDS_JA = (
     "今の時間帯",
     "今の季節や天気",

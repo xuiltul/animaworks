@@ -276,7 +276,7 @@ class TestMemoryStats:
         # Create an anima with memory files
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         episodes = alice_dir / "episodes"
         episodes.mkdir()
@@ -318,7 +318,7 @@ class TestAnimaConfig:
 
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         mock_defaults = MagicMock()
         mock_defaults.model = "anthropic/claude-sonnet-4-6"
@@ -493,7 +493,7 @@ class TestCrossRouteIntegration:
         # Create an anima on the filesystem
         alice_dir = app.state.animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         # Register alice in anima_names so the list endpoint includes her
         app.state.anima_names = ["alice"]
 
@@ -532,7 +532,7 @@ class TestCrossRouteIntegration:
 
         bob_dir = animas_dir / "bob"
         bob_dir.mkdir()
-        (bob_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (bob_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
 
         episodes = bob_dir / "episodes"
         episodes.mkdir()

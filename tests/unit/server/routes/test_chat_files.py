@@ -7,9 +7,9 @@ from datetime import datetime
 
 import pytest
 
+from core.anima.messaging import _chat_received_meta
 from server.routes import chat_files
 from server.routes.chat_models import FileAttachment
-from core.anima.messaging import _chat_received_meta
 
 
 def _file(name: str = "report.pdf", content: bytes = b"abc", media_type: str = "application/pdf") -> FileAttachment:

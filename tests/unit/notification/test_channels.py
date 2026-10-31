@@ -10,12 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from core.notification.channels.slack import SlackChannel
-from core.notification.channels.line import LineChannel
-from core.notification.channels.telegram import TelegramChannel
 from core.notification.channels.chatwork import ChatworkChannel
+from core.notification.channels.line import LineChannel
 from core.notification.channels.ntfy import NtfyChannel
-
+from core.notification.channels.slack import SlackChannel
+from core.notification.channels.telegram import TelegramChannel
 
 # ── Slack Channel ─────────────────────────────────────────────
 

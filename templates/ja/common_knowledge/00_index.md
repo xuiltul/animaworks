@@ -212,8 +212,8 @@ Heartbeat / Cron / チーム設計 / 記憶 / コスト最適化の要点が1枚
 | 音声, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
 | Anima, 自分, 構成, 設計, ライフサイクル | `anatomy/what-is-anima.md` |
-| identity, injection, 人格, 行動指針, 不変, 可変 | `reference/anatomy/anima-anatomy.md` |
-| permissions.json, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
+| IDENTITY.md, SOUL.md, AGENTS.md, 人格, プロフィール, 行動指針, 不変, 可変 | `reference/anatomy/anima-anatomy.md` |
+| permissions.json, bootstrap, HEARTBEAT.md, cron.md | `reference/anatomy/anima-anatomy.md` |
 | 記憶, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting, 忘却 | `reference/anatomy/memory-system.md` |
 | consolidation, 2-phase, multipass, エラートレース | `reference/anatomy/memory-system.md` |

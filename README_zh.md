@@ -195,7 +195,7 @@ FastAPI Server（轻量控制面 / WebSocket & SSE / Enclave 客户端）
 - **睡眠记忆巩固与主动遗忘 (`core/memory/maintenance/`)**：每天夜间自动将零散的日间活动提炼为结构化知识（Consolidation），并按衰减评分清理低价值陈旧记忆（Active Forgetting），同时严格保护核心身份、流程与未完成任务。
 
 ### 2. 按自己的时钟行动——Heartbeat、Cron、SQLite TaskStore 与 GitHub 网关
-- **Heartbeat 与 Cron**：支持自适应间隔与免打扰时段的定期自主巡检（`heartbeat.md`）以及精确到分钟的定时任务（`cron.md`）。
+- **Heartbeat 与 Cron**：支持自适应间隔与免打扰时段的定期自主巡检（`HEARTBEAT.md`）以及精确到分钟的定时任务（`cron.md`）。
 - **SQLite TaskStore (`shared/taskboard.sqlite3`)**：基于 SQLite WAL 的组织级原子任务看板，支持任务依赖、互斥锁键（`mutex_key`，防止多名 Anima 同时修改同一资源）、委派契约（`delegated_tasks`，下属完成后自动触发上级验收）以及卡死任务的自动回收重试。
 - **GitHub 事件网关**：自动接收 CI 失败、PR 审查评论、合并冲突等 Webhook 事件，去重后转化为任务并精准派发给负责该模块的工程师 Anima。
 
@@ -339,7 +339,7 @@ FastAPI Server（轻量控制面 / WebSocket & SSE / Enclave 客户端）
 1. **Enclave（PII 与生产数据隔离运行时）**：将个人隐私与生产 DB/S3 凭据封闭在独立操作系统用户的隔离空间内，仅通过 Unix 域套接字（`SO_PEERCRED`）与 Egress PII 脱敏流水线向主组织返回脱敏后的安全事实。
 2. **信任边界标签（Provenance & Trust）**：来自 Web 搜索、Slack、邮件等外部输入均打上不可信（`untrusted`）来源标签，并在会话与 RAG 记忆元数据中全程追踪来源，防止提示词注入导致权限提升。
 3. **5 级命令与路径检查**：Shell 注入检测 → 全局黑名单（若缺失 `permissions.global.json` 则服务端拒绝启动） → 单 Anima 禁用命令 → 单 Anima 白名单 → 包含相对路径在内的目录穿越拦截与符号链接越界防护。
-4. **文件沙箱与门禁工具（Action Gate）**：每个 Anima 仅能写入允许的 `file_roots`，且禁止篡改自身的 `identity.md` 与 `permissions.json`；高风险外部发送工具支持事前规则门禁校验。
+4. **文件沙箱与门禁工具（Action Gate）**：每个 Anima 仅能写入允许的 `file_roots`，且禁止篡改自身的 `IDENTITY.md` / `SOUL.md` 与 `permissions.json`；高风险外部发送工具支持事前规则门禁校验。
 5. **认证、SSRF 防护与 Webhook 验签**：Argon2id 密码哈希、48 字节会话令牌、带防重放保护的 Slack/Chatwork/Zoom/GitHub HMAC 签名验证，以及拦截内网 IP 与 DNS 重绑定的媒体代理。
 
 </details>

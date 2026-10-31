@@ -225,24 +225,24 @@ send_message(
 2. 외부 도구의 카테고리가 레지스트리에 미활성화(`check_permissions`의 `available_but_not_enabled`)
 3. 파일 경로가 허용 범위 밖(보호 파일에 쓰기, `file_roots` 밖 등). 또한 **전역** 거부는 `permissions.global.json`과 프레임워크 측 패턴이 있음
 
-### 해결 절차
+### 대응 절차
 
-1. **자신의 권한을 확인**
+1. **자신의 권한 확인하기**
    ```
    check_permissions()
    ```
-   - JSON으로 반환됨. `internal_tools`·`external_tools.enabled` / `available_but_not_enabled`·`file_access`(read/write）・`restrictions`（명령 deny 등)를 확인
-   - 원본 설정은 `read_memory_file(path="permissions.json")`(존재하지 않으면 `permissions.md`)로 확인 가능
-   - 시스템 프롬프트에 주입되는 권한 설명은 런타임이 JSON에서 정리한 텍스트가 됨
+   - JSON으로 반환된다.`internal_tools`・`external_tools.enabled` / `available_but_not_enabled`・`file_access`（read/write）・`restrictions`（ 명령 deny 등)를 확인한다
+   - 원시 설정은 `read_memory_file(path="permissions.json")`（없는 경우에는 `permissions.md`）에서 확인할 수 있다
+   - 시스템 프롬프트에 주입되는 권한 설명은 런타임이 JSON을 바탕으로 정리한 텍스트가 된다
 
-2. **허용된 작업인지 확인**
-   - 자신의 `anima_dir` 내는 원칙적으로 읽기·쓰기 가능(`identity.md` 등의 보호 파일은 제외). 상급자·동료의 `activity_log`이나 하위의 `state/` 읽기는 역할에 따라 `check_permissions`의 `file_access`에 반영됨
-   - 셸 명령: `permissions.json`의 `commands`(allow/deny）에 따름. 전역 위험 패턴은 프레임워크 측에서도 차단됨)
+2. **허용된 작업인지 확인하기**
+   - 자신의 `anima_dir` 내부는 원칙적으로 읽고 쓸 수 있다（`IDENTITY.md` / `SOUL.md` 등의 보호 파일은 제외）。상급자·동료의 `activity_log`나 하위에 속한 `state/` 읽기는 역할에 따라 `check_permissions`의 `file_access`에 반영된다
+   - 셸 명령: `permissions.json`의 `commands`（allow/deny）을 따른다. 전역 위험 패턴은 프레임워크 측에서도 차단된다
 
 3. **권한이 필요한 경우의 대응**
-   - 그 작업이 정말 필요한지 재검토
-   - 다른 접근 방식(허용된 범위 내의 작업)으로 대체할 수 있는지 고려
-   - 대체가 불가능하면 상급자에게 권한 추가를 요청:
+   - 해당 작업이 정말 필요한지 다시 검토한다
+   - 다른 접근 방식（허용된 범위 내의 작업）으로 대체할 수 없는지 생각한다
+   - 대체할 수 없는 경우 상급자에게 권한 추가를 요청한다:
    ```
    send_message(
        to="上司の名前",
@@ -251,10 +251,10 @@ send_message(
    )
    ```
 
-4. **절대 하면 안 되는 것**
-   - 권한 확인을 회피하려는 시도
-   - 허용되지 않은 명령을 다른 방법으로 실행하려는 시도
-   - 다른 Anima의 권한을 이용하려는 시도
+4. **절대 해서는 안 되는 일**
+   - 권한 확인을 우회하려고 하는 것
+   - 허용되지 않은 명령을 다른 방법으로 실행하려고 하는 것
+   - 다른 Anima의 권한을 이용하려고 하는 것
 
 ---
 

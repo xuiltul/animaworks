@@ -125,6 +125,33 @@ def test_import_command_registration_and_hermes_target_validation(tmp_path: Path
     assert "requires --target-anima" in capsys.readouterr().err
 
 
+def test_hermes_imports_workspace_files_and_drafts_when_target_exists(tmp_path: Path) -> None:
+    source = tmp_path / ".hermes"
+    source.mkdir()
+    for name, text in {
+        "SOUL.md": "hermes soul",
+        "IDENTITY.md": "hermes identity",
+        "AGENTS.md": "hermes agents",
+        "HEARTBEAT.md": "hermes heartbeat",
+    }.items():
+        (source / name).write_text(text, encoding="utf-8")
+    data_dir = tmp_path / "runtime"
+    anima_dir = data_dir / "animas" / "mei"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "SOUL.md").write_text("existing soul", encoding="utf-8")
+
+    report = import_hermes(HermesImportOptions(source_path=source, data_dir=data_dir, target_anima="mei", apply=True))
+
+    assert (anima_dir / "SOUL.md").read_text(encoding="utf-8") == "existing soul"
+    assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "hermes identity"
+    assert (anima_dir / "AGENTS.md").read_text(encoding="utf-8") == "hermes agents"
+    assert (anima_dir / "HEARTBEAT.md").read_text(encoding="utf-8") == "hermes heartbeat"
+    draft = anima_dir / "state" / "migrations" / "drafts" / "hermes_SOUL_soul_import_draft.md"
+    assert draft.is_file()
+    assert "hermes soul" in draft.read_text(encoding="utf-8")
+    assert report.summary == {"applied": 4}
+
+
 def test_hermes_apply_imports_safe_skill_usage_hub_lock_tasks_and_is_idempotent(tmp_path: Path) -> None:
     source = tmp_path / ".hermes"
     _write_skill(source, "safe-skill")

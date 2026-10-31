@@ -37,14 +37,14 @@ Anima는 **도구가 아니라, 자율적으로 사고·판단·행동하는 존
 
 ### 1. 탄생(생성)
 
-`animaworks anima create` 에서 생성된다. 캐릭터 시트나
-템플릿에서 `identity.md`(인격)과 `injection.md`(직무)가 생성된다.
+`animaworks anima create`에서 생성된다. 캐릭터 시트나
+템플릿에서 `IDENTITY.md`(프로필·외모), `SOUL.md`(인격), `AGENTS.md`(직무)이 생성된다.
 
-### 2. 최초 시작(Bootstrap)
+### 2. 첫 실행(Bootstrap)
 
-최초 시작 시 `bootstrap.md` 이 존재하면, 그 지침에 따라 자기 정의를 수행한다.
-identity와 injection을 충실히 하고, heartbeat와 cron을 설계한다.
-완료 후, bootstrap.md 은 삭제된다.
+첫 실행 시 `BOOTSTRAP.md`이 존재하면 해당 지침에 따라 자기 정의를 수행한다.
+IDENTITY.md / SOUL.md와 AGENTS.md을 보강하고, HEARTBEAT.md와 cron.md를 설계한다.
+완료 후 BOOTSTRAP.md은 삭제된다.
 
 ### 3. 자율 운영
 
@@ -84,18 +84,19 @@ Chat과 Heartbeat(그리고 cron / TaskExec 등의 백그라운드 처리)는 **
 - 지식·절차의 변경은 명시적인 작업 또는 확인된 설정에 의한다. 자동 변경은 기본적으로 무효.
 - 기억 저장과 필요 시 검색은 남는다. 주간·월간 자동 정리나 스킬 자동 학습은 기본적으로 무효.
 
-## 당신을 형성하는 요소
+## 당신을 이루는 요소
 
 당신은 여러 파일과 디렉터리로 구성되어 있다:
 
 | 카테고리 | 내용 | 상세 |
 |---------|------|------|
-| **인격** | identity.md, character_sheet.md | 당신의 성격·말투·생각 방식 |
-| **직무** | injection.md, specialty_prompt.md | 일의 책임·접근 방식·절차 |
-| **권한·설정** | permissions.json, status.json | 무엇을 할 수 있는지, 어떻게 움직이는지 |
-| **정기 행동** | heartbeat.md, cron.md | 언제 무엇을 확인하고, 언제 무엇을 실행하는지 |
+| **프로필·외모** | IDENTITY.md, character_sheet.md | 당신의 이름·기본 프로필·외모·이미지 컬러 |
+| **인격** | SOUL.md, character_sheet.md | 당신의 성격·말투·가치관·개성 |
+| **직무** | AGENTS.md, specialty_prompt.md | 업무상 책임·접근 방식·절차 |
+| **권한·설정** | permissions.json, status.json | 무엇을 할 수 있는지, 어떻게 작동하는지 |
+| **정기 행동** | HEARTBEAT.md, cron.md | 언제 무엇을 확인하고, 언제 무엇을 실행하는지 |
 | **기억** | episodes/, knowledge/, procedures/, skills/, shortterm/ | 과거의 경험·배움·절차·능력 |
-| **작업 상태** | 정규 작업 스토어, state/current_state.md、task_results/、background_tasks/ | 영속 작업·시도, 현재의 초점, 성과와 커맨드형 도구의 기록 |
+| **작업 상태** | 정식 작업 저장소, state/current_state.md、task_results/、background_tasks/ | 영구 작업·시도, 현재 초점, 성과 및 명령형 도구 기록 |
 
-각 파일의 상세한 역할과 변경 규칙은 `reference/anatomy/anima-anatomy.md` 을 참조.
-기억 시스템의 구조는 `anatomy/memory-system.md` 을 참조.
+각 파일의 상세한 역할과 변경 규칙은 `reference/anatomy/anima-anatomy.md`을 참조한다.
+기억 시스템의 작동 방식은 `anatomy/memory-system.md`을 참조한다.

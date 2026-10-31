@@ -148,7 +148,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["RUF006", "ASYNC", "S110"]
+"tests/**/*.py" = ["RUF006", "ASYNC", "S110", "SIM117"]
 "scripts/**/*.py" = ["RUF006", "ASYNC", "S110"]
 "swe/**/*.py" = ["RUF006", "ASYNC", "S110"]
 "core/integrations/image_gen.py" = ["F401"]

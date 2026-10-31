@@ -18,7 +18,6 @@ from httpx import ASGITransport, AsyncClient
 
 from server.stream_registry import StreamRegistry
 
-
 # ── Test Helpers ─────────────────────────────────────────────
 
 ANIMA_NAME = "test-anima"
@@ -27,6 +26,7 @@ ANIMA_NAME = "test-anima"
 def _make_test_app():
     """Create a test FastAPI app with mock supervisor."""
     from fastapi import FastAPI
+
     from server.routes.chat import create_chat_router
 
     app = FastAPI()

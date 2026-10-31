@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from core.anima.workspace_files import IDENTITY_FILE, SOUL_FILE
 from core.i18n import t
 from core.memory import MemoryManager
 from core.memory.conversation.shortterm import ShortTermMemory
@@ -246,6 +247,11 @@ def _build_group1(
             _add(_env, "environment", 2)
 
     identity = memory.read_identity()
+    soul_reader = getattr(memory, "read_soul", None)
+    if callable(soul_reader):
+        soul = soul_reader()
+        if isinstance(soul, str) and soul.strip():
+            identity = "\n\n".join(part for part in (identity, soul) if part.strip())
     if identity:
         if not is_chat:
             try:
@@ -271,7 +277,7 @@ def _build_group1(
                     "injection_size_warning",
                     1,
                 )
-                logger.warning("injection.md oversized: %d chars (threshold=%d)", len(injection), threshold)
+                logger.warning("AGENTS.md oversized: %d chars (threshold=%d)", len(injection), threshold)
         except Exception:
             logger.debug("Best-effort operation failed", exc_info=True)
 
@@ -1214,9 +1220,11 @@ def build_voice_front_prompt(
     name = anima_name or (anima_dir.name if anima_dir else "anima")
     parts: list[str] = []
 
-    identity = _read_text_file(anima_dir / "identity.md") if anima_dir else ""
-    if identity:
-        parts.append(identity)
+    identity = _read_text_file(anima_dir / IDENTITY_FILE) if anima_dir else ""
+    soul = _read_text_file(anima_dir / SOUL_FILE) if anima_dir else ""
+    persona = "\n\n".join(part for part in (identity, soul) if part)
+    if persona:
+        parts.append(persona)
 
     specialty = _read_text_file(anima_dir / "specialty_prompt.md") if anima_dir else ""
     if specialty:

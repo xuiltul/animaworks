@@ -8,7 +8,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 
-
 class TestMain:
     @patch("cli.cli_main")
     def test_main_calls_cli_main(self, mock_cli):

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/operations/gpu.md -->
-<!-- i18n: source-sha256=ad37c7808c5ec6e92a59c5c365fcf8be49b9103acc62e9cf615b44a98e45bac3 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=ad37c7808c5ec6e92a59c5c365fcf8be49b9103acc62e9cf615b44a98e45bac3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: 581e20f1
 

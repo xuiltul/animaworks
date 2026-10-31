@@ -13,9 +13,9 @@ import pytest
 
 from core.auth.manager import (
     create_session,
-    get_auth_path,
     find_user,
     get_all_users,
+    get_auth_path,
     hash_password,
     load_auth,
     revoke_all_sessions,
@@ -25,7 +25,6 @@ from core.auth.manager import (
     verify_password,
 )
 from core.auth.models import AuthConfig, AuthUser
-
 
 # ── get_auth_path ────────────────────────────────────────
 

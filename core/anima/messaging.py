@@ -731,12 +731,12 @@ class MessagingMixin:
 
         Acquires the anima lock, sets status to ``"bootstrapping"``, and
         triggers an agent cycle with the bootstrap prompt.  The agent reads
-        ``bootstrap.md`` from the anima directory and follows its
+        ``BOOTSTRAP.md`` from the anima directory and follows its
         instructions (identity setup, avatar generation, self-introduction,
-        etc.).  Upon completion the agent deletes ``bootstrap.md``.
+        etc.).  Upon completion the agent deletes ``BOOTSTRAP.md``.
         """
         if not self.needs_bootstrap:
-            logger.info("[%s] run_bootstrap SKIPPED: no bootstrap.md", self.name)
+            logger.info("[%s] run_bootstrap SKIPPED: no BOOTSTRAP.md", self.name)
             return CycleResult(
                 trigger="bootstrap",
                 action="skipped",

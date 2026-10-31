@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
-
 
 from swe.runner import (
     create_test_instance,
@@ -45,7 +45,7 @@ class TestCreateTestInstance:
         repo_dir = Path(instance["_local_repo_dir"])
 
         result = subprocess.run(
-            ["python3", "-m", "pytest", "test_calculator.py", "-v", "--tb=no"],
+            [sys.executable, "-m", "pytest", "test_calculator.py", "-v", "--tb=no"],
             cwd=str(repo_dir),
             capture_output=True,
             text=True,

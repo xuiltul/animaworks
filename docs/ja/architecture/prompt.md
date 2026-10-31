@@ -8,7 +8,7 @@
 
 builder は6つの論理グループを作る。組み立て順は、グループ1、2、4、5、6、最後に動的なグループ3である。
 
-1. **環境と行動規則** — runtime 情報、workspace、Anima の identity、`injection.md`、behavior rules。
+1. **環境と行動規則** — runtime 情報、workspace、Anima の `IDENTITY.md` / `SOUL.md`、`AGENTS.md`、behavior rules。
 2. **Anima 自身の情報** — bootstrap 状態、会社の vision、speciality、permissions。
 3. **記憶と能力** — memory guide、trigger / mode に合わせた tool guide、利用可能な外部 tool、active skill context、skill catalog。
 4. **組織とコミュニケーション** — 組織関係、内部メッセージ、人間への通知方法。
@@ -27,7 +27,7 @@ tool guide は heartbeat、MCP を使う engine、それ以外の engine に応�
 
 assembler は section の優先度をもとに予算を配分し、elastic section は Markdown の段落単位で削る。個別段落を途中で切断せず、hard ceiling を超える場合は優先度の低い rigid section も外す。既定の通常 target は 6,000 token、上限は context window の 35% であり、設定によって変更できる。
 
-`injection.md` のサイズ警告は consolidation 中に限り、設定された文字数 threshold を超えた場合に追加される。スキル catalog にも件数上限がある。全体・個別設定の一覧は[設定リファレンス](../reference/config.md)を参照する。
+`AGENTS.md` のサイズ警告は consolidation 中に限り、設定された文字数 threshold を超えた場合に追加される。スキル catalog にも件数上限がある。全体・個別設定の一覧は[設定リファレンス](../reference/config.md)を参照する。
 
 ## template の解決
 

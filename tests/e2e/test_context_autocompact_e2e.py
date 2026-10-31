@@ -63,7 +63,7 @@ def anima_dir(tmp_path: Path) -> Path:
         "activity_log",
     ):
         (d / sub).mkdir(parents=True)
-    (d / "identity.md").write_text("# Test Anima", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Anima", encoding="utf-8")
     return d
 
 
@@ -121,7 +121,7 @@ class TestPreToolHookContextAutoCompact:
         """When estimated tokens exceed budget, hook logs observation but allows tool call."""
         max_tokens = 4096
         context_window = 200_000
-        budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
+        max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
 
         # Set values so remaining < budget
         # estimated = 195_000 + 0 = 195_000.  remaining = 5000 < 8192
@@ -203,7 +203,7 @@ class TestPreToolHookContextAutoCompact:
         )
 
         # Try to read from a sibling anima directory
-        other_anima_path = str(anima_dir.parent / "other-anima" / "identity.md")
+        other_anima_path = str(anima_dir.parent / "other-anima" / "IDENTITY.md")
         input_data = {
             "tool_name": "Read",
             "tool_input": {"file_path": other_anima_path},
@@ -222,7 +222,7 @@ class TestPreToolHookContextAutoCompact:
         """Large total_result_bytes triggers budget observation but allows tool call."""
         max_tokens = 4096
         context_window = 200_000
-        budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
+        max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 8192
 
         # estimated = 1000 + 780_000/4 = 1000 + 195_000 = 196_000
         # remaining = 200_000 - 196_000 = 4000 < 8192
@@ -459,7 +459,7 @@ class TestAutoCompactBoundaryConditions:
         """Small context window (8K, Ollama-like) detects budget exceeded but only logs."""
         max_tokens = 512
         context_window = 8_000
-        budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 1024
+        max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 1024
 
         # estimated = 6500 + 2000/4 = 6500 + 500 = 7000
         # remaining = 8000 - 7000 = 1000 < 1024 -> budget exceeded detected
@@ -485,7 +485,7 @@ class TestAutoCompactBoundaryConditions:
         """Large context window (200K, Claude-like) requires much more data."""
         max_tokens = 8192
         context_window = 200_000
-        budget = max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 16384
+        max_tokens * _CONTEXT_AUTOCOMPACT_SAFETY  # 16384
 
         # estimated = 50_000 + 400_000/4 = 50_000 + 100_000 = 150_000
         # remaining = 200_000 - 150_000 = 50_000 >> 16384 -> does NOT trigger

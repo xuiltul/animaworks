@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/operations/company.md -->
-<!-- i18n: source-sha256=2327b7793a54d6271a2504245e4bb7059a9dd22cee520d3789b3fb4b120e5ece generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=2327b7793a54d6271a2504245e4bb7059a9dd22cee520d3789b3fb4b120e5ece generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Verified commit: 581e20f1
 

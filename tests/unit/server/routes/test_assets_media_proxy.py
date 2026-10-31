@@ -16,6 +16,7 @@ from core.config.models import MediaProxyConfig
 
 def _make_test_app(animas_dir: Path | None = None):
     from fastapi import FastAPI
+
     from server.routes.assets import create_assets_router
 
     app = FastAPI()

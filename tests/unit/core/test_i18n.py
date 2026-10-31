@@ -260,11 +260,11 @@ class TestAnimaFactoryFallbackChain:
         assert result == ja_dir
 
     def test_get_bootstrap_template_uses_en_fallback(self, tmp_path):
-        """Unknown locale falls back to en bootstrap.md."""
-        en_file = tmp_path / "en" / "bootstrap.md"
+        """Unknown locale falls back to en BOOTSTRAP.md."""
+        en_file = tmp_path / "en" / "BOOTSTRAP.md"
         en_file.parent.mkdir(parents=True)
         en_file.write_text("English bootstrap", encoding="utf-8")
-        ja_file = tmp_path / "ja" / "bootstrap.md"
+        ja_file = tmp_path / "ja" / "BOOTSTRAP.md"
         ja_file.parent.mkdir(parents=True)
         ja_file.write_text("Japanese bootstrap", encoding="utf-8")
 
@@ -274,7 +274,7 @@ class TestAnimaFactoryFallbackChain:
 
     def test_get_bootstrap_template_falls_back_to_ja(self, tmp_path):
         """When neither requested locale nor en exists, falls back to ja."""
-        ja_file = tmp_path / "ja" / "bootstrap.md"
+        ja_file = tmp_path / "ja" / "BOOTSTRAP.md"
         ja_file.parent.mkdir(parents=True)
         ja_file.write_text("Japanese bootstrap", encoding="utf-8")
 

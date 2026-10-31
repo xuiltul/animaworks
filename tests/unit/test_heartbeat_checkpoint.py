@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 
-
 class TestCheckpointAndRecovery:
     """Test heartbeat checkpoint/recovery note mechanics.
 

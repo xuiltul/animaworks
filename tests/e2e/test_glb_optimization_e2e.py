@@ -188,7 +188,6 @@ class TestSimplifyGlbE2E:
 
         glb_path = tmp_path / "model.glb"
         _create_minimal_glb(glb_path, with_mesh=True)
-        size_before = glb_path.stat().st_size
 
         result = simplify_glb(glb_path, target_ratio=1.0)
         assert result is True

@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
 from core.platform.atomic_io import atomic_write_text, update_json
 from core.platform.process_role import assert_settings_write_allowed
 
@@ -47,13 +48,23 @@ def update_config(fn: Callable[[Any], Any], path: Path | None = None) -> Any:
 
 
 def write_identity(anima_dir: Path, content: str) -> None:
-    """Lock and atomically replace an anima's ``identity.md``."""
-    _write_text_setting(Path(anima_dir) / "identity.md", content)
+    """Lock and atomically replace an anima's ``IDENTITY.md``."""
+    _write_text_setting(Path(anima_dir) / IDENTITY_FILE, content)
+
+
+def write_soul(anima_dir: Path, content: str) -> None:
+    """Lock and atomically replace an anima's ``SOUL.md``."""
+    _write_text_setting(Path(anima_dir) / SOUL_FILE, content)
+
+
+def write_agents(anima_dir: Path, content: str) -> None:
+    """Lock and atomically replace an anima's ``AGENTS.md``."""
+    _write_text_setting(Path(anima_dir) / AGENTS_FILE, content)
 
 
 def write_injection(anima_dir: Path, content: str) -> None:
-    """Lock and atomically replace an anima's ``injection.md``."""
-    _write_text_setting(Path(anima_dir) / "injection.md", content)
+    """Backward-compatible alias that writes ``AGENTS.md``."""
+    write_agents(anima_dir, content)
 
 
 def write_permissions(anima_dir: Path, permissions: Mapping[str, Any] | Any) -> None:
@@ -92,7 +103,9 @@ __all__ = [
     "settings_server_running",
     "update_status",
     "update_config",
+    "write_agents",
     "write_identity",
     "write_injection",
     "write_permissions",
+    "write_soul",
 ]

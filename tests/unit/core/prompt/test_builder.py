@@ -67,10 +67,10 @@ class TestDiscoverOtherAnimas:
         animas_root.mkdir()
         alice = animas_root / "alice"
         alice.mkdir()
-        (alice / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (alice / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
         bob = animas_root / "bob"
         bob.mkdir()
-        (bob / "identity.md").write_text("I am Bob", encoding="utf-8")
+        (bob / "IDENTITY.md").write_text("I am Bob", encoding="utf-8")
 
         result = _discover_other_animas(alice)
         assert result == ["bob"]
@@ -80,7 +80,7 @@ class TestDiscoverOtherAnimas:
         animas_root.mkdir()
         alice = animas_root / "alice"
         alice.mkdir()
-        (alice / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (alice / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         result = _discover_other_animas(alice)
         assert "alice" not in result
@@ -90,10 +90,10 @@ class TestDiscoverOtherAnimas:
         animas_root.mkdir()
         alice = animas_root / "alice"
         alice.mkdir()
-        (alice / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (alice / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
         noident = animas_root / "noident"
         noident.mkdir()
-        # no identity.md
+        # no IDENTITY.md
 
         result = _discover_other_animas(alice)
         assert "noident" not in result
@@ -103,7 +103,7 @@ class TestDiscoverOtherAnimas:
         animas_root.mkdir()
         alice = animas_root / "alice"
         alice.mkdir()
-        (alice / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (alice / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         result = _discover_other_animas(alice)
         assert result == []
@@ -233,7 +233,7 @@ class TestBuildSystemPrompt:
     def test_builds_prompt(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -260,7 +260,7 @@ class TestBuildSystemPrompt:
     def test_includes_identity(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -282,11 +282,39 @@ class TestBuildSystemPrompt:
             result = build_system_prompt(memory)
             assert "I am Alice" in result
 
+    def test_identity_soul_agents_order(self, tmp_path, data_dir):
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+
+        memory = MagicMock()
+        memory.anima_dir = anima_dir
+        memory.read_company_vision.return_value = ""
+        memory.read_identity.return_value = "IDENTITY_MARKER"
+        memory.read_soul.return_value = "SOUL_MARKER"
+        memory.read_injection.return_value = "AGENTS_MARKER"
+        memory.read_permissions.return_value = ""
+        memory.read_specialty_prompt.return_value = ""
+        memory.read_current_state.return_value = ""
+        memory.read_bootstrap.return_value = ""
+        memory.list_knowledge_files.return_value = []
+        memory.list_episode_files.return_value = []
+        memory.list_procedure_files.return_value = []
+        memory.list_skill_metas.return_value = []
+        memory.list_common_skill_metas.return_value = []
+        memory.common_skills_dir = data_dir / "common_skills"
+
+        with patch("core.prompt.builder.load_prompt", return_value="prompt"):
+            result = build_system_prompt(memory)
+
+        prompt = result.system_prompt
+        assert "IDENTITY_MARKER\n\nSOUL_MARKER" in prompt
+        assert prompt.index("IDENTITY_MARKER") < prompt.index("SOUL_MARKER") < prompt.index("AGENTS_MARKER")
+
     def test_skills_not_in_system_prompt(self, tmp_path, data_dir):
         """Skills are not listed in memory_guide — they appear in skill_catalog section."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         # Create actual skill files for SkillIndex to discover
         skills_dir = anima_dir / "skills" / "coding"
@@ -331,7 +359,7 @@ class TestBuildSystemPrompt:
         """memory_guide omits irrelevant counts and receives the absolute root."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -366,7 +394,7 @@ class TestBuildSystemPrompt:
     def test_includes_bootstrap(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -391,7 +419,7 @@ class TestBuildSystemPrompt:
     def test_includes_state_and_pending(self, tmp_path, data_dir):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -419,7 +447,7 @@ class TestBuildSystemPrompt:
         """Mode A hints should mention Bash and animaworks-tool."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -450,7 +478,7 @@ class TestBuildSystemPrompt:
         """S mode lists CLI categories and separately permits visible direct tools."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -483,7 +511,7 @@ class TestBuildSystemPrompt:
         """B mode injects External Tools hint mentioning Bash + animaworks-tool."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -725,7 +753,7 @@ class TestAssemblyWithTags:
         """Generated prompt must contain <group_N> tags."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -757,7 +785,7 @@ class TestAssemblyWithTags:
         """Non-header sections wrapped in <section> tags."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -786,7 +814,7 @@ class TestAssemblyWithTags:
         """No H1 headings should appear in the final prompt."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Identity H1\nContent", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Identity H1\nContent", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir
@@ -819,7 +847,7 @@ class TestAssemblyWithTags:
         """Sections should not be joined by --- separators."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = MagicMock()
         memory.anima_dir = anima_dir

@@ -1,10 +1,9 @@
 ---
 name: newstaff
 description: >-
-  A skill for hiring and creating a new Digital Anima in the AnimaWorks organization.
-  Based on an interview, create a character sheet (Markdown) and use the CLI command (animaworks anima create) to
-  identity/injection/permissionsgenerate everything at once. After creation, self-maintain via bootstrap.
-  "Create a new employee" "Hire someone" "New employee" "Hiring" "Create Anima" "Recruit" "Add a team member" "Add personnel" "Create a subordinate" "Add staff" "hire" "recruit" "team member"
+  A skill for hiring/creating a new Digital Anima in an AnimaWorks organization.
+  Create a character sheet (Markdown) based on an interview, then use the CLI command (animaworks anima create) to generate   IDENTITY/SOUL/AGENTS/permissions and other items all at once. After creation, it performs its own setup through bootstrap.
+  “Create a new employee,” “hire someone,” “new employee,” “hiring,” “create an Anima,” “recruit,” “add a team member,” “add staff,” “create a subordinate,” “add personnel,” “hire,” “recruit,” “team member”
 ---
 
 
@@ -57,9 +56,9 @@ Always Read the following in this order:
 
 Don't associate a cool beauty with the role. Don't make hobbies an extension of work. Check that hair color, face type, and speech style don't overlap with existing members.
 
-### 3. Create the character sheet and batch-create via CLI
+### 3. Create a character sheet and create everything at once via the CLI
 
-Write the character sheet to a file according to the **character sheet specification** based on the interview and design results, then create it with a CLI command:
+Write the results of the interview and design to a file as a character sheet, following the **character sheet specification**, then create it with the CLI command:
 
 1. Write the character sheet to a file (e.g., `/tmp/{english_name}.md`)
 2. Run the following command:
@@ -68,10 +67,10 @@ Write the character sheet to a file according to the **character sheet specifica
 animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} --supervisor {supervisor_english_name}
 ```
 
-**supervisor configuration:**
-- Explicitly specify via the `supervisor` parameter (recommended)
-- If omitted: Get from the `| 上司 |` field of the character sheet
-- If neither exists: Self (the calling Anima) becomes the supervisor
+**Configuring the supervisor:**
+- Explicitly specify it with the `supervisor` parameter (recommended)
+- If omitted: Retrieved from the character sheet’s `| 上司 |` field
+- If neither is provided: You (the calling Anima) become the supervisor
 
 **Character sheet specification:**
 
@@ -90,11 +89,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 | モデル | {model name — ユーザーが指定した時だけ書く} |
 | credential | {ユーザーがモデルを指定した時だけ書く} |
 
-## 人格 (→ identity.md)
+## 人格 (→ SOUL.md)
 
 {Personality, speaking style, values, backstory, appearance, etc.}
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
@@ -102,25 +101,25 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 
 {If omitted: default template applied}
 
-## 定期業務 (→ heartbeat.md, cron.md) [省略可]
+## 定期業務 (→ HEARTBEAT.md, cron.md) [省略可]
 
 {If omitted: generic template applied. New Anima self-adjusts in bootstrap}
 
-## 初回起動指示 (→ bootstrap.md 追加指示) [省略可]
+## 初回起動指示 (→ BOOTSTRAP.md 追加指示) [省略可]
 
 {If omitted: standard bootstrap only}
 ```
 
-**Required sections**: Basic information, personality, role and action policy
-**Optional sections**: Permission, periodic tasks, initial startup instruction
+**Required sections**: Basic Information, Personality, Role and Behavioral Guidelines
+**Optional sections**: Permissions, Regular Duties, Initial Startup Instructions
 
-This automatically executes the following:
-- Batch creation of the directory structure
-- Placement of skeleton files
-- Placement of bootstrap.md
-- Creation of status.json (including supervisor)
-- Registration in config.json (model, supervisor, etc.)
-- Applying defaults to omitted sections
+This automatically performs:
+- Creates the directory structure all at once
+- Places skeleton files
+- Places BOOTSTRAP.md
+- Creates status.json (including supervisor)
+- Registers it in config.json (model, supervisor, etc.)
+- Applies defaults to omitted sections
 
 ### 4. Confirm the model configuration in config.json
 
@@ -160,9 +159,9 @@ Report the completion of hiring:
 
 ⚠️ Do not report avatar image generation (the new Anima itself generates it via bootstrap)
 
-### From here on, the new Anima executes autonomously:
-- Enrichment of identity.md / injection.md
-- Self-design of heartbeat.md / cron.md
-- Avatar image generation (with supervisor reference)
-- Arrival report to the supervisor
-- Start the first small task (something useful to the user) and report the results to the supervisor
+### The new Anima autonomously performs the following thereafter:
+- Enriches IDENTITY.md / SOUL.md / AGENTS.md
+- Self-designs HEARTBEAT.md / cron.md
+- Generates an avatar image (with supervisor reference)
+- Reports its appointment to the supervisor
+- Starts on its first small task (something useful to the user) and reports the results to the supervisor

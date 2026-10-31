@@ -179,28 +179,28 @@ Heartbeat / Cron / 팀 설계 / 기억 / 비용 최적화의 핵심이 한 장�
 
 ## 키워드 색인
 
-| 키워드 | 참조 |
+| 키워드 | 참조 항목 |
 |-----------|--------|
-| 기초, 입문, 전체상, 에센셜, 시작 방법, 개요 | `anatomy/essentials.md` |
+| 기초, 입문, 전체 개요, 핵심, 시작 방법, 개요 | `anatomy/essentials.md` |
 | 메시지, send_message, 전송, 답장, 스레드, inbox | `reference/communication/messaging-guide.md` |
 | Board, 채널, post_channel, read_channel | `communication/board-guide.md` |
 | DM 기록, read_dm_history, 지난 대화 | `communication/board-guide.md` |
 | 지침, 위임, 작업 요청, 위임 | `reference/communication/instruction-patterns.md` |
-| 보고, 일일 보고, 요약, 완료 보고, 상급자 보고 | `reference/communication/reporting-guide.md` |
+| 보고, 일일 보고, 요약, 완료 보고, 에스컬레이션 | `reference/communication/reporting-guide.md` |
 | 품질 프로토콜, 필수 항목, 검증 근거, 완료 조건, 위임 확인 | `communication/message-quality-protocol.md` |
 | Inbox wake, 메시지 집계, 중복 전송 방지, 확인 응답, 대화 루프 | `communication/sending-limits.md` |
 | call_human, 사람 알림, 사람에게 연락, 알림 채널 | `communication/call-human-guide.md` |
 | Slack, 봇 토큰, SLACK_BOT_TOKEN, not_in_channel | `reference/communication/slack-bot-token-guide.md` |
 | 조직, supervisor, 상급자, 부하, 동료 | `reference/organization/structure.md` |
-| 역할, 책임, speciality, 전문 분야 | `reference/organization/roles.md` |
+| 역할, 책임, speciality, 전문성 | `reference/organization/roles.md` |
 | 계층, 통신 경로, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
 | delegate_task, 작업 위임, task_tracker | `organization/hierarchy-rules.md`, `reference/operations/task-management.md` |
 | 작업, current_state, pending, 진행 상황, 우선순위 | `reference/operations/task-management.md` |
 | 작업 대기열, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
-| 작업 보드, 대시보드, 사람용 | `operations/task-board-guide.md` |
+| 작업 보드, 대시보드, 인간용 | `operations/task-board-guide.md` |
 | 설정, config, status.json, SSoT, reload | `reference/operations/project-setup.md` |
 | 하트비트, heartbeat, 정기 점검 | `reference/operations/heartbeat-cron-guide.md` |
-| cron, 일정, 정기 작업 | `reference/operations/heartbeat-cron-guide.md` |
+| cron, 스케줄, 정기 작업 | `reference/operations/heartbeat-cron-guide.md` |
 | 도구, animaworks-tool, MCP, skill | `reference/operations/tool-usage-overview.md` |
 | 실행 모드, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `reference/operations/tool-usage-overview.md` |
 | 백그라운드, submit, 장시간 도구 | `operations/background-tasks.md` |
@@ -211,9 +211,9 @@ Heartbeat / Cron / 팀 설계 / 기억 / 비용 최적화의 핵심이 한 장�
 | Mode S, 인증, API 직접 연결, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |
 | 음성, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
-| Anima, 자신, 구성, 설계, 수명 주기 | `anatomy/what-is-anima.md` |
-| identity, injection, 인격, 행동 지침, 불변, 가변 | `reference/anatomy/anima-anatomy.md` |
-| permissions.json, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
+| Anima, 자신, 구성, 설계, 라이프사이클 | `anatomy/what-is-anima.md` |
+| IDENTITY.md, SOUL.md, AGENTS.md, 인격, 프로필, 행동 지침, 불변, 가변 | `reference/anatomy/anima-anatomy.md` |
+| permissions.json, bootstrap, HEARTBEAT.md, cron.md | `reference/anatomy/anima-anatomy.md` |
 | 기억, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting, 망각 | `reference/anatomy/memory-system.md` |
 | consolidation, 2-phase, multipass, 오류 추적 | `reference/anatomy/memory-system.md` |
@@ -221,11 +221,11 @@ Heartbeat / Cron / 팀 설계 / 기억 / 비용 최적화의 핵심이 한 장�
 | skills, 스킬 검색, common_skills, search_memory scope="skills" | `reference/anatomy/memory-system.md`, `reference/operations/tool-usage-overview.md` |
 | activity_log, BM25, RRF, 최근 로그 검색 | `reference/anatomy/memory-system.md`, `reference/troubleshooting/common-issues.md` |
 | 프롬프트 인젝션, trust, untrusted, 경계 태그 | `security/prompt-injection-awareness.md` |
-| 오류, 문제, 작동하지 않음, 권한, 차단 명령 | `reference/troubleshooting/common-issues.md` |
-| 흐름도, 판단, 망설임, 긴급, 보안 | `reference/troubleshooting/escalation-flowchart.md` |
+| 오류, 문제, 작동 안 함, 권한, 차단 명령어 | `reference/troubleshooting/common-issues.md` |
+| 순서도, 판단, 고민, 긴급, 보안 | `reference/troubleshooting/escalation-flowchart.md` |
 | Gmail, token.json, OAuth, pickle | `reference/troubleshooting/gmail-credential-setup.md` |
-| 티어, tiered, T1, T2, T3, T4 | `reference/troubleshooting/common-issues.md` |
-| 사용 사례, 활용 예, 할 수 있는 일 | `reference/usecases/usecase-overview.md` |
+| 티어, 계층형, T1, T2, T3, T4 | `reference/troubleshooting/common-issues.md` |
+| 사용 사례, 활용 예, 무엇을 할 수 있는지 | `reference/usecases/usecase-overview.md` |
 
 ---
 

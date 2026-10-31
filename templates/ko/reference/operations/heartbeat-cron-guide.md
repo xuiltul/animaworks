@@ -59,14 +59,14 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 동시에 실행되는 Inbox 처리는 1개뿐이며, 실행 중 도착한 메시지는 다음 1회에 모아서 처리한다. Provider 오류 시 `rate_guard`의 복구 시간을 기다리고, 읽지 않은 메시지를 남긴다.
 수신 intent에 의한 시작 필터나 메시지 기반 cooldown / cascade 억제는 없다. 이해·감사만 있는 메시지에 답장하지 않는 행동 규칙은 Inbox 프롬프트에서 지시한다.
 
-## heartbeat.md의 설정
+## HEARTBEAT.md 설정
 
-`heartbeat.md`은 각 Anima의 설정 파일로, 활동 시간·체크 항목을 정의한다.
-하트비트의 실행 간격은 `config.json`의 `heartbeat.interval_minutes`로 설정 가능(1~1440분, 기본 30). `heartbeat.md`에서는 변경할 수 없다.
-각 Anima에는 이름 기반의 0~9분 오프셋이 부여되어 동시 시작을 분산한다.
-파일 경로: `~/.animaworks/animas/{name}/heartbeat.md`
+`HEARTBEAT.md`은 각 Anima의 설정 파일로, 활동 시간과 확인 항목을 정의한다.
+하트비트 실행 간격은 `config.json`의 `heartbeat.interval_minutes`에서 설정할 수 있다(1~1440분, 기본값 30). `HEARTBEAT.md`에서는 변경할 수 없다.
+각 Anima에는 이름을 기준으로 0~9분의 오프셋이 부여되어, 동시에 시작되는 것을 분산한다.
+파일 경로: `~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-상급자가 산하 Anima의 `heartbeat.md`을 편집하는 경우, 직접 파일 조작이 아니라 `read_memory_file` / `write_memory_file`을 사용하고, `../{anima_name}/heartbeat.md`과 같은 상대 경로로 지정한다.
+상급자가 하위 Anima의 `HEARTBEAT.md`를 편집할 때는 파일을 직접 조작하는 대신 `read_memory_file` / `write_memory_file`을 사용하고, `../{anima_name}/HEARTBEAT.md`과 같은 상대 경로로 지정한다.
 
 ### 포맷
 
@@ -90,19 +90,19 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ### 설정 필드
 
 **실행 간격**:
-- `config.json`의 `heartbeat.interval_minutes`로 설정(1~1440분, 기본 30). `heartbeat.md`에서의 변경은 불가
+- `config.json`의 `heartbeat.interval_minutes`에서 설정한다(1~1440분, 기본값 30). `HEARTBEAT.md`에서는 변경할 수 없다.
 
-**활동 시간**(SHOULD):
-- `HH:MM - HH:MM` 형식으로 기재한다(예: `9:00 - 22:00`)
-- 이 시간 외에는 하트비트가 시작하지 않음
-- 미설정 시 기본: 24시간(전 시간대)
-- 타임존은 `config.json`의 `system.timezone`으로 설정 가능. 미설정 시 시스템 타임존을 자동 감지
+**활동 시간**（SHOULD）:
+- `HH:MM - HH:MM` 형식으로 작성한다(예: `9:00 - 22:00`)
+- 이 시간 외에는 하트비트가 시작되지 않는다
+- 설정하지 않은 경우 기본값: 24시간(하루 종일)
+- 시간대는 `config.json`의 `system.timezone`에서 설정할 수 있다. 설정하지 않은 경우 시스템 시간대를 자동으로 감지한다
 
-**체크리스트**(MUST):
+**체크리스트**（MUST）:
 - 하트비트 시작 시 에이전트가 확인하는 항목
-- 글머리 기호 목록(`- ` 시작)으로 기재한다
-- 에이전트의 프롬프트에 체크리스트 내용이 그대로 전달된다
-- 커스터마이즈 가능: Anima의 역할에 맞게 항목을 추가·변경해도 좋다
+- 글머리 기호 목록(`- `로 시작)으로 작성한다
+- 체크리스트 내용은 에이전트의 프롬프트에 그대로 전달된다
+- 사용자 지정 가능: Anima의 역할에 맞게 항목을 추가하거나 변경해도 된다
 
 ### 체크리스트의 커스터마이즈 예
 
@@ -180,10 +180,10 @@ Chat(인간과의 대화)과 TaskExec(실작업)은 메인 모델을 유지한�
 - **동작**: `core.time_utils`의 로컬 현재 시간 기준으로, 각 행 JSON의 `ts`(ISO 형식)을 파싱하여, **기본 7일**보다 오래된 항목을 `{stem}.{YYYYMMDD}.archive.jsonl`에 추가 아카이브한 후, 현재 파일에서 제거. `ts`의 해석에 실패한 행은 **현재 파일에 유지**(데이터 손실 방지).
 - **기타 서버 정기 작업**: Anima 단위의 `cron.md`와 별도로, 라이프사이클이 메모리 유지보수·RAG 등의 시스템 Cron을 등록(예: 일일 통합 02:00, 일일 인덱스 04:00). 시간은 설정 타임존 기준. DM 로테이션은 위 04:30.
 
-### 하트비트 설정의 핫 리로드
+### 하트비트 설정 핫 리로드
 
-파일 시스템에서 heartbeat.md을 업데이트하면, 다음 하트비트 실행 시 `_check_schedule_freshness()`이 변경을 감지하고 SchedulerManager가 스케줄을 자동으로 리로드한다.
-서버 재시작은 필요 없다(MAY skip restart). APScheduler의 작업이 다시 등록된다.
+파일 시스템에서 HEARTBEAT.md을 업데이트하면 다음 하트비트 실행 시 `_check_schedule_freshness()`이 변경 사항을 감지하고, SchedulerManager가 일정을 자동으로 다시 불러온다.
+서버를 재시작할 필요가 없다(재시작을 건너뛸 수 있음). APScheduler 작업이 다시 등록된다.
 
 ## Anima별 하트비트 간격 설정
 
@@ -536,18 +536,18 @@ type: llm
 
 주석 내의 `## ` 제목은 파서에 무시된다.
 
-## Cron 설정의 핫 리로드
+## Cron 설정 핫 리로드
 
-cron.md를 업데이트하면, heartbeat.md과 동일하게 스케줄이 자동 리로드됩니다.
-Anima 자신이 cron.md을 다시 쓴 경우에도 즉시 반영됩니다 (self-modify 패턴).
-상급자는 산하의 `cron.md` / `heartbeat.md`을 write memory 도구로 편집할 수 있습니다. 허가된 상급자로부터의 `injection.md` 변경 요청도 root로 전송·인가됩니다. `status.json`의 변경에는 대응하는 상급자용 도구 또는 root CLI/API을 사용합니다. root 소유 파일을 Read / Write / Edit / apply_patch / `Path.write_text` / 셸 리다이렉트 등으로 직접 쓰지 않습니다.
+cron.md을 업데이트하면 HEARTBEAT.md과 마찬가지로 일정이 자동으로 다시 불러와진다.
+Anima 자체가 cron.md을 수정한 경우에도 즉시 반영된다(self-modify 패턴).
+상급자는 하위 Anima의 `cron.md` / `HEARTBEAT.md`을 write memory 도구로 편집할 수 있다. 허가된 상급자의 `AGENTS.md` 변경 요청도 root에 전달되어 인가된다. `status.json`을 변경하려면 해당 상급자용 도구 또는 root CLI/API을 사용한다. root 소유 파일을 Read / Write / Edit / apply_patch / `Path.write_text` / 셸 리디렉션 등으로 직접 작성하지 않는다.
 
-리로드 시 동작:
+다시 불러올 때의 동작:
 1. 해당 Anima의 기존 cron 작업을 모두 삭제
-2. 업데이트 후의 cron.md를 파싱하고, 새 작업을 등록
-3. 로그에 `Schedule reloaded for '{name}'`가 출력됨
+2. 업데이트된 cron.md을 파싱하고 새 작업을 등록
+3. 로그에 `Schedule reloaded for '{name}'`가 출력된다
 
-자신이 cron.md을 업데이트할 때의 주의점:
-- 제목 (`## タスク名`) 직후에 `schedule:` 디렉티브를 배치 (MUST)
-- 스케줄은 표준 5필드 cron 식으로 기재 (MUST)
-- type 행은 schedule 직후에 배치 (SHOULD)
+직접 cron.md을 업데이트할 때의 주의 사항:
+- 제목(`## タスク名`) 바로 뒤에 `schedule:` 디렉티브를 둔다(MUST)
+- 스케줄은 표준 5필드 cron 식으로 작성한다(MUST)
+- type 행은 schedule 바로 뒤에 둔다(SHOULD)

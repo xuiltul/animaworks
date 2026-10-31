@@ -12,10 +12,8 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from server.supervisor.manager import ProcessSupervisor
 from server.supervisor.process_handle import ProcessState
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -45,13 +43,13 @@ def _create_anima_dir(
     """Create a complete anima directory on disk."""
     d = animas_dir / name
     d.mkdir(parents=True, exist_ok=True)
-    (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
-    (d / "injection.md").write_text(f"# {name} role", encoding="utf-8")
+    (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
+    (d / "AGENTS.md").write_text(f"# {name} role", encoding="utf-8")
     (d / "status.json").write_text(
         json.dumps({"enabled": enabled}), encoding="utf-8"
     )
     if has_bootstrap:
-        (d / "bootstrap.md").write_text("# Bootstrap", encoding="utf-8")
+        (d / "BOOTSTRAP.md").write_text("# Bootstrap", encoding="utf-8")
     return d
 
 
@@ -80,7 +78,7 @@ class TestBootstrapReconciliationE2E:
         3. Anima should still be present (not stopped)
         """
         sup = _make_supervisor(tmp_path)
-        anima_dir = _create_anima_dir(
+        _create_anima_dir(
             sup.animas_dir, "kotoha", enabled=True, has_bootstrap=True
         )
 
@@ -167,7 +165,7 @@ class TestBootstrapReconciliationE2E:
 
     async def test_retry_limit_prevents_infinite_loop(self, tmp_path: Path):
         """Simulate the infinite loop scenario: repeated bootstrap failures
-        should eventually disable further attempts by renaming bootstrap.md.
+        should eventually disable further attempts by renaming BOOTSTRAP.md.
         """
         sup = _make_supervisor(tmp_path)
         anima_dir = _create_anima_dir(
@@ -181,14 +179,14 @@ class TestBootstrapReconciliationE2E:
             sup.processes.pop("kotoha", None)
             await sup._run_bootstrap("kotoha")
             assert sup._bootstrap_retry_counts["kotoha"] == i + 1
-            assert (anima_dir / "bootstrap.md").exists()
+            assert (anima_dir / "BOOTSTRAP.md").exists()
 
-        # 4th attempt: max retries reached, bootstrap.md renamed
+        # 4th attempt: max retries reached, BOOTSTRAP.md renamed
         await sup._run_bootstrap("kotoha")
-        assert not (anima_dir / "bootstrap.md").exists()
-        assert (anima_dir / "bootstrap.md.failed").exists()
+        assert not (anima_dir / "BOOTSTRAP.md").exists()
+        assert (anima_dir / "BOOTSTRAP.md.failed").exists()
 
-        # needs_bootstrap would now return False since bootstrap.md is gone
+        # needs_bootstrap would now return False since BOOTSTRAP.md is gone
         # This breaks the infinite loop
 
     async def test_successful_bootstrap_resets_retry_count(self, tmp_path: Path):

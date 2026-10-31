@@ -42,7 +42,7 @@ def load_org_data(
     all_names: list[str] = []
     if animas_dir.exists():
         for d in sorted(animas_dir.iterdir()):
-            if d.is_dir() and (d / "identity.md").exists():
+            if d.is_dir() and (d / "IDENTITY.md").exists():
                 all_names.append(d.name)
 
     # Check enabled status

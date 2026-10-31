@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/architecture/tasks.md -->
-<!-- i18n: source-sha256=2eafe0a8d1b890d7718379c0b58fba494ea12cf38ee02587bbcd8c19cd559a58 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=2eafe0a8d1b890d7718379c0b58fba494ea12cf38ee02587bbcd8c19cd559a58 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: b304b7dc
 

@@ -16,7 +16,6 @@ from starlette.testclient import TestClient
 
 from core.config.models import AnimaWorksConfig, VoiceConfig
 
-
 # ── Fixtures ────────────────────────────────────────────────────────
 
 
@@ -49,7 +48,7 @@ def test_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Create test anima
     anima_dir = animas_dir / "test_anima"
     anima_dir.mkdir()
-    (anima_dir / "identity.md").write_text("# Test Anima")
+    (anima_dir / "IDENTITY.md").write_text("# Test Anima")
     (anima_dir / "status.json").write_text(
         json.dumps({
             "enabled": True,
@@ -249,7 +248,7 @@ class TestVoiceWebSocket:
 
     def test_session_replacement(self, test_data_dir: Path) -> None:
         """Test that connecting same anima replaces existing session."""
-        from server.routes.voice import create_voice_router, _active_sessions
+        from server.routes.voice import _active_sessions, create_voice_router
 
         app = FastAPI()
         app.include_router(create_voice_router())

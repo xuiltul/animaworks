@@ -149,8 +149,8 @@ class TestProcessMessageModelOverride:
     def anima_dir(self, tmp_path):
         d = tmp_path / "test-anima"
         d.mkdir()
-        (d / "identity.md").write_text("# Test Anima", encoding="utf-8")
-        (d / "injection.md").write_text("test injection", encoding="utf-8")
+        (d / "IDENTITY.md").write_text("# Test Anima", encoding="utf-8")
+        (d / "AGENTS.md").write_text("test injection", encoding="utf-8")
         (d / "status.json").write_text(
             '{"enabled": true, "model": "claude-sonnet-4-6"}',
             encoding="utf-8",

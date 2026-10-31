@@ -54,8 +54,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Background task failed: {tool}",
     },
     "anima.bootstrap_prompt": {
-        "ja": "あなたの bootstrap.md ファイルを読み、指示に従ってください。",
-        "en": "Read your bootstrap.md file and follow its instructions.",
+        "ja": "あなたの BOOTSTRAP.md ファイルを読み、指示に従ってください。",
+        "en": "Read your BOOTSTRAP.md file and follow its instructions.",
     },
     "anima.chat_reply_delivery_failed": {
         "ja": "{to} への{via}送信に失敗しました。内容はチャットには表示しません。",

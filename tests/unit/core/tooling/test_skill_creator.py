@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -7,7 +8,7 @@ from __future__ import annotations
 
 import yaml
 
-from core.tooling.skill_creator import create_skill_directory, _validate_filename
+from core.tooling.skill_creator import _validate_filename, create_skill_directory
 
 
 class TestValidateFilename:
@@ -80,7 +81,7 @@ class TestCreateSkillDirectory:
         assert "v2" in skill_md
 
     def test_allowed_tools(self, tmp_path):
-        result = create_skill_directory(
+        create_skill_directory(
             "my-skill", "desc", "body", tmp_path, allowed_tools=["web_search", "read_file"]
         )
         skill_md = (tmp_path / "my-skill" / "SKILL.md").read_text()
@@ -101,6 +102,6 @@ class TestCreateSkillDirectory:
             {"filename": "a.md", "content": "A"},
             {"filename": "b.md", "content": "B"},
         ]
-        result = create_skill_directory("my-skill", "desc", "body", tmp_path, references=refs)
+        create_skill_directory("my-skill", "desc", "body", tmp_path, references=refs)
         assert (tmp_path / "my-skill" / "references" / "a.md").read_text() == "A"
         assert (tmp_path / "my-skill" / "references" / "b.md").read_text() == "B"

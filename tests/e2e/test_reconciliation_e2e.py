@@ -18,6 +18,7 @@ from httpx import ASGITransport, AsyncClient
 def _make_app(animas_dir: Path, shared_dir: Path, anima_names: list[str]):
     """Create a minimal FastAPI app with both animas and system routers."""
     from fastapi import FastAPI
+
     from server.routes.animas import create_animas_router
     from server.routes.system import create_system_router
     from server.stream_registry import StreamRegistry
@@ -65,7 +66,7 @@ class TestReconciliationE2E:
         # Create anima on disk
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice")
+        (alice_dir / "IDENTITY.md").write_text("# Alice")
 
         app = _make_app(animas_dir, shared_dir, anima_names=["alice"])
 
@@ -106,13 +107,13 @@ class TestReconciliationE2E:
         # Create enabled anima
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice")
+        (alice_dir / "IDENTITY.md").write_text("# Alice")
         (alice_dir / "status.json").write_text('{"enabled": true}')
 
         # Create disabled anima
         bob_dir = animas_dir / "bob"
         bob_dir.mkdir()
-        (bob_dir / "identity.md").write_text("# Bob")
+        (bob_dir / "IDENTITY.md").write_text("# Bob")
         (bob_dir / "status.json").write_text('{"enabled": false}')
 
         app = _make_app(animas_dir, shared_dir, anima_names=[])
@@ -135,7 +136,7 @@ class TestReconciliationE2E:
 
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice")
+        (alice_dir / "IDENTITY.md").write_text("# Alice")
 
         app = _make_app(animas_dir, shared_dir, anima_names=["alice"])
 
@@ -159,7 +160,7 @@ class TestReconciliationE2E:
 
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice")
+        (alice_dir / "IDENTITY.md").write_text("# Alice")
         # No status.json -- should be treated as enabled
 
         app = _make_app(animas_dir, shared_dir, anima_names=[])

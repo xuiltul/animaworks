@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/README.md -->
-<!-- i18n: source-sha256=582644ac13997cf7c0bb82404f6cb1c785b02b7ed687492367888946a3304901 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=582644ac13997cf7c0bb82404f6cb1c785b02b7ed687492367888946a3304901 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 193a5e72
 

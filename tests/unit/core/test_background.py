@@ -276,7 +276,7 @@ class TestActiveCount:
         assert manager.active_count() == 0
 
         # Use an event to keep the task in RUNNING state
-        blocker = asyncio.Event()
+        asyncio.Event()
 
         def blocking_fn(name: str, args: dict) -> str:
             # This runs in a thread executor. We need a way to block it

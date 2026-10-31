@@ -214,7 +214,7 @@ class TestHeartbeatMdCleanupInstruction:
         result = HeartbeatMixin._build_heartbeat_md_cleanup_instruction(mixin, hb)
 
         assert result is not None
-        assert "heartbeat.md" in result
+        assert "HEARTBEAT.md" in result
         assert result != "heartbeat.heartbeat_md_cleanup_required"
 
     def test_default_limits(self, data_dir):
@@ -227,12 +227,12 @@ class TestHeartbeatMdCleanupInstruction:
     def test_archives_before_cleanup_once_per_day(self, mixin):
         from core.time_utils import now_local
 
-        source = mixin.anima_dir / "heartbeat.md"
+        source = mixin.anima_dir / "HEARTBEAT.md"
         source.write_text("original heartbeat content", encoding="utf-8")
         mixin._get_heartbeat_md_max_bytes = MagicMock(return_value=10)
 
         first = HeartbeatMixin._build_heartbeat_md_cleanup_instruction(mixin, "x" * 20)
-        archive = mixin.anima_dir / "archive" / "heartbeat" / f"heartbeat.md.{now_local().strftime('%Y%m%d')}"
+        archive = mixin.anima_dir / "archive" / "heartbeat" / f"HEARTBEAT.md.{now_local().strftime('%Y%m%d')}"
         assert first is not None
         assert "archive/heartbeat/" in first
         assert archive.read_text(encoding="utf-8") == "original heartbeat content"
@@ -255,4 +255,4 @@ class TestHeartbeatMdCleanupInstruction:
         ):
             parts = await HeartbeatMixin._build_heartbeat_prompt(mixin)
 
-        assert any("heartbeat.md" in p and "KB" in p for p in parts[1:])
+        assert any("HEARTBEAT.md" in p and "KB" in p for p in parts[1:])

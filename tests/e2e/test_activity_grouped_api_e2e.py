@@ -6,12 +6,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
-
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -60,7 +59,7 @@ def _create_app(tmp_path: Path, anima_names: list[str] | None = None):
 def _setup_anima(animas_dir: Path, name: str) -> Path:
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     return anima_dir
 
 

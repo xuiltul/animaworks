@@ -237,7 +237,7 @@ class TestServerStatus:
 
         with patch("core.integrations.local_llm.httpx.get", side_effect=mock_get):
             status = client.server_status()
-        for name, info in status.items():
+        for info in status.values():
             assert "error" in info
 
 
