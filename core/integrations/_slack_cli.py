@@ -90,6 +90,13 @@ def _run_cli_command(client: SlackClient, args) -> None:
         )
         ts = response.get("ts", "")
         channel = response.get("channel", channel_id)
+        anima_dir = anima_dir_env()
+        if anima_dir:
+            from core.notification.reply_routing import remember_anima_slack_post
+
+            remember_anima_slack_post(
+                Path(anima_dir).name, channel_id, response, thread_ts=thread_ts, text=" ".join(args.message)
+            )
         print(f"Sent (channel: {channel}, ts: {ts})")
 
     elif args.command == "messages":
