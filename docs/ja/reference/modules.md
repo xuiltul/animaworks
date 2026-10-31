@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: a292b0cf99b89795b626c40a699a253f8290d1867a033d6513d663fec54652bb -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 1bbd9509ffa689cc55bc6df7d4a04001b02303df3dca7b4cc3437aec7196a7ef -->
 
 # モジュール一覧
 
@@ -35,7 +35,7 @@
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 323 | Operational commands for enclave runtimes. |
 | `cli.commands.import_cmd` | 88 | — |
-| `cli.commands.index_cmd` | 380 | — |
+| `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
 | `cli.commands.logs` | 209 | CLI commands for viewing anima logs. |
@@ -602,7 +602,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
-| `core.memory.rag.cli_access` | 232 | CLI access to phase3 vector stores through the active owner or server. |
+| `core.memory.rag.cli_access` | 228 | CLI access to phase3 vector stores through the active owner or server. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
 | `core.memory.rag.embedding` | 393 | — |
@@ -804,7 +804,7 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.platform.claude_code` | 194 | — |
 | `core.platform.codex` | 245 | — |
 | `core.platform.cursor` | 60 | — |
-| `core.platform.env` | 84 | — |
+| `core.platform.env` | 91 | — |
 | `core.platform.fd_limits` | 60 | — |
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |

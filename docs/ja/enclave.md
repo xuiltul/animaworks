@@ -130,9 +130,9 @@ dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
 
 `templates/_shared/launchd/com.animaworks.enclave.plist` は隔離インスタンスの LaunchDaemon（`UserName`・`Umask=0077`）、`com.animaworks.enclave-egress.plist` は外向き通信の制限を起動時と毎時に適用する root の LaunchDaemon である。ユーザー名・パス・ポートを置き換えて `/Library/LaunchDaemons/` に置き、`launchctl bootstrap system <plist>` で読み込む。秘密は `enclave.secrets_dir` に隔離ユーザー所有の `0600` ファイルで置き、ディレクトリを `0700` にする。
 
-外向き通信の制限は `scripts/enclave/egress_firewall.py --backend pf` で行う。規則は pf のアンカー `com.apple/250.AnimaworksEnclave` に読み込まれ、標準の `/etc/pf.conf` から評価されるため `pf.conf` は書き換えない。pf の `user` 指定は TCP と UDP にだけ効く。スクリプトは本体側と隔離側のどちらのユーザーも書き換えられない root 所有の場所へコピーして使う。
+外向き通信の制限は `scripts/enclave/egress_firewall.py --backend pf` で行う。規則は pf のアンカー `com.apple/250.AnimaworksEnclave` に読み込まれ、標準の `/etc/pf.conf` から評価されるため `pf.conf` は書き換えない。macOS では pf が `lo0` を評価対象外（skip）にしていることがあり、そのままでは隔離側から本体の API など loopback 上のサービスに届く。`--apply` は適用のたびに `lo0` の skip を外す。pf の `user` 指定は TCP と UDP にだけ効く。スクリプトは本体側と隔離側のどちらのユーザーも書き換えられない root 所有の場所へコピーして使う。
 
-launchd には unit 間の依存がないため、隔離側 config の `enclave.egress_probe` に遮断されるべき宛先（`HOST:PORT` のリスト）を指定する。起動時ガードは各宛先へ TCP 接続を試し、つながった場合は起動を拒否する。制限が読み込まれる前に起動しても、制限なしでは動かない。Linux でも同じ設定を使える。
+launchd には unit 間の依存がないため、隔離側 config の `enclave.egress_probe` に遮断されるべき宛先（`HOST:PORT` のリスト）を指定する。起動時ガードは各宛先へ TCP 接続を試し、つながった場合は起動を拒否する。外部の宛先に加えて、本体側の API など loopback 上の宛先も入れておくと、loopback の制限が外れていることも検出できる。制限が読み込まれる前に起動しても、制限なしでは動かない。Linux でも同じ設定を使える。
 
 ## 本体側の接続設定
 

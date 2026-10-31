@@ -31,7 +31,8 @@ Re-run periodically (e.g. weekly) to refresh the AWS ranges.
 On macOS pass ``--backend pf``.  The rules are loaded into the sub-anchor
 ``com.apple/250.AnimaworksEnclave``, which the stock ``/etc/pf.conf``
 evaluates through its ``anchor "com.apple/*"`` line, so ``pf.conf`` is left
-untouched; ``--apply`` also enables pf if it is off.  pf matches ``user``
+untouched; ``--apply`` also enables pf if it is off and stops pf from
+skipping lo0 (otherwise loopback would bypass the rules).  pf matches ``user``
 only for TCP and UDP, so the same limits apply to those protocols.
 """
 
@@ -137,8 +138,11 @@ def build_pf_ruleset(
         "table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }",
         # Only sockets owned by the enclave uid match ``user``, so other
         # users' traffic never reaches the final block rule.
-        f"pass out quick on lo0 proto {{ tcp, udp }} from any to any port {{ {ports} }} user {uid}",
-        f"pass out quick on lo0 proto {{ tcp, udp }} from any port {{ {ports} }} to any user {uid}",
+        # Loopback packets leave and re-enter on lo0, so a state created on
+        # the way out stalls the handshake (SYN_SENT:CLOSED); match each
+        # packet instead.
+        f"pass out quick on lo0 proto {{ tcp, udp }} from any to any port {{ {ports} }} user {uid} no state",
+        f"pass out quick on lo0 proto {{ tcp, udp }} from any port {{ {ports} }} to any user {uid} no state",
         f"pass out quick proto tcp from any to <aw_enclave_aws> port 443 user {uid}",
     ]
     for host, port in endpoints or []:
@@ -149,6 +153,13 @@ def build_pf_ruleset(
 
 def _pf_apply(ruleset: str) -> None:
     subprocess.run(["pfctl", "-q", "-a", PF_ANCHOR, "-f", "-"], input=ruleset, text=True, check=True)
+    # macOS can mark lo0 as skipped, which exempts loopback from every rule
+    # and lets the enclave reach the host's local services.  Loading only the
+    # options with an unused interface clears that flag; re-checked on every
+    # refresh in case something sets it again.
+    interfaces = subprocess.run(["pfctl", "-s", "Interfaces", "-v"], capture_output=True, text=True, check=False)
+    if "lo0 (skip)" in interfaces.stdout:
+        subprocess.run(["pfctl", "-q", "-O", "-f", "-"], input="set skip on stf0\n", text=True, check=True)
     info = subprocess.run(["pfctl", "-s", "info"], capture_output=True, text=True, check=False)
     if "Status: Enabled" not in info.stdout:
         subprocess.run(["pfctl", "-q", "-e"], check=True)

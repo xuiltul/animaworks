@@ -30,7 +30,7 @@
 		<key>ANIMAWORKS_DATA_DIR</key>
 		<string>/Users/_awenclave/.animaworks</string>
 		<key>PATH</key>
-		<string>/Users/_awenclave/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<string>/Users/_awenclave/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin</string>
 		<key>LANG</key>
 		<string>ja_JP.UTF-8</string>
 		<key>HF_HUB_OFFLINE</key>

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=30f1a34dfeb918f8e7df43976c426f5d8d4b527adc790472db788a46cf0edae3 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=5f183e62f463963e2ac2b6f15b16291e5e6376e527435d0132b42afff2ece880 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -35,7 +35,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 323 | Operational commands for enclave runtimes. |
 | `cli.commands.import_cmd` | 88 | — |
-| `cli.commands.index_cmd` | 380 | — |
+| `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
 | `cli.commands.logs` | 209 | CLI commands for viewing anima logs. |
@@ -544,7 +544,7 @@ Model Context Protocol servers and clients.
 
 ## `core.memory`
 
-Conversation and episode memory storage, search, and organization.
+Storage, search, and organization of conversation and episode memories.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -556,7 +556,7 @@ Conversation and episode memory storage, search, and organization.
 | `core.memory.conversation.memory` | 349 | Conversation memory (conversation memory / working memory) management. |
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
-| `core.memory.conversation.shortterm` | 313 | Short-term memory management. |
+| `core.memory.conversation.shortterm` | 313 | Short-term memory (short-term memory) management. |
 | `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
@@ -602,7 +602,7 @@ Conversation and episode memory storage, search, and organization.
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
-| `core.memory.rag.cli_access` | 232 | CLI access to phase3 vector stores through the active owner or server. |
+| `core.memory.rag.cli_access` | 228 | CLI access to phase3 vector stores through the active owner or server. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
 | `core.memory.rag.embedding` | 393 | — |
@@ -794,7 +794,7 @@ Speech synthesis, call status, and webhook management for the Twilio phone chann
 
 ## `core.platform`
 
-Integration layer that abstracts differences between execution engines and operating systems.
+An integration layer that abstracts differences between execution engines and operating systems.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -804,7 +804,7 @@ Integration layer that abstracts differences between execution engines and opera
 | `core.platform.claude_code` | 194 | — |
 | `core.platform.codex` | 245 | — |
 | `core.platform.cursor` | 60 | — |
-| `core.platform.env` | 84 | — |
+| `core.platform.env` | 91 | — |
 | `core.platform.fd_limits` | 60 | — |
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |

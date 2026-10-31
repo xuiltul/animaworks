@@ -24,6 +24,10 @@
 		<string>ap-northeast-1</string>
 		<string>--loopback-ports</string>
 		<string>18610,33061-33070</string>
+		<string>--allow-endpoints</string>
+		<string>192.0.2.10:4100</string>
+		<string>--allow-hosts</string>
+		<string>llm.example.com:443</string>
 		<string>--apply</string>
 	</array>
 	<key>RunAtLoad</key>

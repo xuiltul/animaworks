@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=30f1a34dfeb918f8e7df43976c426f5d8d4b527adc790472db788a46cf0edae3 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=5f183e62f463963e2ac2b6f15b16291e5e6376e527435d0132b42afff2ece880 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -24,26 +24,26 @@
 
 —
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
-| `cli.commands.anima_mgmt` | 1173 | 애니마 프로세스 관리를 위한 CLI 명령어. |
+| `cli.commands.anima_mgmt` | 1173 | 아니마 프로세스 관리를 위한 CLI 명령. |
 | `cli.commands.board` | 144 | — |
 | `cli.commands.company_cmd` | 272 | — |
-| `cli.commands.config_cmd` | 238 | ``animaworks config``용 CLI 처리기와 대화형 마법사. |
+| `cli.commands.config_cmd` | 238 | ``animaworks config``용 CLI 핸들러 및 대화형 마법사. |
 | `cli.commands.cost_cmd` | 326 | — |
-| `cli.commands.enclave_cmd` | 323 | 엔클레이브 런타임을 위한 운영 명령어. |
+| `cli.commands.enclave_cmd` | 323 | 엔클레이브 런타임 운영 명령. |
 | `cli.commands.import_cmd` | 88 | — |
-| `cli.commands.index_cmd` | 380 | — |
+| `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
-| `cli.commands.logs` | 209 | 애니마 로그를 보기 위한 CLI 명령어. |
+| `cli.commands.logs` | 209 | 아니마 로그를 보기 위한 CLI 명령. |
 | `cli.commands.mcp_cmd` | 66 | — |
 | `cli.commands.memory_cmd` | 56 | — |
 | `cli.commands.messaging` | 86 | — |
 | `cli.commands.migrate_cmd` | 114 | — |
-| `cli.commands.models_cmd` | 304 | 모델 정보를 확인하고 관리하기 위한 CLI 명령어. |
+| `cli.commands.models_cmd` | 304 | 모델 정보 및 관리를 위한 CLI 명령. |
 | `cli.commands.optimize_assets` | 189 | — |
 | `cli.commands.profile` | 332 | — |
 | `cli.commands.rag_repair_status` | 147 | 영구 RAG 복구 상태 보고. |
@@ -53,7 +53,7 @@
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
-| `cli.commands.task_store_cmd` | 258 | 운영자 전용, 코호트 범위 작업 마이그레이션 및 현재 상태 내보내기. |
+| `cli.commands.task_store_cmd` | 258 | 운영자 전용, 코호트 단위 작업 마이그레이션 및 현재 상태 내보내기. |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
 
@@ -544,20 +544,20 @@ Model Context Protocol 서버 및 클라이언트.
 
 ## `core.memory`
 
-대화·에피소드 기억의 저장, 검색, 정리.
+대화 및 에피소드 기억의 저장, 검색, 정리.
 
 | 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.memory` | 20 | — |
-| `core.memory._llm_parse（非公開）` | 185 | 기억 파이프라인에서 사용하는 LLM 출력 파싱 공통 헬퍼. |
+| `core.memory._llm_parse（非公開）` | 185 | 메모리 파이프라인에서 공유하는 LLM 출력 파싱 헬퍼. |
 | `core.memory.config_reader` | 31 | — |
-| `core.memory.conversation.compression` | 322 | 대화 기억 압축 로직. |
-| `core.memory.conversation.finalize` | 493 | 대화 기억의 세션 종료 처리. |
-| `core.memory.conversation.memory` | 349 | 대화 기억(대화 기억 / 작업 기억) 관리. |
-| `core.memory.conversation.models` | 149 | 대화 기억을 위한 데이터 클래스와 상수. |
-| `core.memory.conversation.prompt` | 270 | 대화 기억을 위한 프롬프트 작성 함수. |
+| `core.memory.conversation.compression` | 322 | 대화 기억의 압축 로직. |
+| `core.memory.conversation.finalize` | 493 | 대화 기억의 세션 마무리 처리. |
+| `core.memory.conversation.memory` | 349 | 대화 기억(대화 기억 / 작업 메모리) 관리. |
+| `core.memory.conversation.models` | 149 | 대화 기억용 데이터 클래스 및 상수. |
+| `core.memory.conversation.prompt` | 270 | 대화 기억용 프롬프트 빌드 함수. |
 | `core.memory.conversation.shortterm` | 313 | 단기 기억 관리. |
-| `core.memory.conversation.state_update` | 49 | 대화 기억의 세션 종료를 위한 상태 업데이트 함수. |
+| `core.memory.conversation.state_update` | 49 | 대화 기억 마무리 처리를 위한 상태 업데이트 함수. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
 | `core.memory.facts.config` | 85 | — |
@@ -569,9 +569,9 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.facts.invalidation_llm` | 154 | — |
 | `core.memory.facts.live` | 578 | — |
 | `core.memory.facts.observability` | 41 | — |
-| `core.memory.facts.ontology` | 247 | 엔터티 / 사실 추출 결과를 위한 Pydantic 모델. |
-| `core.memory.facts.prompts.en` | 133 | 엔터티 / 사실 추출을 위한 영어 프롬프트. |
-| `core.memory.facts.prompts.ja` | 135 | 엔터티 / 사실 추출을 위한 일본어 프롬프트. |
+| `core.memory.facts.ontology` | 247 | 엔터티 / 사실 추출 결과용 Pydantic 모델. |
+| `core.memory.facts.prompts.en` | 133 | 엔터티 / 사실 추출용 영어 프롬프트. |
+| `core.memory.facts.prompts.ja` | 135 | 엔터티 / 사실 추출용 일본어 프롬프트. |
 | `core.memory.facts.store` | 460 | — |
 | `core.memory.frontmatter` | 430 | — |
 | `core.memory.io` | 59 | — |
@@ -602,7 +602,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
-| `core.memory.rag.cli_access` | 232 | 활성 소유자 또는 서버를 통해 phase3 벡터 저장소에 접근하는 CLI. |
+| `core.memory.rag.cli_access` | 228 | 활성 소유자 또는 서버를 통해 phase3 벡터 저장소에 접근하는 CLI 기능. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
 | `core.memory.rag.embedding` | 393 | — |
@@ -613,7 +613,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.rag.index_signature` | 27 | 기존 임베딩 인덱스 서명에 대한 호환성 진단. |
 | `core.memory.rag.indexer` | 1593 | — |
 | `core.memory.rag.indexer_delete` | 135 | — |
-| `core.memory.rag.owner_lock` | 84 | Anima의 네이티브 벡터 데이터베이스를 위한 독점 소유권 잠금. |
+| `core.memory.rag.owner_lock` | 84 | 아니마의 기본 벡터 데이터베이스에 대한 독점 소유권 잠금. |
 | `core.memory.rag.repair.detect` | 743 | — |
 | `core.memory.rag.repair.rebuild` | 401 | — |
 | `core.memory.rag.repair.state` | 191 | RAG 자동 복구를 위한 영구 복구 상태 헬퍼. |
@@ -794,9 +794,9 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 
 ## `core.platform`
 
-실행 엔진과 OS별 차이를 흡수하는 연동 계층.
+실행 엔진이나 OS별 차이를 흡수하는 연동 계층.
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.platform` | 4 | — |
 | `core.platform.agy` | 32 | — |
@@ -804,7 +804,7 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 | `core.platform.claude_code` | 194 | — |
 | `core.platform.codex` | 245 | — |
 | `core.platform.cursor` | 60 | — |
-| `core.platform.env` | 84 | — |
+| `core.platform.env` | 91 | — |
 | `core.platform.fd_limits` | 60 | — |
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
