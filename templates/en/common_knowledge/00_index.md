@@ -178,51 +178,51 @@ After reading, follow the table of contents below for details on each topic.
 
 | Keyword | Reference |
 |-----------|--------|
-| fundamentals, introduction, big picture, essentials, getting started, overview | `anatomy/essentials.md` |
-| message, send_message, send, reply, thread, inbox | `reference/communication/messaging-guide.md` |
+| Fundamentals, introduction, overview, essentials, getting started, summary | `anatomy/essentials.md` |
+| Message, send_message, send, reply, thread, inbox | `reference/communication/messaging-guide.md` |
 | Board, channel, post_channel, read_channel | `communication/board-guide.md` |
 | DM history, read_dm_history, past conversations | `communication/board-guide.md` |
-| instructions, delegation, task requests, delegation | `reference/communication/instruction-patterns.md` |
-| reports, daily reports, summaries, completion reports, escalation | `reference/communication/reporting-guide.md` |
-| quality protocol, required items, validation evidence, completion criteria, delegation check | `communication/message-quality-protocol.md` |
-| Inbox wake, message aggregation, duplicate send prevention, replying to acknowledgements, conversation loop | `communication/sending-limits.md` |
-| call_human, human notifications, contact a human, notification channel | `communication/call-human-guide.md` |
+| Instruction, delegation, task request, delegation | `reference/communication/instruction-patterns.md` |
+| Report, daily report, summary, completion report, escalation | `reference/communication/reporting-guide.md` |
+| Quality protocol, required items, validation evidence, completion criteria, delegation checklist | `communication/message-quality-protocol.md` |
+| Inbox wake, message aggregation, duplicate-send prevention, reply to acknowledgment, conversation loop | `communication/sending-limits.md` |
+| call_human, human notification, contact a human, notification channel | `communication/call-human-guide.md` |
 | Slack, bot token, SLACK_BOT_TOKEN, not_in_channel | `reference/communication/slack-bot-token-guide.md` |
-| organization, supervisor, supervisor, subordinate, colleagues | `reference/organization/structure.md` |
-| roles, responsibilities, speciality, expertise | `reference/organization/roles.md` |
-| hierarchy, communication paths, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
+| Organization, supervisor, supervisor, subordinate, colleague | `reference/organization/structure.md` |
+| Role, responsibility, speciality, expertise | `reference/organization/roles.md` |
+| Hierarchy, communication route, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
 | delegate_task, task delegation, task_tracker | `organization/hierarchy-rules.md`, `reference/operations/task-management.md` |
-| task, current_state, pending, progress, priority | `reference/operations/task-management.md` |
-| task queue, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
-| task board, dashboard, human-facing | `operations/task-board-guide.md` |
-| configuration, config, status.json, SSoT, reload | `reference/operations/project-setup.md` |
-| heartbeat, heartbeat, periodic checks | `reference/operations/heartbeat-cron-guide.md` |
-| cron, schedule, scheduled tasks | `reference/operations/heartbeat-cron-guide.md` |
-| tools, animaworks-tool, MCP, skill | `reference/operations/tool-usage-overview.md` |
-| execution modes, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `reference/operations/tool-usage-overview.md` |
-| background, submit, long-running tools | `operations/background-tasks.md` |
-| workspace, workspace, working directory, working_directory | `operations/workspace-guide.md` |
-| scratch, worktree, temporary files, cache, ANIMAWORKS_SCRATCH_DIR | `operations/scratch-and-worktrees.md` |
-| model, models.json, credential, set-model, context window | `reference/operations/model-guide.md` |
+| Task, current_state, pending, progress, priority | `reference/operations/task-management.md` |
+| Task queue, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
+| Task board, dashboard, for humans | `operations/task-board-guide.md` |
+| Configuration, config, status.json, SSoT, reload | `reference/operations/project-setup.md` |
+| Heartbeat, heartbeat, periodic check | `reference/operations/heartbeat-cron-guide.md` |
+| cron, schedule, scheduled task | `reference/operations/heartbeat-cron-guide.md` |
+| Tool, animaworks-tool, MCP, skill | `reference/operations/tool-usage-overview.md` |
+| Execution mode, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `reference/operations/tool-usage-overview.md` |
+| Background, submit, long-running tool | `operations/background-tasks.md` |
+| Workspace, workspace, working directory, working_directory | `operations/workspace-guide.md` |
+| scratch, worktree, temporary file, cache, ANIMAWORKS_SCRATCH_DIR | `operations/scratch-and-worktrees.md` |
+| Model, models.json, credential, set-model, context window | `reference/operations/model-guide.md` |
 | background_model, background model, cost optimization | `reference/operations/model-guide.md` |
 | Mode S, authentication, direct API, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |
-| audio, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
+| Audio, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
 | Anima, self, configuration, design, lifecycle | `anatomy/what-is-anima.md` |
-| IDENTITY.md, SOUL.md, AGENTS.md, personality, profile, behavioral guidelines, immutable, variable | `reference/anatomy/anima-anatomy.md` |
+| IDENTITY.md, SOUL.md, AGENTS.md, persona, profile, behavioral guidelines, immutable, variable | `reference/anatomy/anima-anatomy.md` |
 | permissions.json, bootstrap, HEARTBEAT.md, cron.md | `reference/anatomy/anima-anatomy.md` |
-| memory, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
+| Memory, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting, forgetting | `reference/anatomy/memory-system.md` |
-| consolidation, 2-phase, multipass, error traces | `reference/anatomy/memory-system.md` |
+| consolidation, 2-phase, multipass, error trace | `reference/anatomy/memory-system.md` |
 | search_memory, write_memory_file, memory search | `reference/anatomy/memory-system.md` |
 | skills, skill search, common_skills, search_memory scope="skills" | `reference/anatomy/memory-system.md`, `reference/operations/tool-usage-overview.md` |
 | activity_log, BM25, RRF, recent log search | `reference/anatomy/memory-system.md`, `reference/troubleshooting/common-issues.md` |
-| prompt injection, trust, untrusted, boundary tags | `security/prompt-injection-awareness.md` |
-| errors, problems, not working, permissions, blocked commands | `reference/troubleshooting/common-issues.md` |
-| flowcharts, decisions, uncertainty, emergencies, security | `reference/troubleshooting/escalation-flowchart.md` |
+| Prompt injection, trust, untrusted, boundary tags | `security/prompt-injection-awareness.md` |
+| Error, problem, not working, permission, blocked command | `reference/troubleshooting/common-issues.md` |
+| Flowchart, decision-making, uncertainty, emergency, security | `reference/troubleshooting/escalation-flowchart.md` |
 | Gmail, token.json, OAuth, pickle | `reference/troubleshooting/gmail-credential-setup.md` |
-| tiers, tiered, T1, T2, T3, T4 | `reference/troubleshooting/common-issues.md` |
-| use cases, examples, what you can do | `reference/usecases/usecase-overview.md` |
+| Tier, tiered, T1, T2, T3, T4 | `reference/troubleshooting/common-issues.md` |
+| Use case, examples of use, what it can do | `reference/usecases/usecase-overview.md` |
 
 ---
 

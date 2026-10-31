@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=edd56b9e67c756fec1b4eeecac5494f1c0ef7cc4efff2cf7ee64a7501baa0b9f generated=2026-10-30 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d381aa269e104fc13b7413556212b1ae09c5385a36a4e4c9da2af55d9140c099 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -17,10 +17,10 @@ Generated from the argparse definition of the `animaworks` command.
 Manage anima processes
 
 `usage: animaworks anima [-h]
-                        {restart,status,create,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
+                        {restart,status,create,export,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
                         ...`
 
-| Name | Type | Default | Choices | Description |
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
@@ -87,6 +87,18 @@ Enable (復帰) an anima
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | anima | positional | — | — | Anima name to enable |
+
+## `anima export`
+
+Export an Anima workspace in OpenClaw / Hermes Agent format
+
+`usage: animaworks anima export [-h] --format {openclaw,hermes} --out DIR anima`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| anima | positional | — | — | Anima name to export |
+| --format | option | — | openclaw, hermes | Target workspace format |
+| --out | option | — | — | Output directory |
 
 ## `anima info`
 
@@ -684,16 +696,19 @@ Show the number of targets for deactivation and full forgetting without updating
 
 ## `migrate`
 
-Run necessary migrations on runtime data.
+Run required migrations for runtime data.
 
-`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]`
+`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]
+                          [--rollback-standard-files] [--anima NAME]`
 
-| Name | Type | Default | Choices | Description |
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
 | --dry-run | flag | false | — | Preview changes without modifying anything |
 | --verbose | flag | false | — | Show detailed file-level changes |
 | --list | flag | false | — | List all migration steps and their status |
 | --force | flag | false | — | Re-apply all migrations regardless of state |
+| --rollback-standard-files | flag | false | — | Restore legacy workspace files from the latest standard-files archive |
+| --anima | option | — | — | Limit rollback to one anima |
 
 ## `models`
 

@@ -6,14 +6,14 @@ See `operations/scratch-and-worktrees.md` for where worktrees, builds, and tempo
 
 ## What is a Workspace
 
-### The Concept of Home and Workplace
+### The Concept of Home and Workspace
 
-Anima normally resides in its "home" (`~/.animaworks/animas/{name}/`).
-This is where Anima-specific data such as IDENTITY.md / SOUL.md, memory, and configuration are stored.
+Anima usually stays at “its own home” (`~/.animaworks/animas/{name}/`).
+This is where Anima-specific data such as IDENTITY.md / SOUL.md, memories, and configuration are stored.
 
-When performing project work (code changes, research, builds, etc.),
-Anima goes out to the "workplace" (workspace) to work.
-A workspace is a directory containing the project's source code and deliverables.
+When working on a project (making code changes, doing research, building, and so on),
+Anima goes to a “workspace” to work.
+A workspace is a directory containing a project’s source code and artifacts.
 
 ### Registry and Aliases
 

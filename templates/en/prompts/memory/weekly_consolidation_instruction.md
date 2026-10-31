@@ -11,15 +11,15 @@ The following are fact pairs that disagree about the same subject. Read the sour
 
 {conflict_candidates}
 
-## Long-unreferenced memories
-These are memory candidates that have not been referenced for a long time. Read the originals and archive only the ones you judge are no longer needed via archive_memory_file; add a one-line reason for anything you keep.
+## Memories Not Referenced for a Long Time
+The following are candidates for memories that have not been referenced for a long time. Read the originals, and archive only those you determine are no longer needed using archive_memory_file. For anything you keep, add a brief reason.
 
 {forgetting_candidates}
 
 {hygiene_section}
 
-Read the originals before deciding; similarity is not evidence of duplication. Preserve entity-specific detail, provenance, `[IMPORTANT]` rules, and the original records. If uncertain, leave them unchanged and report a proposal. Do not rewrite IDENTITY.md, SOUL.md, AGENTS.md, permissions, or raw episodes, and do not scan or compress the whole memory library.
+Before making a decision, read the originals; do not judge something to be a duplicate based solely on similarity. Retain customer- and project-specific details, sources, `[IMPORTANT]` rules, and original records. If uncertain, make no changes and report it as a suggestion. Do not perform IDENTITY.md, SOUL.md, AGENTS.md, permissions, rewrite original episodes, or scan or compress the entire memory library.
 
-Only confirmed duplicate knowledge or obsolete procedures may be updated or archived; name the surviving source and reason. Do not create abstract concepts merely to meet a quota. Do not delegate tasks or send messages during maintenance.
+Update or archive only verified duplicate knowledge and outdated procedures, and clearly state which original text you retained and why. There is no need to create concepts just to meet a count. Do not delegate maintenance tasks or send messages.
 
-Report changes and unresolved contradictions briefly. No changes is a valid result.
+Briefly report changes and unresolved contradictions. No changes is also a valid outcome.

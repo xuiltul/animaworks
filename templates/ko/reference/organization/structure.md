@@ -1,20 +1,20 @@
 # 조직 구조의 작동 방식
 
-AnimaWorks에서 조직 구조는 각 Anima의 `status.json`(또는 `IDENTITY.md`)을 Single Source of Truth(SSoT)로 하여 구축된다.
-`core/org/org_sync.py`가 디스크 상의 **supervisor**를 `config.json`에 동기화하고, 프롬프트 구축 시에 활용된다.
-본 문서에서는 조직 구조가 어떻게 정의·해석·표시되는지 설명한다.
+AnimaWorks의 조직 구조는 각 Anima의 `status.json`(또는 `IDENTITY.md`)을 Single Source of Truth(SSoT)로 삼아 구축된다.
+`core/org/org_sync.py`가 디스크상의 **supervisor**를 `config.json`에 동기화하고, 프롬프트를 구성할 때 사용한다.
+이 문서에서는 조직 구조가 어떻게 정의·해석·표시되는지 설명한다.
 
 ## 데이터 소스와 우선순위
 
-### supervisor（상급자）
+### supervisor (상급자)
 
 조직의 상하 관계는 각 Anima의 `supervisor`에서 정의된다. 읽기 우선순위:
 
-1. **status.json** — `"supervisor"` 키(권장)
-2. **IDENTITY.md** — 표 형식 `| 上司 | name |`의 행(일본어만. `core/config/models.py`의 `read_anima_supervisor`가 해석)
+1. **status.json** — `"supervisor"` 키 (권장)
+2. **IDENTITY.md** — 표 형식 `| 上司 | name |`의 행 (일본어만. `core/config/models.py`의 `read_anima_supervisor`에서 파싱)
 
-`supervisor`가 미설정·비어 있음·「없음」「(없음)」「（없음）」「-」「---」인 경우는 최상위 레벨이 된다.
-`animaworks config set animas.<name>.supervisor <supervisor>`은 root 소유 status/config를 일괄 업데이트한다. `config.json`만 직접 변경하면 org_sync에 의해 디스크에서 덮어써지므로 CLI/API를 사용한다.
+`supervisor`가 설정되지 않았거나 비어 있거나 "なし", "(なし)", "（なし）", "-", "---"인 경우 최상위 레벨(최상위)이 된다.
+`animaworks config set animas.<name>.supervisor <supervisor>`은 root 소유 status/config을 한꺼번에 업데이트한다. `config.json`만 직접 변경하면 org_sync가 디스크의 값으로 덮어쓰므로 CLI/API를 사용한다.
 
 ### speciality（전문）
 
@@ -28,21 +28,21 @@ AnimaWorks에서 조직 구조는 각 Anima의 `status.json`(또는 `IDENTITY.md
 `animaworks anima create --from-md`로 생성한 Anima는 `status.json`에 `role`가 들어가지만 `speciality`는 들어가지 않는다.
 커스텀 표시(예: 「개발 리드」)로 하고 싶은 경우는 `animaworks config set animas.<name>.speciality "開発リード"`를 사용한다. root 소유 status/config의 양쪽이 모두 업데이트된다.
 
-## org_sync에 의한 config.json 동기화
+## org_sync를 통한 config.json 동기화
 
-`core/org/org_sync.py`의 `sync_org_structure()`이 다음을 수행한다:
+`core/org/org_sync.py`의 `sync_org_structure()`는 다음을 수행한다:
 
-1. 각 Anima 디렉터리(`IDENTITY.md`가 존재하는 것만)에서 `status.json` / `IDENTITY.md`를 읽고 supervisor를 추출(`read_anima_supervisor`)
-2. 순환 참조를 검출(검출된 Anima는 동기화 대상 외)
-3. `config.json`의 `animas.<name>.supervisor`를 디스크의 값에 맞춰 업데이트(**supervisor만**)
-4. 디스크에 존재하지 않는 Anima의 config 엔트리를 삭제(prune)
+1. 각 Anima 디렉터리(`IDENTITY.md`가 존재하는 디렉터리만)에서 `status.json` / `IDENTITY.md`를 읽어 supervisor를 추출한다(`read_anima_supervisor`).
+2. 순환 참조를 감지한다(감지된 Anima는 동기화 대상에서 제외).
+3. `config.json`의 `animas.<name>.supervisor`를 디스크의 값에 맞춰 업데이트한다(**supervisor만**).
+4. 디스크에 존재하지 않는 Anima의 config 항목을 삭제한다(prune).
 
 **동기화되는 항목:** supervisor만. speciality는 org_sync에서 업데이트되지 않는다.
 
-**실행 타이밍:**
+**실행 시점:**
 
 - 서버 시작 시(`animaworks start`의 Anima 프로세스 시작 후)
-- Anima가 reconciliation에서 추가되었을 때(`on_anima_added` 콜백)
+- Anima가 reconciliation을 통해 추가될 때(`on_anima_added` 콜백)
 
 ## supervisor에 의한 계층 정의
 

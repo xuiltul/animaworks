@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/memory/retrieval.md -->
-<!-- i18n: source-sha256=cd9eb191d085ca1974053e1c223707420169fadf846459b8690a8f5b40695a92 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=cd9eb191d085ca1974053e1c223707420169fadf846459b8690a8f5b40695a92 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 193a5e72
 

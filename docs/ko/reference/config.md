@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=544ced8ff2ba6f5174edc608d237ec9e3acd24a0488af75602ca3e769eb57110 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=899fabc1640f66a3492295f8b9a3c7bcbe4f287e14d69f0ca78eebaf2197690a generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -629,7 +629,7 @@
 
 | 키 | 유형 | 기본값 | 설명 |
 |---|---|---|---|
-| `heartbeat` | `HeartbeatConfig` | `{HeartbeatConfig}` | 정기 heartbeat 실행 설정. |
+| `heartbeat` | `HeartbeatConfig` | `{HeartbeatConfig}` | 정기적인 heartbeat 실행 설정. |
 | `heartbeat.interval_minutes` | `int` | `30` | — |
 | `heartbeat.current_state_max_chars` | `int` | `8000` | Max chars for current_state.md before trim; 0 = disabled |
 | `heartbeat.current_state_cleanup_chars` | `int` | `2000` | Soft cleanup threshold for current_state.md; 0 = 80% of current_state_max_chars |

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=b8cef694687b6b9f6fd65eef5c84ccf2fc7432f6c80768fb4873348cda5c2688 generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=88fc3d8a49e0e876d688423f2072fcc267799d945f9cb7947d005d5b111035a3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API Reference
 
@@ -137,7 +137,7 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 
 | POST | `/api/internal/anima/create` | Internal | Create an anima outside sandbox EROFS constraints. | `server/routes/internal.py:internal_anima_create` |
 | POST | `/api/internal/animas/{target}/control` | Internal | Persist subordinate control settings after verifying the token owner. | `server/routes/internal.py:internal_anima_control` |
-| POST | `/api/internal/animas/{target}/prompt-settings` | Internal | Apply an authorized identity/injection change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
+| POST | `/api/internal/animas/{target}/prompt-settings` | Internal | Apply an authorized IDENTITY/SOUL/AGENTS change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
 | POST | `/api/internal/call-human/confirm` | Internal | Check the CLI ``call_human`` confirmation key; keys live in server memory only. | `server/routes/internal.py:internal_call_human_confirm` |
 | POST | `/api/internal/company/assign` | Internal | Apply CLI company assignments through the root-owned status writer. | `server/routes/internal.py:internal_company_assign` |
 | GET | `/api/internal/company/boundary` | Internal | Resolve company membership on the host for sandboxed handlers. | `server/routes/internal.py:internal_company_boundary` |
@@ -166,11 +166,11 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 | POST | `/api/internal/vector/get-by-ids` | Internal | — | `server/routes/internal.py:vector_get_by_ids` |
 | POST | `/api/internal/vector/get-by-metadata` | Internal | — | `server/routes/internal.py:vector_get_by_metadata` |
 | POST | `/api/internal/vector/list-collections` | Internal | — | `server/routes/internal.py:vector_list_collections` |
-| POST | `/api/internal/vector/query` | Internal | Run vector search for internal services. | `server/routes/internal.py:vector_query` |
+| POST | `/api/internal/vector/query` | Internal | Run a vector search for internal services. | `server/routes/internal.py:vector_query` |
 | POST | `/api/internal/vector/update-metadata` | Internal | — | `server/routes/internal.py:vector_update_metadata` |
 | POST | `/api/internal/vector/upsert` | Internal | — | `server/routes/internal.py:vector_upsert` |
 | POST | `/api/internal/workspace/grant` | Internal | Apply a human-origin workspace grant through root-owned writers. | `server/routes/internal.py:internal_workspace_grant` |
-| GET | `/api/messages/{message_id}` | Session required (local_trust mode, or optional if localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
+| GET | `/api/messages/{message_id}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
 
 ## `server/routes/logs_routes.py`
 

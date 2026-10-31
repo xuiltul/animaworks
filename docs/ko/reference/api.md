@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=b8cef694687b6b9f6fd65eef5c84ccf2fc7432f6c80768fb4873348cda5c2688 generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=88fc3d8a49e0e876d688423f2072fcc267799d945f9cb7947d005d5b111035a3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API 참조
 
@@ -27,38 +27,38 @@ FastAPI의 OpenAPI 정의, WebSocket, `server/app.py` 직접 작성 라우트에
 
 ## `server/routes/animas.py`
 
-| GET | `/api/animas` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 사용 가능한 Anima 목록을 가져옵니다. | `server/routes/animas.py:list_animas` |
-| POST | `/api/animas/reload-all` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 실행 중인 모든 Anima의 ModelConfig를 핫 리로드합니다. | `server/routes/animas.py:reload_all_anima_configs` |
-| DELETE | `/api/animas/{name}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 완전히 중지하고 삭제합니다(프로세스 + 파일). | `server/routes/animas.py:delete_anima` |
-| GET | `/api/animas/{name}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/animas.py:get_anima_detail` |
-| GET | `/api/animas/{name}/aliases` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | config.json에서 Anima의 별칭을 반환합니다. | `server/routes/animas.py:get_anima_aliases` |
-| PUT | `/api/animas/{name}/aliases` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | config.json에서 Anima의 별칭을 업데이트합니다. | `server/routes/animas.py:update_anima_aliases` |
-| PUT | `/api/animas/{name}/background-model` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | root 소유 status.json의 heartbeat/cron 모델 설정을 업데이트합니다. | `server/routes/animas.py:update_anima_background_model` |
-| GET | `/api/animas/{name}/background-tasks` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 백그라운드 작업 목록을 가져옵니다(상태 디렉터리에서 읽음). | `server/routes/animas.py:list_background_tasks` |
-| GET | `/api/animas/{name}/background-tasks/{task_id}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | ID로 특정 백그라운드 작업을 가져옵니다. | `server/routes/animas.py:get_background_task` |
-| POST | `/api/animas/{name}/bootstrap/repair` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 첫 실행 설정이 needs_repair 상태에서 중단된 Anima를 복구합니다. | `server/routes/animas.py:repair_anima_bootstrap` |
-| GET | `/api/animas/{name}/config` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 확인된 모델 구성을 반환합니다. | `server/routes/animas.py:get_anima_config` |
-| GET | `/api/animas/{name}/cron` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 원시 cron.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_cron` |
-| POST | `/api/animas/{name}/disable` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 비활성화합니다(status.json을 enabled: false로 설정하고 프로세스를 중지). | `server/routes/animas.py:disable_anima` |
-| POST | `/api/animas/{name}/enable` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 활성화합니다(status.json을 enabled: true로 설정). | `server/routes/animas.py:enable_anima` |
-| GET | `/api/animas/{name}/heartbeat` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 원시 HEARTBEAT.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_heartbeat` |
-| PUT | `/api/animas/{name}/identity` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 IDENTITY.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_identity` |
-| PUT | `/api/animas/{name}/injection` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 AGENTS.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_injection` |
-| POST | `/api/animas/{name}/interactions/{callback_id}/resolve` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 메인 채팅 UI의 대화형 call_human 요청을 처리합니다. | `server/routes/animas.py:resolve_interaction` |
-| POST | `/api/animas/{name}/interrupt` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 프로세스를 중지하지 않고 현재 LLM 세션을 중단합니다. | `server/routes/animas.py:interrupt_anima` |
-| PUT | `/api/animas/{name}/model` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 status.json에서 모델 설정을 업데이트합니다. | `server/routes/animas.py:update_anima_model` |
-| GET | `/api/animas/{name}/permissions` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 permissions.json을 반환합니다. | `server/routes/animas.py:get_anima_permissions` |
-| PUT | `/api/animas/{name}/permissions` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 permissions.json을 업데이트합니다. | `server/routes/animas.py:update_anima_permissions` |
-| POST | `/api/animas/{name}/reload` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 프로세스를 재시작하지 않고 status.json에서 ModelConfig를 핫 리로드합니다. | `server/routes/animas.py:reload_anima_config` |
-| POST | `/api/animas/{name}/rename` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | CLI가 소유 설정을 직접 옮기는 일이 없도록 root에서 Anima의 이름을 변경합니다. | `server/routes/animas.py:rename_anima` |
-| POST | `/api/animas/{name}/restart` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 특정 Anima 프로세스를 다시 시작합니다. | `server/routes/animas.py:restart_anima` |
-| PUT | `/api/animas/{name}/role` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | root writer를 통해 역할 설정과 역할 권한 템플릿을 업데이트합니다. | `server/routes/animas.py:update_anima_role` |
-| POST | `/api/animas/{name}/start` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 중지된 Anima 프로세스를 시작합니다. | `server/routes/animas.py:start_anima` |
-| GET | `/api/animas/{name}/state` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 채팅 정보 창에 필요한 현재 상태 문서만 읽습니다. | `server/routes/animas.py:get_anima_state` |
-| POST | `/api/animas/{name}/stop` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 특정 Anima 프로세스를 중지합니다. | `server/routes/animas.py:stop_anima` |
-| GET | `/api/animas/{name}/summary` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 채팅 선택에 필요한 Anima 필드만 반환합니다. | `server/routes/animas.py:get_anima_summary` |
-| POST | `/api/animas/{name}/trigger` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/animas.py:trigger_heartbeat` |
-| GET | `/api/org/chart` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 조직도를 트리 구조의 JSON으로 반환합니다. | `server/routes/animas.py:get_org_chart` |
+| GET | `/api/animas` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 사용 가능한 아니마 목록을 가져옵니다. | `server/routes/animas.py:list_animas` |
+| POST | `/api/animas/reload-all` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 실행 중인 모든 아니마의 ModelConfig를 핫 리로드합니다. | `server/routes/animas.py:reload_all_anima_configs` |
+| DELETE | `/api/animas/{name}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마를 완전히 중지하고 삭제합니다(프로세스 및 파일). | `server/routes/animas.py:delete_anima` |
+| GET | `/api/animas/{name}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/animas.py:get_anima_detail` |
+| GET | `/api/animas/{name}/aliases` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | config.json에서 아니마의 별칭을 반환합니다. | `server/routes/animas.py:get_anima_aliases` |
+| PUT | `/api/animas/{name}/aliases` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | config.json에서 아니마의 별칭을 업데이트합니다. | `server/routes/animas.py:update_anima_aliases` |
+| PUT | `/api/animas/{name}/background-model` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | root가 소유한 status.json의 heartbeat/cron 모델 설정을 업데이트합니다. | `server/routes/animas.py:update_anima_background_model` |
+| GET | `/api/animas/{name}/background-tasks` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 백그라운드 작업 목록을 가져옵니다(state 디렉터리에서 읽음). | `server/routes/animas.py:list_background_tasks` |
+| GET | `/api/animas/{name}/background-tasks/{task_id}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | ID로 특정 백그라운드 작업을 가져옵니다. | `server/routes/animas.py:get_background_task` |
+| POST | `/api/animas/{name}/bootstrap/repair` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 최초 실행 설정이 needs_repair 상태에서 중단된 Anima를 복구합니다. | `server/routes/animas.py:repair_anima_bootstrap` |
+| GET | `/api/animas/{name}/config` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 확인된 모델 구성을 반환합니다. | `server/routes/animas.py:get_anima_config` |
+| GET | `/api/animas/{name}/cron` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 원시 cron.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_cron` |
+| POST | `/api/animas/{name}/disable` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 비활성화합니다(status.json을 enabled: false로 설정하고 프로세스를 중지). | `server/routes/animas.py:disable_anima` |
+| POST | `/api/animas/{name}/enable` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 활성화합니다(status.json을 enabled: true로 설정). | `server/routes/animas.py:enable_anima` |
+| GET | `/api/animas/{name}/heartbeat` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 원시 HEARTBEAT.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_heartbeat` |
+| PUT | `/api/animas/{name}/identity` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 IDENTITY.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_identity` |
+| PUT | `/api/animas/{name}/injection` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 AGENTS.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_injection` |
+| POST | `/api/animas/{name}/interactions/{callback_id}/resolve` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 메인 채팅 UI에서 발생한 대화형 call_human 요청을 처리합니다. | `server/routes/animas.py:resolve_interaction` |
+| POST | `/api/animas/{name}/interrupt` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 프로세스를 중지하지 않고 현재 LLM 세션을 중단합니다. | `server/routes/animas.py:interrupt_anima` |
+| PUT | `/api/animas/{name}/model` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 status.json에서 모델 설정을 업데이트합니다. | `server/routes/animas.py:update_anima_model` |
+| GET | `/api/animas/{name}/permissions` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 permissions.json을 반환합니다. | `server/routes/animas.py:get_anima_permissions` |
+| PUT | `/api/animas/{name}/permissions` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 아니마의 permissions.json을 업데이트합니다. | `server/routes/animas.py:update_anima_permissions` |
+| POST | `/api/animas/{name}/reload` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 프로세스를 재시작하지 않고 status.json에서 ModelConfig를 핫 리로드합니다. | `server/routes/animas.py:reload_anima_config` |
+| POST | `/api/animas/{name}/rename` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | CLI가 root 소유 설정을 직접 이동하지 않도록 root에서 Anima의 이름을 변경합니다. | `server/routes/animas.py:rename_anima` |
+| POST | `/api/animas/{name}/restart` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 지정된 아니마 프로세스를 다시 시작합니다. | `server/routes/animas.py:restart_anima` |
+| PUT | `/api/animas/{name}/role` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | root writer를 통해 역할 설정과 역할 권한 템플릿을 업데이트합니다. | `server/routes/animas.py:update_anima_role` |
+| POST | `/api/animas/{name}/start` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 중지된 아니마 프로세스를 시작합니다. | `server/routes/animas.py:start_anima` |
+| GET | `/api/animas/{name}/state` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 채팅 정보 패널에 필요한 현재 상태 문서만 읽습니다. | `server/routes/animas.py:get_anima_state` |
+| POST | `/api/animas/{name}/stop` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 지정된 아니마 프로세스를 중지합니다. | `server/routes/animas.py:stop_anima` |
+| GET | `/api/animas/{name}/summary` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 채팅 선택에 필요한 소수의 Anima 필드만 반환합니다. | `server/routes/animas.py:get_anima_summary` |
+| POST | `/api/animas/{name}/trigger` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/animas.py:trigger_heartbeat` |
+| GET | `/api/org/chart` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 조직도를 트리 구조의 JSON으로 반환합니다. | `server/routes/animas.py:get_org_chart` |
 
 ## `server/routes/approve.py`
 
@@ -135,29 +135,29 @@ FastAPI의 OpenAPI 정의, WebSocket, `server/app.py` 직접 작성 라우트에
 
 ## `server/routes/internal.py`
 
-| POST | `/api/internal/anima/create` | 내부 | 샌드박스 EROFS 제약 외부에서 애니마를 생성합니다. | `server/routes/internal.py:internal_anima_create` |
-| POST | `/api/internal/animas/{target}/control` | 내부 | 토큰 소유자를 확인한 후 하위 제어 설정을 영속화합니다. | `server/routes/internal.py:internal_anima_control` |
-| POST | `/api/internal/animas/{target}/prompt-settings` | 내부 | 루트 소유자를 통해 승인된 identity/injection 변경을 적용합니다. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
-| POST | `/api/internal/call-human/confirm` | 내부 | CLI ``call_human`` 확인 키를 확인합니다. 키는 서버 메모리에만 존재합니다. | `server/routes/internal.py:internal_call_human_confirm` |
+| POST | `/api/internal/anima/create` | 내부 | 샌드박스 EROFS 제약을 벗어나 anima를 생성합니다. | `server/routes/internal.py:internal_anima_create` |
+| POST | `/api/internal/animas/{target}/control` | 내부 | 토큰 소유자를 확인한 후 하위 제어 설정을 저장합니다. | `server/routes/internal.py:internal_anima_control` |
+| POST | `/api/internal/animas/{target}/prompt-settings` | 내부 | 루트 소유자를 통해 승인된 IDENTITY/SOUL/AGENTS 변경을 적용합니다. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
+| POST | `/api/internal/call-human/confirm` | 내부 | CLI ``call_human`` 확인 키를 검사합니다. 키는 서버 메모리에만 저장됩니다. | `server/routes/internal.py:internal_call_human_confirm` |
 | POST | `/api/internal/company/assign` | 내부 | 루트 소유 상태 기록기를 통해 CLI 회사 할당을 적용합니다. | `server/routes/internal.py:internal_company_assign` |
-| GET | `/api/internal/company/boundary` | 내부 | 샌드박스 처리기를 위해 호스트에서 회사 구성원 자격을 확인합니다. | `server/routes/internal.py:internal_company_boundary` |
-| POST | `/api/internal/company/split` | 내부 | status/settings.을 변경할 때 루트에서 CLI 회사 분할을 실행합니다. | `server/routes/internal.py:internal_company_split` |
-| POST | `/api/internal/delegate-task` | 내부 | 샌드박스 EROFS 제약 외부에서 위임된 작업을 영속화합니다. | `server/routes/internal.py:internal_delegate_task` |
-| POST | `/api/internal/embed` | 내부 | 하위 프로세스를 위한 중앙 집중식 임베딩 추론. | `server/routes/internal.py:internal_embed` |
+| GET | `/api/internal/company/boundary` | 내부 | 샌드박스 처리기에서 사용할 회사 소속 정보를 호스트에서 확인합니다. | `server/routes/internal.py:internal_company_boundary` |
+| POST | `/api/internal/company/split` | 내부 | status/settings.을 변경하는 경우 루트에서 CLI 회사 분할을 실행합니다. | `server/routes/internal.py:internal_company_split` |
+| POST | `/api/internal/delegate-task` | 내부 | 샌드박스 EROFS 제약을 벗어나 위임된 작업을 저장합니다. | `server/routes/internal.py:internal_delegate_task` |
+| POST | `/api/internal/embed` | 내부 | 자식 프로세스를 위한 중앙 집중식 임베딩 추론입니다. | `server/routes/internal.py:internal_embed` |
 | POST | `/api/internal/interaction/create` | 내부 | — | `server/routes/internal.py:internal_interaction_create` |
 | POST | `/api/internal/interaction/message-ts` | 내부 | — | `server/routes/internal.py:internal_interaction_message_ts` |
 | POST | `/api/internal/message-sent` | 내부 | CLI를 통해 메시지가 전송되었음을 서버에 알립니다. | `server/routes/internal.py:internal_message_sent` |
 | POST | `/api/internal/notification-mapping` | 내부 | — | `server/routes/internal.py:internal_notification_mapping` |
-| POST | `/api/internal/notify-web` | 내부 | 연결된 웹 UI 클라이언트에 call_human 알림을 푸시합니다. | `server/routes/internal.py:internal_notify_web` |
-| POST | `/api/internal/phone/alert` | 내부 | 구성된 애니마에 대한 긴급 전화 알림을 시작합니다. | `server/routes/internal.py:internal_phone_alert` |
-| POST | `/api/internal/post-channel` | 내부 | 샌드박스 EROFS 제약 외부에서 채널 게시물을 추가합니다. | `server/routes/internal.py:internal_post_channel` |
-| POST | `/api/internal/rerank` | 내부 | 하위 프로세스를 위한 중앙 집중식 크로스 인코더 재순위화. | `server/routes/internal.py:internal_rerank` |
-| POST | `/api/internal/send-message` | 내부 | 샌드박스 EROFS 제약 외부에서 DM을 영속화합니다. | `server/routes/internal.py:internal_send_message` |
-| POST | `/api/internal/settings/anima-icon-template` | 내부 | 인증된 작업자를 대신하여 아이콘 템플릿 기본값을 영속화합니다. | `server/routes/internal.py:internal_persist_anima_icon_template` |
-| POST | `/api/internal/submit-tasks` | 내부 | 호스트에서 전체 배치를 게시합니다. 샌드박스 DB 권한이 필요 없습니다. | `server/routes/internal.py:internal_submit_tasks` |
-| POST | `/api/internal/task-board-action` | 내부 | 샌드박스 애니마 CLI를 위해 임대 보호된 작업 보드 쓰기를 실행합니다. | `server/routes/internal.py:internal_task_board_action` |
+| POST | `/api/internal/notify-web` | 내부 | 연결된 웹 UI 클라이언트에 call_human 알림을 전송합니다. | `server/routes/internal.py:internal_notify_web` |
+| POST | `/api/internal/phone/alert` | 내부 | 설정된 Anima에 긴급 전화 알림을 시작합니다. | `server/routes/internal.py:internal_phone_alert` |
+| POST | `/api/internal/post-channel` | 내부 | 샌드박스 EROFS 제약을 벗어나 채널 게시물을 추가합니다. | `server/routes/internal.py:internal_post_channel` |
+| POST | `/api/internal/rerank` | 내부 | 자식 프로세스를 위한 중앙 집중식 교차 인코더 재순위 지정입니다. | `server/routes/internal.py:internal_rerank` |
+| POST | `/api/internal/send-message` | 내부 | 샌드박스 EROFS 제약을 벗어나 DM을 저장합니다. | `server/routes/internal.py:internal_send_message` |
+| POST | `/api/internal/settings/anima-icon-template` | 내부 | 인증된 작업자를 대신해 아이콘 템플릿 기본값을 저장합니다. | `server/routes/internal.py:internal_persist_anima_icon_template` |
+| POST | `/api/internal/submit-tasks` | 내부 | 호스트에서 전체 배치를 게시합니다. 샌드박스 데이터베이스 권한은 필요하지 않습니다. | `server/routes/internal.py:internal_submit_tasks` |
+| POST | `/api/internal/task-board-action` | 내부 | 샌드박스 처리된 anima CLI를 위해 리스 가드가 적용된 작업 보드 쓰기를 실행합니다. | `server/routes/internal.py:internal_task_board_action` |
 | GET | `/api/internal/tasks` | 내부 | 데이터베이스에 직접 접근할 수 없는 작업자를 위해 작업 스냅샷을 읽습니다. | `server/routes/internal.py:internal_tasks` |
-| POST | `/api/internal/update-task` | 내부 | 샌드박스 EROFS 제약 외부에서 작업 업데이트를 영속화합니다. | `server/routes/internal.py:internal_update_task` |
+| POST | `/api/internal/update-task` | 내부 | 샌드박스 EROFS 제약을 벗어나 작업 업데이트를 저장합니다. | `server/routes/internal.py:internal_update_task` |
 | POST | `/api/internal/vector/count` | 내부 | — | `server/routes/internal.py:vector_count` |
 | POST | `/api/internal/vector/create-collection` | 내부 | — | `server/routes/internal.py:vector_create_collection` |
 | POST | `/api/internal/vector/delete-collection` | 내부 | — | `server/routes/internal.py:vector_delete_collection` |
@@ -166,11 +166,11 @@ FastAPI의 OpenAPI 정의, WebSocket, `server/app.py` 직접 작성 라우트에
 | POST | `/api/internal/vector/get-by-ids` | 내부 | — | `server/routes/internal.py:vector_get_by_ids` |
 | POST | `/api/internal/vector/get-by-metadata` | 내부 | — | `server/routes/internal.py:vector_get_by_metadata` |
 | POST | `/api/internal/vector/list-collections` | 내부 | — | `server/routes/internal.py:vector_list_collections` |
-| POST | `/api/internal/vector/query` | 내부 | 내부 서비스용 벡터 검색을 실행합니다. | `server/routes/internal.py:vector_query` |
+| POST | `/api/internal/vector/query` | 내부 | 내부 서비스를 위한 벡터 검색을 실행합니다. | `server/routes/internal.py:vector_query` |
 | POST | `/api/internal/vector/update-metadata` | 내부 | — | `server/routes/internal.py:vector_update_metadata` |
 | POST | `/api/internal/vector/upsert` | 내부 | — | `server/routes/internal.py:vector_upsert` |
-| POST | `/api/internal/workspace/grant` | 내부 | 루트 소유 기록기를 통해 인간 출처 워크스페이스 권한을 적용합니다. | `server/routes/internal.py:internal_workspace_grant` |
-| GET | `/api/messages/{message_id}` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 저장된 메시지의 전체 JSON을 ID로 반환합니다. | `server/routes/internal.py:get_message` |
+| POST | `/api/internal/workspace/grant` | 내부 | 루트 소유 기록기를 통해 사람이 부여한 워크스페이스 권한을 적용합니다. | `server/routes/internal.py:internal_workspace_grant` |
+| GET | `/api/messages/{message_id}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | ID로 저장된 메시지의 전체 JSON을 반환합니다. | `server/routes/internal.py:get_message` |
 
 ## `server/routes/logs_routes.py`
 

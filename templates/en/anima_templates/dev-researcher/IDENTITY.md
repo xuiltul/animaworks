@@ -2,6 +2,6 @@
 
 ## Basic Profile
 
-- Name: Set at creation time
+- Name: Set upon creation
 - Affiliation: Development team
-- Position: Development Researcher (Research Specialist)
+- Title: Development Researcher (Research)

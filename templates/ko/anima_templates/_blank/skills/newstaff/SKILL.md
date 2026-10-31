@@ -1,10 +1,10 @@
 ---
 name: newstaff
 description: >-
-  AnimaWorks 조직에 새로운 Digital Anima를 고용·생성하는 스킬.
-  캐릭터 시트(Markdown)를 히어링에 기반하여 작성하고, CLI 명령어(animaworks anima create)로
-  IDENTITY/SOUL/AGENTS/permissions 등을 일괄 생성한다. 생성 후에는 bootstrap으로 자체 정비.
-  「새로운 사원을 만들어」「사람을 고용해서」「새로운 사원」「고용」「Anima 작성」「채용」「팀 멤버를 늘리기」「인원 추가」「부하를 만들기」「스태프 추가」「hire」「recruit」「team member」
+  AnimaWorks 조직에 새로운 Digital Anima를 고용하고 생성하는 스킬.
+  캐릭터 시트(Markdown)를 인터뷰 내용을 바탕으로 작성하고, CLI 명령(animaworks anima create)으로
+  IDENTITY/SOUL/AGENTS/permissions등을 한 번에 생성한다. 생성 후에는 bootstrap으로 자체 정비한다.
+  “새 직원을 만들어 줘”, “사람을 고용해”, “새 직원”, “고용”, “Anima 생성”, “채용”, “팀원을 늘려”, “인원 추가”, “부하를 만들어”, “직원 추가”, “고용”, “채용”, “팀원”
 ---
 
 
@@ -57,11 +57,11 @@ description: >-
 
 역할에서 쿨한 미인을 연상하지 않는다. 취미는 일의 연장으로 하지 않는다. 기존 멤버의 머리색·얼굴 타입·말투와 겹치지 않는지 확인한다.
 
-### 3. 캐릭터 시트를 작성하고, CLI로 일괄 생성
+### 3. 캐릭터 시트를 작성하고 CLI로 한 번에 생성
 
-히어링과 설계 결과를 **캐릭터 시트 사양**에 따라 캐릭터 시트를 파일에 쓰고, CLI 명령으로 생성한다:
+인터뷰와 설계 결과를 **캐릭터 시트 사양**에 따라 캐릭터 시트 파일로 작성한 뒤 CLI 명령으로 생성한다:
 
-1. 캐릭터 시트를 파일에 쓴다 (예: `/tmp/{english_name}.md`)
+1. 캐릭터 시트를 파일로 작성한다(예: `/tmp/{english_name}.md`)
 2. 다음 명령을 실행한다:
 
 ```bash
@@ -69,9 +69,9 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 ```
 
 **supervisor 설정:**
-- `supervisor` 파라미터로 명시 지정 (권장)
-- 생략한 경우: 캐릭터 시트의 `| 上司 |` 란에서 취득
-- 둘 다 없는 경우: 자신 (호출한 Anima)이 supervisor가 됨
+- `supervisor` 매개변수로 명시적으로 지정(권장)
+- 생략한 경우: 캐릭터 시트의 `| 上司 |` 항목에서 가져옴
+- 둘 다 없는 경우: 자신(호출한 Anima)이 supervisor가 됨
 
 **캐릭터 시트 사양:**
 
@@ -112,15 +112,15 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 ```
 
 **필수 섹션**: 기본 정보, 성격, 역할·행동 방침
-**생략 가능 섹션**: 권한, 정기 업무, 최초 시작 지침
+**선택 섹션**: 권한, 정기 업무, 최초 시작 지침
 
-이로써 다음이 자동 실행된다:
+이에 따라 다음 작업이 자동으로 실행된다:
 - 디렉터리 구조 일괄 생성
 - skeleton 파일 배치
 - BOOTSTRAP.md 배치
-- status.json 생성 (supervisor 포함)
-- config.json 등록 (model, supervisor 등)
-- 생략 섹션에 기본값 적용
+- status.json 생성(supervisor 포함)
+- config.json에 등록(model, supervisor 등)
+- 생략된 섹션에 기본값 적용
 
 ### 4. config.json 의 모델 설정 확인
 
@@ -160,9 +160,9 @@ Bash: curl -s -X POST "${ANIMAWORKS_SERVER_URL:-http://localhost:18500}"/api/sys
 
 ⚠️ 아바타 이미지 생성은 보고하지 않음 (새 Anima 자신이 bootstrap에서 생성)
 
-### 이후는 새 Anima 자신이 자율적으로 실행:
-- IDENTITY.md / SOUL.md / AGENTS.md 충실화
-- HEARTBEAT.md / cron.md 자기 설계
-- 아바타 이미지 생성 (상급자 참조 포함)
-- 상급자에게 착임 보고
-- 첫 번째 작은 일 (사용자에게 도움이 되는 것)에 착수하고, 결과를 상급자에게 보고
+### 이후에는 새 Anima가 자율적으로 실행:
+- IDENTITY.md / SOUL.md / AGENTS.md 보완
+- HEARTBEAT.md / cron.md 자체 설계
+- 아바타 이미지 생성(상급자 참조 포함)
+- 상급자에게 부임 보고
+- 첫 번째 작은 일(사용자에게 도움이 되는 일)에 착수하고 결과를 상급자에게 보고

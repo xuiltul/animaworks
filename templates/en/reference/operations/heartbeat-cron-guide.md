@@ -59,14 +59,14 @@ The message trigger is activated by a change notification for the Inbox JSON fil
 Only one Inbox process runs at a time; messages that arrive during execution are batched into the next single pass. On a Provider error, wait for the recovery time in `rate_guard` and leave unread messages.
 There is no startup filter based on received intent, nor message-originated cooldown or cascade suppression. The behavior rule of not replying to messages that only acknowledge or thank is instructed in the Inbox prompt.
 
-## HEARTBEAT.md Configuration
+## Configuration for HEARTBEAT.md
 
-`HEARTBEAT.md` is each Anima's configuration file, defining activity hours and check items.
-The Heartbeat execution interval can be set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). It cannot be changed via `HEARTBEAT.md`.
-Each Anima is assigned a name-based offset of 0–9 minutes to distribute simultaneous startups.
+`HEARTBEAT.md` is each Anima’s configuration file and defines active hours and checklist items.
+The heartbeat interval can be configured with `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). It cannot be changed in `HEARTBEAT.md`.
+Each Anima is assigned a name-based offset of 0–9 minutes to stagger simultaneous startups.
 File path: `~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-When a supervisor edits `HEARTBEAT.md` of a subordinate Anima, use `read_memory_file` / `write_memory_file` rather than direct file operations, and specify it with a relative path such as `../{anima_name}/HEARTBEAT.md`.
+When a supervisor edits a subordinate Anima’s `HEARTBEAT.md`, use `read_memory_file` / `write_memory_file` rather than directly manipulating files, and specify a relative path such as `../{anima_name}/HEARTBEAT.md`.
 
 ### Format
 
@@ -89,20 +89,20 @@ When a supervisor edits `HEARTBEAT.md` of a subordinate Anima, use `read_memory_
 
 ### Configuration Fields
 
-**Execution interval**:
-- Set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). Cannot be changed via `HEARTBEAT.md`
+**Interval**:
+- Configured with `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). Changes in `HEARTBEAT.md` are not allowed.
 
-**Activity hours** (SHOULD):
-- Write in `HH:MM - HH:MM` format (e.g., `9:00 - 22:00`)
-- Heartbeat does not start outside these hours
-- Default when unset: 24 hours (all time slots)
-- Timezone can be set via `system.timezone` in `config.json`. When unset, the system timezone is auto-detected
+**Active hours** (SHOULD):
+- Specify in `HH:MM - HH:MM` format (e.g., `9:00 - 22:00`).
+- The heartbeat will not start outside these hours.
+- Default when unset: 24 hours (all hours).
+- The time zone can be configured with `system.timezone` in `config.json`. If unset, the system time zone is detected automatically.
 
 **Checklist** (MUST):
-- Items the agent checks at Heartbeat startup
-- Written as a bullet list (starting with `- `)
-- The checklist content is passed directly to the agent's prompt
-- Customizable: items may be added or changed to match the Anima's role
+- Items for the agent to check when the heartbeat starts.
+- Write as a bullet list (beginning with `- `).
+- The checklist content is passed directly to the agent’s prompt.
+- Customizable: You may add or change items to suit the Anima’s role.
 
 ### Checklist Customization Examples
 
@@ -180,10 +180,10 @@ Otherwise (e.g., effective 61 minutes, or an interval like 43 minutes that does 
 - **Behavior**: Based on the local current time of `core.time_utils`, parse the `ts` (ISO format) in each line of JSON, append entries older than the **default 7 days** to `{stem}.{YYYYMMDD}.archive.jsonl` as an archive, then remove them from the current file. Lines where `ts` parsing fails are **kept in the current file** (to prevent data loss).
 - **Other server scheduled jobs**: In addition to the per-Anima `cron.md`, the lifecycle registers system cron jobs for memory maintenance, RAG, etc. (e.g., daily consolidation at 02:00, daily indexing at 04:00). Times are based on the configured timezone. DM rotation runs at 04:30 as described above.
 
-### Heartbeat configuration hot reload
+### Hot Reloading Heartbeat Configuration
 
-When HEARTBEAT.md is updated on the file system, `_check_schedule_freshness()` detects the change at the next heartbeat execution, and SchedulerManager automatically reloads the schedule.
-No server restart is required (MAY skip restart). APScheduler jobs are re-registered.
+When HEARTBEAT.md is updated on the file system, `_check_schedule_freshness()` detects the change the next time the heartbeat runs, and SchedulerManager automatically reloads the schedule.
+A server restart is not required (MAY skip restart). APScheduler jobs are re-registered.
 
 ## Per-anima Heartbeat interval configuration
 
@@ -536,18 +536,18 @@ type: llm
 
 The `## ` heading inside the comment is ignored by the parser.
 
-## Hot Reload of Cron Configuration
+## Hot Reloading Cron Configuration
 
-When cron.md is updated, the schedule is automatically reloaded, just like HEARTBEAT.md.
-If Anima itself rewrites cron.md, the change is reflected immediately (self-modify pattern).
-Supervisors can edit the `cron.md` / `HEARTBEAT.md` of their subordinates using the write memory tool. Change requests for `AGENTS.md` from authorized supervisors are also forwarded to root and authorized. For changes to `status.json`, use the corresponding supervisor tool or root CLI/API. Do not write directly to root-owned files via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection, etc.
+When cron.md is updated, the schedule is automatically reloaded, as with HEARTBEAT.md.
+Changes are reflected immediately even when the Anima itself modifies cron.md (self-modify pattern).
+A supervisor can edit a subordinate’s `cron.md` / `HEARTBEAT.md` using the write memory tool. Requests from an authorized supervisor to change `AGENTS.md` are also forwarded to root for authorization. To change `status.json`, use the corresponding supervisor-facing tool or root CLI/API. Do not write directly to root-owned files using Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection, etc.
 
 Behavior on reload:
-1. Delete all existing cron jobs for the relevant Anima
-2. Parse the updated cron.md and register new jobs
-3. `Schedule reloaded for '{name}'` is output to the log
+1. Delete all existing cron jobs for the relevant Anima.
+2. Parse the updated cron.md and register new jobs.
+3. `Schedule reloaded for '{name}'` is output to the log.
 
-Notes when updating cron.md yourself:
-- Place the `schedule:` directive immediately after the heading (`## タスク名`) (MUST)
-- Write the schedule as a standard 5-field cron expression (MUST)
-- Place the type line immediately after the schedule (SHOULD)
+Notes when updating your own cron.md:
+- Place the `schedule:` directive immediately after the heading (`## タスク名`) (MUST).
+- Specify schedules using the standard five-field cron expression (MUST).
+- Place the type line immediately after the schedule (SHOULD).

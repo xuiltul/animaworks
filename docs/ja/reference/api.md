@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: a12fe2b105f9e90e2eb7d2c98520407770fb7e6d0c770e83aea4e13fe994a7ca -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 868dae51f59fa592a580d6786fbaa6296f4e684c801cad44cbbfb169e6ea5d10 -->
 
 # API リファレンス
 
@@ -137,7 +137,7 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 
 | POST | `/api/internal/anima/create` | 内部 | Create an anima outside sandbox EROFS constraints. | `server/routes/internal.py:internal_anima_create` |
 | POST | `/api/internal/animas/{target}/control` | 内部 | Persist subordinate control settings after verifying the token owner. | `server/routes/internal.py:internal_anima_control` |
-| POST | `/api/internal/animas/{target}/prompt-settings` | 内部 | Apply an authorized identity/injection change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
+| POST | `/api/internal/animas/{target}/prompt-settings` | 内部 | Apply an authorized IDENTITY/SOUL/AGENTS change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
 | POST | `/api/internal/call-human/confirm` | 内部 | Check the CLI ``call_human`` confirmation key; keys live in server memory only. | `server/routes/internal.py:internal_call_human_confirm` |
 | POST | `/api/internal/company/assign` | 内部 | Apply CLI company assignments through the root-owned status writer. | `server/routes/internal.py:internal_company_assign` |
 | GET | `/api/internal/company/boundary` | 内部 | Resolve company membership on the host for sandboxed handlers. | `server/routes/internal.py:internal_company_boundary` |

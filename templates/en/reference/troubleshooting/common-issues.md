@@ -221,24 +221,24 @@ There is no such state as "waiting until conditions are met" or "blocked" (`bloc
 2. The external tool category is not enabled in the registry (`available_but_not_enabled` of `check_permissions`)
 3. The file path is outside the allowed range (writing to protected files, outside `file_roots`, etc.). Additionally, **global** denials include `permissions.global.json` and framework-side patterns
 
-### Resolution Steps
+### Steps to Take
 
 1. **Check your own permissions**
    ```
    check_permissions()
    ```
-   - Returns in JSON. Check `internal_tools`, `external_tools.enabled` / `available_but_not_enabled`, and `file_access` (including read/write）・`restrictions`（ command denials)
-   - Raw configuration can be checked via `read_memory_file(path="permissions.json")` (or `permissions.md` if it doesn't exist)
-   - The permission description injected into the system prompt is text formatted by the runtime from the JSON
+   - Returned as JSON. Check `internal_tools`・`external_tools.enabled` / `available_but_not_enabled`・`file_access` (such as read/write）・`restrictions`（ command denies)
+   - You can check the raw configuration using `read_memory_file(path="permissions.json")` (or `permissions.md` if it does not exist)
+   - The permission descriptions injected into the system prompt are text formatted by the runtime from JSON
 
 2. **Check whether the operation is permitted**
-   - In principle, you can read and write within your own `anima_dir` (except protected files like `IDENTITY.md` / `SOUL.md`). Read access to your supervisor's or colleagues' `activity_log` and subordinate `state/` is reflected in `file_access` of `check_permissions` depending on the role
-   - Shell commands: `commands` of `permissions.json` (follow allow/deny）. Global dangerous patterns are also blocked on the framework side)
+   - In principle, you can read and write within your own `anima_dir` (excluding protected files such as `IDENTITY.md` / `SOUL.md`). Depending on your role, reading a supervisor’s or colleague’s `activity_log` or a subordinate’s `state/` is reflected in `file_access` of `check_permissions`
+   - Shell commands: `permissions.json` `commands` (follow allow/deny）. Global dangerous patterns are also blocked by the framework
 
-3. **If you need additional permissions**
+3. **What to do when you need permission**
    - Reconsider whether the operation is truly necessary
-   - Consider whether a different approach (an operation within the allowed scope) can substitute
-   - If no substitute is possible, request the permission addition from your supervisor:
+   - Consider whether it can be replaced with another approach (an operation within the permitted scope)
+   - If there is no alternative, ask your supervisor to add the necessary permission:
    ```
    send_message(
        to="上司の名前",
@@ -247,10 +247,10 @@ There is no such state as "waiting until conditions are met" or "blocked" (`bloc
    )
    ```
 
-4. **What you must never do**
+4. **Things you must never do**
    - Try to bypass permission checks
-   - Try to execute a disallowed command through another method
-   - Try to use another Anima's permissions
+   - Try to run a command that is not permitted using another method
+   - Try to use another Anima’s permissions
 
 ---
 

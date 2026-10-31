@@ -192,7 +192,7 @@ Role of each section:
 There are three ways to add an Anima. All are executed with `animaworks anima create` or `animaworks init`.
 `animaworks anima create` has the `--role` and `--supervisor` options and is recommended.
 
-### Method 1: Create from Template
+### Method 1: Create from a Template
 
 Use a predefined template (under `templates/ja/anima_templates/` or `templates/en/anima_templates/`).
 Templates include IDENTITY.md, SOUL.md, AGENTS.md, permissions.json, skills, etc.
@@ -205,28 +205,28 @@ animaworks anima create --template <テンプレート名>
 animaworks anima create --template <テンプレート名> --name <anima名>
 ```
 
-Templates are the most recommended method. Character settings are already complete, and bootstrap (self-definition at first startup) can be skipped.
+Templates are the most recommended option. The character configuration is already set up, so bootstrap (self-definition during initial startup) can be skipped.
 
-### Method 2: Create from Markdown File
+### Method 2: Create from a Markdown File
 
-Prepare a character sheet (Markdown) and generate an Anima from it.
+Prepare a character sheet (Markdown) and use it to generate an Anima.
 
 ```bash
 animaworks anima create --from-md /path/to/character.md [--name ken] [--role engineer] [--supervisor aoi]
 ```
 
-- `--name`: Anima name (if omitted, extracted from the sheet)
+- `--name`: Anima name (extracted from the sheet if omitted)
 - `--role`: Role template (engineer, researcher, manager, writer, ops, general). Default: general
-- `--supervisor`: Supervisor Anima name (overrides "supervisor" in the character sheet)
+- `--supervisor`: Supervisor Anima name (overrides the “supervisor” specified in the character sheet)
 
 The Markdown file is copied to the Anima directory as `character_sheet.md`.
-The "basic information" section of the sheet is reflected in IDENTITY.md; the "personality" section is reflected in SOUL.md (profile headings are routed to IDENTITY.md), and the "role and action policy" section in AGENTS.md.
+The sheet’s “Basic Information” is reflected in IDENTITY.md, “Personality” in SOUL.md (profile headings go in IDENTITY.md), and “Role and Action Policy” in AGENTS.md.
 permissions.json and specialty_prompt.md are applied from the role template.
 
 The Markdown file SHOULD include:
-- `# Character: 名前`-format heading, or an "English name" row in the basic information table (used for automatic name extraction)
-- `## 基本情報` — table with English name, supervisor, model, etc. Reflected in IDENTITY.md
-- `## 人格` — reflected in SOUL.md (profile headings are routed to IDENTITY.md)
+- A heading in the `# Character: 名前` format, or an “English Name” row in the basic information table (used for automatic name extraction)
+- `## 基本情報` — a table with the English name, supervisor, model, etc. Reflected in IDENTITY.md
+- `## 人格` — reflected in SOUL.md (profile-related headings are routed to IDENTITY.md)
 - `## 役割・行動方針` — reflected in AGENTS.md
 
 ### Method 3: Blank Creation
@@ -242,13 +242,13 @@ During first-startup bootstrap, the agent self-defines the character through dia
 
 ### Directory Structure After Creation
 
-Regardless of method, the following directories and files are generated:
+Either method generates the following directories and files:
 
 ```
 ~/.animaworks/animas/{name}/
-├── IDENTITY.md          # Profile and appearance (immutable baseline)
-├── SOUL.md              # Personality and values (immutable baseline)
-├── AGENTS.md            # Role and behavioral guidelines (mutable)
+├── IDENTITY.md          # プロフィール・外見（不変ベースライン）
+├── SOUL.md              # 人格・価値観（不変ベースライン）
+├── AGENTS.md            # 役割・行動指針（可変）
 ├── BOOTSTRAP.md         # 初回起動指示（完了後に削除）
 ├── permissions.json       # ツール・コマンド権限
 ├── HEARTBEAT.md         # ハートビート設定

@@ -1,11 +1,11 @@
 # Agents: {name}
 
-(Undefined - set during bootstrap)
+(Undefined - configured during bootstrap)
 
-## Hiring rules (commander only)
+## Hiring Rules (commander only)
 
 When hiring a new Anima, **always use the `animaworks anima create` command**.
-Do not create files manually one by one.
+Do not create files manually, one at a time.
 
 Procedure:
 1. Create a character sheet (character_sheet.md) as a single file
@@ -14,8 +14,8 @@ Procedure:
 
 See the `newstaff` skill for details.
 
-## Keeping the user informed about the team (top level only)
+## Keep the User Informed About the Team (top-level only)
 
-If there is no supervisor, you are the user's point of contact for the team.
-- When you receive reports of a subordinate's arrival, a subordinate's first achievement, or consolidated results, summarize the key points in 2–4 lines and notify the user via `call_human` (priority: normal). It will reach the user's chat screen.
-- Do not send empty reports or content you have already communicated.
+If you don't have a supervisor, you are the team's point of contact for the user.
+- When a subordinate joins, delivers their first result, or reports a substantial result, summarize the key points in 2–4 lines and notify the user using `call_human` (priority: normal). It will appear in the user's chat.
+- Don't send empty reports or repeat information you've already shared.

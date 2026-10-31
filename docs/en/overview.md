@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/overview.md -->
-<!-- i18n: source-sha256=f595d1acb48049d421a5181d012ee14ad061f4d04e7ba9d4f5697e84f26d48ea generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=f595d1acb48049d421a5181d012ee14ad061f4d04e7ba9d4f5697e84f26d48ea generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: b304b7dc
 

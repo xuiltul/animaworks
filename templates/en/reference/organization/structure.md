@@ -1,20 +1,20 @@
 # How the Organization Structure Works
 
-In AnimaWorks, the organization structure is built using each Anima's `status.json` (or `IDENTITY.md`) as the Single Source of Truth (SSoT).
-`core/org/org_sync.py` synchronizes the **supervisor** on disk to `config.json`, which is then used during prompt construction.
-This document explains how the organization structure is defined, interpreted, and displayed.
+The organization structure in AnimaWorks is built using each Anima’s `status.json` (or `IDENTITY.md`) as the Single Source of Truth (SSoT).
+`core/org/org_sync.py` synchronizes the on-disk **supervisor** to `config.json`, where it is used when constructing prompts.
+This documentation explains how the organization structure is defined, interpreted, and displayed.
 
 ## Data Sources and Priority Order
 
-### supervisor
+### supervisor (supervisor)
 
-The hierarchical relationships within the organization are defined by each Anima's `supervisor`. Read priority:
+The organization’s hierarchy is defined in each Anima’s `supervisor`. Read priority:
 
-1. **status.json** — `"supervisor"` key (recommended)
-2. **IDENTITY.md** — Row in the table format `| 上司 | name |` (Japanese only. The `read_anima_supervisor` of `core/config/models.py` is parsed)
+1. **status.json** — the `"supervisor"` key (recommended)
+2. **IDENTITY.md** — a row in the tabular `| 上司 | name |` (Japanese only; `read_anima_supervisor` in `core/config/models.py` parses it)
 
-If `supervisor` is unset, empty, "none", "(none)", "（none）", "-", or "---", the Anima is at the top level (highest rank).
-`animaworks config set animas.<name>.supervisor <supervisor>` updates the root-owned status/config collectively. Directly modifying only `config.json` will be overwritten from disk by org_sync, so use CLI/API.
+If `supervisor` is unset, empty, or set to “none,” “(none),” “（none),” “-,” or “---,” the Anima is top-level (at the highest level).
+`animaworks config set animas.<name>.supervisor <supervisor>` updates all root-owned status/config together. If you change only `config.json` directly, org_sync will overwrite it from disk, so use CLI/API.
 
 ### speciality
 
@@ -30,19 +30,19 @@ To use a custom display (e.g., "development lead"), use `animaworks config set a
 
 ## config.json Synchronization via org_sync
 
-The `sync_org_structure()` of `core/org/org_sync.py` performs the following:
+The `sync_org_structure()` in `core/org/org_sync.py` does the following:
 
-1. Reads `status.json` / `IDENTITY.md` from each Anima directory (only those where `IDENTITY.md` exists) and extracts the supervisor (`read_anima_supervisor`)
-2. Detects circular references (Animas with circular references are excluded from synchronization)
-3. Updates the `animas.<name>.supervisor` of `config.json` to match the values on disk (**supervisor only**)
-4. Removes config entries for Animas that no longer exist on disk (prune)
+1. Reads `status.json` / `IDENTITY.md` from each Anima directory (only those containing `IDENTITY.md`) and extracts the supervisor (`read_anima_supervisor`)
+2. Detects circular references (Animas with detected cycles are excluded from synchronization)
+3. Updates `animas.<name>.supervisor` in `config.json` to match the values on disk (**supervisor only**)
+4. Removes config entries for Animas not present on disk (prune)
 
-**Items synchronized:** supervisor only. Speciality is not updated by org_sync.
+**Synchronized item:** supervisor only. speciality is not updated by org_sync.
 
-**Execution timing:**
+**When it runs:**
 
-- At server startup (after the Anima process of `animaworks start` starts)
-- When an Anima is added via reconciliation (`on_anima_added` callback)
+- At server startup (after the Anima processes in `animaworks start` have started)
+- When an Anima is added through reconciliation (`on_anima_added` callback)
 
 ## Hierarchy definition via supervisor
 

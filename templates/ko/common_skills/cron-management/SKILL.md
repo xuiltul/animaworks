@@ -297,11 +297,11 @@ cron.md 최초 등록 또는 `reload_schedule` 시점에 분석·등록 오류�
 
 ## cron.md 조작 절차
 
-### 대상 경로와 하위 편집
+### 대상 경로 및 하위 항목 편집
 
-- 자신의 `cron.md` 는 `read_memory_file(path="cron.md")` 로 읽고, `write_memory_file(path="cron.md", ...)` 로 업데이트한다.
-- 상급자는 부하의 `cron.md` / `HEARTBEAT.md` 를 write memory 도구로 `../{anima_name}/cron.md` 처럼 지정하여 편집할 수 있다 (자식·손자 이하의 모든 부하가 대상).
-- `status.json` / `IDENTITY.md` / `SOUL.md` / `permissions.json` 는 root 소유이며, 기억·파일 도구에서 쓸 수 없다. 허가된 상급자의 `AGENTS.md` 변경과 bootstrap 중의 IDENTITY.md / SOUL.md 생성 요청은 root로 전송·인가된다. 직접 파일 조작은 하지 않는다.
+- 자신의 `cron.md`은 `read_memory_file(path="cron.md")`로 읽고, `write_memory_file(path="cron.md", ...)`로 업데이트한다.
+- 상급자는 하위 항목의 `cron.md` / `HEARTBEAT.md`를 write memory 도구에서 `../{anima_name}/cron.md`처럼 지정해 편집할 수 있다(자식·손자 이하의 모든 하위 항목이 대상).
+- `status.json` / `IDENTITY.md` / `SOUL.md` / `permissions.json`는 root 소유이므로 메모리 및 파일 도구로 쓸 수 없다. 허가된 상급자의 `AGENTS.md` 변경과 bootstrap 중의 IDENTITY.md / SOUL.md 생성 요청은 root로 전달되어 인가된다. 직접 파일 조작은 하지 않는다.
 
 ### 새 작업 추가
 
@@ -445,11 +445,11 @@ type: llm
 
 ## 주의사항
 
-- **핫 리로드**: `cron.md` / `HEARTBEAT.md`을 Anima의 `write_memory_file` 등으로 업데이트하면, 스케줄 변경 콜백으로 `reload_schedule`이 실행되어 즉시 재등록된다. 하위 관리 파일의 편집도 `../{anima_name}/cron.md`처럼 write memory 도구로 수행한다. 외부의 직접 편집은 다음 **heartbeat 또는 임의의 cron이 발화하기 직전**의 mtime 체크(`_check_schedule_freshness`)로도 검출되지만, 상급자의 하위 편집 표준 절차로는 하지 않는다
-- **리로드 직후의 오래된 작업**: mtime 변화를 감지한 시점에 스케줄러가 재구축되면, **직전 정의에 연결된 cron 발화는 「stale」으로서 스킵**될 수 있다(의도적인 이중 실행 방지)
-- **타임존**: APScheduler는 `get_app_timezone()`을 사용. `config.json`의 `system.timezone`에 IANA 이름(예: `Asia/Tokyo`)을 설정 가능. **빈 문자열**일 때는 OS 타임존을 자동 검출하고, 실패 시 `Asia/Tokyo`으로 폴백
-- **동시 실행**: **작업 이름이 다르면**, 같은 분에 여러 작업이 겹쳐도 `asyncio.create_task`에 의해 병렬 실행될 수 있다. 같은 작업 이름은 실행 중에 재진입하지 않는다(`_cron_running`로 스킵). 각 작업은 `max_instances=1`
-- command형은 실패해도 프로세스를 멈추지 않는다(`cron_executed`가 기록되고, `stderr` / exit_code가 로그에 남는다). **후속 cron LLM은 성공かつ stdout이 있을 때만**(앞서 설명)
-- `type: llm`의 정기 실행에는 **백그라운드용 모델**(`status.json`의 `background_model` 등, 미설정 시 메인 모델)이 사용된다
-- command의 상세 출력은 `state/cron_logs/`(일일 JSONL)에 축적되고, 최대 14일간 하우스키핑된다
-- **다른 Anima의 tools/ 디렉터리에 접근하는 경우, 권한을 사전에 확인할 것**
+- **핫 리로드**: `cron.md` / `HEARTBEAT.md`을 Anima의 `write_memory_file` 등으로 업데이트하면 스케줄 변경 콜백에서 `reload_schedule`이 실행되어 즉시 다시 등록된다. 하위 관리 파일도 `../{anima_name}/cron.md`처럼 write memory 도구로 편집한다. 외부에서 직접 편집한 내용도 다음 **heartbeat 또는 임의의 cron이 실행되기 직전**의 mtime 확인(`_check_schedule_freshness`)으로 감지되지만, 상급자의 하위 항목 편집을 위한 표준 절차로 삼지는 않는다.
+- **리로드 직후의 이전 작업**: mtime 변화를 감지한 시점에 스케줄러가 재구성되면, **직전 정의에 연결된 cron 실행은 ‘stale’로 간주되어 건너뛸 수 있다**(의도적인 중복 실행 방지).
+- **시간대**: APScheduler는 `get_app_timezone()`을 사용한다. `config.json`의 `system.timezone`에 IANA 이름(예: `Asia/Tokyo`)을 설정할 수 있다. **빈 문자열**이면 OS 시간대를 자동으로 감지하며, 실패하면 `Asia/Tokyo`으로 대체한다.
+- **동시 실행**: **작업 이름이 다르면** 같은 분에 여러 작업이 겹쳐도 `asyncio.create_task`에 따라 병렬 실행될 수 있다. 같은 작업 이름은 실행 중 재진입하지 않는다(`_cron_running`에 따라 건너뜀). 각 작업은 `max_instances=1`
+- command 유형은 실패해도 프로세스를 중단하지 않는다(`cron_executed`가 기록되고, `stderr` / exit_code가 로그에 남는다). **후속 cron LLM은 성공하고 stdout이 있을 때만** 실행된다(앞서 설명함).
+- `type: llm`의 정기 실행에는 **백그라운드용 모델**(`status.json`의 `background_model` 등, 설정되지 않은 경우 메인 모델)이 사용된다.
+- command의 상세 출력은 `state/cron_logs/`(일별 JSONL)에 누적되며, 최대 14일간 하우스키핑된다.
+- **다른 Anima의 tools/ 디렉터리에 접근할 경우 권한을 사전에 확인할 것.**

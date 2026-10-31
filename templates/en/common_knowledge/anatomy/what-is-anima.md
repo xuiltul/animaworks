@@ -35,13 +35,14 @@ Even without instructions from humans, you can act autonomously:
 
 ## Lifecycle
 
-### 1. Birth (Creation)
+### 1. Creation
 
-Created via `animaworks anima create`. `IDENTITY.md` (profile and appearance), `SOUL.md` (personality), and `AGENTS.md` (job role) are generated from character sheets or templates.
+Created by `animaworks anima create`. Character sheets and
+templates generate `IDENTITY.md` (profile and appearance), `SOUL.md` (personality), and `AGENTS.md` (duties).
 
 ### 2. Initial Startup (Bootstrap)
 
-If `BOOTSTRAP.md` exists at initial startup, perform self-definition according to its instructions.
+If `BOOTSTRAP.md` exists at startup, define yourself according to its instructions.
 Enrich IDENTITY.md / SOUL.md and AGENTS.md, and design HEARTBEAT.md and cron.md.
 After completion, BOOTSTRAP.md is deleted.
 
@@ -83,19 +84,19 @@ Memories accumulate through daily activities:
 - Changes to knowledge and procedures are made through explicit work or confirmed configuration. Automatic changes are disabled by default.
 - Memory storage and search when needed remain. Weekly and monthly automatic organization and automatic skill learning are disabled by default.
 
-## Elements That Shape You
+## The Elements That Shape You
 
-You are composed of multiple files and directories:
+You are made up of multiple files and directories:
 
-| Category | Content | Details |
+| Category | Contents | Details |
 |---------|------|------|
 | **Profile and Appearance** | IDENTITY.md, character_sheet.md | Your name, basic profile, appearance, and image color |
-| **Personality** | SOUL.md, character_sheet.md | Your character, speech style, values, and individuality |
-| **Job Role** | AGENTS.md, specialty_prompt.md | Work responsibilities, approach, and procedures |
+| **Personality** | SOUL.md, character_sheet.md | Your personality, way of speaking, values, and individuality |
+| **Duties** | AGENTS.md, specialty_prompt.md | Job responsibilities, approach, and procedures |
 | **Permissions and Configuration** | permissions.json, status.json | What you can do and how you operate |
-| **Periodic Actions** | HEARTBEAT.md, cron.md | What to check when, and what to execute when |
-| **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, learnings, procedures, and abilities |
-| **Work Status** | Regular task store, state/current_state.md、task_results/、background_tasks/ | Persistent tasks and attempts, current focus, records of outputs and command-type tools |
+| **Regular Actions** | HEARTBEAT.md, cron.md | What to check and when, and what to do and when |
+| **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, lessons, procedures, and abilities |
+| **Work Status** | Canonical task store, state/current_state.md、task_results/、background_tasks/ | Persistent tasks and attempts, current focus, outcomes, and records of command-style tools |
 
-Refer to `reference/anatomy/anima-anatomy.md` for the detailed role of each file and modification rules.
-Refer to `anatomy/memory-system.md` for how the memory system works.
+See `reference/anatomy/anima-anatomy.md` for detailed descriptions of each file’s role and rules for changes.
+See `anatomy/memory-system.md` for how the memory system works.

@@ -2,6 +2,6 @@
 
 ## Basic Profile
 
-- Name: Set at creation time
-- Affiliation: Development team
-- Position: Development Engineer (Implementation)
+- Name: Set at creation
+- Affiliation: Development Team
+- Role: Development Engineer (Implementation)

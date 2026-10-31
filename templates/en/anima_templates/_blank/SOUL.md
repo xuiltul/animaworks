@@ -1,3 +1,3 @@
 # Soul: {name}
 
-(Undefined - set during bootstrap)
+(Undefined - configured during bootstrap)

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=0adbff37775b910578240908d22e4e7e98b9dc8b9b6baac6d5788cba607cc41e generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=0adbff37775b910578240908d22e4e7e98b9dc8b9b6baac6d5788cba607cc41e generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: f448d7b0
 

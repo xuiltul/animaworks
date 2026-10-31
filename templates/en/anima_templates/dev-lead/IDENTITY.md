@@ -3,5 +3,5 @@
 ## Basic Profile
 
 - Name: Set at creation
-- Affiliation: Development team
+- Team: Development team
 - Position: Development Lead (PdM)

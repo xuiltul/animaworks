@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/vision.md -->
-<!-- i18n: source-sha256=648d7564f35cd1ef72ce7d941f78e3e67170e7d1e96203125376a6cc080e6d6b generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=648d7564f35cd1ef72ce7d941f78e3e67170e7d1e96203125376a6cc080e6d6b generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 581e20f1
 
