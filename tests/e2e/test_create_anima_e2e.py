@@ -137,16 +137,16 @@ class TestCreateFromMdFullFlow:
         assert status["model"] == "claude-sonnet-5-5"
         assert status["credential"] == "anthropic"
 
-    def test_identity_md_populated_from_personality_section(self, data_dir: Path, tmp_path: Path):
-        """IDENTITY.md should contain the content from the character sheet's personality section."""
+    def test_soul_md_populated_from_personality_section(self, data_dir: Path, tmp_path: Path):
+        """SOUL.md should contain the content from the character sheet's personality section."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_character_sheet(tmp_path, FULL_CHARACTER_SHEET)
 
         anima_dir = create_from_md(animas_dir, sheet_path)
 
-        identity = (anima_dir / "IDENTITY.md").read_text(encoding="utf-8")
-        assert "テスト用の人格設定です" in identity
-        assert "明るく元気な性格" in identity
+        soul = (anima_dir / "SOUL.md").read_text(encoding="utf-8")
+        assert "テスト用の人格設定です" in soul
+        assert "明るく元気な性格" in soul
 
     def test_injection_md_populated_from_role_section(self, data_dir: Path, tmp_path: Path):
         """AGENTS.md should contain the content from the role/behavior section."""
