@@ -58,3 +58,18 @@ def test_allowed_hosts_resolve_to_every_address(firewall, monkeypatch: pytest.Mo
     monkeypatch.setattr(firewall.socket, "getaddrinfo", fake_getaddrinfo)
     endpoints = firewall._resolve_hosts("api.example:443, missing.example:443")
     assert endpoints == [("192.0.2.20", 443), ("2001:db8::20", 443)]
+
+
+def test_pf_ruleset_limits_only_the_enclave_user(firewall) -> None:
+    endpoints = [("192.0.2.10", 8888), ("2001:db8::5", 8002)]
+    ruleset = firewall.build_pf_ruleset(299, "ap-northeast-1", [18610, 33061], endpoints)
+    lines = ruleset.strip().splitlines()
+    assert lines[0] == "table <aw_enclave_aws> persist { 192.0.2.0/24, 2001:db8::/32 }"
+    rules = lines[1:]
+    assert all(rule.endswith("user 299") for rule in rules)
+    assert "to any port { 53, 18610, 33061 } user 299" in rules[0]
+    assert "from any port { 53, 18610, 33061 } to any user 299" in rules[1]
+    assert "pass out quick proto tcp from any to <aw_enclave_aws> port 443 user 299" in rules
+    assert "pass out quick proto tcp from any to 2001:db8::5 port 8002 user 299" in rules
+    assert rules[-1] == "block return out quick proto { tcp, udp } from any to any user 299"
+    assert all(rule.startswith("pass") for rule in rules[:-1])

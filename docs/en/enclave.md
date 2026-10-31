@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=e6ba47c1f3fa66648ee8af16b56530f654445787e285dabc7e9d5c6d6baa3355 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=678562bed397eb607cfd7411f78b5329891e01edb8430af39e68a87ea6b131a4 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
 
 > Confirmed commit: f448d7b0
 
@@ -119,11 +119,29 @@ systemctl enable --now animaworks-enclave@aw-enclave.service
 
 The template sets `User=%i`, a dedicated `RuntimeDirectory`, `UMask=0077`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, and `ProtectSystem=strict`. The write destination is limited to `/home/%i/.animaworks`, and `ProtectHome=tmpfs` and `BindPaths=/home/%i` expose only that user's home directory. The example HTTP port should be a value that does not conflict with the main side. Since the gateway communicates via a Unix socket, the HTTP bind address is limited to loopback.
 
-## Main-Side Connection Configuration
+## Startup on macOS
 
-Register the connection destination in `config.json` on the main side. `allowed_animas` is an allow-list of main-side animas that can call `enclave_ask`. An empty list allows no one.
+On macOS, use launchd instead of systemd. Create a dedicated OS user and group for isolation, and add the host-side user to the group (the following is an example; use an unused uid below 500).
 
-`allowed_animas` is an application-layer restriction. The OS boundary is the socket's group permission (0660) and the connection source uid that the gateway verifies with `SO_PEERCRED` (`allowed_peer_uids`); any process with the same uid can connect to the socket. Keep the number of users who can be added to the socket group on the main side to a minimum.
+```bash
+dseditgroup -o create -i 299 animaworks-enclave
+sysadminctl -addUser _awenclave -UID 299 -GID 299 -shell /usr/bin/false -home /Users/_awenclave
+dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
+```
+
+Place the socket somewhere that persists across reboots, and set the directory’s permissions to `0750` for the isolation user and group (e.g., `/usr/local/var/animaworks-enclave`). The macOS gateway checks the connecting uid using `LOCAL_PEERCRED`. The way to specify `allowed_peer_uids` is the same as on Linux.
+
+`templates/_shared/launchd/com.animaworks.enclave.plist` is the isolated instance’s LaunchDaemon (`UserName` and `Umask=0077`), while `com.animaworks.enclave-egress.plist` is a root LaunchDaemon that applies outbound communication restrictions at startup and every hour. Replace the username, paths, and port, place it in `/Library/LaunchDaemons/`, and load it with `launchctl bootstrap system <plist>`. Store secrets in `enclave.secrets_dir` as a `0600` file owned by the isolation user, and set the directory to `0700`.
+
+Outbound communication is restricted using `scripts/enclave/egress_firewall.py --backend pf`. The rules are loaded into the pf anchor `com.apple/250.AnimaworksEnclave` and evaluated from the default `/etc/pf.conf`, so do not rewrite `pf.conf`. The pf `user` specification applies only to TCP and UDP. Copy the script to a root-owned location that neither the host-side nor isolation-side user can modify, and use it from there.
+
+Since launchd has no dependencies between units, specify in the isolated-side config’s `enclave.egress_probe` the destinations that must be blocked (the list in `HOST:PORT`). The startup guard attempts a TCP connection to each destination and refuses to start if it succeeds. Even if it starts before the restrictions are loaded, it will not run without them. The same configuration can be used on Linux.
+
+## Host-Side Connection Configuration
+
+Register the connection destination in the host-side `config.json`. `allowed_animas` is the allow-list of host-side anima instances allowed to call `enclave_ask`. An empty list allows no one.
+
+`allowed_animas` is an application-layer restriction. The OS boundary is enforced by the socket’s group permissions (0660) and the connecting uid, which the gateway checks using `SO_PEERCRED` (`LOCAL_PEERCRED` on macOS) (`allowed_peer_uids`). Any process running under the same uid can connect to the socket. Keep the number of host-side users added to the socket’s group to a minimum.
 
 ```json
 {
@@ -137,7 +155,7 @@ Register the connection destination in `config.json` on the main side. `allowed_
 }
 ```
 
-If external tools are restricted in the main-side anima's `permissions.json`, add the module name `enclave` to `external_tools.allow`.
+If external tools are restricted in the host-side anima’s `permissions.json`, add the module name `enclave` to `external_tools.allow`.
 
 ```json
 {

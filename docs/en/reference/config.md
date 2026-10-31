@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=71df71d680b7c8f23a8433b00630604dfaf1d63b5effec714b2a4f94807181b3 generated=2026-10-30 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a4c03b52ba2162ec96ab9ad74c98a9a3b673394395ae37a5d248685cf750d89d generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
 
 # Configuration Reference
 
@@ -811,24 +811,24 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 ### `enclave`
 
-| Key | Type | Default value | Description |
+| Key | Type | Default | Description |
 |---|---|---|---|
 | `enclave` | `EnclaveConfig` | `{EnclaveConfig}` | Server configuration for isolated enclave mode. When enabled, checks the security guard at startup. |
 | `enclave.enabled` | `bool` | `false` | Start this runtime environment as an isolated enclave. |
 | `enclave.name` | `str` | `""` | Identifier returned by the enclave gateway. |
-| `enclave.socket_path` | `str` | `""` | Path to the Unix domain socket on which the gateway listens. |
-| `enclave.socket_group` | `str` | `""` | OS group to assign to the gateway socket. |
-| `enclave.entry_anima` | `str` | `""` | Entry anima that handles questions inside the enclave. |
+| `enclave.socket_path` | `str` | `""` | Path to the Unix domain socket the gateway listens on. |
+| `enclave.socket_group` | `str` | `""` | OS group to set on the gateway socket. |
+| `enclave.entry_anima` | `str` | `""` | Entry anima that processes questions inside the enclave. |
 | `enclave.allowed_peer_uids` | `list[int]` | `[]` | OS user UID allowed to connect to the gateway. |
-| `enclave.max_concurrency` | `int` | `2` | Maximum number of questions the gateway handles concurrently. |
+| `enclave.max_concurrency` | `int` | `2` | Maximum number of questions the gateway processes concurrently. |
 | `enclave.request_timeout_s` | `int` | `0` | Timeout in seconds for question processing and gateway responses. |
-| `enclave.allowed_llm_credentials` | `list[str]` | `[]` | Names of authentication credentials available to the anima inside the enclave. |
+| `enclave.allowed_llm_credentials` | `list[str]` | `[]` | Names of credentials available to the anima inside the enclave. |
 | `enclave.model_profiles` | `dict[str, str]` | `{}` | — |
 | `enclave.default_model_profile` | `str` | `""` | — |
 | `enclave.datasets` | `dict[str, EnclaveDatasetConfig]` | `{}` | JSONL datasets that the anima inside the enclave can access. |
-| `enclave.datasets.path` | `str` | `"—"` | Relative path to a JSONL file within the data directory. |
+| `enclave.datasets.path` | `str` | `"—"` | Relative path to the JSONL file inside the data directory. |
 | `enclave.datasets.id_field` | `str` | `"—"` | ID field used to retrieve a record uniquely. |
-| `enclave.datasets.searchable_fields` | `list[str]` | `[]` | Fields for which partial-match search is allowed. |
+| `enclave.datasets.searchable_fields` | `list[str]` | `[]` | Fields that allow partial-match search. |
 | `enclave.sql_sources` | `dict[str, EnclaveSqlSourceConfig]` | `{}` | — |
 | `enclave.sql_sources.driver` | `Literal['mysql']` | `"mysql"` | — |
 | `enclave.sql_sources.host` | `str` | `"—"` | Tunnel target (or direct) host |
@@ -866,6 +866,8 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `enclave.secrets_dir` | `str \| None` | `null` | — |
 | `enclave.raw_dir` | `str` | `"raw"` | — |
 | `enclave.egress` | `dict[str, Any]` | `{}` | Egress stage configuration for processing facts returned externally. |
+| `enclave.egress_probe` | `list[str]` | `[]` | — |
+| `enclave.egress_probe_timeout_s` | `float` | `5.0` | — |
 
 ### `enclaves`
 

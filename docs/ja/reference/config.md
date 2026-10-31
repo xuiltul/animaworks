@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: e89f04ed0e7c2dfaab7189d664720b279a2fcfc9ee5ea096101bab46e851f949 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 34b4266f4b3eb98b0050e05b06a3821bc9b1435dc191ec4fec13001546c8b2a7 -->
 
 # 設定リファレンス
 
@@ -866,6 +866,8 @@
 | `enclave.secrets_dir` | `str \| None` | `null` | — |
 | `enclave.raw_dir` | `str` | `"raw"` | — |
 | `enclave.egress` | `dict[str, Any]` | `{}` | 外部へ返す facts を処理する egress ステージ設定。 |
+| `enclave.egress_probe` | `list[str]` | `[]` | — |
+| `enclave.egress_probe_timeout_s` | `float` | `5.0` | — |
 
 ### `enclaves`
 

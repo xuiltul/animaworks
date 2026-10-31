@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=ecbe85c694dd700552a749695864a44617ae256c67b98918b6270017b31a83a9 generated=2026-10-30 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=30f1a34dfeb918f8e7df43976c426f5d8d4b527adc790472db788a46cf0edae3 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
 
 # Module List
 
@@ -214,12 +214,12 @@ Application configuration schemas, loading, validation, and migration.
 
 ## `core.enclave`
 
-Configuration models and startup security guards for isolated enclave mode.
+Configuration model and startup security guards for isolated enclave mode.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.enclave` | 54 | Enclave mode: an isolated runtime instance that bind to a dedicated socket. |
-| `core.enclave.config` | 202 | Configuration models for enclave mode. |
+| `core.enclave.config` | 207 | Configuration models for enclave mode. |
 | `core.enclave.egress.audit` | 62 | Audit logging for the egress pipeline. |
 | `core.enclave.egress.config` | 113 | Configuration model for the egress pipeline. |
 | `core.enclave.egress.fs` | 38 | Small filesystem helpers enforcing enclave file/directory permissions. |
@@ -231,8 +231,8 @@ Configuration models and startup security guards for isolated enclave mode.
 | `core.enclave.egress.pipeline` | 96 | Egress pipeline: apply configured stages and fail closed on any error. |
 | `core.enclave.egress.stages` | 236 | Stage implementations for the egress pipeline. |
 | `core.enclave.gateway` | 521 | Gateway: the ingress point of an enclave instance. |
-| `core.enclave.gateway_server` | 187 | Lifecycle and Unix-socket wiring for the enclave gateway. |
-| `core.enclave.guards` | 247 | Startup guards for enclave mode. |
+| `core.enclave.gateway_server` | 216 | Lifecycle and Unix-socket wiring for the enclave gateway. |
+| `core.enclave.guards` | 273 | Startup guards for enclave mode. |
 | `core.enclave.jobs` | 254 | Persistent query jobs for the enclave gateway. |
 | `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
 | `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
@@ -379,14 +379,14 @@ Tool execution, command execution, and safety controls.
 
 ## `core.i18n`
 
-Translation catalogs and language selection.
+Translation catalog and language selection.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
 | `core.i18n.strings.company` | 14 | Localized strings for company management. |
-| `core.i18n.strings.config` | 836 | Domain-specific i18n strings. |
+| `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
 | `core.i18n.strings.handler` | 416 | Domain-specific i18n strings (handler part 1). |
