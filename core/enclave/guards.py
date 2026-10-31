@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -147,6 +148,11 @@ def collect_enclave_violations(
     if host is not None and host not in _LOCAL_HOSTS:
         violations.append(t("enclave.guard.host", locale=locale, host=host))
 
+    # 9. Targets the OS firewall must block are unreachable.
+    for target in enclave.egress_probe:
+        if _probe_reachable(target, enclave.egress_probe_timeout_s):
+            violations.append(t("enclave.guard.egress_probe_reachable", locale=locale, target=target))
+
     return violations
 
 
@@ -160,6 +166,26 @@ def enforce_enclave_runtime(
     violations = collect_enclave_violations(config, data_dir, host=host)
     if violations:
         raise EnclaveViolationError("\n".join(violations))
+
+
+def _probe_reachable(target: str, timeout_s: float) -> bool:
+    """Return whether a TCP connection to ``HOST:PORT`` succeeds.
+
+    A malformed target counts as reachable so a typo cannot disable the check.
+    """
+    host, _, port = target.rpartition(":")
+    host = host.strip("[]")
+    try:
+        port_number = int(port)
+    except ValueError:
+        return True
+    if not host:
+        return True
+    try:
+        with socket.create_connection((host, port_number), timeout=timeout_s):
+            return True
+    except OSError:
+        return False
 
 
 def _group_exists(group: str) -> bool:

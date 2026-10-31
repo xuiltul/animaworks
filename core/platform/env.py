@@ -74,6 +74,13 @@ def server_url(*, default: str | None = None) -> str:
     return default.rstrip("/") if default else DEFAULT_SERVER_URL
 
 
+def server_port() -> int:
+    """Return the port of :func:`server_url` (``ANIMAWORKS_SERVER_URL`` or the default)."""
+    from urllib.parse import urlsplit
+
+    return urlsplit(server_url()).port or urlsplit(DEFAULT_SERVER_URL).port or 18500
+
+
 def server_url_env() -> dict[str, str]:
     """Return the server URL variable for an explicitly configured child env."""
     return {SERVER_URL_ENV: server_url()}

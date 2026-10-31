@@ -2,7 +2,7 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Restrict outbound traffic of the enclave OS user with nftables.
+"""Restrict outbound traffic of the enclave OS user with nftables (Linux) or pf (macOS).
 
 The enclave user may only reach:
 
@@ -27,6 +27,13 @@ services (e.g. the main AnimaWorks API) and the LAN.  Run as root::
 
 Without ``--apply`` the ruleset is printed.  ``--remove`` deletes the table.
 Re-run periodically (e.g. weekly) to refresh the AWS ranges.
+
+On macOS pass ``--backend pf``.  The rules are loaded into the sub-anchor
+``com.apple/250.AnimaworksEnclave``, which the stock ``/etc/pf.conf``
+evaluates through its ``anchor "com.apple/*"`` line, so ``pf.conf`` is left
+untouched; ``--apply`` also enables pf if it is off and stops pf from
+skipping lo0 (otherwise loopback would bypass the rules).  pf matches ``user``
+only for TCP and UDP, so the same limits apply to those protocols.
 """
 
 from __future__ import annotations
@@ -42,6 +49,7 @@ import urllib.request
 
 AWS_RANGES_URL = "https://ip-ranges.amazonaws.com/ip-ranges.json"
 TABLE = "aw_enclave_egress"
+PF_ANCHOR = "com.apple/250.AnimaworksEnclave"
 
 
 def _aws_ranges(region: str) -> tuple[list[str], list[str]]:
@@ -116,6 +124,47 @@ def build_ruleset(
     return "\n".join(lines) + "\n"
 
 
+def build_pf_ruleset(
+    uid: int,
+    region: str,
+    loopback_ports: list[int],
+    endpoints: list[tuple[str, int]] | None = None,
+) -> str:
+    v4, v6 = _aws_ranges(region)
+    if not v4:
+        raise SystemExit(f"no AWS ranges found for region {region}")
+    ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
+    lines = [
+        "table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }",
+        # Only sockets owned by the enclave uid match ``user``, so other
+        # users' traffic never reaches the final block rule.
+        # Loopback packets leave and re-enter on lo0, so a state created on
+        # the way out stalls the handshake (SYN_SENT:CLOSED); match each
+        # packet instead.
+        f"pass out quick on lo0 proto {{ tcp, udp }} from any to any port {{ {ports} }} user {uid} no state",
+        f"pass out quick on lo0 proto {{ tcp, udp }} from any port {{ {ports} }} to any user {uid} no state",
+        f"pass out quick proto tcp from any to <aw_enclave_aws> port 443 user {uid}",
+    ]
+    for host, port in endpoints or []:
+        lines.append(f"pass out quick proto tcp from any to {host} port {port} user {uid}")
+    lines.append(f"block return out quick proto {{ tcp, udp }} from any to any user {uid}")
+    return "\n".join(lines) + "\n"
+
+
+def _pf_apply(ruleset: str) -> None:
+    subprocess.run(["pfctl", "-q", "-a", PF_ANCHOR, "-f", "-"], input=ruleset, text=True, check=True)
+    # macOS can mark lo0 as skipped, which exempts loopback from every rule
+    # and lets the enclave reach the host's local services.  Loading only the
+    # options with an unused interface clears that flag; re-checked on every
+    # refresh in case something sets it again.
+    interfaces = subprocess.run(["pfctl", "-s", "Interfaces", "-v"], capture_output=True, text=True, check=False)
+    if "lo0 (skip)" in interfaces.stdout:
+        subprocess.run(["pfctl", "-q", "-O", "-f", "-"], input="set skip on stf0\n", text=True, check=True)
+    info = subprocess.run(["pfctl", "-s", "info"], capture_output=True, text=True, check=False)
+    if "Status: Enabled" not in info.stdout:
+        subprocess.run(["pfctl", "-q", "-e"], check=True)
+
+
 def _nft(args: list[str], stdin: str | None = None) -> None:
     subprocess.run(["nft", *args], input=stdin, text=True, check=True)
 
@@ -168,20 +217,28 @@ def main() -> int:
         default="",
         help="comma-separated NAME:PORT resolved at apply time, e.g. a cloud LLM API",
     )
+    parser.add_argument("--backend", choices=("nft", "pf"), default="nft")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--remove", action="store_true")
     args = parser.parse_args()
 
     if args.remove:
-        subprocess.run(["nft", "delete", "table", "inet", TABLE], check=False)
+        if args.backend == "pf":
+            subprocess.run(["pfctl", "-q", "-a", PF_ANCHOR, "-F", "all"], check=False)
+        else:
+            subprocess.run(["nft", "delete", "table", "inet", TABLE], check=False)
         return 0
 
     uid = pwd.getpwnam(args.user).pw_uid
     ports = _parse_ports(args.loopback_ports)
     endpoints = _parse_endpoints(args.allow_endpoints) + _resolve_hosts(args.allow_hosts)
-    ruleset = build_ruleset(uid, args.region, ports, endpoints)
+    builder = build_pf_ruleset if args.backend == "pf" else build_ruleset
+    ruleset = builder(uid, args.region, ports, endpoints)
     if not args.apply:
         sys.stdout.write(ruleset)
+        return 0
+    if args.backend == "pf":
+        _pf_apply(ruleset)
         return 0
     # Replace atomically: declare, flush, then load in one transaction.
     _nft(["-f", "-"], f"table inet {TABLE}\ndelete table inet {TABLE}\n{ruleset}")

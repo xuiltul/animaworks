@@ -349,6 +349,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "enclave の allowed_peer_uids が空です（少なくとも1つ設定する必要があります）",
         "en": "enclave allowed_peer_uids is empty (at least one must be set)",
     },
+    "enclave.guard.egress_probe_reachable": {
+        "ja": "enclave の egress_probe の宛先 {target} に接続できました（外向き通信の制限が効いていません）",
+        "en": "enclave egress_probe target {target} is reachable (outbound traffic is not restricted)",
+    },
     "enclave.guard.socket_group_missing": {
         "ja": "enclave の socket_group '{group}' が存在しません",
         "en": "enclave socket_group '{group}' does not exist",

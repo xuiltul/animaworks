@@ -186,6 +186,11 @@ class EnclaveConfig(BaseModel):
     secrets_dir: str | None = None
     raw_dir: str = "raw"
     egress: dict[str, Any] = Field(default_factory=dict)
+    # HOST:PORT targets the OS firewall must block.  The startup guard tries a
+    # TCP connection to each and refuses to boot if one succeeds, so the
+    # enclave never runs while the egress rules are missing.
+    egress_probe: list[str] = Field(default_factory=list)
+    egress_probe_timeout_s: float = 5.0
 
     @model_validator(mode="after")
     def _default_profile_must_exist(self) -> EnclaveConfig:

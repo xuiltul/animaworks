@@ -183,3 +183,20 @@ def test_request_repair_and_wait_times_out(monkeypatch) -> None:
 
     assert result["ok"] is False
     assert result["status"] == "timeout"
+
+
+@pytest.mark.parametrize(
+    ("server_url", "expected"),
+    [(None, "http://127.0.0.1:18500/api"), ("http://localhost:18610", "http://127.0.0.1:18610/api")],
+)
+def test_detect_server_uses_server_url_port(
+    monkeypatch: pytest.MonkeyPatch, server_url: str | None, expected: str
+) -> None:
+    from core.memory.rag import cli_access
+
+    if server_url is None:
+        monkeypatch.delenv("ANIMAWORKS_SERVER_URL", raising=False)
+    else:
+        monkeypatch.setenv("ANIMAWORKS_SERVER_URL", server_url)
+    monkeypatch.setattr("core.platform.pid.read_server_pid", lambda: None)
+    assert cli_access.detect_server().base_url == expected
