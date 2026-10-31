@@ -194,6 +194,39 @@ def lookup_notification_mapping(thread_ts: str) -> dict[str, str] | None:
     }
 
 
+def remember_anima_slack_post(
+    anima_name: str,
+    channel: str,
+    response: Any,
+    *,
+    thread_ts: str | None = None,
+    text: str = "",
+) -> None:
+    """Route later thread replies to the Anima that posted this Slack message.
+
+    A top-level post is keyed by its own ts; a reply inside an existing
+    thread is keyed by that thread's ts.  An existing mapping is never
+    overwritten, so a call_human thread stays with its original owner.
+    Best effort: failures are logged and ignored.
+    """
+    if not anima_name or not isinstance(response, dict):
+        return
+    key = str(thread_ts or response.get("ts") or "")
+    if not key:
+        return
+    try:
+        if lookup_notification_mapping(key) is not None:
+            return
+        save_notification_mapping_resilient(
+            key,
+            str(response.get("channel") or channel),
+            anima_name,
+            notification_text=text[:2000],
+        )
+    except Exception:
+        logger.warning("Failed to remember Slack post for reply routing", exc_info=True)
+
+
 def prune_old_entries(max_age_days: int = _MAX_AGE_DAYS) -> None:
     """Remove entries older than *max_age_days* from the mapping file."""
     path = _map_path()

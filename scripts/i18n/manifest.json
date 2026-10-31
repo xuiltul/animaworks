@@ -646,7 +646,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "d00582a869c64e951689a4221177407bf8af08f2d4d13d141e5a083013dc8dee",
+      "source_sha256": "bf68c81afb6c3b3f5bdd2176036d0f463514737436eb7523fb66b292fc7e2294",
       "statuses": [
         "translated"
       ],
@@ -1131,7 +1131,7 @@
         "69de7e531896210a476cd52a7160a673612cb56e3e5ae1f329fb1260fb3650fe",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "bc7162b9245c52587f6e0f678115a634577ea5b9fcb5896ad3018b69b95da462",
-        "6595d9c1e669ab4b8a84db74b9598558de0a0f880803842ffa11d3ee2c312c16",
+        "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
         "36405749eca4c7549a20affcb16ee9d6565d1bf57db7f4919f70f4790dd5521c",
         "0ed63f0496b6f2bcbbaf14486b21c49c8ec318b963910275a23eba385fb1f339",
@@ -1148,7 +1148,7 @@
         "9677e170f0a92d30541b1b1f05047a6fff5b1cd9f48c670f041a5215c9b6feed",
         "c61f47232bdb433e981a265b88e827d8ee1a8bb0c2702331d44158d3d6be93b7",
         "cd3553abcbabc735bff7b49ab7c38f4a9cf82b7869f9634fbc704bf74223bc66",
-        "f3b9533c29c32e27f3faa4989874a6e1293cd540970f0ce06db2a780899b8585",
+        "fa58a58451fc2824b10a095d6291921f5375d8a6324ad0eaf505adbd2d268d9d",
         "f25144984620d4e33c067ce62ecdae1185c3f6f65f092bf449abd2f2fa2c6a45",
         "15857b9b6941d263a4ec4d21f49f5d4dda76cb070d04ee2a1e47ed1fe0437eb9",
         "ff4286a9fd7955bbe0e3a7bb332baf63c837a30a3885ee12b9481b9293c39b89",
@@ -1175,7 +1175,7 @@
         "147f68072c8fc759e0f8d483e901626abd90949bfb6b2267444d820b2083f195"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "5f183e62f463963e2ac2b6f15b16291e5e6376e527435d0132b42afff2ece880",
+      "source_sha256": "62a3eda3a30d520bc930211b8ea0be04d70a11012abb75cd5e47b3ce1d28c636",
       "statuses": [
         "translated",
         "translated",
@@ -2001,12 +2001,12 @@
     "docs/ko/reference/README.md": {
       "engine": "luna",
       "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "model": "gpt-6-luna",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "d00582a869c64e951689a4221177407bf8af08f2d4d13d141e5a083013dc8dee",
+      "source_sha256": "bf68c81afb6c3b3f5bdd2176036d0f463514737436eb7523fb66b292fc7e2294",
       "statuses": [
         "translated"
       ],
@@ -2491,7 +2491,7 @@
         "69de7e531896210a476cd52a7160a673612cb56e3e5ae1f329fb1260fb3650fe",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "bc7162b9245c52587f6e0f678115a634577ea5b9fcb5896ad3018b69b95da462",
-        "6595d9c1e669ab4b8a84db74b9598558de0a0f880803842ffa11d3ee2c312c16",
+        "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
         "36405749eca4c7549a20affcb16ee9d6565d1bf57db7f4919f70f4790dd5521c",
         "0ed63f0496b6f2bcbbaf14486b21c49c8ec318b963910275a23eba385fb1f339",
@@ -2508,7 +2508,7 @@
         "9677e170f0a92d30541b1b1f05047a6fff5b1cd9f48c670f041a5215c9b6feed",
         "c61f47232bdb433e981a265b88e827d8ee1a8bb0c2702331d44158d3d6be93b7",
         "cd3553abcbabc735bff7b49ab7c38f4a9cf82b7869f9634fbc704bf74223bc66",
-        "f3b9533c29c32e27f3faa4989874a6e1293cd540970f0ce06db2a780899b8585",
+        "fa58a58451fc2824b10a095d6291921f5375d8a6324ad0eaf505adbd2d268d9d",
         "f25144984620d4e33c067ce62ecdae1185c3f6f65f092bf449abd2f2fa2c6a45",
         "15857b9b6941d263a4ec4d21f49f5d4dda76cb070d04ee2a1e47ed1fe0437eb9",
         "ff4286a9fd7955bbe0e3a7bb332baf63c837a30a3885ee12b9481b9293c39b89",
@@ -2535,7 +2535,7 @@
         "147f68072c8fc759e0f8d483e901626abd90949bfb6b2267444d820b2083f195"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "5f183e62f463963e2ac2b6f15b16291e5e6376e527435d0132b42afff2ece880",
+      "source_sha256": "62a3eda3a30d520bc930211b8ea0be04d70a11012abb75cd5e47b3ce1d28c636",
       "statuses": [
         "translated",
         "translated",

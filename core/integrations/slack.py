@@ -202,6 +202,16 @@ def _record_external_reply(
         logger.warning("Failed to record Slack external reply", exc_info=True)
 
 
+def _remember_post(args: dict[str, Any], channel: str, response: Any, thread_ts: str | None, text: str) -> None:
+    """Let human replies in this thread reach the posting Anima (best effort)."""
+    anima_dir = args.get("anima_dir")
+    if not anima_dir:
+        return
+    from core.notification.reply_routing import remember_anima_slack_post
+
+    remember_anima_slack_post(Path(str(anima_dir)).name, channel, response, thread_ts=thread_ts, text=text)
+
+
 def _dispatch_slack_send(args: dict[str, Any]) -> Any:
     client = SlackClient(token=_resolve_slack_token(args))
     channel_id = client.resolve_channel(args["channel"])
@@ -221,6 +231,7 @@ def _dispatch_slack_send(args: dict[str, Any]) -> Any:
         response=response,
         recipient_channel=str(args.get("channel") or ""),
     )
+    _remember_post(args, channel_id, response, args.get("thread_ts"), args["message"])
     return response
 
 
@@ -308,6 +319,7 @@ def _dispatch_slack_channel_post(args: dict[str, Any]) -> Any:
         thread_ts=args.get("thread_ts"),
         response=response,
     )
+    _remember_post(args, args["channel_id"], response, args.get("thread_ts"), args["text"])
     timestamp = response.get("ts", "") if response is not None else ""
     return {"status": "ok", "channel": args["channel_id"], "ts": timestamp}
 

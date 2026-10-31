@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 1bbd9509ffa689cc55bc6df7d4a04001b02303df3dca7b4cc3437aec7196a7ef -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: fe220c4d772c54e23464dd6454307896e0261f774640b0133dc4c565ad27e08b -->
 
 # モジュール一覧
 
@@ -461,7 +461,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.integrations._retry（非公開）` | 170 | Shared retry/backoff utility for AnimaWorks tools. |
 | `core.integrations._slack_cache（非公開）` | 435 | SQLite message cache for Slack (offline search, unreplied detection). |
 | `core.integrations._slack_client（非公開）` | 308 | Slack Web API client with rate-limit retry and pagination. |
-| `core.integrations._slack_cli（非公開）` | 308 | Standalone CLI entry point for Slack tools. |
+| `core.integrations._slack_cli（非公開）` | 315 | Standalone CLI entry point for Slack tools. |
 | `core.integrations._slack_markdown（非公開）` | 240 | Slack markdown conversion and formatting utilities. |
 | `core.integrations.aws_collector` | 408 | AnimaWorks AWS collector tool — ECS status, CloudWatch logs & metrics. |
 | `core.integrations.call_human` | 113 | — |
@@ -489,7 +489,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.integrations.image_gen` | 425 | Character image & 3-D model generation tool for AnimaWorks. |
 | `core.integrations.local_llm` | 552 | AnimaWorks local LLM tool -- Ollama API client. |
 | `core.integrations.notion` | 862 | Notion integration for AnimaWorks. |
-| `core.integrations.slack` | 340 | Slack integration for AnimaWorks. |
+| `core.integrations.slack` | 352 | Slack integration for AnimaWorks. |
 | `core.integrations.transcribe` | 429 | AnimaWorks transcribe tool -- Whisper speech-to-text with LLM refinement. |
 | `core.integrations.web_search` | 408 | Web Search tool for AnimaWorks. |
 | `core.integrations.x_search` | 348 | X (Twitter) Search tool for AnimaWorks. |
@@ -752,7 +752,7 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 612 | — |
 | `core.notification.notifier` | 238 | — |
-| `core.notification.reply_routing` | 500 | — |
+| `core.notification.reply_routing` | 533 | — |
 | `core.notification.slack_names` | 67 | — |
 
 ## `core.notification.channels`
