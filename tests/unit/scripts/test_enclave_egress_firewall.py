@@ -58,3 +58,41 @@ def test_allowed_hosts_resolve_to_every_address(firewall, monkeypatch: pytest.Mo
     monkeypatch.setattr(firewall.socket, "getaddrinfo", fake_getaddrinfo)
     endpoints = firewall._resolve_hosts("api.example:443, missing.example:443")
     assert endpoints == [("192.0.2.20", 443), ("2001:db8::20", 443)]
+
+
+def test_pf_ruleset_limits_only_the_enclave_user(firewall) -> None:
+    endpoints = [("192.0.2.10", 8888), ("2001:db8::5", 8002)]
+    ruleset = firewall.build_pf_ruleset(299, "ap-northeast-1", [18610, 33061], endpoints)
+    lines = ruleset.strip().splitlines()
+    assert lines[0] == "table <aw_enclave_aws> persist { 192.0.2.0/24, 2001:db8::/32 }"
+    rules = lines[1:]
+    assert all(rule.endswith(("user 299", "user 299 no state")) for rule in rules)
+    assert rules[0].endswith("no state") and rules[1].endswith("no state")
+    assert "to any port { 53, 18610, 33061 } user 299" in rules[0]
+    assert "from any port { 53, 18610, 33061 } to any user 299" in rules[1]
+    assert "pass out quick proto tcp from any to <aw_enclave_aws> port 443 user 299" in rules
+    assert "pass out quick proto tcp from any to 2001:db8::5 port 8002 user 299" in rules
+    assert rules[-1] == "block return out quick proto { tcp, udp } from any to any user 299"
+    assert all(rule.startswith("pass") for rule in rules[:-1])
+
+
+def test_pf_apply_stops_skipping_loopback(firewall, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], str | None]] = []
+
+    class _Done:
+        def __init__(self, stdout: str = "") -> None:
+            self.stdout = stdout
+
+    def fake_run(args, input=None, **kwargs):
+        calls.append((args, input))
+        if args[:3] == ["pfctl", "-s", "Interfaces"]:
+            return _Done("lo0 (skip)\nstf0\n")
+        if args[:3] == ["pfctl", "-s", "info"]:
+            return _Done("Status: Enabled for 0 days\n")
+        return _Done()
+
+    monkeypatch.setattr(firewall.subprocess, "run", fake_run)
+    firewall._pf_apply("block return out quick proto { tcp, udp } from any to any user 299\n")
+    assert calls[0][0] == ["pfctl", "-q", "-a", firewall.PF_ANCHOR, "-f", "-"]
+    assert (["pfctl", "-q", "-O", "-f", "-"], "set skip on stf0\n") in calls
+    assert not any(args == ["pfctl", "-q", "-e"] for args, _ in calls)

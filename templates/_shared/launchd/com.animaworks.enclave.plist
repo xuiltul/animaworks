@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for an AnimaWorks enclave instance on macOS.
+  Replace _awenclave, /Users/_awenclave, the virtualenv path and the port with
+  values for this installation, then install as root:
+    install -m 0644 -o root -g wheel com.animaworks.enclave.plist /Library/LaunchDaemons/
+    launchctl bootstrap system /Library/LaunchDaemons/com.animaworks.enclave.plist
+  Set enclave.egress_probe in the enclave config: launchd has no unit
+  dependencies, so the startup guard is what keeps the instance from running
+  before the pf rules (com.animaworks.enclave-egress) are loaded.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.animaworks.enclave</string>
+	<key>UserName</key>
+	<string>_awenclave</string>
+	<key>GroupName</key>
+	<string>animaworks-enclave</string>
+	<key>InitGroups</key>
+	<true/>
+	<!-- 0077 -->
+	<key>Umask</key>
+	<integer>63</integer>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/_awenclave</string>
+		<key>ANIMAWORKS_DATA_DIR</key>
+		<string>/Users/_awenclave/.animaworks</string>
+		<key>PATH</key>
+		<string>/Users/_awenclave/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin</string>
+		<key>LANG</key>
+		<string>ja_JP.UTF-8</string>
+		<key>HF_HUB_OFFLINE</key>
+		<string>1</string>
+		<key>TRANSFORMERS_OFFLINE</key>
+		<string>1</string>
+		<key>LITELLM_LOCAL_MODEL_COST_MAP</key>
+		<string>True</string>
+		<key>AWS_STS_REGIONAL_ENDPOINTS</key>
+		<string>regional</string>
+	</dict>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/_awenclave/animaworks/.venv/bin/animaworks</string>
+		<string>start</string>
+		<string>--foreground</string>
+		<string>--host</string>
+		<string>127.0.0.1</string>
+		<string>--port</string>
+		<string>18610</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/_awenclave</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>30</integer>
+	<key>StandardOutPath</key>
+	<string>/Users/_awenclave/.animaworks/logs/launchd.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/_awenclave/.animaworks/logs/launchd.err.log</string>
+</dict>
+</plist>

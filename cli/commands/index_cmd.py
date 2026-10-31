@@ -38,13 +38,9 @@ def _setup_server_delegation() -> bool:
         configure_endpoints(RagEndpoints())
         return False
 
-    try:
-        from core.config import load_config
+    from core.platform.env import server_port
 
-        port = load_config().server.port
-    except Exception:
-        port = 18500
-
+    port = server_port()
     configure_endpoints(RagEndpoints.for_server(port))
     logger.info(
         "Server detected (pid=%d). Using HTTP delegation for safe ChromaDB access.",

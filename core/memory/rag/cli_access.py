@@ -33,18 +33,14 @@ class VectorAccess:
 
 
 def detect_server() -> ServerInfo:
-    """Detect the local server using its PID file and configured port."""
+    """Detect the local server using its PID file and the ANIMAWORKS_SERVER_URL port."""
+    from core.platform.env import server_port
     from core.platform.pid import read_server_pid
     from core.platform.process import is_process_alive
 
     pid = read_server_pid()
     running = pid is not None and is_process_alive(pid)
-    try:
-        from core.config import load_config
-
-        port = load_config().server.port
-    except Exception:
-        port = 18500
+    port = server_port()
     return ServerInfo(running=running, base_url=f"http://127.0.0.1:{port}/api")
 
 
@@ -58,9 +54,9 @@ def _configure_server_embeddings(server: ServerInfo) -> None:
         return
     port = urlsplit(server.base_url).port
     if port is None:
-        from core.config import load_config
+        from core.platform.env import server_port
 
-        port = load_config().server.port
+        port = server_port()
     configure_endpoints(RagEndpoints.for_server(port))
 
 

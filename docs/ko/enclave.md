@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=e6ba47c1f3fa66648ee8af16b56530f654445787e285dabc7e9d5c6d6baa3355 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=0adbff37775b910578240908d22e4e7e98b9dc8b9b6baac6d5788cba607cc41e generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인한 커밋: f448d7b0
 
@@ -119,11 +119,29 @@ systemctl enable --now animaworks-enclave@aw-enclave.service
 
 템플릿은 `User=%i`, 전용 `RuntimeDirectory`, `UMask=0077`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=strict`를 설정한다. 쓰기 대상은 `/home/%i/.animaworks`만 허용하고, `ProtectHome=tmpfs` 및 `BindPaths=/home/%i`를 통해 해당 사용자의 home만 공개한다. 예시의 HTTP 포트는 본체 측과 충돌하지 않는 값으로 설정한다. gateway는 Unix 소켓으로 통신하므로 HTTP bind address는 loopback으로 제한한다.
 
+## macOS에서 시작
+
+macOS에서는 systemd 대신 launchd를 사용한다. 격리용 OS 사용자와 그룹을 만들고, 본체 측 사용자를 그룹에 추가한다(아래는 예시다. uid는 500 미만의 비어 있는 번호를 사용한다).
+
+```bash
+dseditgroup -o create -i 299 animaworks-enclave
+sysadminctl -addUser _awenclave -UID 299 -GID 299 -shell /usr/bin/false -home /Users/_awenclave
+dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
+```
+
+소켓은 재시작해도 사라지지 않는 위치에 두고, 디렉터리를 격리 사용자와 그룹의 `0750`로 설정한다(예: `/usr/local/var/animaworks-enclave`). macOS의 gateway는 접속한 쪽의 uid를 `LOCAL_PEERCRED`으로 확인한다. `allowed_peer_uids`를 지정하는 방법은 Linux와 같다.
+
+`templates/_shared/launchd/com.animaworks.enclave.plist`는 격리 인스턴스의 LaunchDaemon(`UserName`·`Umask=0077`)이고, `com.animaworks.enclave-egress.plist`은 외부 통신 제한을 시작 시와 매시간 적용하는 root의 LaunchDaemon이다. 사용자 이름·경로·포트를 바꿔 `/Library/LaunchDaemons/`에 두고, `launchctl bootstrap system <plist>`으로 불러온다. 비밀 정보는 `enclave.secrets_dir`에 격리 사용자가 소유한 `0600` 파일로 두고, 디렉터리를 `0700`으로 설정한다.
+
+외부 통신은 `scripts/enclave/egress_firewall.py --backend pf`로 제한한다. 규칙은 pf의 앵커 `com.apple/250.AnimaworksEnclave`에 불러오며, 기본 `/etc/pf.conf`에서 평가되므로 `pf.conf`은 수정하지 않는다. macOS에서는 pf가 `lo0`을 평가 대상에서 제외(skip)하는 경우가 있어, 그대로 두면 격리 측에서 본체의 API 같은 loopback 서비스에 접속할 수 있다. `--apply`는 적용할 때마다 `lo0`의 skip을 해제한다. pf의 `user` 지정은 TCP와 UDP에만 적용된다. 스크립트는 본체 측과 격리 측 어느 쪽 사용자도 수정할 수 없는 root 소유 위치에 복사해 사용한다.
+
+launchd에는 unit 간 의존 관계가 없으므로, 격리 측 config의 `enclave.egress_probe`에 차단되어야 할 대상(`HOST:PORT` 목록)을 지정한다. 시작 시 실행되는 가드는 각 대상에 TCP 접속을 시도하고, 접속에 성공하면 시작을 거부한다. 외부 대상 외에도 본체 측 API 같은 loopback 대상을 포함하면 loopback 제한이 해제된 경우도 감지할 수 있다. 제한이 불러와지기 전에 시작하더라도 제한이 없으면 작동하지 않는다. Linux에서도 같은 설정을 사용할 수 있다.
+
 ## 본체 측 연결 설정
 
-본체 측의 `config.json`에 연결 대상을 등록한다. `allowed_animas`은 `enclave_ask`를 호출할 수 있는 본체 측 anima의 allow-list다. 빈 목록이면 아무도 허용되지 않는다.
+본체 측 `config.json`에 연결 대상을 등록한다. `allowed_animas`은 `enclave_ask`를 호출할 수 있는 본체 측 anima의 허용 목록이다. 목록이 비어 있으면 아무도 허용하지 않는다.
 
-`allowed_animas`는 애플리케이션 계층의 제한이다. OS 경계는 소켓의 그룹 권한(0660)과 gateway가 `SO_PEERCRED`에서 확인하는 연결 원본 uid(`allowed_peer_uids`)로 정해지며, 같은 uid의 프로세스는 모두 소켓에 연결할 수 있다. 본체 측에서 소켓 그룹에 추가하는 사용자는 최소한으로 제한한다.
+`allowed_animas`은 애플리케이션 계층의 제한이다. OS 경계는 소켓의 그룹 권한(0660)과 gateway가 `SO_PEERCRED`(macOS에서는 `LOCAL_PEERCRED`)로 확인하는 연결 시작 uid(`allowed_peer_uids`)로 구성된다. 같은 uid의 프로세스라면 어느 것이든 소켓에 연결할 수 있다. 본체 측에서 소켓 그룹에 포함하는 사용자는 최소한으로 제한한다.
 
 ```json
 {
