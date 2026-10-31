@@ -7,6 +7,8 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-01
+
 ### Breaking change
 
 - Anima workspace files now use the OpenClaw/Hermes standard names `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `HEARTBEAT.md`, and `BOOTSTRAP.md`. The startup migration automatically converts legacy `identity.md`, `injection.md`, `heartbeat.md`, and `bootstrap.md` before anima discovery; it splits the old identity into `IDENTITY.md` and `SOUL.md`, rewrites old-name references, and archives the originals with a manifest under `archive/standard_files_migration/`. The old names are no longer read after migration. Before starting an older AnimaWorks version, run `animaworks migrate --rollback-standard-files [--anima NAME]` (add `--dry-run` to preview). Rollback restores the archived files byte-for-byte and removes the migration marker; if a new file was edited after migration, the edited copy is preserved under `rolled_back_new/` and a warning is shown.
@@ -15,6 +17,16 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `animaworks anima export NAME --format openclaw|hermes --out DIR` exports an Anima in the corresponding workspace format, redacts credentials, and records exported and omitted files in `ANIMAWORKS_EXPORT.md`.
 - OpenClaw and Hermes imports now reflect same-name `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, and `HEARTBEAT.md` directly when the target does not exist, falling back to a draft unless `--replace` is given.
+- The isolated enclave runs on macOS (launchd + pf), including pf loopback handling and the CLI server port.
+
+### Fixed
+
+- Slack thread replies are routed back to the Anima that posted the parent message, and remembering posts accepts `SlackResponse` objects.
+- Codex no longer auto-loads the Anima's own `AGENTS.md` on top of the system prompt (task worktrees still read the repository `AGENTS.md`); Cursor gets `/AGENTS.md` in `.cursorignore` for the same reason.
+
+### Changed
+
+- Slack notification icons use the current anime-style faces.
 
 ## [0.16.0] - 2026-10-30
 
@@ -2130,7 +2142,8 @@ memory, and decision-making criteria.
 - Moved model mode patterns from config.json to models.json
 - Tool permissions changed from whitelist to default-allow (blacklist) model
 
-[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/xuiltul/animaworks/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/xuiltul/animaworks/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/xuiltul/animaworks/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/xuiltul/animaworks/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/xuiltul/animaworks/compare/v0.13.0...v0.14.0
