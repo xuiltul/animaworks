@@ -101,6 +101,12 @@ def split_legacy_identity(text: str) -> tuple[str, str]:
 
     lines = text.splitlines(keepends=True)
     title_index = next((index for index, line in enumerate(lines) if line.lstrip().startswith("# ")), None)
+    if title_index:
+        header = "".join(lines[:title_index])
+        if header.strip():
+            # Keep anything above the title (e.g. YAML front matter) at the top of IDENTITY.md.
+            identity, soul = split_legacy_identity("".join(lines[title_index:]))
+            return header + identity, soul
     title_line = lines[title_index] if title_index is not None else ""
     body_start = title_index + 1 if title_index is not None else 0
     h2_indices = _h2_indices(lines)

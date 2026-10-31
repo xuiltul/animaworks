@@ -175,3 +175,13 @@ def test_split_adds_blank_line_between_title_and_first_profile_section() -> None
     assert identity.startswith("# Identity: Alice\n\n## Profile")
     assert "## Profile" in identity
     assert soul.startswith("# Soul: Alice\n\n## Personality")
+
+
+def test_split_legacy_identity_keeps_front_matter_in_identity() -> None:
+    from core.anima.workspace_files import split_legacy_identity
+
+    text = "---\nrole: manager\n---\n\n# Identity: rin\n\n## 基本プロフィール\n\n名前\n\n## 性格\n\n明るい\n"
+    identity, soul = split_legacy_identity(text)
+    assert identity.startswith("---\nrole: manager\n---\n\n# Identity: rin\n")
+    assert "名前" in identity and "明るい" in soul
+    assert "role: manager" not in soul
