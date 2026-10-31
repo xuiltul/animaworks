@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -14,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.schemas import (
     DEFAULT_CONSOLIDATION_MODEL,
     AnimaWorksConfig,

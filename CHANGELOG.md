@@ -7,6 +7,15 @@ adhering to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Breaking change
+
+- Anima workspace files now use the OpenClaw/Hermes standard names `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `HEARTBEAT.md`, and `BOOTSTRAP.md`. The startup migration automatically converts legacy `identity.md`, `injection.md`, `heartbeat.md`, and `bootstrap.md` before anima discovery; it splits the old identity into `IDENTITY.md` and `SOUL.md`, rewrites old-name references, and archives the originals with a manifest under `archive/standard_files_migration/`. The old names are no longer read after migration. Before starting an older AnimaWorks version, run `animaworks migrate --rollback-standard-files [--anima NAME]` (add `--dry-run` to preview). Rollback restores the archived files byte-for-byte and removes the migration marker; if a new file was edited after migration, the edited copy is preserved under `rolled_back_new/` and a warning is shown.
+
+### Added
+
+- `animaworks anima export NAME --format openclaw|hermes --out DIR` exports an Anima in the corresponding workspace format, redacts credentials, and records exported and omitted files in `ANIMAWORKS_EXPORT.md`.
+- OpenClaw and Hermes imports now reflect same-name `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, and `HEARTBEAT.md` directly when the target does not exist, falling back to a draft unless `--replace` is given.
+
 ## [0.16.0] - 2026-10-30
 
 ### Upgrade notes

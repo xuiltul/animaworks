@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -15,6 +13,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.file_access_policy import find_denied_root, load_denied_roots
 from core.config.models import read_anima_company
 from core.paths import get_data_dir, load_prompt, load_prompt_text

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -11,6 +9,12 @@ from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    SOUL_FILE,
+)
 from core.time_utils import now_iso
 
 from ._common import (
@@ -66,8 +70,10 @@ def import_openclaw(options: OpenClawImportOptions) -> MigrationReport:
             backup_path,
             data_dir=options.data_dir,
             targets=[
+                _anima_dir(options) / SOUL_FILE,
                 _anima_dir(options) / IDENTITY_FILE,
                 _anima_dir(options) / AGENTS_FILE,
+                _anima_dir(options) / HEARTBEAT_FILE,
                 _anima_dir(options) / "permissions.md",
                 _anima_dir(options) / "permissions.json",
                 migration_dir / "drafts",
@@ -78,7 +84,7 @@ def import_openclaw(options: OpenClawImportOptions) -> MigrationReport:
         )
         report.backup_manifest_path = rel_to(backup_path, options.data_dir)
 
-    _draft_soul(source, options, report, import_lock_path, seen)
+    _import_workspace_files(source, options, report, import_lock_path, seen)
     _draft_permissions(source, options, report, import_lock_path, seen)
     _draft_memory(source, options, report, import_lock_path, seen)
     _propose_tasks(source, options, report, import_lock_path, seen)
@@ -90,24 +96,63 @@ def import_openclaw(options: OpenClawImportOptions) -> MigrationReport:
     return report
 
 
-def _draft_soul(
+def _import_workspace_files(
     source: Path,
     options: OpenClawImportOptions,
     report: MigrationReport,
     import_lock_path: Path,
     seen: set[str],
 ) -> None:
-    soul = source / "SOUL.md"
-    if not soul.is_file():
-        return
-    body = (
-        provenance_header("openclaw", soul, report.batch_id)
-        + "# OpenClaw Identity / Injection Draft\n\n"
-        + "This draft is not applied to IDENTITY.md, SOUL.md, or AGENTS.md automatically.\n\n"
-        + redact_credentials(soul.read_text(encoding="utf-8"))
+    """Reflect OpenClaw workspace files into AnimaWorks standard names.
+
+    A source file is written directly when the target does not exist (or
+    ``--replace`` is given). Otherwise it becomes a draft so an existing
+    AnimaWorks file is never silently overwritten.
+    """
+    imports = (
+        (SOUL_FILE, "identity_injection_draft", "identity_injection_draft"),
+        (IDENTITY_FILE, "identity_import", "identity_import_draft"),
+        (AGENTS_FILE, "agents_import", "agents_import_draft"),
+        (HEARTBEAT_FILE, "heartbeat_import", "heartbeat_import_draft"),
     )
-    target = _migration_dir(options) / "drafts" / "openclaw_SOUL_identity_injection_draft.md"
-    _write_item(soul, target, body, "identity_injection_draft", options, report, import_lock_path, seen)
+    anima_dir = _anima_dir(options)
+    draft_dir = _migration_dir(options) / "drafts"
+    for source_name, action, draft_suffix in imports:
+        source_path = source / source_name
+        if not source_path.is_file():
+            continue
+        text = redact_credentials(source_path.read_text(encoding="utf-8"))
+        target = anima_dir / source_name
+        if target.exists() and not options.replace:
+            body = (
+                provenance_header("openclaw", source_path, report.batch_id)
+                + f"# OpenClaw {source_name} Draft\n\n"
+                + f"{target.name} already exists; review this draft and merge it manually if desired.\n\n"
+                + text
+            )
+            target = draft_dir / f"openclaw_{source_name.removesuffix('.md')}_{draft_suffix}.md"
+            _write_item(
+                source_path,
+                target,
+                body,
+                action,
+                options,
+                report,
+                import_lock_path,
+                seen,
+            )
+        else:
+            _write_item(
+                source_path,
+                target,
+                text,
+                action,
+                options,
+                report,
+                import_lock_path,
+                seen,
+                manual_action="",
+            )
 
 
 def _draft_permissions(
@@ -182,6 +227,8 @@ def _write_item(
     report: MigrationReport,
     import_lock_path: Path,
     seen: set[str],
+    *,
+    manual_action: str = "review draft and apply manually if desired",
 ) -> None:
     target_path = rel_to(target, options.data_dir)
     fp = source_fingerprint(f"openclaw_{action}", source_path, target_path)
@@ -209,7 +256,7 @@ def _write_item(
             action,
             status,
             fp,
-            manual_action="review draft and apply manually if desired",
+            manual_action=manual_action,
         )
     )
 

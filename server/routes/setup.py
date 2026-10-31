@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -19,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.platform.claude_code import get_claude_auth_status
 from core.platform.codex import (
     get_codex_device_login,

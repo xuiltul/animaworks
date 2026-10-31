@@ -633,7 +633,7 @@
 | `heartbeat.interval_minutes` | `int` | `30` | — |
 | `heartbeat.current_state_max_chars` | `int` | `8000` | Max chars for current_state.md before trim; 0 = disabled |
 | `heartbeat.current_state_cleanup_chars` | `int` | `2000` | Soft cleanup threshold for current_state.md; 0 = 80% of current_state_max_chars |
-| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of heartbeat.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
+| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of HEARTBEAT.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
 | `heartbeat.recent_dialogue_max_age_hours` | `int` | `6` | Include recent chat dialogue in heartbeat context only when the last turn is younger than this many hours; 0 = always include |
 | `heartbeat.soft_timeout_seconds` | `int` | `300` | Seconds before injecting a wrap-up system-reminder into the HB session |
 | `heartbeat.hard_timeout_seconds` | `int` | `0` | Seconds before forcefully terminating the HB session; 0 = disabled |

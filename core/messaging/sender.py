@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -9,6 +7,8 @@ from core.anima.workspace_files import IDENTITY_FILE
 """Helpers for identifying message senders across CLI and core workflows."""
 
 import logging
+
+from core.anima.workspace_files import IDENTITY_FILE
 
 logger = logging.getLogger("animaworks")
 

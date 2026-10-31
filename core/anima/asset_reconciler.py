@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -22,6 +20,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.exceptions import AnimaWorksError  # noqa: F401
 from core.i18n import t
 from core.paths import load_prompt

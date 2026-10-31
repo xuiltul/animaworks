@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -23,6 +21,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
 from core.execution.base import ExecutionResult, ToolCallRecord, _truncate_for_record, join_answer_parts
 from core.execution.cli_stream import CLIStreamExecutor
 from core.execution.engine_base import GRACEFUL_KILL_WAIT_SECONDS, engine_error_event

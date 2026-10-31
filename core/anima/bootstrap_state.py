@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import AGENTS_FILE, BOOTSTRAP_FILE, IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -13,6 +11,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE, BOOTSTRAP_FILE, IDENTITY_FILE
 from core.platform.atomic_io import atomic_write_json
 from core.platform.state_writer import get_state_writer, run_writer_sync
 from core.time_utils import now_iso, now_local

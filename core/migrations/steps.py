@@ -9,16 +9,28 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from core.anima.workspace_files import AGENTS_FILE
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    BOOTSTRAP_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+    split_legacy_identity,
+)
 from core.migrations.registry import MigrationStep, StepResult
+from core.platform.atomic_io import atomic_write_json
 from core.platform.status_store import update_status
 
 logger = logging.getLogger(__name__)
@@ -28,11 +40,28 @@ logger = logging.getLogger(__name__)
 
 
 def _iter_anima_dirs(data_dir: Path) -> list[Path]:
-    """Return anima directories that have identity.md."""
+    """Return anima directories with a legacy or standard identity file.
+
+    Names are compared exactly against ``os.listdir`` entries so that the
+    check works both before (``identity.md``) and after (``IDENTITY.md``) the
+    standard workspace-file migration, including on case-insensitive
+    filesystems where ``Path.exists()`` cannot tell the two names apart.
+    """
     animas_dir = data_dir / "animas"
     if not animas_dir.exists():
         return []
-    return [d for d in sorted(animas_dir.iterdir()) if d.is_dir() and (d / "identity.md").exists()]
+    anima_dirs: list[Path] = []
+    for candidate in sorted(animas_dir.iterdir()):
+        if not candidate.is_dir():
+            continue
+        try:
+            names = set(os.listdir(candidate))
+        except OSError:
+            logger.warning("Could not list anima directory: %s", candidate)
+            continue
+        if LEGACY_IDENTITY in names or IDENTITY_FILE in names:
+            anima_dirs.append(candidate)
+    return anima_dirs
 
 
 def _persist_config(config_path: Path, payload: dict[str, Any]) -> None:
@@ -1166,6 +1195,232 @@ def step_memory_config_dead_keys_20260927(data_dir: Path, dry_run: bool, verbose
         return StepResult(changed=0, skipped=0, details=[], error=str(exc))
 
 
+# ── Standard workspace file migration (A2) ─────────────────────
+
+STANDARD_WORKSPACE_FILES_STEP_ID = "standard_workspace_files_20261031"
+_STANDARD_ARCHIVE_DIRNAME = "standard_files_migration"
+_STANDARD_LEGACY_FILES = (LEGACY_IDENTITY, *LEGACY_RENAMES.keys())
+_STANDARD_REWRITE_DIRS = ("knowledge", "procedures", "skills")
+_STANDARD_REWRITE_ROOT_FILES = (AGENTS_FILE, HEARTBEAT_FILE, "cron.md", "specialty_prompt.md")
+_STANDARD_REF_RE = re.compile(r"(?<![A-Za-z0-9_./-])(identity|injection|heartbeat|bootstrap)\.md(?![A-Za-z0-9_])")
+_STANDARD_REF_REPLACEMENTS = {
+    LEGACY_IDENTITY: f"{SOUL_FILE}/{IDENTITY_FILE}",
+    "injection.md": AGENTS_FILE,
+    "heartbeat.md": HEARTBEAT_FILE,
+    "bootstrap.md": BOOTSTRAP_FILE,
+}
+
+
+def _standard_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _standard_timestamp() -> str:
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _standard_archive_dir(anima_dir: Path) -> Path:
+    base = anima_dir / "archive" / _STANDARD_ARCHIVE_DIRNAME
+    stamp = _standard_timestamp()
+    candidate = base / stamp
+    if not candidate.exists():
+        return candidate
+    suffix = 2
+    while True:
+        candidate = base / f"{stamp}-{suffix}"
+        if not candidate.exists():
+            return candidate
+        suffix += 1
+
+
+def _standard_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _standard_ref_replacement(match: re.Match[str]) -> str:
+    old_name = f"{match.group(1)}.md"
+    return _STANDARD_REF_REPLACEMENTS.get(old_name, old_name)
+
+
+def _standard_rewrite_targets(anima_dir: Path) -> list[Path]:
+    targets: list[Path] = []
+    for dirname in _STANDARD_REWRITE_DIRS:
+        root = anima_dir / dirname
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*.md")):
+            if path.is_file() and ".bak" not in path.name:
+                targets.append(path)
+    for name in _STANDARD_REWRITE_ROOT_FILES:
+        path = anima_dir / name
+        if path.is_file() and ".bak" not in path.name:
+            targets.append(path)
+    return targets
+
+
+def _standard_rewrite_references(
+    anima_dir: Path,
+    archive_dir: Path,
+    *,
+    dry_run: bool,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Rewrite legacy workspace-file references in prose, preserving originals."""
+    rewritten: list[dict[str, str]] = []
+    details: list[str] = []
+    for path in _standard_rewrite_targets(anima_dir):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        updated = _STANDARD_REF_RE.sub(_standard_ref_replacement, text)
+        if updated == text:
+            continue
+        rel = str(path.relative_to(anima_dir)).replace(os.sep, "/")
+        if dry_run:
+            details.append(f"{anima_dir.name}: would rewrite {rel}")
+            rewritten.append({"path": rel, "sha256": _standard_sha256(path)})
+            continue
+        backup = archive_dir / "rewritten" / rel
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, backup)
+        _standard_write_text(path, updated)
+        rewritten.append({"path": rel, "sha256": _standard_sha256(backup)})
+        details.append(f"{anima_dir.name}: rewrote {rel}")
+    return rewritten, details
+
+
+def step_standard_workspace_files_20261031(data_dir: Path, dry_run: bool, verbose: bool) -> StepResult:
+    """Rename legacy anima workspace files to the OpenClaw/Hermes names."""
+    del verbose
+    details: list[str] = []
+    changed = 0
+    try:
+        from core.migrations.tracker import MigrationTracker
+
+        version = MigrationTracker(data_dir).get_current_version()
+        for anima_dir in _iter_anima_dirs(data_dir):
+            try:
+                names = set(os.listdir(anima_dir))
+            except OSError as exc:
+                details.append(f"{anima_dir.name}: skipped (could not list: {exc})")
+                continue
+            present = [old for old in _STANDARD_LEGACY_FILES if old in names]
+            if not present:
+                continue
+
+            archive_dir = _standard_archive_dir(anima_dir)
+            archive_rel = str(archive_dir.relative_to(anima_dir)).replace(os.sep, "/")
+            if dry_run:
+                for old in present:
+                    targets = [IDENTITY_FILE, SOUL_FILE] if old == LEGACY_IDENTITY else [LEGACY_RENAMES[old]]
+                    for target in targets:
+                        if target in names:
+                            details.append(f"{anima_dir.name}: would keep {target} and archive conflicting {old}")
+                        else:
+                            details.append(f"{anima_dir.name}: would rename {old} -> {target}")
+                rewritten, rewrite_details = _standard_rewrite_references(anima_dir, archive_dir, dry_run=True)
+                details.extend(rewrite_details)
+                details.append(f"{anima_dir.name}: would archive originals under {archive_rel}")
+                changed += len(present) + len(rewritten)
+                continue
+
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            source_sha256: dict[str, str] = {}
+            for old in present:
+                source = anima_dir / old
+                source_sha256[old] = _standard_sha256(source)
+                shutil.copy2(source, archive_dir / old)
+
+            manifest: dict[str, Any] = {
+                "schema": 1,
+                "step_id": STANDARD_WORKSPACE_FILES_STEP_ID,
+                "anima": anima_dir.name,
+                "executed_at": datetime.now(UTC).isoformat(),
+                "timestamp": archive_dir.name,
+                "version": version,
+                "legacy_to_standard": {
+                    old: [IDENTITY_FILE, SOUL_FILE] if old == LEGACY_IDENTITY else [LEGACY_RENAMES[old]]
+                    for old in present
+                },
+                "old_files": present,
+                "source_sha256": source_sha256,
+                "new_files": [],
+                "new_sha256": {},
+                "rewritten": [],
+                "collisions": [],
+            }
+
+            if LEGACY_IDENTITY in names:
+                source_path = anima_dir / LEGACY_IDENTITY
+                identity_text, soul_text = split_legacy_identity(source_path.read_text(encoding="utf-8"))
+                # Unlink before writing: on a case-insensitive filesystem,
+                # writing IDENTITY.md first can remove identity.md.
+                source_path.unlink()
+                for target, content in ((IDENTITY_FILE, identity_text), (SOUL_FILE, soul_text)):
+                    if target in names:
+                        manifest["collisions"].append({"source": LEGACY_IDENTITY, "existing": target})
+                        details.append(
+                            f"{anima_dir.name}: kept existing {target}; archived conflicting {LEGACY_IDENTITY}"
+                        )
+                        changed += 1
+                        continue
+                    _standard_write_text(anima_dir / target, content)
+                    names.add(target)
+                    manifest["new_files"].append(target)
+                    details.append(f"{anima_dir.name}: created {target} from {LEGACY_IDENTITY}")
+                    changed += 1
+
+            for old, target in LEGACY_RENAMES.items():
+                if old not in names:
+                    continue
+                source_path = anima_dir / old
+                if target in names:
+                    manifest["collisions"].append({"source": old, "existing": target})
+                    source_path.unlink()
+                    details.append(f"{anima_dir.name}: kept existing {target}; archived conflicting {old}")
+                    changed += 1
+                    continue
+                tmp_path = anima_dir / f".{old}.standard-migration.tmp"
+                source_path.rename(tmp_path)
+                tmp_path.rename(anima_dir / target)
+                names.add(target)
+                manifest["new_files"].append(target)
+                details.append(f"{anima_dir.name}: renamed {old} -> {target}")
+                changed += 1
+
+            rewritten, rewrite_details = _standard_rewrite_references(anima_dir, archive_dir, dry_run=False)
+            manifest["rewritten"] = rewritten
+            details.extend(rewrite_details)
+            changed += len(rewritten)
+
+            manifest["new_files"] = sorted(set(manifest["new_files"]))
+            manifest["new_sha256"] = {
+                name: _standard_sha256(anima_dir / name)
+                for name in manifest["new_files"]
+                if (anima_dir / name).is_file()
+            }
+            atomic_write_json(
+                archive_dir / "manifest.json",
+                manifest,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            details.append(f"{anima_dir.name}: archived originals under {archive_rel}")
+
+        if not details:
+            details.append("No legacy workspace files found")
+        return StepResult(changed=changed, skipped=0, details=details)
+    except Exception as exc:
+        logger.exception("step_standard_workspace_files_20261031 failed")
+        return StepResult(changed=changed, skipped=0, details=details, error=str(exc))
+
+
 def register_all_steps(runner: Any) -> None:
     """Register all migration steps in execution order."""
     from core.migrations.template_sync import template_fingerprint
@@ -1294,6 +1549,12 @@ def register_all_steps(runner: Any) -> None:
             "Drop consolidation.duplicate_threshold and rag.enable_file_watcher",
             "structural",
             step_memory_config_dead_keys_20260927,
+        ),
+        MigrationStep(
+            STANDARD_WORKSPACE_FILES_STEP_ID,
+            "Rename legacy workspace files to SOUL/IDENTITY/AGENTS/HEARTBEAT/BOOTSTRAP",
+            "per_anima",
+            step_standard_workspace_files_20261031,
         ),
         MigrationStep("update_version", "Update migration_state.json", "version", step_update_version),
     ]

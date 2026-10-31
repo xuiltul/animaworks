@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/architecture/prompt.md -->
-<!-- i18n: source-sha256=87c388a389b02d102bc322504f639598ced27b0c348ed22fafb70fde9f3e49a6 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=4efd5e6044c341500cee440726a5e0ae86fc499c7ff7c73f6109d91d97138208 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: b304b7dc
 
@@ -11,7 +11,7 @@
 
 builder는 6개의 논리 그룹을 만든다. 조립 순서는 그룹 1, 2, 4, 5, 6, 마지막으로 동적인 그룹 3이다.
 
-1. **환경과 행동 규칙** — runtime 정보, workspace, Anima의 identity, `injection.md`, behavior rules.
+1. **환경과 행동 규칙** — runtime 정보, workspace, Anima의 `IDENTITY.md` / `SOUL.md`, `AGENTS.md`, behavior rules.
 2. **Anima 자신의 정보** — bootstrap 상태, 회사의 vision, speciality, permissions.
 3. **기억과 능력** — memory guide, trigger / mode에 맞춘 tool guide, 사용 가능한 외부 tool, active skill context, skill catalog.
 4. **조직과 커뮤니케이션** — 조직 관계, 내부 메시지, 인간에게 알리는 방법.
@@ -30,7 +30,7 @@ tool guide는 heartbeat, MCP를 사용하는 engine, 그 외의 engine에 따라
 
 assembler는 section의 우선순위를 바탕으로 예산을 배분하고, elastic section은 Markdown의 문단 단위로 줄인다. 개별 문단을 중간에 끊지 않고, hard ceiling을 초과하는 경우 우선순위가 낮은 rigid section도 제외한다. 기본 일반 target은 6,000 token, 상한은 context window의 35%이며, 설정으로 변경할 수 있다.
 
-`injection.md`의 크기 경고는 consolidation 중에만, 설정된 문자 수 threshold를 초과한 경우에 추가된다. 스킬 catalog에도 건수 상한이 있다. 전체·개별 설정 목록은 [설정 참조](../reference/config.md)를 참조한다.
+`AGENTS.md`의 크기 경고는 consolidation 중에만, 설정된 문자 수 threshold를 초과한 경우에 추가된다. 스킬 catalog에도 건수 상한이 있다. 전체·개별 설정 목록은 [설정 참조](../reference/config.md)를 참조한다.
 
 ## template 해결
 

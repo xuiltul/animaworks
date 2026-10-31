@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=bd0a14e31345d4f51bb84160a1ec1ee5bebc42cd82f2e4018fd535165680ea5b generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=b8cef694687b6b9f6fd65eef5c84ccf2fc7432f6c80768fb4873348cda5c2688 generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API 참조
 
@@ -41,9 +41,9 @@ FastAPI의 OpenAPI 정의, WebSocket, `server/app.py` 직접 작성 라우트에
 | GET | `/api/animas/{name}/cron` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 원시 cron.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_cron` |
 | POST | `/api/animas/{name}/disable` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 비활성화합니다(status.json을 enabled: false로 설정하고 프로세스를 중지). | `server/routes/animas.py:disable_anima` |
 | POST | `/api/animas/{name}/enable` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima를 활성화합니다(status.json을 enabled: true로 설정). | `server/routes/animas.py:enable_anima` |
-| GET | `/api/animas/{name}/heartbeat` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 원시 heartbeat.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_heartbeat` |
-| PUT | `/api/animas/{name}/identity` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 identity.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_identity` |
-| PUT | `/api/animas/{name}/injection` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 injection.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_injection` |
+| GET | `/api/animas/{name}/heartbeat` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 원시 HEARTBEAT.md 콘텐츠를 반환합니다. | `server/routes/animas.py:get_anima_heartbeat` |
+| PUT | `/api/animas/{name}/identity` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 IDENTITY.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_identity` |
+| PUT | `/api/animas/{name}/injection` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 AGENTS.md 콘텐츠를 업데이트합니다. | `server/routes/animas.py:update_anima_injection` |
 | POST | `/api/animas/{name}/interactions/{callback_id}/resolve` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 메인 채팅 UI의 대화형 call_human 요청을 처리합니다. | `server/routes/animas.py:resolve_interaction` |
 | POST | `/api/animas/{name}/interrupt` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 프로세스를 중지하지 않고 현재 LLM 세션을 중단합니다. | `server/routes/animas.py:interrupt_anima` |
 | PUT | `/api/animas/{name}/model` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Anima의 status.json에서 모델 설정을 업데이트합니다. | `server/routes/animas.py:update_anima_model` |

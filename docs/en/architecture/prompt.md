@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/architecture/prompt.md -->
-<!-- i18n: source-sha256=87c388a389b02d102bc322504f639598ced27b0c348ed22fafb70fde9f3e49a6 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=4efd5e6044c341500cee440726a5e0ae86fc499c7ff7c73f6109d91d97138208 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
 
 > Confirmed commit: b304b7dc
 
@@ -11,7 +11,7 @@
 
 The builder creates six logical groups. The assembly order is groups 1, 2, 4, 5, 6, and finally the dynamic group 3.
 
-1. **Environment and behavior rules** — runtime information, workspace, Anima's identity, `injection.md`, behavior rules.
+1. **Environment and behavior rules** — runtime information, workspace, Anima's `IDENTITY.md` / `SOUL.md`, `AGENTS.md`, behavior rules.
 2. **Anima's own information** — bootstrap status, company vision, speciality, permissions.
 3. **Memory and capabilities** — memory guide, tool guide tailored to trigger / mode, available external tools, active skill context, skill catalog.
 4. **Organization and communication** — organizational relationships, internal messages, notification methods for humans.
@@ -30,7 +30,7 @@ The tool guide switches depending on heartbeat, engines using MCP, and other eng
 
 The assembler allocates budget based on section priority, and elastic sections are trimmed at the Markdown paragraph level. Individual paragraphs are not cut mid-way; if the hard ceiling is exceeded, lower-priority rigid sections are also removed. The default normal target is 6,000 tokens, with a cap of 35% of the context window, adjustable via configuration.
 
-The `injection.md` size warning is added only during consolidation, when the configured character threshold is exceeded. The skill catalog also has a count limit. See the [configuration reference](../reference/config.md) for the full list of global and individual settings.
+The `AGENTS.md` size warning is added only during consolidation, when the configured character threshold is exceeded. The skill catalog also has a count limit. See the [configuration reference](../reference/config.md) for the full list of global and individual settings.
 
 ## Template resolution
 

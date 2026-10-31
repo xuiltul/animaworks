@@ -48,6 +48,39 @@ def test_openclaw_apply_writes_only_drafts_redacts_credentials_and_preserves_ide
     assert report.backup_manifest_path is not None
 
 
+def test_openclaw_imports_standard_workspace_files_by_name(tmp_path: Path) -> None:
+    source = tmp_path / ".openclaw"
+    source.mkdir()
+    files = {
+        "SOUL.md": "soul body",
+        "IDENTITY.md": "identity body",
+        "AGENTS.md": "agents body",
+        "HEARTBEAT.md": "heartbeat body",
+    }
+    for name, text in files.items():
+        (source / name).write_text(text, encoding="utf-8")
+    data_dir = tmp_path / "runtime"
+    anima_dir = data_dir / "animas" / "mei"
+    anima_dir.mkdir(parents=True)
+
+    report = import_openclaw(OpenClawImportOptions(source_path=source, data_dir=data_dir, target_anima="mei", apply=True))
+
+    assert report.summary == {"applied": 4}
+    for name, text in files.items():
+        assert (anima_dir / name).read_text(encoding="utf-8") == text
+    assert not (anima_dir / "state" / "migrations" / "drafts").exists()
+    backup = Path(report.backup_manifest_path)
+    assert backup.is_absolute() is False
+    assert (data_dir / backup).is_file()
+
+    (source / "SOUL.md").write_text("replaced soul", encoding="utf-8")
+    replaced = import_openclaw(
+        OpenClawImportOptions(source_path=source, data_dir=data_dir, target_anima="mei", apply=True, replace=True)
+    )
+    assert replaced.summary["applied"] == 4
+    assert (anima_dir / "SOUL.md").read_text(encoding="utf-8") == "replaced soul"
+
+
 def test_openclaw_cli_outputs_markdown_dry_run(tmp_path: Path, monkeypatch, capsys) -> None:
     data_dir = tmp_path / "runtime"
     source = tmp_path / ".openclaw"

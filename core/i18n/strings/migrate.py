@@ -96,4 +96,29 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "マイグレーションステップ一覧:",
         "en": "Migration steps:",
     },
+    "migrate.rollback_dry_run_header": {
+        "ja": "=== 標準ワークスペースファイルのロールバック（ドライラン） ===",
+        "en": "=== Standard workspace-file rollback (dry run) ===",
+        "ko": "=== 표준 워크스페이스 파일 롤백 (드라이런) ===",
+    },
+    "migrate.rollback_no_archives": {
+        "ja": "標準ワークスペースファイルのロールバック元が見つかりません: {anima}",
+        "en": "No standard workspace-file archive found to roll back: {anima}",
+        "ko": "롤백할 표준 워크스페이스 파일 아카이브를 찾을 수 없습니다: {anima}",
+    },
+    "migrate.rollback_complete": {
+        "ja": "ロールバック完了: {animas} 体, {restored} ファイル復元, {moved} 新ファイルを退避",
+        "en": "Rollback complete: {animas} anima(s), {restored} file(s) restored, {moved} new file(s) moved aside",
+        "ko": "롤백 완료: {animas}개 애니마, {restored}개 파일 복원, {moved}개 새 파일 이동",
+    },
+    "migrate.rollback_state_removed": {
+        "ja": "migration_state.json から標準ワークスペースファイル移行の適用記録を削除しました。",
+        "en": "Removed the standard workspace-file migration entry from migration_state.json.",
+        "ko": "migration_state.json에서 표준 워크스페이스 파일 마이그레이션 항목을 제거했습니다.",
+    },
+    "migrate.rollback_old_version_note": {
+        "ja": "旧バージョンのサーバーを起動する前に、必ずこのロールバックを実行してください。新ファイルは archive/standard_files_migration/<timestamp>/rolled_back_new/ に保存されています。",
+        "en": "Run this rollback before starting an older version of the server. New files are preserved under archive/standard_files_migration/<timestamp>/rolled_back_new/.",
+        "ko": "이전 버전 서버를 시작하기 전에 반드시 이 롤백을 실행하세요. 새 파일은 archive/standard_files_migration/<timestamp>/rolled_back_new/에 보관됩니다.",
+    },
 }

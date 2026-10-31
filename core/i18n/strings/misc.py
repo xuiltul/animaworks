@@ -524,4 +524,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "[ask_anima job {job}: 30分以内に完了を確認できませんでした。依頼: {request}]",
         "en": "[ask_anima job {job}: still running after 30 minutes. Request: {request}]",
     },
+    "cli.export_help": {
+        "ja": "Anima のワークスペースを OpenClaw / Hermes Agent 形式で書き出す",
+        "en": "Export an Anima workspace in OpenClaw or Hermes Agent format",
+        "ko": "Anima 워크스페이스를 OpenClaw / Hermes Agent 형식으로 내보내기",
+    },
+    "cli.export_complete": {
+        "ja": "{anima} を {format} 形式で書き出しました: {out} ({count} ファイル)",
+        "en": "Exported {anima} in {format} format: {out} ({count} files)",
+        "ko": "{anima}를 {format} 형식으로 내보냈습니다: {out} ({count}개 파일)",
+    },
+    "cli.export_failed": {
+        "ja": "エクスポートに失敗しました: {error}",
+        "en": "Export failed: {error}",
+        "ko": "내보내기 실패: {error}",
+    },
 }

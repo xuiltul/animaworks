@@ -1,13 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import (
-    AGENTS_FILE,
-    IDENTITY_FILE,
-    LEGACY_IDENTITY,
-    LEGACY_RENAMES,
-    SOUL_FILE,
-)
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -27,6 +19,13 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
 from core.config.file_access_policy import (
     PROTECTED_FILE_PATHS,
     FileAccessContext,

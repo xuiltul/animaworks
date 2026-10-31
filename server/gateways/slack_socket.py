@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -21,6 +19,7 @@ import threading
 import time
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.models import load_config
 from core.credentials import _lookup_shared_credentials, _lookup_vault_credential, get_credential
 from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError

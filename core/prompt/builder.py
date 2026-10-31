@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE, SOUL_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -27,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+from core.anima.workspace_files import IDENTITY_FILE, SOUL_FILE
 from core.i18n import t
 from core.memory import MemoryManager
 from core.memory.conversation.shortterm import ShortTermMemory

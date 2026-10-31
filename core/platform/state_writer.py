@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import BOOTSTRAP_FILE, HEARTBEAT_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -30,6 +28,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
+from core.anima.workspace_files import BOOTSTRAP_FILE, HEARTBEAT_FILE
 from core.platform.atomic_io import atomic_write_json, atomic_write_text
 from core.platform.process_role import get_process_role_env
 from core.time_utils import now_iso, now_local, today_local

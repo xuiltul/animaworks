@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -14,6 +12,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
 from core.platform.atomic_io import atomic_write_text, update_json
 from core.platform.process_role import assert_settings_write_allowed
 

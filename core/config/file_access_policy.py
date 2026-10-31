@@ -1,15 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import (
-    AGENTS_FILE,
-    BOOTSTRAP_FILE,
-    HEARTBEAT_FILE,
-    IDENTITY_FILE,
-    LEGACY_IDENTITY,
-    LEGACY_RENAMES,
-    SOUL_FILE,
-)
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -21,6 +11,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    BOOTSTRAP_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
 from core.i18n import t
 
 PROTECTED_FILE_PATHS = frozenset(

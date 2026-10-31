@@ -41,9 +41,9 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 | GET | `/api/animas/{name}/cron` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the raw cron.md content for an anima. | `server/routes/animas.py:get_anima_cron` |
 | POST | `/api/animas/{name}/disable` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Disable an Anima (set status.json to enabled: false and stop process). | `server/routes/animas.py:disable_anima` |
 | POST | `/api/animas/{name}/enable` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Enable an Anima (set status.json to enabled: true). | `server/routes/animas.py:enable_anima` |
-| GET | `/api/animas/{name}/heartbeat` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the raw heartbeat.md content for an anima. | `server/routes/animas.py:get_anima_heartbeat` |
-| PUT | `/api/animas/{name}/identity` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update the identity.md content for an anima. | `server/routes/animas.py:update_anima_identity` |
-| PUT | `/api/animas/{name}/injection` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update the injection.md content for an anima. | `server/routes/animas.py:update_anima_injection` |
+| GET | `/api/animas/{name}/heartbeat` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the raw HEARTBEAT.md content for an anima. | `server/routes/animas.py:get_anima_heartbeat` |
+| PUT | `/api/animas/{name}/identity` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update the IDENTITY.md content for an anima. | `server/routes/animas.py:update_anima_identity` |
+| PUT | `/api/animas/{name}/injection` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update the AGENTS.md content for an anima. | `server/routes/animas.py:update_anima_injection` |
 | POST | `/api/animas/{name}/interactions/{callback_id}/resolve` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Resolve an interactive call_human request from the main chat UI. | `server/routes/animas.py:resolve_interaction` |
 | POST | `/api/animas/{name}/interrupt` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Interrupt the current LLM session without stopping the process. | `server/routes/animas.py:interrupt_anima` |
 | PUT | `/api/animas/{name}/model` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update the model setting in status.json for an anima. | `server/routes/animas.py:update_anima_model` |

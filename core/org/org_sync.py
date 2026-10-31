@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import IDENTITY_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -22,6 +20,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.models import (
     AnimaModelConfig,
     read_anima_company,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import AGENTS_FILE, HEARTBEAT_FILE, IDENTITY_FILE, SOUL_FILE
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -27,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE, HEARTBEAT_FILE, IDENTITY_FILE, SOUL_FILE
 from core.execution.engines.claude._sdk_security import (
     _build_output_guard,
     _check_a1_bash_command,

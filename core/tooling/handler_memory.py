@@ -1,17 +1,5 @@
 from __future__ import annotations
 
-from core.anima.workspace_files import (
-    AGENTS_FILE,
-    HEARTBEAT_FILE,
-    IDENTITY_FILE,
-    LEGACY_IDENTITY,
-    LEGACY_RENAMES,
-    SOUL_FILE,
-)
-from core.tooling._handler_protocols import (
-    _MemoryToolsHost,
-)
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -24,10 +12,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
 from core.config.file_access_policy import load_denied_roots, memory_source_is_allowed
 from core.i18n import t
 from core.memory.io import archive_episode_before_write
 from core.memory.retrieval.search_metadata import format_result_metadata_line
+from core.tooling._handler_protocols import (
+    _MemoryToolsHost,
+)
 from core.tooling.handler_base import (
     _error_result,
     _extract_first_heading,
