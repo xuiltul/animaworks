@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=a4c03b52ba2162ec96ab9ad74c98a9a3b673394395ae37a5d248685cf750d89d generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=899fabc1640f66a3492295f8b9a3c7bcbe4f287e14d69f0ca78eebaf2197690a generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -629,11 +629,11 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `heartbeat` | `HeartbeatConfig` | `{HeartbeatConfig}` | Periodic heartbeat execution configuration. |
+| `heartbeat` | `HeartbeatConfig` | `{HeartbeatConfig}` | Configuration for periodic heartbeat execution. |
 | `heartbeat.interval_minutes` | `int` | `30` | — |
 | `heartbeat.current_state_max_chars` | `int` | `8000` | Max chars for current_state.md before trim; 0 = disabled |
 | `heartbeat.current_state_cleanup_chars` | `int` | `2000` | Soft cleanup threshold for current_state.md; 0 = 80% of current_state_max_chars |
-| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of heartbeat.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
+| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of HEARTBEAT.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
 | `heartbeat.recent_dialogue_max_age_hours` | `int` | `6` | Include recent chat dialogue in heartbeat context only when the last turn is younger than this many hours; 0 = always include |
 | `heartbeat.soft_timeout_seconds` | `int` | `300` | Seconds before injecting a wrap-up system-reminder into the HB session |
 | `heartbeat.hard_timeout_seconds` | `int` | `0` | Seconds before forcefully terminating the HB session; 0 = disabled |

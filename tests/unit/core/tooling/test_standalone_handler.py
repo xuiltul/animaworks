@@ -19,7 +19,7 @@ def anima_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     anima_dir = tmp_path / "data" / "animas" / "boss"
     anima_dir.mkdir(parents=True)
     (anima_dir / "status.json").write_text('{"enabled": true}', encoding="utf-8")
-    (anima_dir / "identity.md").write_text("# Boss", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Boss", encoding="utf-8")
     (anima_dir / "notes.md").write_text("standalone-note", encoding="utf-8")
     return anima_dir
 

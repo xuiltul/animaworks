@@ -8,7 +8,7 @@ Tests cover:
 - --supervisor overriding the character sheet's supervisor value
 - Without --supervisor, supervisor is read from the character sheet
 - Reconciliation skipping anima directories without status.json
-- Reconciliation starting anima directories with both identity.md and status.json
+- Reconciliation starting anima directories with both IDENTITY.md and status.json
 """
 
 from __future__ import annotations
@@ -215,16 +215,16 @@ class TestReconciliationStatusGuardE2E:
         self,
         data_dir: Path,
     ):
-        """Anima directory with identity.md but no status.json should be skipped."""
+        """Anima directory with IDENTITY.md but no status.json should be skipped."""
         animas_dir = data_dir / "animas"
         shared_dir = data_dir / "shared"
         run_dir = data_dir / "run"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create an incomplete anima: has identity.md but no status.json
+        # Create an incomplete anima: has IDENTITY.md but no status.json
         incomplete_dir = animas_dir / "incomplete-anima"
         incomplete_dir.mkdir(parents=True, exist_ok=True)
-        (incomplete_dir / "identity.md").write_text("# Incomplete\nStill being created.", encoding="utf-8")
+        (incomplete_dir / "IDENTITY.md").write_text("# Incomplete\nStill being created.", encoding="utf-8")
 
         supervisor = ProcessSupervisor(
             animas_dir=animas_dir,
@@ -245,16 +245,16 @@ class TestReconciliationStatusGuardE2E:
         self,
         data_dir: Path,
     ):
-        """Anima directory with both identity.md and status.json should be started."""
+        """Anima directory with both IDENTITY.md and status.json should be started."""
         animas_dir = data_dir / "animas"
         shared_dir = data_dir / "shared"
         run_dir = data_dir / "run"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create a complete anima: has both identity.md and status.json
+        # Create a complete anima: has both IDENTITY.md and status.json
         complete_dir = animas_dir / "complete-anima"
         complete_dir.mkdir(parents=True, exist_ok=True)
-        (complete_dir / "identity.md").write_text("# Complete\nReady to run.", encoding="utf-8")
+        (complete_dir / "IDENTITY.md").write_text("# Complete\nReady to run.", encoding="utf-8")
         status = {
             "supervisor": "",
             "role": "worker",
@@ -280,5 +280,5 @@ class TestReconciliationStatusGuardE2E:
             # start_anima SHOULD have been called for complete-anima
             started_names = [call.args[0] for call in mock_start.call_args_list]
             assert "complete-anima" in started_names, (
-                "Reconciliation should start anima with both identity.md and status.json"
+                "Reconciliation should start anima with both IDENTITY.md and status.json"
             )

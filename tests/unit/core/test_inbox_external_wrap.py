@@ -19,13 +19,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.anima.inbox import _SOURCE_TO_ORIGIN
+from core.schemas import EXTERNAL_PLATFORM_SOURCES
 from core.trust import (
     ORIGIN_ANIMA,
     ORIGIN_EXTERNAL_PLATFORM,
     ORIGIN_HUMAN,
     ORIGIN_UNKNOWN,
 )
-from core.schemas import EXTERNAL_PLATFORM_SOURCES
 
 
 class TestSourceToOrigin:
@@ -105,9 +105,9 @@ class TestInboxPromptPartsWrap:
         # Reconstruct the same formatting logic used in process_inbox_message
         # by invoking a extracted unit: re-import and simulate the loop.
         from core.anima.inbox import _build_reply_instruction, _truncate_with_thread_ctx
-        from core.trust import wrap_inbox_message
         from core.i18n import t
         from core.paths import load_prompt
+        from core.trust import wrap_inbox_message
 
         lines: list[str] = []
         prefix = f"- {msg.from_person}: "

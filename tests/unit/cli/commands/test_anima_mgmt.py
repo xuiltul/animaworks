@@ -81,7 +81,7 @@ class TestCmdAnimaDelete:
         animas_dir.mkdir()
         anima_dir = animas_dir / name
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (anima_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
         # Create config.json with the anima registered
         config = {
@@ -189,7 +189,7 @@ class TestCmdAnimaDelete:
         # Create a subordinate that references sakura as supervisor
         sub_dir = animas_dir / "kotoha"
         sub_dir.mkdir()
-        (sub_dir / "identity.md").write_text("# Kotoha", encoding="utf-8")
+        (sub_dir / "IDENTITY.md").write_text("# Kotoha", encoding="utf-8")
         (sub_dir / "status.json").write_text(json.dumps({"enabled": True, "supervisor": "sakura"}), encoding="utf-8")
         mock_data_dir.return_value = data_dir
         mock_animas_dir.return_value = animas_dir
@@ -310,7 +310,7 @@ class TestCmdAnimaDisable:
         animas_dir.mkdir()
         anima_dir = animas_dir / "alice"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Alice")
+        (anima_dir / "IDENTITY.md").write_text("# Alice")
         (anima_dir / "status.json").write_text(json.dumps({"enabled": True, "role": "general"}))
         mock_data_dir.return_value = data_dir
         mock_animas_dir.return_value = animas_dir
@@ -357,7 +357,7 @@ class TestCmdAnimaEnable:
         animas_dir.mkdir()
         anima_dir = animas_dir / "alice"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Alice")
+        (anima_dir / "IDENTITY.md").write_text("# Alice")
         (anima_dir / "status.json").write_text(json.dumps({"enabled": False, "role": "general"}))
         mock_data_dir.return_value = data_dir
         mock_animas_dir.return_value = animas_dir
@@ -408,7 +408,7 @@ class TestCmdAnimaList:
         for name, enabled, role in [("alice", True, "engineer"), ("bob", False, "general")]:
             d = animas_dir / name
             d.mkdir()
-            (d / "identity.md").write_text(f"# {name}")
+            (d / "IDENTITY.md").write_text(f"# {name}")
             (d / "status.json").write_text(json.dumps({"enabled": enabled, "role": role}))
 
         mock_data_dir.return_value = data_dir
@@ -477,7 +477,7 @@ def test_enable_disable_gateway_and_offline_paths(
     animas_dir = data_dir / "animas"
     anima_dir = animas_dir / "alice"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
     status_file = anima_dir / "status.json"
     status_file.write_text(json.dumps({"enabled": initial_enabled, "role": "general"}), encoding="utf-8")
     if server_running:

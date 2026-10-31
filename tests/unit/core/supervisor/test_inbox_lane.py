@@ -20,9 +20,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.schemas import Message
 from core.runtime.inbox_rate_limiter import InboxRateLimiter
 from core.runtime.scheduler_manager import SchedulerManager
+from core.schemas import Message
 
 
 def _default_config():

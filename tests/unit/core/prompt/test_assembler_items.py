@@ -13,9 +13,8 @@ def test_empty_group_header_is_not_emitted() -> None:
 
 
 def test_priming_heading_without_recalled_content_is_not_emitted() -> None:
-    from core.prompt.builder import _priming_has_content
-
     from core.i18n import t
+    from core.prompt.builder import _priming_has_content
 
     empty_formatted = f"## {t('priming.section_title')}\n\n{t('priming.section_intro')}\n\n### Pending tasks"
     assert not _priming_has_content(empty_formatted)

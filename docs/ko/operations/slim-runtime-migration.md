@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/operations/slim-runtime-migration.md -->
-<!-- i18n: source-sha256=6efe1c3dda4226990ef09df2a9fb50b937e6ddd8f9b83b0238a10ab3d6ea2bd1 generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=6efe1c3dda4226990ef09df2a9fb50b937e6ddd8f9b83b0238a10ab3d6ea2bd1 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 581e20f1
 

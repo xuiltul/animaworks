@@ -44,7 +44,7 @@ class TestDKPromptInjectionRemoved:
         """DK sections are no longer part of the fixed system prompt."""
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir, data_dir)
         memory.list_knowledge_files.return_value = [anima_dir / "knowledge" / "python-basics.md"]

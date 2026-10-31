@@ -57,10 +57,10 @@ class TestCreateApp:
         animas_dir.mkdir()
         shared_dir = tmp_path / "shared"
 
-        # Create a fake anima directory with identity.md
+        # Create a fake anima directory with IDENTITY.md
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         mock_ws_cls.return_value = MagicMock()
         mock_sup_cls.return_value = MagicMock()
@@ -78,7 +78,7 @@ class TestCreateApp:
         animas_dir.mkdir()
         shared_dir = tmp_path / "shared"
 
-        # Create dir without identity.md
+        # Create dir without IDENTITY.md
         (animas_dir / "invalid").mkdir()
 
         mock_ws_cls.return_value = MagicMock()
@@ -120,13 +120,13 @@ class TestCreateApp:
         # Enabled anima
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
 
         # Disabled anima
         bob_dir = animas_dir / "bob"
         bob_dir.mkdir()
-        (bob_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (bob_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
         (bob_dir / "status.json").write_text(json.dumps({"enabled": False}), encoding="utf-8")
 
         mock_ws_cls.return_value = MagicMock()

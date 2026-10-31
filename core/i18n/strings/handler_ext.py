@@ -334,8 +334,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": ("\n⚠️ {target_name} is currently disabled. Tasks will queue until restart."),
     },
     "handler.subordinate_management": {
-        "ja": "配下のcron.md, heartbeat.md, status.json, injection.md",
-        "en": "Descendant's cron.md, heartbeat.md, status.json, injection.md",
+        "ja": "配下のcron.md, HEARTBEAT.md, status.json, AGENTS.md",
+        "en": "Descendant's cron.md, HEARTBEAT.md, status.json, AGENTS.md",
     },
     "handler.task_add_log": {
         "ja": "タスク追加: {summary}",

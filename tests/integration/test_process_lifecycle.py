@@ -20,7 +20,7 @@ from server.supervisor.process_handle import ProcessState
 async def test_start_anima_process(data_dir: Path, make_anima):
     """Test starting a anima process."""
     # Create a test anima
-    anima_dir = make_anima("test-anima")
+    make_anima("test-anima")
 
     # Create supervisor
     supervisor = ProcessSupervisor(

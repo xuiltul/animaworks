@@ -29,7 +29,7 @@ def scheduler_mgr(tmp_path: Path) -> SchedulerManager:
 class TestRecordScheduleMtimes:
     def test_records_existing_files(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
         (tmp_path / "cron.md").write_text("# test")
-        (tmp_path / "heartbeat.md").write_text("# test")
+        (tmp_path / "HEARTBEAT.md").write_text("# test")
         scheduler_mgr._record_schedule_mtimes()
         assert scheduler_mgr._cron_md_mtime > 0
         assert scheduler_mgr._heartbeat_md_mtime > 0
@@ -60,11 +60,11 @@ class TestCheckScheduleFreshness:
         mock_reload.assert_called_once_with("test")
 
     def test_heartbeat_change_triggers_reload(self, scheduler_mgr: SchedulerManager, tmp_path: Path) -> None:
-        (tmp_path / "heartbeat.md").write_text("# v1")
+        (tmp_path / "HEARTBEAT.md").write_text("# v1")
         scheduler_mgr._record_schedule_mtimes()
 
         time.sleep(0.05)
-        (tmp_path / "heartbeat.md").write_text("# v2")
+        (tmp_path / "HEARTBEAT.md").write_text("# v2")
 
         with patch.object(scheduler_mgr, "reload_schedule") as mock_reload:
             result = scheduler_mgr._check_schedule_freshness()

@@ -21,17 +21,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from core.schemas import CycleResult
 from core.runtime.ipc import IPCResponse
+from core.schemas import CycleResult
+from core.time_utils import now_jst
+from core.tooling.handler import active_session_type
+from server.stream_registry import StreamRegistry
 from server.supervisor.manager import (
     HealthConfig,
     ProcessSupervisor,
     RestartPolicy,
 )
 from server.supervisor.process_handle import ProcessHandle, ProcessState
-from core.time_utils import now_jst
-from core.tooling.handler import active_session_type
-from server.stream_registry import StreamRegistry
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -40,9 +40,9 @@ def _make_anima_dir(tmp_path: Path, *, with_bootstrap: bool = True) -> Path:
     """Create a minimal anima directory for testing."""
     anima_dir = tmp_path / "animas" / "test-anima"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# Test Anima", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Test Anima", encoding="utf-8")
     if with_bootstrap:
-        (anima_dir / "bootstrap.md").write_text("# Bootstrap instructions", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("# Bootstrap instructions", encoding="utf-8")
     for sub in [
         "episodes",
         "knowledge",
@@ -296,7 +296,7 @@ class TestAnimaRunnerBootstrap:
 
     @pytest.mark.asyncio
     async def test_runner_get_status_needs_bootstrap_false(self, tmp_path: Path):
-        """get_status should show needs_bootstrap=False when no bootstrap.md."""
+        """get_status should show needs_bootstrap=False when no BOOTSTRAP.md."""
         from core.runtime.runner import AnimaRunner
 
         runner = AnimaRunner(
@@ -430,7 +430,7 @@ class TestSupervisorBootstrap:
         supervisor._bootstrap_retry_delay_s = 0
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "bootstrap.md").write_text("bootstrap", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("bootstrap", encoding="utf-8")
         supervisor._save_bootstrap_retries = MagicMock()
 
         handle = _make_mock_handle("alice")
@@ -444,7 +444,7 @@ class TestSupervisorBootstrap:
             await asyncio.sleep(0.01)
 
         assert handle.send_request.await_count == supervisor._bootstrap_max_retries
-        assert (anima_dir / "bootstrap.md.failed").exists()
+        assert (anima_dir / "BOOTSTRAP.md.failed").exists()
 
     @pytest.mark.asyncio
     async def test_supervisor_run_bootstrap_broadcasts_failed_on_exception(self, tmp_path: Path):

@@ -18,6 +18,7 @@ from httpx import ASGITransport, AsyncClient
 def _create_app(shared_dir: Path):
     """Create a test FastAPI app with channels router and real filesystem."""
     from fastapi import FastAPI
+
     from server.routes.channels import create_channels_router
 
     app = FastAPI()

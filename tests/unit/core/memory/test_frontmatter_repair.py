@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -7,14 +8,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from core.memory.frontmatter import (
     FrontmatterService,
     parse_frontmatter,
     repair_double_frontmatter,
     validate_and_complete_frontmatter,
 )
-
 
 # ── validate_and_complete_frontmatter ────────────────────────────
 

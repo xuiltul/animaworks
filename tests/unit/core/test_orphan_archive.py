@@ -354,7 +354,7 @@ class TestDetectOrphanAnimasArchiveIntegration:
         assert len(archives) == 3
 
     def test_existing_valid_animas_untouched(self, data_dir, make_anima):
-        """Valid animas with identity.md are never archived."""
+        """Valid animas with IDENTITY.md are never archived."""
         make_anima("sakura")
         make_anima("rin", supervisor="sakura")
 

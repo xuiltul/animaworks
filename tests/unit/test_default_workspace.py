@@ -41,7 +41,7 @@ def _write_status(data_dir: Path, anima_name: str, **kwargs) -> Path:
     """Write status.json for anima with given fields."""
     anima_dir = data_dir / "animas" / anima_name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text("# Test\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Test\n", encoding="utf-8")
     for sub in ["episodes", "knowledge", "skills", "state", "shortterm"]:
         (anima_dir / sub).mkdir(parents=True, exist_ok=True)
     status_path = anima_dir / "status.json"

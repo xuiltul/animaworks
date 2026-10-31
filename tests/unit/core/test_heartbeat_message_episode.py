@@ -77,7 +77,7 @@ class TestHeartbeatMessageEpisodeRecording:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # append_episode should be called at least once for the message episode
             assert MockMM.return_value.append_episode.call_count >= 1
@@ -139,7 +139,7 @@ class TestHeartbeatMessageEpisodeRecording:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # append_episode should be called 3 times for the 3 message episodes
             assert MockMM.return_value.append_episode.call_count >= 3
@@ -207,7 +207,7 @@ class TestHeartbeatMessageEpisodeRecording:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # Should only record 2 message episodes (not the ACK)
             all_calls = [call[0][0] for call in MockMM.return_value.append_episode.call_args_list]
@@ -269,7 +269,7 @@ class TestHeartbeatMessageEpisodeRecording:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # Find the message episode
             all_calls = [call[0][0] for call in MockMM.return_value.append_episode.call_args_list]
@@ -333,7 +333,7 @@ class TestHeartbeatMessageEpisodeRecording:
 
             dp.agent.run_cycle_streaming = mock_stream
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # Count message episodes
             all_calls = [call[0][0] for call in MockMM.return_value.append_episode.call_args_list]
@@ -379,7 +379,7 @@ class TestHeartbeatMessageEpisodeRecording:
             dp.agent.replied_to = set()
             dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
 
-            result = await dp.process_inbox_message()
+            await dp.process_inbox_message()
 
             # append_episode should NOT be called when there are no messages
             MockMM.return_value.append_episode.assert_not_called()

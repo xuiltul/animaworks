@@ -16,6 +16,7 @@ def _make_test_app(
     supervisor: MagicMock | None = None,
 ):
     from fastapi import FastAPI
+
     from server.routes.animas import create_animas_router
 
     app = FastAPI()
@@ -113,7 +114,7 @@ class TestStartStopRestartEndpoints:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         sup = MagicMock()
         sup.get_process_status.return_value = {"status": "running"}

@@ -17,8 +17,8 @@ def _make_anima(animas_dir: Path, name: str, *, defined: bool) -> Path:
     (anima_dir / "state").mkdir(parents=True)
     (anima_dir / "shortterm").mkdir()
     body = "Defined" if defined else "未定義"
-    (anima_dir / "identity.md").write_text(f"# Identity\n\n{body}\n", encoding="utf-8")
-    (anima_dir / "injection.md").write_text(f"# Injection\n\n{body}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# Identity\n\n{body}\n", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text(f"# Injection\n\n{body}\n", encoding="utf-8")
     (anima_dir / "character_sheet.md").write_text("# Sheet\n", encoding="utf-8")
     (anima_dir / "state" / "bootstrap_state.json").write_text(
         json.dumps({"version": 1, "state": "needs_repair", "validation_errors": ["character_sheet_unprocessed"]}),

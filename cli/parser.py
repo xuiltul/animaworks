@@ -366,6 +366,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_anima_create.set_defaults(func=_lazy_anima_create)
 
+    # anima export
+    p_anima_export = anima_sub.add_parser("export", help=t("cli.export_help"))
+    p_anima_export.add_argument("anima", help="Anima name to export")
+    p_anima_export.add_argument(
+        "--format",
+        required=True,
+        choices=["openclaw", "hermes"],
+        help="Target workspace format",
+    )
+    p_anima_export.add_argument("--out", required=True, metavar="DIR", help="Output directory")
+    p_anima_export.set_defaults(func=_lazy_anima_export)
+
     # anima delete
     p_anima_delete = anima_sub.add_parser("delete", help="Delete an anima (with optional archive)")
     p_anima_delete.add_argument("anima", help="Anima name to delete")
@@ -775,6 +787,12 @@ def _lazy_anima_create(args: argparse.Namespace) -> None:
     from cli.commands.anima import cmd_create_anima
 
     cmd_create_anima(args)
+
+
+def _lazy_anima_export(args: argparse.Namespace) -> None:
+    from cli.commands.anima_export_cmd import cmd_anima_export
+
+    cmd_anima_export(args)
 
 
 def _lazy_anima_delete(args: argparse.Namespace) -> None:

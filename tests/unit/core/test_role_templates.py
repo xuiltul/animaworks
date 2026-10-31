@@ -831,8 +831,8 @@ class TestProtectedFiles:
         """All expected protected files are in the frozenset."""
         assert "permissions.json" in _PROTECTED_FILES
         assert "permissions.md" in _PROTECTED_FILES  # legacy, still protected
-        assert "identity.md" in _PROTECTED_FILES
-        assert "bootstrap.md" in _PROTECTED_FILES
+        assert "IDENTITY.md" in _PROTECTED_FILES
+        assert "BOOTSTRAP.md" in _PROTECTED_FILES
 
     def test_protected_files_is_frozenset(self) -> None:
         """_PROTECTED_FILES is an immutable frozenset."""

@@ -13,8 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.execution.base import tool_result_save_budget, tool_input_save_budget
-
+from core.execution.base import tool_input_save_budget, tool_result_save_budget
 
 # ── Reference context (128K) ────────────────────────────────
 # At the reference window the scale factor is 1.0, so budget == base value.

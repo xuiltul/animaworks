@@ -74,7 +74,7 @@ Do something
 
     @pytest.mark.asyncio
     async def test_setup_no_heartbeat_config(self, tmp_path):
-        """Scheduler should start even without heartbeat.md content."""
+        """Scheduler should start even without HEARTBEAT.md content."""
         mock_anima = MagicMock()
         mock_anima.memory.read_heartbeat_config.return_value = ""
         mock_anima.memory.read_cron_config.return_value = ""
@@ -141,7 +141,7 @@ New task description
         animas_dir.mkdir(exist_ok=True)
         anima_dir = animas_dir / "test-anima"
         anima_dir.mkdir(exist_ok=True)
-        (anima_dir / "identity.md").write_text("test")
+        (anima_dir / "IDENTITY.md").write_text("test")
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir(exist_ok=True)
         socket_path = tmp_path / "test.sock"

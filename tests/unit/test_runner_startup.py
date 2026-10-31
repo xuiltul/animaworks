@@ -44,7 +44,7 @@ class TestAnimaRunnerPingReadiness:
         animas_dir.mkdir()
         anima_dir = animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("test")
+        (anima_dir / "IDENTITY.md").write_text("test")
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()
         socket_path = tmp_path / "test.sock"

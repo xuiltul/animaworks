@@ -33,7 +33,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d.mkdir(parents=True)
     (d / "shortterm" / "chat").mkdir(parents=True)
     (d / "shortterm" / "heartbeat").mkdir(parents=True)
-    (d / "identity.md").write_text("# Test Gemini Anima", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Gemini Anima", encoding="utf-8")
     (d / "state").mkdir()
     (d / "state" / "current_state.md").write_text("status: idle\n", encoding="utf-8")
     return d

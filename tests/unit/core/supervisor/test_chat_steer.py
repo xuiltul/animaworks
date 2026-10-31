@@ -14,13 +14,13 @@ from core.anima.messaging import _inject_chat_message
 from core.execution.base import BaseExecutor, ExecutionResult
 from core.execution.engines.claude.executor import AgentSDKExecutor
 from core.memory.conversation.memory import ConversationMemory
-from core.schemas import ModelConfig
 from core.runtime import task_runner
 from core.runtime.ipc import IPCRequest
 from core.runtime.ipc_v2 import IPCV2ConnectionState, IPCV2Identity
 from core.runtime.runner import AnimaRunner
 from core.runtime.streaming_handler import StreamingIPCHandler
 from core.runtime.task_runner_supervisor import TaskRunnerJob, TaskRunnerSupervisor
+from core.schemas import ModelConfig
 
 
 class _UnsupportedExecutor(BaseExecutor):

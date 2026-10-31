@@ -214,7 +214,7 @@ class TestReloadAnimas:
         # Create a new anima on disk
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas={},
@@ -256,7 +256,7 @@ class TestReloadAnimas:
 
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas={},
@@ -278,7 +278,7 @@ class TestReloadAnimas:
 
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas={},
@@ -307,7 +307,7 @@ class TestReloadAnimas:
         animas_dir.mkdir()
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas={},
@@ -349,10 +349,10 @@ class TestReloadAnimas:
         animas_dir.mkdir()
         shared_dir = tmp_path / "shared"
 
-        # Create anima on disk with identity.md but disabled via status.json
+        # Create anima on disk with IDENTITY.md but disabled via status.json
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir()
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(json.dumps({"enabled": False}), encoding="utf-8")
 
         app = _make_test_app(

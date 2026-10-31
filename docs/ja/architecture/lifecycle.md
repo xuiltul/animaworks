@@ -10,7 +10,7 @@ Anima は server からの要求だけでなく、メッセージやスケジュ
 |---|---|
 | chat | ユーザーとの会話を thread ごとに処理する。 |
 | inbox | 他 Anima や連携先から届いたメッセージを専用 inbox lane で処理する。 |
-| heartbeat | `heartbeat.md` の指示に基づく定期的な確認を heartbeat task runner で行う。 |
+| heartbeat | `HEARTBEAT.md` の指示に基づく定期的な確認を heartbeat task runner で行う。 |
 | cron | `cron.md` に定義した定期処理を cron task runner で実行する。 |
 | task | TaskStore の実行可能タスクを background worker が引き受ける。 |
 | greet | 起動後や会話開始時の挨拶を専用 chat task runner で行う。 |
@@ -19,13 +19,13 @@ Anima は server からの要求だけでなく、メッセージやスケジュ
 
 ## Heartbeat と cron
 
-heartbeat の基本間隔は全体設定で 30 分が既定であり、`status.json` の `heartbeat_interval_minutes` で Anima ごとに上書きできる。有効な範囲は 1〜1440 分である。全体の `activity_level` は既定 100%、許容範囲 10〜400% で、値が高いほど実効間隔が短くなる。`activity_schedule` を使うと時刻帯ごとに活動度を切り替えられる。`heartbeat.md` からは活動時間帯を設定する。
+heartbeat の基本間隔は全体設定で 30 分が既定であり、`status.json` の `heartbeat_interval_minutes` で Anima ごとに上書きできる。有効な範囲は 1〜1440 分である。全体の `activity_level` は既定 100%、許容範囲 10〜400% で、値が高いほど実効間隔が短くなる。`activity_schedule` を使うと時刻帯ごとに活動度を切り替えられる。`HEARTBEAT.md` からは活動時間帯を設定する。
 
 `cron.md` は見出し単位の定義で、`schedule` に標準の5フィールド cron 式を記す。`type`、説明、必要に応じて command/tool と引数を設定し、`core/runtime/schedule_parser.py` が解析する。セットアップや hot-reload 時には、解析・登録できなかったスケジュールだけを `cron_health_*.md` として通知する。登録済み cron の実行頻度や失敗を定期監視する機能はない。
 
 ## 初回起動と1サイクル
 
-初回起動では `core/anima/bootstrap_state.py` が `identity.md` や `injection.md` などの定義状態を確認し、bootstrap の開始・失敗・完了を記録する。supervisor はプロセスを起動し、IPC endpoint と依存サービスの準備を確認してから通常の処理を開始する。
+初回起動では `core/anima/bootstrap_state.py` が `IDENTITY.md` / `SOUL.md` や `AGENTS.md` などの定義状態を確認し、bootstrap の開始・失敗・完了を記録する。supervisor はプロセスを起動し、IPC endpoint と依存サービスの準備を確認してから通常の処理を開始する。
 
 1. trigger を session type と lane に対応づけ、必要な lock または worker slot を取得する。
 2. `status.json` と共通設定を解決し、記憶、権限、現在状態、メッセージなどから prompt を準備する。

@@ -774,11 +774,16 @@ class CodexSetupMixin:
         task_compaction_line = (
             f"model_auto_compact_token_limit = {task_compaction_tokens}\n" if task_compaction_tokens > 0 else ""
         )
+        # Codex auto-loads AGENTS.md from its cwd as a project document.  When
+        # no task cwd is configured, cwd is the anima directory and AGENTS.md
+        # is already injected by AnimaWorks; let the explicit prompt win.
+        project_doc_line = "project_doc_max_bytes = 0\n" if self._task_cwd is None else ""
 
         config_toml = (
             f'model = "{esc(provider_config.model)}"\n'
             f"{effort_line}"
             f"{task_compaction_line}"
+            f"{project_doc_line}"
             f'model_provider = "{esc(provider_config.provider)}"\n'
             f'model_instructions_file = "{esc(str(instructions_file))}"\n'
             f'developer_instructions = "{esc(self._CODEX_DEVELOPER_INSTRUCTIONS)}"\n'
@@ -890,6 +895,11 @@ class CodexSetupMixin:
 
     def _codex_thread_kwargs(self, system_prompt: str) -> dict[str, Any]:
         provider_config = _resolve_codex_provider_config(self._model_config)
+        codex_config: dict[str, Any] = {"bypass_hook_trust": True}
+        if self._task_cwd is None:
+            # The anima directory's AGENTS.md is already part of the explicit
+            # system prompt; disable Codex's automatic project-doc loading.
+            codex_config["project_doc_max_bytes"] = 0
         kwargs: dict[str, Any] = {
             "approval_mode": self._sdk_approval_mode(),
             "base_instructions": system_prompt or None,
@@ -901,7 +911,7 @@ class CodexSetupMixin:
             # trust, which Codex grants via a TUI prompt we never see.  The hook
             # source is our own module, so bypass the trust gate.  Verified on
             # codex 0.151: config.toml keys / -c overrides do NOT enable it.
-            "config": {"bypass_hook_trust": True},
+            "config": codex_config,
         }
         from core.config.file_access_policy import resolve_effective_denied_roots
         from core.config.models import load_permissions
@@ -934,13 +944,21 @@ class CodexSetupMixin:
         executable = get_codex_executable()
         if not executable:
             raise RuntimeError("Codex CLI executable not available for exec fallback")
-        return [
+        command = [
             executable,
             "exec",
             "-C",
             str(self._task_cwd or self._anima_dir),
-            "--skip-git-repo-check",
-            "--dangerously-bypass-hook-trust",  # see _codex_thread_kwargs
-            "--json",
-            "-",
         ]
+        if self._task_cwd is None:
+            # See _write_codex_config: AGENTS.md is supplied explicitly.
+            command.extend(["-c", "project_doc_max_bytes=0"])
+        command.extend(
+            [
+                "--skip-git-repo-check",
+                "--dangerously-bypass-hook-trust",  # see _codex_thread_kwargs
+                "--json",
+                "-",
+            ]
+        )
+        return command

@@ -155,7 +155,7 @@ class TestEpisodeCollectionGlobAndFallback:
         )
 
         # Suffixed file
-        suffixed = consolidation_engine.episodes_dir / f"{today}_heartbeat.md"
+        suffixed = consolidation_engine.episodes_dir / f"{today}_HEARTBEAT.md"
         suffixed.write_text(
             "## 12:00 — 定期巡回\n\n**要点**: 異常なし\n",
             encoding="utf-8",
@@ -259,7 +259,7 @@ class TestEpisodeCollectionGlobAndFallback:
         today = now_jst().date()
 
         files_data = [
-            (f"{today}_heartbeat.md", "## 08:00 — ハートビート1\n\nチェック完了\n"),
+            (f"{today}_HEARTBEAT.md", "## 08:00 — ハートビート1\n\nチェック完了\n"),
             (f"{today}_cron.md", "## 09:00 — Cronジョブ\n\nバッチ成功\n"),
             (f"{today}_alert.md", "## 10:00 — アラート対応\n\nアラート解消\n"),
         ]

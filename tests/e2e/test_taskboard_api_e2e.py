@@ -19,7 +19,7 @@ def _create_app(tmp_path: Path, anima_names: list[str]):
     for name in anima_names:
         anima_dir = animas_dir / name
         (anima_dir / "state").mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
     shared_dir.mkdir(parents=True, exist_ok=True)
 
     with (

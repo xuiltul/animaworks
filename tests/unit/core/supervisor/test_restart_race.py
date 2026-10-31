@@ -96,7 +96,7 @@ class TestReconcileRestartingGuard:
         # Set up an anima directory on disk (enabled)
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "IDENTITY.md").write_text("Test identity")
 
         # Mark as restarting
         supervisor._restarting.add("test-anima")
@@ -117,7 +117,7 @@ class TestReconcileRestartingGuard:
         # Set up an anima directory on disk (enabled)
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "IDENTITY.md").write_text("Test identity")
         (anima_dir / "status.json").write_text('{"enabled": true}')
 
         # NOT in _restarting set
@@ -137,7 +137,7 @@ class TestReconcileRestartingGuard:
         """Simulate race: _restarting prevents double start via _reconcile guard."""
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "IDENTITY.md").write_text("Test identity")
 
         supervisor.start_anima = AsyncMock()
 
@@ -172,7 +172,6 @@ class TestStartAnimaStartingGuard:
         """start_anima() adds anima to _starting before spawn and removes after."""
         entered_starting: list[bool] = []
 
-        original_start = ProcessSupervisor.start_anima
 
         with patch("server.supervisor.manager.ProcessHandle") as MockHandle:
             mock_handle = AsyncMock()
@@ -219,7 +218,7 @@ class TestReconcileStartingGuard:
         """_reconcile() should not start an anima that is already being started."""
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "IDENTITY.md").write_text("Test identity")
         (anima_dir / "status.json").write_text('{"enabled": true}')
 
         supervisor._starting.add("test-anima")
@@ -235,7 +234,7 @@ class TestReconcileStartingGuard:
         """_reconcile() starts an anima that is NOT in _starting set."""
         anima_dir = supervisor.animas_dir / "test-anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("Test identity")
+        (anima_dir / "IDENTITY.md").write_text("Test identity")
         (anima_dir / "status.json").write_text('{"enabled": true}')
 
         assert "test-anima" not in supervisor._starting

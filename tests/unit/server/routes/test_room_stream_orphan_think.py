@@ -13,13 +13,14 @@ from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
 import server.routes.room as room_mod
 from server.room_manager import MeetingRoom, RoomManager
 from server.routes.room import _meeting_stream
+
 CLOSE_TAG = chr(60) + "/" + "think" + chr(62)  # </think>
 
 

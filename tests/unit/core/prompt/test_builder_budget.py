@@ -182,8 +182,8 @@ def _make_mock_memory(
     """Create a mock MemoryManager."""
     anima_dir = tmp_path / "animas" / "test-anima"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text(identity, encoding="utf-8")
-    (anima_dir / "heartbeat.md").write_text("- check", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity, encoding="utf-8")
+    (anima_dir / "HEARTBEAT.md").write_text("- check", encoding="utf-8")
 
     memory = MagicMock()
     memory.anima_dir = anima_dir

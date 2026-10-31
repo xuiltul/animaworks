@@ -79,7 +79,7 @@ class TestCopyInfrastructure:
         templates = tmp_path / "templates"
         ja_dir = templates / "ja"
         (ja_dir / "anima_templates").mkdir(parents=True)
-        (ja_dir / "anima_templates" / "identity.md").write_text("# Identity", encoding="utf-8")
+        (ja_dir / "anima_templates" / "IDENTITY.md").write_text("# Identity", encoding="utf-8")
         # Also add common_knowledge so there's something valid
         (ja_dir / "common_knowledge").mkdir()
         (ja_dir / "common_knowledge" / "test.md").write_text("test", encoding="utf-8")
@@ -391,7 +391,7 @@ class TestBuildSystemPromptCommonKnowledge:
         animas_dir = data_dir / "animas"
         anima_dir = animas_dir / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         memory = _make_mock_memory(anima_dir)
 

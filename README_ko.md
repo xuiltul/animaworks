@@ -195,7 +195,7 @@ FastAPI Server (경량 컨트롤 플레인 / WebSocket & SSE / Enclave 클라이
 - **수면 중 기억 고정화와 능동적 망각 (`core/memory/maintenance/`)**: 매일 밤 하루의 활동 로그를 구조화된 지식으로 증류·통합(Consolidation)하고, 중요도와 시간 감쇠에 따라 오래된 저가치 기억을 정리(Active Forgetting)하되 핵심 정체성·절차·미완료 태스크는 엄격히 보호합니다.
 
 ### 2. 지시를 기다리지 않고 움직인다 — Heartbeat·Cron·SQLite TaskStore·GitHub 게이트웨이
-- **Heartbeat & Cron**: 적응형 간격과 야간 조용한 시간(Quiet Hours)을 지원하는 자율 순찰(`heartbeat.md`) 및 정각 스케줄 실행(`cron.md`).
+- **Heartbeat & Cron**: 적응형 간격과 야간 조용한 시간(Quiet Hours)을 지원하는 자율 순찰(`HEARTBEAT.md`) 및 정각 스케줄 실행(`cron.md`).
 - **SQLite TaskStore (`shared/taskboard.sqlite3`)**: 조직 전체의 태스크를 원자적으로 관리하는 보드입니다. 의존 관계, 동일 리소스의 충돌을 막는 **배타 키(`mutex_key`)**, 부하가 완료하면 자동으로 상사의 검수 태스크를 깨우는 **위임 계약(`delegated_tasks`)**, 중단된 워커의 자동 재시도·회수를 지원합니다.
 - **GitHub 이벤트 게이트웨이**: CI 실패, PR 리뷰 코멘트, 머지 충돌을 Webhook으로 수신해 중복 제거 후 담당 엔지니어 Anima의 태스크로 자동 투입합니다.
 
@@ -339,7 +339,7 @@ FastAPI Server (경량 컨트롤 플레인 / WebSocket & SSE / Enclave 클라이
 1. **Enclave (PII·프로덕션 데이터 격리 런타임)**: 개인정보나 프로덕션 DB/S3를 별도 OS 유저의 격리 공간에 가두고, Unix 도메인 소켓(`SO_PEERCRED`)과 Egress PII 마스킹 파이프라인을 거친 안전한 사실만을 본체 조직에 반환합니다.
 2. **신뢰 경계 라벨링 (Provenance & Trust)**: 웹 검색·Slack·이메일 등 외부 입력에는 출처(`untrusted`) 태그가 부여되며 세션 중 최소 신뢰도가 전파됩니다. 외부 데이터 유래 기억도 RAG 메타데이터까지 출처가 추적되어 프롬프트 인젝션에 의한 권한 상승을 방지합니다.
 3. **5단계 명령어·경로 검사**: 셸 인젝션 검출 → 글로벌 금지 리스트(`permissions.global.json`이 없으면 서버 기동 거부) → Anima별 금지 명령어 → Anima별 허용 리스트 → CWD 상대 경로를 포함한 경로 트래버설 차단·심볼릭 링크 월경 방지.
-4. **파일 샌드박스와 게이트 도구**: 각 Anima는 허용된 `file_roots` 외에는 쓸 수 없으며, 자신의 `identity.md`나 `permissions.json`도 자기 개조로부터 보호됩니다. 부작용이 큰 외부 송신 도구에는 사전 액션 규칙 대조(Action Gate)를 적용할 수 있습니다.
+4. **파일 샌드박스와 게이트 도구**: 각 Anima는 허용된 `file_roots` 외에는 쓸 수 없으며, 자신의 `IDENTITY.md` / `SOUL.md`나 `permissions.json`도 자기 개조로부터 보호됩니다. 부작용이 큰 외부 송신 도구에는 사전 액션 규칙 대조(Action Gate)를 적용할 수 있습니다.
 5. **인증·SSRF 방지·Webhook 검증**: Argon2id 패스워드 해시, 48바이트 세션 토큰, Slack/Chatwork/Zoom/GitHub의 HMAC 서명 검증(리플레이 방지 포함), 프라이빗 IP와 DNS 리바인딩을 차단하는 미디어 프록시.
 
 </details>

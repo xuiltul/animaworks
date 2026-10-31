@@ -19,7 +19,7 @@ def anima_dir(tmp_path):
     for sub in ("knowledge", "procedures", "skills", "episodes", "state"):
         (ad / sub).mkdir(parents=True)
     (ad / "state" / "current_state.md").write_text("status: idle\n")
-    (ad / "identity.md").write_text("# Test\n")
+    (ad / "IDENTITY.md").write_text("# Test\n")
     return ad
 
 

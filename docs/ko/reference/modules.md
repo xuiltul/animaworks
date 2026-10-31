@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=2e3a7c14027d5e87a9bce838ccac411fc2c219d5eb75fd1312fe9e7e4c8b7956 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=b739062c18e93089cb49affb2fd390fe3815268e0c5465f7fd42d737aef197d8 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -9,15 +9,15 @@
 
 —
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `cli` | 9 | — |
 | `cli.__main__（非公開）` | 9 | — |
 | `cli._anima_tool（非公開）` | 33 | — |
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | Codex의 ``PreToolUse`` 명령 정책 훅용 CLI 어댑터. |
-| `cli.demo` | 407 | 네이티브 ``animaworks demo`` 명령. |
-| `cli.parser` | 867 | — |
+| `cli.demo` | 409 | 네이티브 ``animaworks demo`` 명령. |
+| `cli.parser` | 885 | — |
 | `cli.tool_dispatch` | 414 | 외부 도구, 작업 제출 및 명령 별칭을 위한 CLI 디스패치. |
 
 ## `cli.commands`
@@ -28,21 +28,22 @@
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
-| `cli.commands.anima_mgmt` | 1173 | 아니마 프로세스 관리를 위한 CLI 명령. |
+| `cli.commands.anima_export_cmd` | 67 | — |
+| `cli.commands.anima_mgmt` | 1174 | Anima 프로세스 관리를 위한 CLI 명령. |
 | `cli.commands.board` | 144 | — |
 | `cli.commands.company_cmd` | 272 | — |
-| `cli.commands.config_cmd` | 238 | ``animaworks config``용 CLI 핸들러 및 대화형 마법사. |
+| `cli.commands.config_cmd` | 238 | ``animaworks config``을 위한 CLI 핸들러와 대화형 마법사. |
 | `cli.commands.cost_cmd` | 326 | — |
-| `cli.commands.enclave_cmd` | 323 | 엔클레이브 런타임 운영 명령. |
+| `cli.commands.enclave_cmd` | 323 | 엔클레이브 런타임을 위한 운영 명령. |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
-| `cli.commands.logs` | 209 | 아니마 로그를 보기 위한 CLI 명령. |
+| `cli.commands.logs` | 209 | Anima 로그를 보는 CLI 명령. |
 | `cli.commands.mcp_cmd` | 66 | — |
 | `cli.commands.memory_cmd` | 56 | — |
 | `cli.commands.messaging` | 86 | — |
-| `cli.commands.migrate_cmd` | 114 | — |
+| `cli.commands.migrate_cmd` | 157 | — |
 | `cli.commands.models_cmd` | 304 | 모델 정보 및 관리를 위한 CLI 명령. |
 | `cli.commands.optimize_assets` | 189 | — |
 | `cli.commands.profile` | 332 | — |
@@ -53,7 +54,7 @@
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
-| `cli.commands.task_store_cmd` | 258 | 운영자 전용, 코호트 단위 작업 마이그레이션 및 현재 상태 내보내기. |
+| `cli.commands.task_store_cmd` | 259 | 운영자 전용 코호트 범위 작업 마이그레이션 및 현재 상태 내보내기. |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
 
@@ -141,19 +142,20 @@ LLM 에이전트 실행, 대화 제어, 엔진 연동.
 
 ## `core.anima`
 
-디지털 Anima의 수명 주기와 런타임 객체.
+Digital Anima의 수명 주기와 런타임 객체.
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.anima` | 23 | — |
-| `core.anima._mixin_protocols（非公開）` | 130 | 구성 믹스인을 위한 구조적 호스트 프로토콜. |
+| `core.anima._mixin_protocols（非公開）` | 130 | 합성 믹스인을 위한 구조적 호스트 프로토콜. |
 | `core.anima.admin` | 170 | — |
-| `core.anima.asset_reconciler` | 786 | — |
-| `core.anima.bootstrap_state` | 591 | — |
+| `core.anima.asset_reconciler` | 787 | — |
+| `core.anima.bootstrap_state` | 592 | — |
 | `core.anima.chat_attachments` | 253 | — |
 | `core.anima.digital_anima` | 702 | — |
-| `core.anima.emotion_tag` | 84 | LLM 응답을 위한 공통 감정 태그 추출. |
-| `core.anima.factory` | 842 | Anima 생성 팩토리: 템플릿, 빈 상태 또는 MD 파일에서 새 디지털 Anima를 생성합니다. |
+| `core.anima.emotion_tag` | 84 | LLM 응답에서 감정 태그를 추출하는 공통 기능. |
+| `core.anima.export` | 234 | Anima 작업 공간을 OpenClaw 또는 Hermes Agent 레이아웃으로 내보냅니다. |
+| `core.anima.factory` | 876 | Anima 생성 팩토리: 템플릿, 빈 상태 또는 MD 파일에서 새 Digital Anima를 생성합니다. |
 | `core.anima.heartbeat` | 1022 | — |
 | `core.anima.image_artifacts` | 219 | — |
 | `core.anima.inbox` | 1001 | — |
@@ -162,8 +164,9 @@ LLM 에이전트 실행, 대화 제어, 엔진 연동.
 | `core.anima.messaging` | 1426 | — |
 | `core.anima.response_normalize` | 141 | — |
 | `core.anima.roster` | 83 | — |
-| `core.anima.settings_store` | 98 | — |
+| `core.anima.settings_store` | 111 | — |
 | `core.anima.skills_check` | 15 | — |
+| `core.anima.workspace_files` | 178 | — |
 
 ## `core.auth`
 
@@ -189,26 +192,26 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.config`
 
-애플리케이션 설정 스키마, 로드, 검증, 마이그레이션.
+애플리케이션 설정의 스키마, 로드, 검증, 마이그레이션.
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.config` | 42 | — |
-| `core.config.anima_registry` | 313 | config.json에서 Anima 등록: 등록, 등록 해제, 이름 변경. |
+| `core.config.anima_registry` | 314 | config.json에서 Anima 등록: 등록, 등록 해제, 이름 변경. |
 | `core.config.env_slots` | 92 | — |
-| `core.config.file_access_policy` | 569 | — |
+| `core.config.file_access_policy` | 588 | — |
 | `core.config.global_permissions` | 259 | — |
-| `core.config.helper_models` | 499 | — |
+| `core.config.helper_models` | 500 | — |
 | `core.config.io` | 317 | 설정 I/O: 싱글턴 캐시, 로드 및 저장. |
 | `core.config.local_llm` | 69 | 로컬 Ollama 기반 모델 기본값 및 역할 프리셋을 위한 헬퍼. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | 정적 모델 카탈로그 및 요청별 모델 재정의 검증. |
-| `core.config.model_config` | 885 | 모델 설정 해석: load_model_config, 패널티, max_tokens. |
-| `core.config.model_discovery` | 581 | 설치된 CLI에서 “모드 + 모델” 카탈로그 동적 탐색. |
-| `core.config.model_mode` | 458 | 표준 S/C/D/G/X/Y/A 모드에 대한 모델 실행 모드 해석. |
-| `core.config.models` | 100 | 중앙 설정 모듈 — 분할된 모듈을 다시 내보내는 파사드. |
+| `core.config.model_config` | 885 | 모델 설정 해석: load_model_config, penalties, max_tokens. |
+| `core.config.model_discovery` | 581 | 설치된 CLI에서 “모드 + 모델” 카탈로그를 동적으로 탐색합니다. |
+| `core.config.model_mode` | 458 | 표준 S/C/D/G/X/Y/A 모드의 모델 실행 모드 해석. |
+| `core.config.models` | 100 | 중앙 설정 모듈 — 분리된 모듈을 다시 내보내는 파사드. |
 | `core.config.ops` | 203 | AnimaWorks 설정을 읽고 업데이트하는 애플리케이션 작업. |
-| `core.config.resolver` | 160 | 설정 해석: status.json와 anima_defaults 병합. |
+| `core.config.resolver` | 160 | 설정 해석: anima_defaults와 status.json 병합. |
 | `core.config.schemas` | 1540 | AnimaWorks용 Pydantic 설정 스키마. |
 | `core.config.vault` | 461 | PyNaCl SealedBox 암호화를 사용하는 자격 증명 보관소. |
 
@@ -260,29 +263,29 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 도구 실행, 명령 실행, 안전 제어.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
 | `core.execution._streaming（非公開）` | 303 | — |
 | `core.execution._tool_summary（非公開）` | 99 | — |
 | `core.execution.base` | 915 | — |
-| `core.execution.busy_probe` | 68 | Congestion probe for self-hosted fallback models (vLLM ``/metrics``). |
+| `core.execution.busy_probe` | 68 | 자체 호스팅 대체 모델을 위한 혼잡도 점검기(vLLM ``/metrics``). |
 | `core.execution.cli_stream` | 328 | — |
 | `core.execution.engine_base` | 76 | — |
 | `core.execution.engines.agy.executor` | 795 | — |
-| `core.execution.engines.claude._sdk_hooks（非公開）` | 652 | — |
+| `core.execution.engines.claude._sdk_hooks（非公開）` | 654 | — |
 | `core.execution.engines.claude._sdk_interrupt（非公開）` | 112 | — |
 | `core.execution.engines.claude._sdk_options（非公開）` | 567 | — |
 | `core.execution.engines.claude._sdk_patch（非公開）` | 261 | — |
-| `core.execution.engines.claude._sdk_security（非公開）` | 304 | — |
+| `core.execution.engines.claude._sdk_security（非公開）` | 314 | — |
 | `core.execution.engines.claude._sdk_session（非公開）` | 586 | — |
 | `core.execution.engines.claude._sdk_stream（非公開）` | 503 | — |
 | `core.execution.engines.claude.executor` | 867 | — |
 | `core.execution.engines.codex.events` | 664 | — |
 | `core.execution.engines.codex.executor` | 844 | — |
-| `core.execution.engines.codex.setup` | 946 | — |
-| `core.execution.engines.cursor.executor` | 655 | — |
+| `core.execution.engines.codex.setup` | 964 | — |
+| `core.execution.engines.cursor.executor` | 682 | — |
 | `core.execution.engines.gemini.executor` | 461 | — |
 | `core.execution.engines.grok.executor` | 1033 | — |
 | `core.execution.engines.litellm._litellm_context（非公開）` | 526 | — |
@@ -290,9 +293,9 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.execution.engines.litellm._llm_call（非公開）` | 326 | — |
 | `core.execution.engines.litellm.executor` | 1068 | — |
 | `core.execution.events` | 255 | — |
-| `core.execution.fallback_activity` | 290 | Activity-log integration for ephemeral runtime model fallback. |
-| `core.execution.github_identity` | 162 | GitHub identity resolution for executor environments. |
-| `core.execution.loop_guards` | 411 | In-loop guard mechanisms for the self-hosted execution loops (Mode A/B). |
+| `core.execution.fallback_activity` | 290 | 임시 런타임 모델 대체를 위한 활동 로그 통합. |
+| `core.execution.github_identity` | 162 | 실행기 환경을 위한 GitHub ID 확인. |
+| `core.execution.loop_guards` | 411 | 자체 호스팅 실행 루프(모드 A/B)의 루프 내부 가드 메커니즘. |
 | `core.execution.mcp_env` | 39 | — |
 | `core.execution.process_runner` | 184 | — |
 | `core.execution.reminder` | 128 | — |
@@ -381,30 +384,30 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 번역 카탈로그와 언어 선택.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
-| `core.i18n` | 135 | 런타임 문자열을 위한 경량 i18n 지원. |
-| `core.i18n.strings.communication` | 46 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.company` | 14 | 회사 관리를 위한 현지화된 문자열. |
-| `core.i18n.strings.config` | 840 | 도메인별 i18n 문자열. |
+| `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
+| `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
+| `core.i18n.strings.company` | 14 | Localized strings for company management. |
+| `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
-| `core.i18n.strings.execution` | 221 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.handler` | 416 | 도메인별 i18n 문자열(핸들러 1부). |
-| `core.i18n.strings.handler_ext` | 393 | 도메인별 i18n 문자열(핸들러 2부). |
-| `core.i18n.strings.lifecycle` | 104 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.memory` | 418 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.migrate` | 99 | — |
-| `core.i18n.strings.misc` | 527 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.misc_routes` | 21 | 도메인별 i18n 문자열(레거시 경로 모듈). |
-| `core.i18n.strings.models` | 70 | 모델 검사를 위한 현지화된 CLI 메시지. |
+| `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
+| `core.i18n.strings.handler` | 426 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
+| `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
+| `core.i18n.strings.migrate` | 124 | — |
+| `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
+| `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
+| `core.i18n.strings.models` | 70 | Localized CLI messages for model inspection. |
 | `core.i18n.strings.phone` | 127 | — |
-| `core.i18n.strings.room_manager` | 29 | 회의실 관리자를 위한 i18n 문자열. |
-| `core.i18n.strings.server` | 341 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.supervisor` | 140 | 도메인별 i18n 문자열. |
+| `core.i18n.strings.room_manager` | 29 | i18n strings for meeting room manager. |
+| `core.i18n.strings.server` | 341 | Domain-specific i18n strings. |
+| `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
 | `core.i18n.strings.tmp` | 74 | — |
-| `core.i18n.strings.tooling` | 175 | 도메인별 i18n 문자열(도구 프롬프트 및 도구 기능). |
-| `core.i18n.strings.tooling_schema` | 540 | 도메인별 i18n 문자열(schema.*). |
-| `core.i18n.strings.tooling_schema_ext` | 167 | 도메인별 i18n 문자열(schema.* 2부). |
+| `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
+| `core.i18n.strings.tooling_schema` | 540 | Domain-specific i18n strings (schema.*). |
+| `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -419,14 +422,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 로그, 데이터베이스, 캐시 등의 기반 기능.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
 | `core.infra.execution_sdk_preflight` | 126 | — |
 | `core.infra.gpu` | 173 | — |
-| `core.infra.logging_config` | 530 | AnimaWorks의 중앙 집중식 로그 설정 |
-| `core.infra.runtime_init` | 429 | 최초 실행 초기화: 템플릿을 런타임 데이터 디렉터리에 복사 |
+| `core.infra.logging_config` | 530 | Centralized logging configuration for AnimaWorks. |
+| `core.infra.runtime_init` | 430 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 
@@ -544,34 +547,34 @@ Model Context Protocol 서버 및 클라이언트.
 
 ## `core.memory`
 
-대화 및 에피소드 기억의 저장, 검색, 정리.
+대화·에피소드 기억의 저장, 검색, 정리.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.memory` | 20 | — |
-| `core.memory._llm_parse（非公開）` | 185 | 메모리 파이프라인에서 공유하는 LLM 출력 파싱 헬퍼. |
+| `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
 | `core.memory.config_reader` | 31 | — |
-| `core.memory.conversation.compression` | 322 | 대화 기억의 압축 로직. |
-| `core.memory.conversation.finalize` | 493 | 대화 기억의 세션 마무리 처리. |
-| `core.memory.conversation.memory` | 349 | 대화 기억(대화 기억 / 작업 메모리) 관리. |
-| `core.memory.conversation.models` | 149 | 대화 기억용 데이터 클래스 및 상수. |
-| `core.memory.conversation.prompt` | 270 | 대화 기억용 프롬프트 빌드 함수. |
-| `core.memory.conversation.shortterm` | 313 | 단기 기억 관리. |
-| `core.memory.conversation.state_update` | 49 | 대화 기억 마무리 처리를 위한 상태 업데이트 함수. |
+| `core.memory.conversation.compression` | 322 | Compression logic for conversation memory. |
+| `core.memory.conversation.finalize` | 493 | Session finalization for conversation memory. |
+| `core.memory.conversation.memory` | 349 | Conversation memory (대화 기억 / 작업 기억) management. |
+| `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
+| `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
+| `core.memory.conversation.shortterm` | 313 | Short-term memory (단기 기억) management. |
+| `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
 | `core.memory.facts.config` | 85 | — |
 | `core.memory.facts.connections` | 544 | — |
 | `core.memory.facts.entity_index` | 452 | — |
 | `core.memory.facts.extraction` | 529 | — |
-| `core.memory.facts.extractor` | 431 | LLM 기반 엔터티 및 사실 추출 파이프라인. |
+| `core.memory.facts.extractor` | 431 | LLM-based entity and fact extraction pipeline. |
 | `core.memory.facts.invalidation` | 515 | — |
 | `core.memory.facts.invalidation_llm` | 154 | — |
 | `core.memory.facts.live` | 578 | — |
 | `core.memory.facts.observability` | 41 | — |
-| `core.memory.facts.ontology` | 247 | 엔터티 / 사실 추출 결과용 Pydantic 모델. |
-| `core.memory.facts.prompts.en` | 133 | 엔터티 / 사실 추출용 영어 프롬프트. |
-| `core.memory.facts.prompts.ja` | 135 | 엔터티 / 사실 추출용 일본어 프롬프트. |
+| `core.memory.facts.ontology` | 247 | Pydantic models for entity / fact extraction results. |
+| `core.memory.facts.prompts.en` | 133 | English prompts for entity / fact extraction. |
+| `core.memory.facts.prompts.ja` | 135 | Japanese prompts for entity / fact extraction. |
 | `core.memory.facts.store` | 460 | — |
 | `core.memory.frontmatter` | 430 | — |
 | `core.memory.io` | 59 | — |
@@ -586,7 +589,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.maintenance.hygiene` | 75 | — |
 | `core.memory.maintenance.reconsolidation` | 669 | — |
 | `core.memory.maintenance.resolution_tracker` | 60 | — |
-| `core.memory.manager` | 683 | — |
+| `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
 | `core.memory.priming.channel_b` | 534 | — |
@@ -602,7 +605,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
-| `core.memory.rag.cli_access` | 228 | 활성 소유자 또는 서버를 통해 phase3 벡터 저장소에 접근하는 CLI 기능. |
+| `core.memory.rag.cli_access` | 228 | CLI access to phase3 vector stores through the active owner or server. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
 | `core.memory.rag.embedding` | 393 | — |
@@ -610,13 +613,13 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.rag.episode_time` | 46 | — |
 | `core.memory.rag.exclusion` | 38 | — |
 | `core.memory.rag.facts_chunker` | 100 | — |
-| `core.memory.rag.index_signature` | 27 | 기존 임베딩 인덱스 서명에 대한 호환성 진단. |
+| `core.memory.rag.index_signature` | 27 | Compatibility diagnostics for an existing embedding index signature. |
 | `core.memory.rag.indexer` | 1593 | — |
 | `core.memory.rag.indexer_delete` | 135 | — |
-| `core.memory.rag.owner_lock` | 84 | 아니마의 기본 벡터 데이터베이스에 대한 독점 소유권 잠금. |
-| `core.memory.rag.repair.detect` | 743 | — |
+| `core.memory.rag.owner_lock` | 84 | Exclusive ownership lock for an anima's native vector database. |
+| `core.memory.rag.repair.detect` | 744 | — |
 | `core.memory.rag.repair.rebuild` | 401 | — |
-| `core.memory.rag.repair.state` | 191 | RAG 자동 복구를 위한 영구 복구 상태 헬퍼. |
+| `core.memory.rag.repair.state` | 191 | Persistent repair-state helpers for RAG auto-repair. |
 | `core.memory.rag.repair.types` | 27 | — |
 | `core.memory.rag.retriever` | 809 | — |
 | `core.memory.rag.shared_check_registry` | 140 | — |
@@ -624,7 +627,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.rag.sqlite_health` | 359 | — |
 | `core.memory.rag.store` | 783 | — |
 | `core.memory.rag.vector_client` | 497 | — |
-| `core.memory.rag.vector_ops` | 88 | 벡터 API 요청과 MemoryService 와이어 형식 간 변환. |
+| `core.memory.rag.vector_ops` | 88 | Conversion between vector API requests and the MemoryService wire format. |
 | `core.memory.rag.vector_registry` | 160 | — |
 | `core.memory.retrieval.bm25` | 1325 | — |
 | `core.memory.retrieval.code_index` | 221 | — |
@@ -640,7 +643,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.retrieval.types` | 38 | — |
 | `core.memory.retrieval.unified_search` | 722 | — |
 | `core.memory.skill_metadata` | 49 | — |
-| `core.memory.state_lock` | 96 | ``state/current_state.md`` 업데이트를 위한 프로세스 안전 잠금. |
+| `core.memory.state_lock` | 96 | Process-safe locking for ``state/current_state.md`` updates. |
 
 ## `core.memory.conversation`
 
@@ -708,7 +711,7 @@ Model Context Protocol 서버 및 클라이언트.
 
 ## `core.messaging`
 
-Anima 간 및 외부와의 메시지 전달.
+anima 간 및 외부와의 메시지 전달.
 
 | 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
@@ -722,19 +725,20 @@ Anima 간 및 외부와의 메시지 전달.
 | `core.messaging.outbound_auto` | 377 | — |
 | `core.messaging.recipient_status` | 79 | — |
 | `core.messaging.reply_grants` | 253 | — |
-| `core.messaging.sender` | 32 | — |
+| `core.messaging.sender` | 34 | — |
 
 ## `core.migrations`
 
 런타임 데이터 형식의 단계적 마이그레이션.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.migrations` | 1 | Runtime migration framework; import specific modules directly. |
 | `core.migrations.registry` | 149 | — |
-| `core.migrations.steps` | 1300 | Migration step implementations for AnimaWorks runtime data. |
+| `core.migrations.standard_files_rollback` | 161 | Rollback support for the standard workspace-file migration (A2). |
+| `core.migrations.steps` | 1562 | Migration step implementations for AnimaWorks runtime data. |
 | `core.migrations.template_sync` | 137 | — |
-| `core.migrations.tracker` | 143 | — |
+| `core.migrations.tracker` | 157 | — |
 
 ## `core.notification`
 
@@ -773,7 +777,7 @@ Anima 간 및 외부와의 메시지 전달.
 | `core.org.company` | 1212 | Company membership and cross-company boundary helpers. |
 | `core.org.company_resources` | 86 | — |
 | `core.org.hierarchy` | 39 | — |
-| `core.org.org_sync` | 482 | — |
+| `core.org.org_sync` | 483 | — |
 | `core.org.workspace` | 232 | — |
 
 ## `core.phone`
@@ -796,7 +800,7 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 
 실행 엔진이나 OS별 차이를 흡수하는 연동 계층.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `core.platform` | 4 | — |
 | `core.platform.agy` | 32 | — |
@@ -811,10 +815,10 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 | `core.platform.locks` | 125 | — |
 | `core.platform.pid` | 42 | — |
 | `core.platform.process` | 327 | — |
-| `core.platform.process_role` | 66 | 프로세스 역할 메타데이터를 위한 저수준 환경 접근. |
+| `core.platform.process_role` | 68 | 프로세스 역할 메타데이터에 대한 저수준 환경 접근. |
 | `core.platform.processing_lease` | 344 | — |
 | `core.platform.scratch` | 99 | — |
-| `core.platform.state_writer` | 1014 | — |
+| `core.platform.state_writer` | 1020 | — |
 | `core.platform.status_store` | 54 | — |
 | `core.platform.subprocess_entries` | 23 | — |
 | `core.platform.tasks` | 35 | — |
@@ -823,45 +827,45 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 
 시스템 프롬프트와 컨텍스트 구성.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
-| `core.prompt` | 1 | Prompt construction package; import specific modules directly. |
+| `core.prompt` | 1 | 프롬프트 구성 패키지. 특정 모듈을 직접 가져오세요. |
 | `core.prompt.assembler` | 307 | — |
-| `core.prompt.builder` | 1289 | — |
-| `core.prompt.context` | 490 | Context window usage tracker. |
+| `core.prompt.builder` | 1297 | — |
+| `core.prompt.context` | 490 | 컨텍스트 창 사용량 추적기. |
 | `core.prompt.messaging` | 147 | — |
-| `core.prompt.org_context` | 378 | — |
+| `core.prompt.org_context` | 379 | — |
 | `core.prompt.sections` | 52 | — |
 
 ## `core.runtime`
 
-Anima 메인의 런타임 구성 요소, 프로세스 간 통신 및 작업 실행.
+Anima 메인의 런타임 구성 요소, 프로세스 간 통신, 작업 실행.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `core.runtime` | 1 | 개별 Anima 프로세스가 소유하는 런타임 구성 요소. |
-| `core.runtime.cron_diagnostics` | 85 | LLM 실행을 낭비하는 cron 일정에 대한 등록 시점 진단. |
-| `core.runtime.cron_followup` | 169 | 레거시 및 격리 실행기에서 공유하는 명령 cron 후속 처리 정책. |
-| `core.runtime.event_bus` | 88 | Anima 메인 실행기가 내보낸 이벤트를 위한 프로세스 내 버퍼. |
+| `core.runtime.cron_diagnostics` | 85 | LLM 실행을 낭비하는 크론 일정에 대한 등록 시점 진단. |
+| `core.runtime.cron_followup` | 169 | 레거시 및 격리된 실행기를 위한 공유 명령 크론 후속 처리 정책. |
+| `core.runtime.event_bus` | 88 | Anima 메인 실행기가 발생시킨 이벤트를 위한 프로세스 내 이벤트 버퍼. |
 | `core.runtime.inbox_rate_limiter` | 371 | 이벤트 기반 받은 편지함 깨우기 및 지연된 트리거 관리. |
 | `core.runtime.ipc` | 508 | 플랫폼별 전송 방식을 통해 JSON Lines를 사용하는 IPC 통신 계층. |
 | `core.runtime.ipc_v2` | 414 | Anima 메인과 작업 실행기 사이에서 사용하는 영구 양방향 IPC v2. |
-| `core.runtime.memory_service` | 774 | Anima 메인 소유 벡터 메모리 서비스. |
+| `core.runtime.memory_service` | 774 | Anima 메인이 소유하는 벡터 메모리 서비스. |
 | `core.runtime.process_role` | 25 | AnimaWorks 프로세스 진입점에서 공유하는 프로세스 역할 메타데이터. |
 | `core.runtime.runner` | 1409 | Anima 하위 프로세스의 자식 프로세스 진입점. |
 | `core.runtime.schedule_parser` | 484 | — |
-| `core.runtime.scheduler_manager` | 1058 | 하트비트 및 cron 작업을 위한 APScheduler 관리. |
+| `core.runtime.scheduler_manager` | 1059 | 하트비트 및 크론 작업을 위한 APScheduler 관리. |
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 449 | 스트리밍 IPC 메시지 처리기. |
-| `core.runtime.task_runner` | 1056 | 일회성 작업 실행기 진입점. |
-| `core.runtime.task_runner_supervisor` | 1446 | 일회성 작업 실행기 프로세스의 Anima 메인 측 수명 주기 관리자. |
-| `core.runtime.transport` | 240 | IPC server/client 통신용 전송 헬퍼. |
+| `core.runtime.task_runner` | 1056 | 일회용 작업 실행기 진입점. |
+| `core.runtime.task_runner_supervisor` | 1446 | 일회용 작업 실행기 프로세스의 Anima 메인 측 수명 주기 관리자. |
+| `core.runtime.transport` | 240 | IPC server/client 통신을 위한 전송 헬퍼. |
 
 ## `core.skills`
 
-스킬 검색, 로드 및 실행 지원.
+스킬 검색, 로드, 실행 지원.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `core.skills` | 20 | — |
 | `core.skills.activation` | 459 | — |
@@ -879,9 +883,9 @@ Anima 메인의 런타임 구성 요소, 프로세스 간 통신 및 작업 실�
 | `core.skills.ledger` | 404 | — |
 | `core.skills.loader` | 176 | — |
 | `core.skills.migration._common（非公開）` | 179 | — |
-| `core.skills.migration.hermes` | 513 | — |
+| `core.skills.migration.hermes` | 560 | — |
 | `core.skills.migration.hermes_format` | 170 | — |
-| `core.skills.migration.openclaw` | 220 | — |
+| `core.skills.migration.openclaw` | 269 | — |
 | `core.skills.migration.report` | 125 | — |
 | `core.skills.models` | 384 | — |
 | `core.skills.pointer_rewriter` | 221 | — |
@@ -982,13 +986,13 @@ Anima 메인의 런타임 구성 요소, 프로세스 간 통신 및 작업 실�
 
 도구 스키마, 권한, 실행 기반.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
-| `core.tooling` | 1 | Tooling package; import specific modules to avoid eager handler loading. |
-| `core.tooling._handler_protocols（非公開）` | 233 | Structural host protocols for the compositional mixins. |
-| `core.tooling.codex_command_hook` | 31 | Core command-policy decision for Codex's PreToolUse hook. |
+| `core.tooling` | 1 | 도구 패키지. 핸들러가 미리 로드되지 않도록 특정 모듈을 가져오세요. |
+| `core.tooling._handler_protocols（非公開）` | 233 | 구성형 믹스인을 위한 구조적 호스트 프로토콜. |
+| `core.tooling.codex_command_hook` | 31 | Codex의 PreToolUse 훅을 위한 핵심 명령 정책 결정. |
 | `core.tooling.dispatch` | 256 | — |
-| `core.tooling.handler` | 911 | — |
+| `core.tooling.handler` | 912 | — |
 | `core.tooling.handler_base` | 335 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
 | `core.tooling.handler_comms` | 1027 | — |
@@ -996,7 +1000,7 @@ Anima 메인의 런타임 구성 요소, 프로세스 간 통신 및 작업 실�
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
 | `core.tooling.handler_files` | 899 | — |
-| `core.tooling.handler_memory` | 1434 | — |
+| `core.tooling.handler_memory` | 1515 | — |
 | `core.tooling.handler_org` | 39 | — |
 | `core.tooling.handler_org_dashboard` | 203 | — |
 | `core.tooling.handler_perms` | 446 | — |
@@ -1027,7 +1031,7 @@ Anima 메인의 런타임 구성 요소, 프로세스 간 통신 및 작업 실�
 | `core.tooling.skill_creator` | 120 | — |
 | `core.tooling.skill_promotion_tool` | 176 | — |
 | `core.tooling.standalone` | 322 | — |
-| `core.tooling.tool_context` | 17 | Shared runtime state passed to ToolHandler mixin delegates. |
+| `core.tooling.tool_context` | 17 | ToolHandler 믹스인 위임 객체에 전달되는 공유 런타임 상태. |
 
 ## `core.tooling.policy`
 
@@ -1087,16 +1091,16 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1517 | — |
-| `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
+| `server.app` | 1518 | — |
+| `server.enclave_delivery` | 327 | 완료된 enclave ask 작업을 수집해 호스트 받은 편지함으로 전달. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
 | `server.localhost` | 86 | — |
 | `server.reload_manager` | 115 | — |
-| `server.room_manager` | 542 | Meeting room lifecycle, orchestration, and minutes generation. |
+| `server.room_manager` | 542 | 회의실 수명 주기, 오케스트레이션 및 회의록 생성. |
 | `server.stream_registry` | 489 | — |
 | `server.websocket` | 165 | — |
 
@@ -1104,27 +1108,27 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
-| `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
+| `server.gateways` | 1 | 서버가 실행하는 인바운드 chat/meeting 게이트웨이(Slack, Discord, Zoom, GitHub). |
 | `server.gateways.discord_channel_sync` | 278 | — |
 | `server.gateways.discord_gateway` | 727 | — |
 | `server.gateways.github_gateway` | 534 | — |
 | `server.gateways.slack_channel_sync` | 505 | — |
 | `server.gateways.slack_interactive` | 239 | — |
-| `server.gateways.slack_socket` | 1145 | — |
+| `server.gateways.slack_socket` | 1146 | — |
 | `server.gateways.zoom_gateway` | 700 | — |
 
 ## `server.routes`
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 63 | — |
-| `server.routes.animas` | 1268 | — |
+| `server.routes.animas` | 1271 | — |
 | `server.routes.approve` | 89 | — |
-| `server.routes.assets` | 1737 | — |
+| `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 133 | — |
 | `server.routes.channels` | 496 | — |
@@ -1140,21 +1144,21 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1537 | — |
+| `server.routes.internal` | 1549 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
-| `server.routes.memory_routes` | 531 | — |
+| `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 404 | — |
 | `server.routes.phone_stream` | 258 | — |
-| `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
+| `server.routes.room` | 443 | SSE 스트리밍을 지원하는 회의실 API 경로. |
 | `server.routes.sessions` | 734 | — |
-| `server.routes.setup` | 603 | — |
+| `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
-| `server.routes.system` | 1217 | — |
+| `server.routes.system` | 1218 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 280 | — |
-| `server.routes.voice` | 223 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.voice` | 223 | 음성 채팅 WebSocket 엔드포인트. Anima별 status.json 설정은 공용 헬퍼를 사용합니다. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 46 | — |
 
@@ -1171,16 +1175,16 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
-| `server.supervisor` | 23 | Server-level supervision APIs for managing Anima processes. |
-| `server.supervisor._manager_protocols（非公開）` | 85 | Structural host protocols for the compositional mixins. |
-| `server.supervisor._mgr_health（非公開）` | 470 | Health check mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_rag_repair（非公開）` | 268 | Supervised RAG repair mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_reconcile（非公開）` | 320 | Reconciliation mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_scheduler（非公開）` | 1281 | System scheduler mixin for ProcessSupervisor. |
+| `server.supervisor` | 23 | Anima 프로세스를 관리하기 위한 서버 수준 감독 API. |
+| `server.supervisor._manager_protocols（非公開）` | 85 | 조합형 믹스인을 위한 구조적 호스트 프로토콜. |
+| `server.supervisor._mgr_health（非公開）` | 470 | ProcessSupervisor용 상태 확인 믹스인. |
+| `server.supervisor._mgr_rag_repair（非公開）` | 268 | ProcessSupervisor용 감독형 RAG 복구 믹스인. |
+| `server.supervisor._mgr_reconcile（非公開）` | 321 | ProcessSupervisor용 조정 믹스인. |
+| `server.supervisor._mgr_scheduler（非公開）` | 1282 | ProcessSupervisor용 시스템 스케줄러 믹스인. |
 | `server.supervisor.activity_schedule` | 100 | — |
 | `server.supervisor.auto_updater` | 198 | — |
-| `server.supervisor.manager` | 1275 | Process Supervisor - Manages lifecycle of Anima child processes. |
-| `server.supervisor.process_handle` | 768 | Process handle for managing child Anima processes. |
-| `server.supervisor.restart_state` | 169 | Unified restart state machine for ProcessSupervisor. |
+| `server.supervisor.manager` | 1276 | 프로세스 감독자 - Anima 자식 프로세스의 수명 주기를 관리합니다. |
+| `server.supervisor.process_handle` | 768 | 자식 Anima 프로세스를 관리하는 프로세스 핸들. |
+| `server.supervisor.restart_state` | 169 | ProcessSupervisor용 통합 재시작 상태 머신. |

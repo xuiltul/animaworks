@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "animaworks"
-version = "0.16.0"
+version = "0.17.0"
 description = "AnimaWorks - Digital Anima Framework with library-type memory"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -148,7 +148,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["RUF006", "ASYNC", "S110"]
+"tests/**/*.py" = ["RUF006", "ASYNC", "S110", "SIM117"]
 "scripts/**/*.py" = ["RUF006", "ASYNC", "S110"]
 "swe/**/*.py" = ["RUF006", "ASYNC", "S110"]
 "core/integrations/image_gen.py" = ["F401"]

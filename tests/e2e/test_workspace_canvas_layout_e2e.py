@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 CARD_W = 280
@@ -38,7 +37,7 @@ def _create_app_with_config(
     for anima_name in anima_names:
         anima_dir = animas_dir / anima_name
         anima_dir.mkdir(parents=True, exist_ok=True)
-        (anima_dir / 'identity.md').write_text(
+        (anima_dir / 'IDENTITY.md').write_text(
             f'# {anima_name}\n\nTest identity for {anima_name}.\n',
             encoding='utf-8',
         )
@@ -92,7 +91,7 @@ def _create_app_with_config(
 
     app.state.anima_names = anima_names
 
-    from core.config.models import load_config, invalidate_cache
+    from core.config.models import invalidate_cache, load_config
 
     invalidate_cache()
     real_config = load_config(config_path)

@@ -56,7 +56,7 @@ def _make_digital_anima(anima_dir: Path, shared_dir: Path):
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "alice"
     d.mkdir(parents=True)
-    (d / "identity.md").write_text("# Alice", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
     return d
 
 
@@ -109,7 +109,7 @@ class TestLoadRecentHeartbeatSummary:
         """Returns empty string when heartbeat_history directory does not exist."""
         anima_dir = tmp_path / "animas" / "bob"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
 
         with (
             patch("core.memory.manager.get_company_dir", return_value=tmp_path / "company"),
@@ -128,7 +128,7 @@ class TestLoadRecentHeartbeatSummary:
         """Creates JSONL entries and verifies parsed output."""
         anima_dir = tmp_path / "animas" / "bob"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
         history_dir = anima_dir / "shortterm" / "heartbeat_history"
         history_dir.mkdir(parents=True)
 
@@ -174,7 +174,7 @@ class TestLoadRecentHeartbeatSummary:
         """HEARTBEAT_OK entries should be excluded from the summary."""
         anima_dir = tmp_path / "animas" / "bob"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
         history_dir = anima_dir / "shortterm" / "heartbeat_history"
         history_dir.mkdir(parents=True)
 
@@ -230,7 +230,7 @@ class TestLoadRecentHeartbeatSummary:
         """Respects the limit parameter."""
         anima_dir = tmp_path / "animas" / "bob"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
         history_dir = anima_dir / "shortterm" / "heartbeat_history"
         history_dir.mkdir(parents=True)
 

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/integrations/index.md -->
-<!-- i18n: source-sha256=13d454db58d55c2e6ee64f11dc01dd4adba26e91c464ce4204336c7d2d105e4e generated=2026-10-16 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=13d454db58d55c2e6ee64f11dc01dd4adba26e91c464ce4204336c7d2d105e4e generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 581e20f1
 

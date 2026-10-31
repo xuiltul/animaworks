@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.schemas import CronTask, CycleResult
 from core.runtime.task_runner import execute_cron_contract, execute_cron_followup_contract
+from core.schemas import CronTask, CycleResult
 
 
 @pytest.mark.asyncio

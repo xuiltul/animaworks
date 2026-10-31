@@ -214,7 +214,7 @@ def _compare_or_write(golden_id: str, actual: dict) -> None:
 def _anima_dir(tmp_path: Path, name: str) -> Path:
     d = tmp_path / "animas" / name
     d.mkdir(parents=True)
-    (d / "identity.md").write_text("# Test Anima\n", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Anima\n", encoding="utf-8")
     (d / "shortterm" / "chat").mkdir(parents=True)
     (d / "shortterm" / "heartbeat").mkdir(parents=True)
     (d / "state").mkdir()

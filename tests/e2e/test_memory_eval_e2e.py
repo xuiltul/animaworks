@@ -93,11 +93,11 @@ class TestReconsolidationAblationE2E:
     @pytest.mark.asyncio
     async def test_full_reconsolidation_pipeline(self, tmp_path):
         """Run reconsolidation ablation end-to-end in mock mode."""
-        from experiments.memory_eval.dataset import AblationDatasetGenerator
         from experiments.memory_eval.ablation.reconsolidation import (
             ReconsolidationAblation,
             ReconsolidationAblationResult,
         )
+        from experiments.memory_eval.dataset import AblationDatasetGenerator
 
         # Step 1: Generate dataset
         dataset_dir = tmp_path / "dataset"
@@ -283,15 +283,15 @@ class TestFullPipelineE2E:
     @pytest.mark.asyncio
     async def test_result_normalization(self, tmp_path):
         """Verify that result normalization produces expected structure."""
-        from experiments.memory_eval.run_all import (
-            _normalize_priming_result,
-            _normalize_forgetting_result,
-            _normalize_reconsolidation_result,
-        )
-        from experiments.memory_eval.ablation.priming import PrimingAblationResult
         from experiments.memory_eval.ablation.forgetting import ForgettingAblationResult
+        from experiments.memory_eval.ablation.priming import PrimingAblationResult
         from experiments.memory_eval.ablation.reconsolidation import (
             ReconsolidationAblationResult,
+        )
+        from experiments.memory_eval.run_all import (
+            _normalize_forgetting_result,
+            _normalize_priming_result,
+            _normalize_reconsolidation_result,
         )
 
         # Test priming normalization

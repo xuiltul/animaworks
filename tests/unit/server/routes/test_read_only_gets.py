@@ -29,8 +29,8 @@ async def test_read_only_get_apis_do_not_create_or_migrate_memory_files(tmp_path
     legacy_shortterm = anima_dir / "shortterm"
     state_dir.mkdir(parents=True)
     legacy_shortterm.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("Alice identity\n", encoding="utf-8")
-    (anima_dir / "injection.md").write_text("Alice instructions\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("Alice identity\n", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("Alice instructions\n", encoding="utf-8")
     (anima_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
     (anima_dir / "permissions.md").write_text("## File Operations\n", encoding="utf-8")
     (state_dir / "current_task.md").write_text("legacy task\n", encoding="utf-8")

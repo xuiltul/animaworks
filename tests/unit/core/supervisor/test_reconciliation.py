@@ -4,7 +4,7 @@
 """Unit tests for ProcessSupervisor._reconcile() — on_disk_incomplete protection.
 
 Verifies that the reconciliation loop correctly handles anima directories
-that have identity.md but are missing status.json (incomplete / factory-in-progress).
+that have IDENTITY.md but are missing status.json (incomplete / factory-in-progress).
 These animas must NOT be auto-started, but if already running they must NOT
 be killed either.
 """
@@ -16,9 +16,7 @@ import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from server.supervisor.manager import ProcessSupervisor
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -50,7 +48,7 @@ def _create_anima_dir(
     d = animas_dir / name
     d.mkdir(parents=True, exist_ok=True)
     if has_identity:
-        (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     if has_status:
         (d / "status.json").write_text(
             json.dumps({"enabled": enabled}), encoding="utf-8"
@@ -65,7 +63,7 @@ class TestReconcileOnDiskIncomplete:
     """Tests for the on_disk_incomplete protection in _reconcile()."""
 
     async def test_running_anima_without_status_json_not_killed(self, tmp_path: Path):
-        """A running anima with identity.md but no status.json must NOT be stopped."""
+        """A running anima with IDENTITY.md but no status.json must NOT be stopped."""
         sup = _make_supervisor(tmp_path)
         _create_anima_dir(sup.animas_dir, "sakura", has_identity=True, has_status=False)
 
@@ -123,7 +121,7 @@ class TestReconcileOnDiskIncomplete:
         sup.stop_anima.assert_called_once_with("sakura")
 
     async def test_incomplete_anima_not_auto_started(self, tmp_path: Path):
-        """An anima with identity.md but no status.json must NOT be auto-started."""
+        """An anima with IDENTITY.md but no status.json must NOT be auto-started."""
         sup = _make_supervisor(tmp_path)
         _create_anima_dir(sup.animas_dir, "sakura", has_identity=True, has_status=False)
 
@@ -138,13 +136,13 @@ class TestReconcileOnDiskIncomplete:
         sup.stop_anima.assert_not_called()
 
     async def test_dir_without_identity_md_ignored(self, tmp_path: Path):
-        """A directory without identity.md is completely ignored.
+        """A directory without IDENTITY.md is completely ignored.
 
         It won't be in on_disk or on_disk_incomplete, so a running process
         with that name will be treated as "removed from disk" and stopped.
         """
         sup = _make_supervisor(tmp_path)
-        # Create dir with status.json but NO identity.md
+        # Create dir with status.json but NO IDENTITY.md
         d = sup.animas_dir / "noidentity"
         d.mkdir()
         (d / "status.json").write_text('{"enabled": true}', encoding="utf-8")

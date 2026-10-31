@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -29,8 +29,8 @@ def app_with_assets(tmp_path):
     test_glb = assets_dir / "avatar_chibi.glb"
     test_glb.write_bytes(b"fake-glb-data-for-testing")
 
-    # Create identity.md
-    (anima_dir / "identity.md").write_text("# Test Anima\n")
+    # Create IDENTITY.md
+    (anima_dir / "IDENTITY.md").write_text("# Test Anima\n")
 
     router = create_assets_router()
     app.include_router(router, prefix="/api")

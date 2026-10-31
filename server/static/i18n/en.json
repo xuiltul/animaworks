@@ -361,7 +361,7 @@
   "chat.episode_log": "Episode log",
   "chat.error_prefix": "[Error]",
   "chat.heartbeat_activity": "Heartbeat",
-  "chat.heartbeat_not_configured": "heartbeat.md is not configured",
+  "chat.heartbeat_not_configured": "HEARTBEAT.md is not configured",
   "chat.heartbeat_relay": "Processing heartbeat...",
   "chat.heartbeat_relay_done": "Preparing response...",
   "chat.history_archive": "Session archive",

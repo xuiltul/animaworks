@@ -37,7 +37,7 @@ def _build_handler(tmp_path: Path):
 
     anima_dir = tmp_path / "animas" / "test_anima"
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text("# test_anima\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# test_anima\n", encoding="utf-8")
     (anima_dir / "activity_log").mkdir(exist_ok=True)
     (anima_dir / "skills").mkdir(exist_ok=True)
 
@@ -67,7 +67,7 @@ class TestCommonSkillsWriteRedirect:
         content = "---\nname: test-skill\ndescription: >-\n  test 「test」\n---\n\n# test\n\n## Procedure\n\n1. step\n"
 
         with patch("core.paths.get_common_skills_dir", return_value=cs_dir):
-            result = handler.handle(
+            handler.handle(
                 "write_memory_file",
                 {
                     "path": "common_skills/test-skill/SKILL.md",
@@ -106,7 +106,7 @@ class TestCommonSkillsWriteRedirect:
         content = "---\nname: flat\ndescription: >-\n  flat 「flat」\n---\n\n# flat\n"
 
         with patch("core.paths.get_common_skills_dir", return_value=cs_dir):
-            result = handler.handle(
+            handler.handle(
                 "write_memory_file",
                 {
                     "path": "common_skills/flat.md",
@@ -282,8 +282,8 @@ class TestJapaneseSkillCreatorContent:
         content = path.read_text(encoding="utf-8")
         assert "create_skill" in content
         lines = content.splitlines()
-        checklist_lines = [l for l in lines if l.strip().startswith("- [ ]")]
-        create_skill_items = [l for l in checklist_lines if "create_skill" in l]
+        checklist_lines = [line for line in lines if line.strip().startswith("- [ ]")]
+        create_skill_items = [line for line in checklist_lines if "create_skill" in line]
         assert len(create_skill_items) >= 1
 
 

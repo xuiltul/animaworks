@@ -12,6 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    SOUL_FILE,
+)
 from core.skills.hub import SkillHub
 from core.tasks.queue import TaskQueueManager
 from core.time_utils import now_iso
@@ -84,6 +90,7 @@ def import_hermes(options: HermesImportOptions) -> MigrationReport:
     _migrate_skills(source, options, report, import_lock_path, seen)
     _migrate_usage(source, options, report, import_lock_path, seen)
     _migrate_hub_lock(source, options, report, import_lock_path, seen)
+    _migrate_workspace_files(source, options, report, import_lock_path, seen)
     _migrate_memory_and_profile(source, options, report, import_lock_path, seen)
     _migrate_cron(source, options, report, import_lock_path, seen)
     _migrate_tasks(source, options, report, import_lock_path, seen)
@@ -287,6 +294,42 @@ def _migrate_hub_lock(
         )
 
 
+def _migrate_workspace_files(
+    source: Path,
+    options: HermesImportOptions,
+    report: MigrationReport,
+    import_lock_path: Path,
+    seen: set[str],
+) -> None:
+    """Reflect Hermes standard workspace files into the Anima directory."""
+    if not options.target_anima:
+        return
+    anima_dir = _anima_dir(options)
+    draft_dir = _migration_dir(options) / "drafts"
+    for source_name, action in (
+        (SOUL_FILE, "soul_import"),
+        (IDENTITY_FILE, "identity_import"),
+        (AGENTS_FILE, "agents_import"),
+        (HEARTBEAT_FILE, "heartbeat_import"),
+    ):
+        source_path = source / source_name
+        if not source_path.is_file():
+            continue
+        text = redact_credentials(source_path.read_text(encoding="utf-8"))
+        target = anima_dir / source_name
+        if target.exists() and not options.replace:
+            body = (
+                provenance_header("hermes", source_path, report.batch_id)
+                + f"# Hermes {source_name} Draft\n\n"
+                + f"{target.name} already exists; review this draft and merge it manually if desired.\n\n"
+                + text
+            )
+            target = draft_dir / f"hermes_{source_name.removesuffix('.md')}_{action}_draft.md"
+        else:
+            body = text
+        _write_text_item(source_path, target, body, action, options, report, import_lock_path, seen)
+
+
 def _migrate_memory_and_profile(
     source: Path,
     options: HermesImportOptions,
@@ -459,6 +502,10 @@ def _planned_backup_targets(source: Path, options: HermesImportOptions, migratio
     if options.target_anima:
         targets.extend(
             [
+                _anima_dir(options) / SOUL_FILE,
+                _anima_dir(options) / IDENTITY_FILE,
+                _anima_dir(options) / AGENTS_FILE,
+                _anima_dir(options) / HEARTBEAT_FILE,
                 _anima_dir(options) / "state" / "skill_usage.jsonl",
                 _anima_dir(options) / "state" / "skill_hub_lock.jsonl",
             ]

@@ -61,13 +61,13 @@ In the Mode A schema, they use **PascalCase names**. Inside `ToolHandler`, they 
 | **WebSearch** | `web_search` | Web search. External content is untrusted | `query` |
 | **WebFetch** | `web_fetch` | Fetches URL content as markdown. External content is untrusted | `url` |
 
-### Usage Guidelines
+### Key points for choosing
 
-- File operations: Prioritize Read / Write / Edit. Using `cat` / `sed` / `awk` in Bash is not recommended.
-- Search: Prioritize Grep (content) and Glob (paths). Using `grep` / `find` in Bash is not recommended.
-- Within Anima's memory tree: Use **`read_memory_file` / `write_memory_file` / `archive_memory_file`** (relative paths). Use Read / Write when absolute path operations across the entire project are needed—this is the division of roles.
-- For schedules Anima can edit (`cron.md` / `heartbeat.md`), even if they are subordinate, edit them using the **write memory tool** by specifying them as `../{anima_name}/cron.md`.
-- `config.json` / `status.json` / `identity.md` / `injection.md` / `permissions.json` are owned by root, and Anima does not write to them directly. Identity creation during bootstrap and authorized supervisor injection changes are forwarded from `write_memory_file` to root for authorization. For other changes, use supervisor tools or root CLI/API; do not configure them via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection.
+- File operations: Prefer Read / Write / Edit. Using Bash for `cat` / `sed` / `awk` is discouraged.
+- Search: Prefer Grep (content) and Glob (paths). Using Bash for `grep` / `find` is discouraged.
+- Within Anima’s memory tree: **`read_memory_file` / `write_memory_file` / `archive_memory_file`** (relative paths). Use Read / Write when operations require absolute paths across the project.
+- For schedules that Anima can edit (`cron.md` / `HEARTBEAT.md`), including those in subdirectories, use the **write memory tool** and specify the path as `../{anima_name}/cron.md`.
+- `config.json` / `status.json` / `IDENTITY.md` / `SOUL.md` / `AGENTS.md` / `permissions.json` are owned by root, and Anima must not write to them directly. Creation of IDENTITY.md / SOUL.md during bootstrap and changes to AGENTS.md by an authorized supervisor are forwarded to root via `write_memory_file` for authorization. For other changes, use a tool for supervisors or root CLI/API; do not configure them using Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection.
 
 ### Exploration Scope Limits (Runaway Prevention)
 

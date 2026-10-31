@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: a16a2592e97533d7d3e9e84e0bca5219e53cc20f44ec8974514da0e9115a3be9 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: a6ac4774664a64599d96f49489e41137fc67acc6468e7d0cbe92fa0198f217ee -->
 
 # CLI リファレンス: `animaworks`
 
@@ -17,7 +17,7 @@
 Manage anima processes
 
 `usage: animaworks anima [-h]
-                        {restart,status,create,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
+                        {restart,status,create,export,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
                         ...`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
@@ -87,6 +87,18 @@ Enable (復帰) an anima
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
 | anima | positional | — | — | Anima name to enable |
+
+## `anima export`
+
+Anima のワークスペースを OpenClaw / Hermes Agent 形式で書き出す
+
+`usage: animaworks anima export [-h] --format {openclaw,hermes} --out DIR anima`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| anima | positional | — | — | Anima name to export |
+| --format | option | — | openclaw, hermes | Target workspace format |
+| --out | option | — | — | Output directory |
 
 ## `anima info`
 
@@ -686,7 +698,8 @@ Run a stdio MCP server for an anima
 
 実行時データに必要なマイグレーションを実行します。
 
-`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]`
+`usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]
+                          [--rollback-standard-files] [--anima NAME]`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
@@ -694,6 +707,8 @@ Run a stdio MCP server for an anima
 | --verbose | flag | false | — | Show detailed file-level changes |
 | --list | flag | false | — | List all migration steps and their status |
 | --force | flag | false | — | Re-apply all migrations regardless of state |
+| --rollback-standard-files | flag | false | — | Restore legacy workspace files from the latest standard-files archive |
+| --anima | option | — | — | Limit rollback to one anima |
 
 ## `models`
 

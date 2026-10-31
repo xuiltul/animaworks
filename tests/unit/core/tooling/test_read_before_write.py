@@ -21,8 +21,8 @@ def anima_dir(tmp_path):
     (tmp_path / "episodes").mkdir()
     (tmp_path / "state").mkdir()
     (tmp_path / "shortterm").mkdir()
-    (tmp_path / "identity.md").write_text("identity")
-    (tmp_path / "injection.md").write_text("injection")
+    (tmp_path / "IDENTITY.md").write_text("identity")
+    (tmp_path / "AGENTS.md").write_text("injection")
     return tmp_path
 
 

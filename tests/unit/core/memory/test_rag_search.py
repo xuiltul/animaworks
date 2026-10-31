@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.memory.rag.retriever import MemoryRetriever, RetrievalResult
+from core.memory.rag.retriever import RetrievalResult
 from core.memory.retrieval.rag_search import (
     RAGMemorySearch,
     _keyword_token_matches,

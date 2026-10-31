@@ -50,7 +50,7 @@ class TestListAnimasBootstrapFlag:
         """When supervisor reports bootstrapping=True, API response should reflect it."""
         animas_dir = tmp_path / "animas"
         (animas_dir / "alice").mkdir(parents=True)
-        (animas_dir / "alice" / "identity.md").write_text("# Alice\n")
+        (animas_dir / "alice" / "IDENTITY.md").write_text("# Alice\n")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -77,7 +77,7 @@ class TestListAnimasBootstrapFlag:
         """When supervisor omits bootstrapping key, API defaults to False."""
         animas_dir = tmp_path / "animas"
         (animas_dir / "alice").mkdir(parents=True)
-        (animas_dir / "alice" / "identity.md").write_text("# Alice\n")
+        (animas_dir / "alice" / "IDENTITY.md").write_text("# Alice\n")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -110,7 +110,7 @@ class TestStartAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -141,7 +141,7 @@ class TestStartAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -180,7 +180,7 @@ class TestStartAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas_dir=animas_dir,

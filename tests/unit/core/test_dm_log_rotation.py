@@ -214,8 +214,8 @@ class TestDmLogRotationSchedulerRegistration:
         """system_dm_log_rotation ジョブがスケジューラに登録される。"""
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        from server.supervisor.manager import ProcessSupervisor
         from core.time_utils import get_app_timezone
+        from server.supervisor.manager import ProcessSupervisor
 
         supervisor = ProcessSupervisor(
             animas_dir=tmp_path / "animas",

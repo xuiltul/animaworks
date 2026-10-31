@@ -249,7 +249,7 @@ Anima 作成時に `--role` で専門ロールを指定できるのは、**MD �
 ### 適用フロー
 
 1. **作成時**（`create_from_md`）の順序は次のとおり:
-   - `_apply_defaults_from_sheet()` … キャラシートから `identity.md` / `injection.md` /（権限セクションがあれば）`permissions.md` → `permissions.json` へマイグレーション
+   - `_apply_defaults_from_sheet()` … キャラシートから `IDENTITY.md` / `SOUL.md` / `AGENTS.md` /（権限セクションがあれば）`permissions.md` → `permissions.json` へマイグレーション
    - `_apply_role_defaults()` … ロールの `permissions.json` と `specialty_prompt.md` を **上書きコピー**（キャラシート由来の `permissions.json` はロール側で上書きされる）
    - `_create_status_json()` … `SHARED_ROLES_DIR`（`_shared/roles/<role>/defaults.json`）から上表のモデル・コンテキスト設定を読み、キャラシートの「モデル」「credential」があればそれで上書きして `status.json` を書く。キャラシートの「実行モード」に値があるときだけ `execution_mode` を書き込む；未指定ならキー自体を省略し、`models.json` 等のパターン解決に任せる（`core/anima/factory.py` の `_create_status_json`）。
 2. **ロール変更時**（`animaworks anima set-role`）: root が `_apply_role_defaults()` で `permissions.json` と `specialty_prompt.md` を適用。root 所有の `status.json` には `model`, `context_threshold`, `conversation_history_threshold` が `defaults.json` からマージされる。`background_model` は **set-role では更新されない**（`animaworks anima set-background-model` を使う）。`--status-only` は `role` のみ更新しテンプレートファイルには触れない。`--no-restart` で API 経由の自動再起動をスキップできる。CLI の成功出力には `permissions.json` が含まれる（`cli/commands/anima_mgmt.py` の `cmd_anima_set_role`）。

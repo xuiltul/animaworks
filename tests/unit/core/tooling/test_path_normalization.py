@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from core.tooling.handler_memory import _PathNormResult, _normalize_memory_path
+from core.tooling.handler_memory import _normalize_memory_path, _PathNormResult
 
 DATA_DIR = Path("/home/testuser/.animaworks")
 ANIMA_DIR = DATA_DIR / "animas" / "sakura"

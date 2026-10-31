@@ -15,7 +15,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "Anima '{name}' status.json is invalid or unreadable; the operation was aborted.",
     },
     "anima.bootstrap_complete_requires_identity": {
-        "ja": "Anima '{name}' の人格（identity.md / injection.md）がまだ書かれていないため、完了扱いにできません。「やり直す」を選んでください。",
-        "en": "Anima '{name}' has no identity.md / injection.md yet, so setup cannot be marked complete. Choose retry instead.",
+        "ja": "Anima '{name}' の人格（IDENTITY.md / AGENTS.md）がまだ書かれていないため、完了扱いにできません。「やり直す」を選んでください。",
+        "en": "Anima '{name}' has no IDENTITY.md / AGENTS.md yet, so setup cannot be marked complete. Choose retry instead.",
     },
 }

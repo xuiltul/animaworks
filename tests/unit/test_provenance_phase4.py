@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from core.memory.priming import PrimingResult, format_priming_section
 from core.trust import (
     ORIGIN_ANIMA,
     ORIGIN_CONSOLIDATION,
@@ -21,7 +22,6 @@ from core.trust import (
     ORIGIN_UNKNOWN,
     resolve_trust,
 )
-from core.memory.priming import PrimingResult, format_priming_section
 
 # ── MemoryIndexer._extract_metadata with origin ───────────────
 

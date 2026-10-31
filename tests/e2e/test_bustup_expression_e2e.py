@@ -16,7 +16,6 @@ from httpx import ASGITransport, AsyncClient
 
 from server.stream_registry import StreamRegistry
 
-
 # ── Test Helpers ─────────────────────────────────────────────
 
 

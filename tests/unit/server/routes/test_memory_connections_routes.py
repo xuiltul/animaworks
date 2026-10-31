@@ -19,9 +19,9 @@ def _make_app(tmp_path: Path) -> tuple[FastAPI, Path, Path]:
     shared_dir = data_dir / "shared"
     anima_dir = animas_dir / "alice"
     (anima_dir / "facts").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("Alice", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("Alice", encoding="utf-8")
     (animas_dir / "bob").mkdir(parents=True)
-    (animas_dir / "bob" / "identity.md").write_text("Bob", encoding="utf-8")
+    (animas_dir / "bob" / "IDENTITY.md").write_text("Bob", encoding="utf-8")
     (shared_dir / "users" / "taka").mkdir(parents=True)
     (data_dir / "config.json").write_text(
         json.dumps({"external_messaging": {"user_aliases": {"guest": {"slack_user_id": "U123"}}}}),

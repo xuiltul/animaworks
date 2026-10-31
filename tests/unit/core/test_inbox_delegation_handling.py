@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.activity.logger import ActivityLogger
 from core.anima.inbox import (
     _append_episode_off_loop,
     _check_task_state,
@@ -26,7 +27,6 @@ from core.anima.inbox import (
     _handle_delegation_dms,
     _split_delegation_items,
 )
-from core.activity.logger import ActivityLogger
 from core.messaging.messenger import InboxItem
 from core.schemas import Message
 

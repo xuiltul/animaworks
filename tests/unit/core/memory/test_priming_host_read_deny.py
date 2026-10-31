@@ -89,7 +89,7 @@ def test_org_context_omits_denied_anima_tree_and_status(tmp_path: Path) -> None:
     peer = data_dir / "animas" / "secret-peer"
     for path in (current, peer):
         path.mkdir(parents=True)
-        (path / "identity.md").write_text("identity", encoding="utf-8")
+        (path / "IDENTITY.md").write_text("identity", encoding="utf-8")
     (current / "status.json").write_text('{"supervisor": null, "role": "main"}', encoding="utf-8")
     (peer / "status.json").write_text(
         '{"supervisor": "agent", "speciality": "DENIED STATUS CANARY"}',

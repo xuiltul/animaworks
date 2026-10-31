@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -34,6 +35,7 @@ def _make_mixin(tmp_path: Path) -> FileToolsMixin:
 
     def _write_procedure(path, content, metadata):
         import yaml
+
         from core.memory.frontmatter import strip_content_frontmatter
         content = strip_content_frontmatter(content)
         fm = yaml.dump(metadata, default_flow_style=False, allow_unicode=True).rstrip()
@@ -41,6 +43,7 @@ def _make_mixin(tmp_path: Path) -> FileToolsMixin:
 
     def _write_knowledge(path, content, metadata):
         import yaml
+
         from core.memory.frontmatter import strip_content_frontmatter
         content = strip_content_frontmatter(content)
         fm = yaml.dump(metadata, default_flow_style=False, allow_unicode=True)

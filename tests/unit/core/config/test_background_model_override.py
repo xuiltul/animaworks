@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 from core.config.models import (
     AnimaDefaults,
     AnimaWorksConfig,
@@ -23,7 +22,6 @@ from core.config.models import (
     resolve_anima_config,
     update_status_model,
 )
-
 
 # ── HeartbeatConfig.default_model ─────────────────────────────
 

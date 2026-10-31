@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
 from server.events import emit, emit_notification
 
 logger = logging.getLogger("animaworks.routes.internal")
@@ -164,7 +165,7 @@ class AnimaControlRequest(BaseModel):
 
 
 class AnimaPromptSettingsRequest(BaseModel):
-    setting: Literal["identity", "injection"]
+    setting: Literal["identity", "soul", "agents", "injection"]
     content: str
     mode: Literal["overwrite", "append"] = "overwrite"
 
@@ -867,7 +868,7 @@ def create_internal_router() -> APIRouter:
                 return JSONResponse(status_code=403, content={"detail": "Target must be a descendant of the caller"})
 
         target_dir = get_animas_dir() / target
-        if not target_dir.is_dir() or not (target_dir / "identity.md").is_file():
+        if not target_dir.is_dir() or not (target_dir / IDENTITY_FILE).is_file():
             return JSONResponse(status_code=404, content={"detail": f"Anima not found: {target}"})
 
         def _persist() -> dict[str, Any]:
@@ -953,7 +954,7 @@ def create_internal_router() -> APIRouter:
         body: AnimaPromptSettingsRequest,
         request: Request,
     ):
-        """Apply an authorized identity/injection change through the root owner."""
+        """Apply an authorized IDENTITY/SOUL/AGENTS change through the root owner."""
         caller, denied = _require_settings_caller(request)
         if denied is not None:
             return denied
@@ -963,13 +964,13 @@ def create_internal_router() -> APIRouter:
         if validate_anima_name(target):
             return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
         target_dir = get_animas_dir() / target
-        if not target_dir.is_dir() or not (target_dir / "identity.md").is_file():
+        if not target_dir.is_dir() or not (target_dir / IDENTITY_FILE).is_file():
             return JSONResponse(status_code=404, content={"detail": f"Anima not found: {target}"})
 
         if caller.kind == "anima":
-            if target == caller.name and body.setting == "injection":
-                # Animas have always maintained their own injection.md (aoi,
-                # natsume, sora in 2026-09); root performs the write.
+            if target == caller.name and body.setting in {"injection", "agents", "soul"}:
+                # Animas maintain their own AGENTS.md / SOUL.md through the
+                # root owner (the former identity/injection split).
                 pass
             elif target == caller.name:
                 from core.anima.bootstrap_state import get_bootstrap_status
@@ -980,7 +981,7 @@ def create_internal_router() -> APIRouter:
                         status_code=403,
                         content={"detail": "Anima prompt settings are root-owned outside bootstrap/repair"},
                     )
-            elif body.setting == "injection":
+            elif body.setting in {"injection", "agents"}:
                 from core.config.models import load_config
                 from core.org.hierarchy import descendants_of
 
@@ -993,7 +994,13 @@ def create_internal_router() -> APIRouter:
             else:
                 return JSONResponse(status_code=403, content={"detail": "Anima identity is root-owned"})
 
-        path = target_dir / ("identity.md" if body.setting == "identity" else "injection.md")
+        filename = {
+            "identity": IDENTITY_FILE,
+            "soul": SOUL_FILE,
+            "agents": AGENTS_FILE,
+            "injection": AGENTS_FILE,
+        }[body.setting]
+        path = target_dir / filename
         content = body.content
         if body.mode == "append":
             try:
@@ -1002,9 +1009,14 @@ def create_internal_router() -> APIRouter:
                 return JSONResponse(status_code=409, content={"detail": str(exc)})
             content = existing + content
         try:
-            from core.anima.settings_store import write_identity, write_injection
+            from core.anima.settings_store import write_agents, write_identity, write_soul
 
-            writer = write_identity if body.setting == "identity" else write_injection
+            writer = {
+                "identity": write_identity,
+                "soul": write_soul,
+                "agents": write_agents,
+                "injection": write_agents,
+            }[body.setting]
             await asyncio.to_thread(writer, target_dir, content)
         except (OSError, ValueError) as exc:
             return JSONResponse(status_code=409, content={"detail": str(exc)})
@@ -1087,7 +1099,7 @@ def create_internal_router() -> APIRouter:
         if not body.path.strip():
             return JSONResponse(status_code=400, content={"detail": "path is required"})
         target_dir = (animas_root / target).resolve()
-        if not target_dir.is_dir() or not (target_dir / "identity.md").is_file():
+        if not target_dir.is_dir() or not (target_dir / IDENTITY_FILE).is_file():
             return JSONResponse(status_code=404, content={"detail": f"Target Anima directory not found: {target}"})
 
         alias = body.alias.strip()

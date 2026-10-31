@@ -110,6 +110,20 @@ class MigrationTracker:
         state.last_migrated_at = now_local().isoformat()
         self.save(state)
 
+    def unmark_applied(self, step_id: str) -> bool:
+        """Remove a step from the applied set so it can run again.
+
+        Returns True when the step was present. Keeps ``applied_version`` so a
+        rollback can be followed by a restart on the same version.
+        """
+        state = self.load()
+        if step_id not in state.steps_applied:
+            return False
+        del state.steps_applied[step_id]
+        state.last_migrated_at = now_local().isoformat()
+        self.save(state)
+        return True
+
     def get_current_version(self) -> str:
         return _get_package_version()
 

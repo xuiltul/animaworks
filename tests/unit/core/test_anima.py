@@ -98,7 +98,7 @@ class TestNeedsBootstrap:
     def test_needs_bootstrap_true(self, data_dir, make_anima):
         anima_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
-        (anima_dir / "bootstrap.md").write_text("bootstrap", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("bootstrap", encoding="utf-8")
 
         with (
             patch("core.anima.digital_anima.AgentCore"),
@@ -114,8 +114,8 @@ class TestNeedsBootstrap:
     def test_needs_bootstrap_false(self, data_dir, make_anima):
         anima_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
-        # Ensure no bootstrap.md
-        bp = anima_dir / "bootstrap.md"
+        # Ensure no BOOTSTRAP.md
+        bp = anima_dir / "BOOTSTRAP.md"
         if bp.exists():
             bp.unlink()
 
@@ -295,7 +295,7 @@ class TestProcessMessage:
 
         anima_dir = make_anima("alice")
         shared_dir = data_dir / "shared"
-        (anima_dir / "bootstrap.md").write_text("bootstrap", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("bootstrap", encoding="utf-8")
 
         with (
             patch("core.anima.digital_anima.AgentCore"),

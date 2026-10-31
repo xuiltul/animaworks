@@ -23,7 +23,7 @@ def e2e_app(tmp_path):
     anima_dir = tmp_path / "sakura"
     assets_dir = anima_dir / "assets"
     assets_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text(
+    (anima_dir / "IDENTITY.md").write_text(
         "# サクラ\nイメージカラー: #FF69B4\n"
     )
 
@@ -115,7 +115,7 @@ class TestAssetThumbnailE2E:
         anima_dir = tmp_path / "sakura"
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# サクラ\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# サクラ\n", encoding="utf-8")
         img = Image.new("RGB", (1024, 1024), color=(80, 160, 240))
         img.save(assets_dir / "icon.png", format="PNG")
 

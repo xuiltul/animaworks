@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=bd0a14e31345d4f51bb84160a1ec1ee5bebc42cd82f2e4018fd535165680ea5b generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=88fc3d8a49e0e876d688423f2072fcc267799d945f9cb7947d005d5b111035a3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API Reference
 
@@ -41,9 +41,9 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 | GET | `/api/animas/{name}/cron` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return the raw cron.md content for an anima. | `server/routes/animas.py:get_anima_cron` |
 | POST | `/api/animas/{name}/disable` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Disable an Anima (set status.json to enabled: false and stop process). | `server/routes/animas.py:disable_anima` |
 | POST | `/api/animas/{name}/enable` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Enable an Anima (set status.json to enabled: true). | `server/routes/animas.py:enable_anima` |
-| GET | `/api/animas/{name}/heartbeat` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return the raw heartbeat.md content for an anima. | `server/routes/animas.py:get_anima_heartbeat` |
-| PUT | `/api/animas/{name}/identity` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Update the identity.md content for an anima. | `server/routes/animas.py:update_anima_identity` |
-| PUT | `/api/animas/{name}/injection` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Update the injection.md content for an anima. | `server/routes/animas.py:update_anima_injection` |
+| GET | `/api/animas/{name}/heartbeat` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return the raw HEARTBEAT.md content for an anima. | `server/routes/animas.py:get_anima_heartbeat` |
+| PUT | `/api/animas/{name}/identity` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Update the IDENTITY.md content for an anima. | `server/routes/animas.py:update_anima_identity` |
+| PUT | `/api/animas/{name}/injection` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Update the AGENTS.md content for an anima. | `server/routes/animas.py:update_anima_injection` |
 | POST | `/api/animas/{name}/interactions/{callback_id}/resolve` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Resolve an interactive call_human request from the main chat UI. | `server/routes/animas.py:resolve_interaction` |
 | POST | `/api/animas/{name}/interrupt` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Interrupt the current LLM session without stopping the process. | `server/routes/animas.py:interrupt_anima` |
 | PUT | `/api/animas/{name}/model` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Update the model setting in status.json for an anima. | `server/routes/animas.py:update_anima_model` |
@@ -137,7 +137,7 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 
 | POST | `/api/internal/anima/create` | Internal | Create an anima outside sandbox EROFS constraints. | `server/routes/internal.py:internal_anima_create` |
 | POST | `/api/internal/animas/{target}/control` | Internal | Persist subordinate control settings after verifying the token owner. | `server/routes/internal.py:internal_anima_control` |
-| POST | `/api/internal/animas/{target}/prompt-settings` | Internal | Apply an authorized identity/injection change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
+| POST | `/api/internal/animas/{target}/prompt-settings` | Internal | Apply an authorized IDENTITY/SOUL/AGENTS change through the root owner. | `server/routes/internal.py:internal_update_anima_prompt_setting` |
 | POST | `/api/internal/call-human/confirm` | Internal | Check the CLI ``call_human`` confirmation key; keys live in server memory only. | `server/routes/internal.py:internal_call_human_confirm` |
 | POST | `/api/internal/company/assign` | Internal | Apply CLI company assignments through the root-owned status writer. | `server/routes/internal.py:internal_company_assign` |
 | GET | `/api/internal/company/boundary` | Internal | Resolve company membership on the host for sandboxed handlers. | `server/routes/internal.py:internal_company_boundary` |
@@ -166,11 +166,11 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 | POST | `/api/internal/vector/get-by-ids` | Internal | — | `server/routes/internal.py:vector_get_by_ids` |
 | POST | `/api/internal/vector/get-by-metadata` | Internal | — | `server/routes/internal.py:vector_get_by_metadata` |
 | POST | `/api/internal/vector/list-collections` | Internal | — | `server/routes/internal.py:vector_list_collections` |
-| POST | `/api/internal/vector/query` | Internal | Run vector search for internal services. | `server/routes/internal.py:vector_query` |
+| POST | `/api/internal/vector/query` | Internal | Run a vector search for internal services. | `server/routes/internal.py:vector_query` |
 | POST | `/api/internal/vector/update-metadata` | Internal | — | `server/routes/internal.py:vector_update_metadata` |
 | POST | `/api/internal/vector/upsert` | Internal | — | `server/routes/internal.py:vector_upsert` |
 | POST | `/api/internal/workspace/grant` | Internal | Apply a human-origin workspace grant through root-owned writers. | `server/routes/internal.py:internal_workspace_grant` |
-| GET | `/api/messages/{message_id}` | Session required (local_trust mode, or optional if localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
+| GET | `/api/messages/{message_id}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
 
 ## `server/routes/logs_routes.py`
 

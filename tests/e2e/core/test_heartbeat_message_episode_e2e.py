@@ -66,9 +66,9 @@ class TestInboxMessageEpisodeE2E:
         activity_dir = alice_dir / "activity_log"
         today_file = activity_dir / f"{today_local().isoformat()}.jsonl"
         assert today_file.exists()
-        lines = [l for l in today_file.read_text(encoding="utf-8").splitlines() if l.strip()]
+        lines = [line for line in today_file.read_text(encoding="utf-8").splitlines() if line.strip()]
         assert len(lines) >= 1
-        entries = [json.loads(l) for l in lines]
+        entries = [json.loads(line) for line in lines]
         msg_entries = [e for e in entries if e.get("type") == "message_received"]
         assert len(msg_entries) >= 1
         content_str = " ".join(e.get("content", "") or "" for e in msg_entries)
@@ -131,8 +131,8 @@ class TestInboxMessageEpisodeE2E:
             # Activity log records message_received
             activity_file = alice_dir / "activity_log" / f"{today_local().isoformat()}.jsonl"
             assert activity_file.exists()
-            lines = [l for l in activity_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-            msg_entries = [e for e in (json.loads(l) for l in lines) if e.get("type") == "message_received"]
+            lines = [line for line in activity_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            msg_entries = [e for e in (json.loads(line) for line in lines) if e.get("type") == "message_received"]
             assert len(msg_entries) >= 1
             content_str = " ".join(e.get("content", "") or "" for e in msg_entries)
             assert "ログ確認" in content_str
@@ -193,8 +193,8 @@ class TestInboxMessageEpisodeE2E:
 
         activity_file = alice_dir / "activity_log" / f"{today_local().isoformat()}.jsonl"
         assert activity_file.exists()
-        lines = [l for l in activity_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-        msg_entries = [e for e in (json.loads(l) for l in lines) if e.get("type") == "message_received"]
+        lines = [line for line in activity_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        msg_entries = [e for e in (json.loads(line) for line in lines) if e.get("type") == "message_received"]
         content_str = " ".join(e.get("content", "") or "" for e in msg_entries)
 
         assert "DB バックアップ" in content_str
@@ -250,8 +250,8 @@ class TestInboxMessageEpisodeE2E:
 
         activity_file = alice_dir / "activity_log" / f"{today_local().isoformat()}.jsonl"
         assert activity_file.exists()
-        lines = [l for l in activity_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-        msg_entries = [e for e in (json.loads(l) for l in lines) if e.get("type") == "message_received"]
+        lines = [line for line in activity_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        msg_entries = [e for e in (json.loads(line) for line in lines) if e.get("type") == "message_received"]
         assert len(msg_entries) >= 3
         content_str = " ".join(e.get("content", "") or "" for e in msg_entries)
         from_str = " ".join(e.get("from_person", e.get("from", "")) or "" for e in msg_entries)

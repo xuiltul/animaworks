@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 
 
-
 class TestUIConfig:
     """Tests for UIConfig model."""
 

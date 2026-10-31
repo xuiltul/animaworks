@@ -30,10 +30,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.runtime.ipc import IPCResponse
+from core.time_utils import now_jst
 from server.supervisor.manager import HealthConfig, ProcessSupervisor, RestartPolicy
 from server.supervisor.process_handle import ProcessHandle, ProcessState
-from core.time_utils import now_jst
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -394,7 +393,7 @@ class TestHealthCheckStoppingDetection:
 
         with patch.object(
             supervisor, "_handle_process_failure", new_callable=AsyncMock,
-        ) as mock_failure:
+        ):
             await supervisor._check_process_health("stuck-anima", handle)
 
         # State should have been set to FAILED

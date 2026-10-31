@@ -58,7 +58,7 @@ def _make_executor(anima_dir: Path):
 
     anima_dir.mkdir(parents=True, exist_ok=True)
     (anima_dir / "permissions.md").write_text("", encoding="utf-8")
-    (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
     for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm"]:
         (anima_dir / sub).mkdir(exist_ok=True)
 

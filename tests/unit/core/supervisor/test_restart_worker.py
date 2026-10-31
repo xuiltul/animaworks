@@ -247,7 +247,7 @@ async def test_reconcile_forgets_disabled_and_deleted_records_without_process(su
     s, _ft, _ws = supervisor
     disabled_dir = s.animas_dir / "disabled"
     disabled_dir.mkdir()
-    (disabled_dir / "identity.md").write_text("identity", encoding="utf-8")
+    (disabled_dir / "IDENTITY.md").write_text("identity", encoding="utf-8")
     (disabled_dir / "status.json").write_text(json.dumps({"enabled": False}), encoding="utf-8")
     s._restart_ctl.record_failure("disabled", "failure")
     s._restart_ctl.record_failure("deleted", "failure")

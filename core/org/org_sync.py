@@ -10,7 +10,7 @@ from __future__ import annotations
 """Periodic organizational structure synchronization.
 
 Scans anima directories, extracts supervisor relationships from status.json
-(or identity.md), and syncs them into config.json entries.
+(or IDENTITY.md), and syncs them into config.json entries.
 status.json is the single source of truth; config.json is kept in sync.
 """
 
@@ -20,6 +20,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.config.models import (
     AnimaModelConfig,
     read_anima_company,
@@ -80,14 +81,14 @@ def sync_org_structure(
 ) -> dict[str, str | None]:
     """Sync organizational structure from anima files to config.json.
 
-    ``status.json`` (or ``identity.md``) is the single source of truth for
+    ``status.json`` (or ``IDENTITY.md``) is the single source of truth for
     supervisor relationships.  This function syncs those values *into*
     ``config.json`` so that code reading ``config.animas`` directly stays
     up-to-date.
 
     For each anima directory:
 
-    1. Extract supervisor from status.json / identity.md via
+    1. Extract supervisor from status.json / IDENTITY.md via
        :func:`~core.config.models.read_anima_supervisor`.
     2. If config.json has no entry for this anima, create one.
     3. If the supervisor value differs, update config.json to match disk.
@@ -116,7 +117,7 @@ def sync_org_structure(
     for anima_dir in sorted(animas_dir.iterdir()):
         if not anima_dir.is_dir():
             continue
-        if not (anima_dir / "identity.md").exists():
+        if not (anima_dir / IDENTITY_FILE).exists():
             continue
 
         name = anima_dir.name
@@ -213,7 +214,7 @@ _TRIVIAL_ENTRIES = frozenset(
         "index_meta.json",
         "shared_index_meta.json",
         "shared_index_meta.json.lock",
-        "identity.md",
+        IDENTITY_FILE,
     }
 )
 
@@ -381,8 +382,8 @@ def detect_orphan_animas(
 
     A directory is considered *orphan* when:
 
-    - ``identity.md`` does not exist, **or**
-    - ``identity.md`` is empty or contains only ``"未定義"``.
+    - ``IDENTITY.md`` does not exist, **or**
+    - ``IDENTITY.md`` is empty or contains only ``"未定義"``.
 
     Directories that start with ``_`` or ``.``, and directories younger than
     *age_threshold_s* seconds (possibly still being created) are skipped.
@@ -421,8 +422,8 @@ def detect_orphan_animas(
         if entry.name.startswith("_") or entry.name.startswith("."):
             continue
 
-        # Check identity.md validity
-        identity_path = entry / "identity.md"
+        # Check IDENTITY.md validity
+        identity_path = entry / IDENTITY_FILE
         is_orphan = False
         if not identity_path.exists():
             is_orphan = True

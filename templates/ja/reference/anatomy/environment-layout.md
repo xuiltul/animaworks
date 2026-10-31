@@ -29,8 +29,8 @@
 5. **プロンプト** (`{data_dir}/prompts/`): 読み取り専用。キャラクター設計ガイド等のテンプレート
 6. **他の社員のディレクトリ**: permissions.json に明示された範囲のみアクセス可能
 7. **配下のディレクトリ**（supervisorのみ。子・孫・曾孫…全配下に同じ権限）:
-   - **Anima が編集できるスケジュール**: supervisor は `cron.md` / `heartbeat.md` を読み書き可能
-   - **root 所有設定**: `status.json`, `identity.md`, `injection.md`, `permissions.json` および root の `config.json` は Anima プロセスから直接書き込めない。対応する上司向けツールまたは root 管理 API/CLI を使う
+   - **Anima が編集できるスケジュール**: supervisor は `cron.md` / `HEARTBEAT.md` を読み書き可能
+   - **root 所有設定**: `status.json`, `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `permissions.json` および root の `config.json` は Anima プロセスから直接書き込めない。対応する上司向けツールまたは root 管理 API/CLI を使う
    - **状態参照**: `activity_log/` と `state/current_state.md` は**読み取りのみ**。部下のタスクは権限のあるタスクツールで確認する。正本の保存先はホスト管理で直接編集は禁止。
-   - **その他の配下メモリ**（`identity.md` を含む）: 専用の root 管理操作がない限り読み取りのみ
+   - **その他の配下メモリ**（`IDENTITY.md` / `SOUL.md` を含む）: 専用の root 管理操作がない限り読み取りのみ
 8. **同僚のactivity_log**: 同じsupervisorを持つ同僚の `activity_log/` は読み取り可能（検証用）。書き込みは不可

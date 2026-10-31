@@ -51,11 +51,12 @@
 - 性格から連想される色を選ぶ。職能のイメージカラー（経理=紺）に引っ張られない
 - 日本語の色名 + HEXコード（例: 桜色 (#FFB7C5)）
 
-### identity.md の正本書式
+### IDENTITY.md / SOUL.md の正本書式
 
-`identity.md` が唯一の人格正本。character_sheet や prompt にしか無い外見は禁止。
+`IDENTITY.md` はプロフィールと外見、`SOUL.md` は人格（性格・口調・価値観・個性）の正本。character_sheet や prompt にしか無い外見は禁止。
 
-必須セクション: 基本プロフィール（名前・英名・年齢・誕生日・星座・血液型・身長・所属・役職・上司・顔タイプ）、外見、性格・キャラクター、AI社員としての個性。
+- IDENTITY.md の必須セクション: 基本プロフィール（名前・英名・年齢・誕生日・星座・血液型・身長・所属・役職・上司・顔タイプ）、外見、イメージカラー、AIモデル情報
+- SOUL.md の必須セクション: 性格・キャラクター、口調・価値観、AI社員としての個性、決め台詞
 
 ## 内部整合性チェック
 
@@ -77,7 +78,7 @@
 
 ### NovelAI プロンプトへの変換
 
-identity.md の外見設定を NovelAI 互換のアニメタグに変換する。
+IDENTITY.md の外見設定を NovelAI 互換のアニメタグに変換する。
 
 **基本構造:**
 
@@ -87,7 +88,7 @@ masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean line
 
 **変換例:**
 
-| identity.md の外見 | NovelAI プロンプト |
+| IDENTITY.md の外見 | NovelAI プロンプト |
 |---|---|
 | 身長158cm・黒髪ロング・赤い瞳・セーラー服 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
 | 身長175cm・銀髪ショート・青い瞳・スーツ | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
@@ -126,7 +127,7 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 - `assets/prompt_realistic.txt` が存在する → **そのまま使用**（最優先）
 - `assets/prompt.txt` が存在する → アニメスタイルの場合そのまま使用。リアリスティックが必要な場合は下記のルールで変換
-- いずれも存在しない → identity.md の外見設定から新規作成
+- いずれも存在しない → IDENTITY.md の外見設定から新規作成
 
 **ステップ 2: プロンプト作成**
 

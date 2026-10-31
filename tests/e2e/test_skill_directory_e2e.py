@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -7,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from core.tooling.skill_creator import create_skill_directory
 from core.memory.skill_metadata import SkillMetadataService
+from core.tooling.skill_creator import create_skill_directory
 
 
 def _list_available_names(skills_dir, common_skills_dir, procedures_dir):

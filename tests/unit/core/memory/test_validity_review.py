@@ -107,7 +107,7 @@ class TestSelectReviewCandidates:
 
     def test_from_rag(self, engine: object, temp_anima_dir: Path) -> None:
         """RAG results are included as candidates."""
-        kfile = _write_knowledge_file(
+        _write_knowledge_file(
             temp_anima_dir,
             "api-design.md",
             "# API Design\n\nREST patterns.",
@@ -498,7 +498,7 @@ class TestProcessReviewVerdicts:
         temp_anima_dir: Path,
     ) -> None:
         """Source B: resolved events RAG search includes candidates."""
-        kfile = _write_knowledge_file(
+        _write_knowledge_file(
             temp_anima_dir,
             "ipc-problem.md",
             "# IPC Problem\n\nIPC接続が不安定。",

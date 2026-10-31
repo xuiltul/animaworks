@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 
-
 from tests.helpers.mocks import make_litellm_response, patch_litellm
 
 

@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 
@@ -81,7 +80,7 @@ def _create_app(
         for n in anima_names:
             d = animas_dir / n
             d.mkdir(parents=True, exist_ok=True)
-            (d / "identity.md").write_text(f"# {n}", encoding="utf-8")
+            (d / "IDENTITY.md").write_text(f"# {n}", encoding="utf-8")
 
     # Patch load_config used inside the animas route
     if config_animas is not None:
@@ -96,7 +95,7 @@ def _patch_route_config(app, config_animas: dict):
 
     This patches the module-level import used inside the route handler.
     """
-    from core.config.models import AnimaWorksConfig, AnimaModelConfig
+    from core.config.models import AnimaModelConfig, AnimaWorksConfig
 
     animas = {}
     for name, overrides in config_animas.items():

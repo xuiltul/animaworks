@@ -16,6 +16,7 @@ from server.stream_registry import StreamRegistry
 
 def _make_test_app(supervisor=None):
     from fastapi import FastAPI
+
     from server.routes.chat import create_chat_router
 
     app = FastAPI()

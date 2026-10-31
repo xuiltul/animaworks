@@ -232,7 +232,7 @@ send_message(
    - システムプロンプトに注入される権限説明は、ランタイムが JSON から整形したテキストになる
 
 2. **許可されている操作か確認する**
-   - 自分の `anima_dir` 内は原則読み書き可能（`identity.md` 等の保護ファイルは除く）。上司・同僚の `activity_log` や配下の `state/` 読み取りはロール次第で `check_permissions` の `file_access` に反映される
+   - 自分の `anima_dir` 内は原則読み書き可能（`IDENTITY.md` / `SOUL.md` 等の保護ファイルは除く）。上司・同僚の `activity_log` や配下の `state/` 読み取りはロール次第で `check_permissions` の `file_access` に反映される
    - シェルコマンド: `permissions.json` の `commands`（allow/deny）に従う。グローバル危険パターンはフレームワーク側でもブロックされる
 
 3. **権限が必要な場合の対応**

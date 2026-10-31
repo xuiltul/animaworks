@@ -398,7 +398,7 @@ class TestCtxAwareParallelGrouping:
         assert len(hb_groups) == 1
         assert len(groups) == 6
 
-        for i, g in enumerate(sorted(task_groups, key=lambda x: x["ctx"])):
+        for g in sorted(task_groups, key=lambda x: x["ctx"]):
             tid = g["ctx"].removeprefix("task:")
             assert all(e.get("ctx") == g["ctx"] for e in g["events"])
             assert any(e["type"] == "task_exec_start" for e in g["events"])

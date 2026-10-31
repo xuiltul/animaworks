@@ -9,9 +9,9 @@ import pytest
 
 from core.anima.factory import TEMPLATES_DIR, create_from_template
 from core.memory.maintenance.consolidation import ConsolidationEngine, list_project_archives
-from core.schemas import CycleResult
 from core.runtime.runner import AnimaRunner
 from core.runtime.task_runner import execute_background_contract
+from core.schemas import CycleResult
 
 
 def test_project_engine_paths_and_default_compatibility(tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ def test_librarian_template_configuration(tmp_path: Path, locale: str) -> None:
         "speciality": "librarian",
     }
     assert list((anima_dir / "skills").iterdir()) == []
-    assert "{name}" not in (anima_dir / "identity.md").read_text(encoding="utf-8")
+    assert "{name}" not in (anima_dir / "IDENTITY.md").read_text(encoding="utf-8")
     assert "schedule:" not in (anima_dir / "cron.md").read_text(encoding="utf-8")
 
 

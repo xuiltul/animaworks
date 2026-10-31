@@ -12,12 +12,12 @@ Validates the four CRITICAL fixes through the real FastAPI app stack:
 from __future__ import annotations
 
 import json
-from core.time_utils import now_jst
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
+from core.time_utils import now_jst
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -85,8 +85,8 @@ def _create_anima_on_disk(
     for subdir in ["episodes", "knowledge", "procedures", "state", "shortterm"]:
         (anima_dir / subdir).mkdir(exist_ok=True)
 
-    (anima_dir / "identity.md").write_text(identity, encoding="utf-8")
-    (anima_dir / "injection.md").write_text("", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity, encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("", encoding="utf-8")
     (anima_dir / "permissions.md").write_text("", encoding="utf-8")
 
     # Episodes

@@ -21,6 +21,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import HEARTBEAT_FILE
+
 # Model names (must match KNOWN_MODELS in core/config/model_mode.py)
 CLAUDE_MODEL_MAIN = "claude-sonnet-5-5"
 CLAUDE_MODEL_BACKGROUND = "claude-haiku-4-5-20251001"
@@ -180,7 +182,7 @@ def _override_models(data_dir: Path, family: str) -> None:
 
 def _copy_heartbeat_cron(preset_dir: Path, data_dir: Path) -> None:
     """Copy preset heartbeat/cron templates (entrypoint step 4b)."""
-    for source, ext in ((preset_dir / "heartbeat", "heartbeat.md"), (preset_dir / "cron", "cron.md")):
+    for source, ext in ((preset_dir / "heartbeat", HEARTBEAT_FILE), (preset_dir / "cron", "cron.md")):
         for md_file in source.glob("*.md"):
             name = md_file.stem
             target_dir = data_dir / "animas" / name

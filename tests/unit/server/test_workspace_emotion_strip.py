@@ -14,8 +14,7 @@ import json
 
 import pytest
 
-from server.routes.chat import extract_emotion, _handle_chunk
-
+from server.routes.chat import _handle_chunk, extract_emotion
 
 # ── Done event contract for workspace conversation overlay ──────
 

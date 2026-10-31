@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 
 def _make_test_app(shared_dir: Path):
     from fastapi import FastAPI
+
     from server.routes.internal import create_internal_router
 
     app = FastAPI()
@@ -52,7 +53,7 @@ def _create_message_file(shared_dir: Path, to_person: str, message_id: str, *, p
 class TestGetMessage:
     async def test_get_processed_message(self, tmp_path):
         """Should return full message JSON for a processed message."""
-        msg_data = _create_message_file(tmp_path, "kotoha", "20260217_121515_353828")
+        _create_message_file(tmp_path, "kotoha", "20260217_121515_353828")
         app = _make_test_app(tmp_path)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -66,7 +67,7 @@ class TestGetMessage:
 
     async def test_get_unread_message(self, tmp_path):
         """Should find messages in unread inbox (not just processed)."""
-        msg_data = _create_message_file(tmp_path, "kotoha", "20260217_130000_000001", processed=False)
+        _create_message_file(tmp_path, "kotoha", "20260217_130000_000001", processed=False)
         app = _make_test_app(tmp_path)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

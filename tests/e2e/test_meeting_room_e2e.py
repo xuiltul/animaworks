@@ -40,7 +40,7 @@ def _create_app(
     for name in anima_names or []:
         d = animas_dir / name
         d.mkdir(parents=True, exist_ok=True)
-        (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
 
     with (
         patch("server.app.ProcessSupervisor") as mock_sup_cls,

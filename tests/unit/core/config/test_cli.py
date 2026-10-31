@@ -255,7 +255,7 @@ class TestCmdConfigSet:
 
         anima_dir = data_dir / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("Alice\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("Alice\n", encoding="utf-8")
         (anima_dir / "status.json").write_text("{}", encoding="utf-8")
         save_config(AnimaWorksConfig(animas={"alice": AnimaModelConfig()}), data_dir / "config.json")
         invalidate_cache()

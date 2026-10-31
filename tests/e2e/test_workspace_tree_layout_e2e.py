@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 
@@ -35,11 +34,11 @@ def _create_app_with_config(
     animas_dir = tmp_path / "animas"
     animas_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create identity.md for each anima so /api/animas route recognizes them
+    # Create IDENTITY.md for each anima so /api/animas route recognizes them
     for anima_name in anima_names:
         anima_dir = animas_dir / anima_name
         anima_dir.mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             f"# {anima_name}\n\nTest identity for {anima_name}.\n",
             encoding="utf-8",
         )
@@ -50,7 +49,7 @@ def _create_app_with_config(
     for n in anima_names:
         d = animas_dir / n
         d.mkdir(parents=True, exist_ok=True)
-        (d / "identity.md").write_text(f"# {n}\ntest identity\n")
+        (d / "IDENTITY.md").write_text(f"# {n}\ntest identity\n")
 
     # Write config.json to disk so load_config() can read it
     config_path = tmp_path / "config.json"
@@ -102,7 +101,7 @@ def _create_app_with_config(
     app.state.anima_names = anima_names
 
     # Patch load_config in the animas route module to use our config file
-    from core.config.models import load_config, invalidate_cache
+    from core.config.models import invalidate_cache, load_config
 
     invalidate_cache()
     real_config = load_config(config_path)

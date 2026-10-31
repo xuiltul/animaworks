@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/brain-mapping.md -->
-<!-- i18n: source-sha256=7dcc78847528444765320f4b4c5136301eba11e1e31df7999f11faa067f64b19 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=7dcc78847528444765320f4b4c5136301eba11e1e31df7999f11faa067f64b19 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: 193a5e72
 

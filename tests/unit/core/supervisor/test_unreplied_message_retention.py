@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -15,7 +16,6 @@ duplicate ``message_received`` log entries.
 """
 
 from pathlib import Path
-
 
 
 class FakeMsg:
@@ -51,7 +51,6 @@ class TestUnconditionalArchive:
         msg_alice = FakeMsg("alice")
         msg_bob = FakeMsg("bob")
         items = [FakeInboxItem(msg_alice), FakeInboxItem(msg_bob)]
-        replied_to = {"alice"}
 
         assert len(items) == 2
 
@@ -60,7 +59,6 @@ class TestUnconditionalArchive:
         msg_alice = FakeMsg("alice")
         msg_bob = FakeMsg("bob")
         items = [FakeInboxItem(msg_alice), FakeInboxItem(msg_bob)]
-        replied_to: set[str] = set()
 
         assert len(items) == 2
 
@@ -84,6 +82,5 @@ class TestUnconditionalArchive:
             FakeInboxItem(msg_charlie),
             FakeInboxItem(msg_system),
         ]
-        replied_to = {"alice", "charlie"}
 
         assert len(items) == 4

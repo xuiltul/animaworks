@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/operations/configuration.md -->
-<!-- i18n: source-sha256=7af4d2067fc6d903b130aec1b7be2e9f06d27f3968f81963e44a6b4116d85779 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=7af4d2067fc6d903b130aec1b7be2e9f06d27f3968f81963e44a6b4116d85779 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Verified commit: 581e20f1
 

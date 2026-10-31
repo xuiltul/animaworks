@@ -58,7 +58,7 @@ def _create_anima_dir(
     d = animas_dir / name
     d.mkdir(parents=True, exist_ok=True)
     if has_identity:
-        (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     if has_status:
         (d / "status.json").write_text(json.dumps({"enabled": enabled}), encoding="utf-8")
     return d

@@ -17,6 +17,7 @@ from core.auth.models import AuthConfig, AuthUser
 def _create_test_app(data_dir: Path):
     """Create a minimal test app with auth routes."""
     import json
+
     from server.app import create_app
 
     animas_dir = data_dir / "animas"
@@ -102,7 +103,7 @@ class TestAddUser:
         save_auth(config)
         anima_dir = data_dir / "animas" / "sakura"
         anima_dir.mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text("# sakura\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# sakura\n", encoding="utf-8")
 
         app = _create_test_app(data_dir)
         client = TestClient(app)

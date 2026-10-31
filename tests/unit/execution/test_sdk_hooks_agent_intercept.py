@@ -245,7 +245,7 @@ class TestPreToolHookAgentHardBlock:
         mock_context = MagicMock()
         input_data = {
             "tool_name": "Read",
-            "tool_input": {"file_path": str(anima_dir / "identity.md")},
+            "tool_input": {"file_path": str(anima_dir / "IDENTITY.md")},
         }
         result = await hook(input_data, "tu_read_01", mock_context)
 

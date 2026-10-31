@@ -9,7 +9,7 @@ from __future__ import annotations
 
 """Schedule-parsing helpers extracted from lifecycle.py.
 
-Provides pure-function parsers for cron.md and heartbeat.md with no
+Provides pure-function parsers for cron.md and HEARTBEAT.md with no
 dependency on APScheduler internals.
 """
 
@@ -84,10 +84,10 @@ def _valid_heartbeat_hours(start: int, end: int) -> bool:
 
 
 def parse_heartbeat_config(content: str) -> tuple[int | None, int | None]:
-    """Parse heartbeat.md content to extract active hours.
+    """Parse HEARTBEAT.md content to extract active hours.
 
     Interval is managed by config.json (heartbeat.interval_minutes),
-    NOT parsed from heartbeat.md content.
+    NOT parsed from HEARTBEAT.md content.
 
     Returns:
         Tuple of (active_start_hour, active_end_hour).

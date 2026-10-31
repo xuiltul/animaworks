@@ -5,7 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from core.anima.settings_store import update_config, update_status, write_identity, write_injection, write_permissions
+from core.anima.settings_store import (
+    update_config,
+    update_status,
+    write_agents,
+    write_identity,
+    write_injection,
+    write_permissions,
+    write_soul,
+)
 from core.config.file_access_policy import FileAccessContext, evaluate_file_access
 from core.config.io import update_config as raw_update_config
 from core.platform.process_role import PROCESS_ROLE_ENV
@@ -21,6 +29,8 @@ def test_settings_writers_reject_worker_roles(tmp_path: Path, monkeypatch: pytes
     writers = (
         lambda: update_status(anima_dir, lambda status: status.update(enabled=False)),
         lambda: write_identity(anima_dir, "identity\n"),
+        lambda: write_soul(anima_dir, "soul\n"),
+        lambda: write_agents(anima_dir, "agents\n"),
         lambda: write_injection(anima_dir, "injection\n"),
         lambda: write_permissions(anima_dir, {"version": 1}),
         lambda: update_config(lambda config: setattr(config, "activity_level", 200), tmp_path / "config.json"),
@@ -51,20 +61,23 @@ def test_root_and_offline_cli_can_write_settings(tmp_path: Path, monkeypatch: py
 
     update_status(anima_dir, lambda status: status.update(enabled=True))
     write_identity(anima_dir, "identity\n")
+    write_soul(anima_dir, "soul\n")
+    write_agents(anima_dir, "agents\n")
     write_injection(anima_dir, "injection\n")
     write_permissions(anima_dir, {"version": 1, "file_roots": ["/"]})
     config_path = tmp_path / "config.json"
     update_config(lambda config: setattr(config, "activity_level", 200), config_path)
 
     assert json.loads((anima_dir / "status.json").read_text(encoding="utf-8")) == {"enabled": True}
-    assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "identity\n"
-    assert (anima_dir / "injection.md").read_text(encoding="utf-8") == "injection\n"
+    assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "identity\n"
+    assert (anima_dir / "SOUL.md").read_text(encoding="utf-8") == "soul\n"
+    assert (anima_dir / "AGENTS.md").read_text(encoding="utf-8") == "injection\n"
     assert json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))["file_roots"] == ["/"]
     assert json.loads(config_path.read_text(encoding="utf-8"))["activity_level"] == 200
 
     monkeypatch.setenv(PROCESS_ROLE_ENV, "cli")
     write_identity(anima_dir, "offline cli\n")
-    assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "offline cli\n"
+    assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "offline cli\n"
 
 
 def test_config_writer_can_preserve_sparse_migration_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,7 +104,7 @@ def test_file_tools_cannot_write_owned_settings_even_with_broad_roots(tmp_path: 
         write_roots=(Path("/"),),
     )
 
-    for filename in ("identity.md", "injection.md", "permissions.json", "status.json"):
+    for filename in ("IDENTITY.md", "SOUL.md", "AGENTS.md", "permissions.json", "status.json"):
         decision = evaluate_file_access(anima_dir / filename, context, write=True)
         assert not decision.allowed, filename
         assert decision.reason == "protected_file"
@@ -102,7 +115,7 @@ def test_file_tools_cannot_write_owned_settings_even_with_broad_roots(tmp_path: 
     assert decision.reason == "protected_file"
 
     superuser_context = FileAccessContext(anima_dir=anima_dir, data_dir=tmp_path, superuser=True)
-    for filename in ("identity.md", "injection.md", "permissions.json", "status.json"):
+    for filename in ("IDENTITY.md", "SOUL.md", "AGENTS.md", "permissions.json", "status.json"):
         assert not evaluate_file_access(anima_dir / filename, superuser_context, write=True).allowed
     assert not evaluate_file_access(root_config, superuser_context, write=True).allowed
     descendant_status = tmp_path / "animas" / "other" / "status.json"

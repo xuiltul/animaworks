@@ -57,10 +57,10 @@ def _make_anima(
     identity_content: str = "# Identity\nNo supervisor info.",
     status_json: dict | None = None,
 ) -> Path:
-    """Helper to create an anima directory with identity.md and optional status.json."""
+    """Helper to create an anima directory with IDENTITY.md and optional status.json."""
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(identity_content, encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity_content, encoding="utf-8")
     if status_json is not None:
         (anima_dir / "status.json").write_text(
             json.dumps(status_json, ensure_ascii=False),
@@ -164,7 +164,7 @@ class TestSyncOrgStructure:
         animas_dir: Path,
         config_path: Path,
     ) -> None:
-        """Config entry with supervisor=None gets filled from identity.md."""
+        """Config entry with supervisor=None gets filled from IDENTITY.md."""
         _make_anima(animas_dir, "alice", "| 上司 | bob |\n")
 
         # Pre-populate config with supervisor=None
@@ -246,7 +246,7 @@ class TestSyncOrgStructure:
         animas_dir: Path,
         config_path: Path,
     ) -> None:
-        """Falls back to status.json when identity.md has no supervisor."""
+        """Falls back to status.json when IDENTITY.md has no supervisor."""
         _make_anima(
             animas_dir,
             "alice",
@@ -267,7 +267,7 @@ class TestSyncOrgStructure:
         config_path: Path,
     ) -> None:
         """status.json supervisor is checked first by read_anima_supervisor."""
-        # Note: read_anima_supervisor checks status.json first, then identity.md.
+        # Note: read_anima_supervisor checks status.json first, then IDENTITY.md.
         # If status.json has a supervisor, that wins.
         _make_anima(
             animas_dir,
@@ -306,7 +306,7 @@ class TestSyncOrgStructure:
         animas_dir: Path,
         config_path: Path,
     ) -> None:
-        """Directories without identity.md are skipped."""
+        """Directories without IDENTITY.md are skipped."""
         (animas_dir / "not-an-anima").mkdir()
         _make_anima(animas_dir, "alice", "| 上司 | bob |\n")
 
@@ -453,7 +453,7 @@ class TestSyncOrgStructure:
         animas_dir: Path,
         config_path: Path,
     ) -> None:
-        """Various 'none' values in identity.md produce supervisor=None."""
+        """Various 'none' values in IDENTITY.md produce supervisor=None."""
         _make_anima(animas_dir, "a", "| 上司 | なし |\n")
         _make_anima(animas_dir, "b", "| 上司 | (なし) |\n")
         _make_anima(animas_dir, "c", "| 上司 | - |\n")
@@ -469,7 +469,7 @@ class TestSyncOrgStructure:
         animas_dir: Path,
         config_path: Path,
     ) -> None:
-        """Supervisor extracted from a realistic multi-section identity.md."""
+        """Supervisor extracted from a realistic multi-section IDENTITY.md."""
         identity = (
             "# Identity: hinata\n\n"
             "あなたの名前は日向 ひなた。\n\n"
@@ -537,7 +537,7 @@ class TestSyncOrgStructure:
         """Config entries for directories that exist (even orphans) are NOT pruned."""
         _make_anima(animas_dir, "alice")
 
-        # Create an orphan dir (no identity.md) but dir exists
+        # Create an orphan dir (no IDENTITY.md) but dir exists
         orphan = animas_dir / "orphan"
         orphan.mkdir()
 

@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.i18n import t
 from core.schemas import TaskEntry
 from core.time_utils import now_iso
@@ -175,7 +176,7 @@ def run_maintenance(args: argparse.Namespace) -> dict[str, Any]:
 
     runtime = get_data_dir().resolve()
     anima_dir = (runtime / "animas" / args.anima).resolve()
-    if anima_dir.parent != runtime / "animas" or not (anima_dir / "identity.md").is_file():
+    if anima_dir.parent != runtime / "animas" or not (anima_dir / IDENTITY_FILE).is_file():
         raise ValueError(t("task_store.invalid_anima", name=args.anima))
     store = TaskStore(task_database_path(anima_dir))
     action = args.task_store_action

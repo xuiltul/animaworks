@@ -1,15 +1,16 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Unit tests for injection.md size governance.
+"""Unit tests for AGENTS.md size governance.
 
-Tests that injection_size_warning is injected when injection.md exceeds
+Tests that injection_size_warning is injected when AGENTS.md exceeds
 the configured threshold, and omitted when under threshold.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -45,7 +46,7 @@ def _make_anima_with_injection(data_dir: Path, name: str, injection: str) -> Pat
 
 
 class TestInjectionUnderThreshold:
-    """injection.md under threshold does not inject warning."""
+    """AGENTS.md under threshold does not inject warning."""
 
     def test_no_warning_when_under_threshold(self, data_dir):
         """When injection size is under threshold, no injection_size_warning."""
@@ -65,7 +66,7 @@ class TestInjectionUnderThreshold:
 
 
 class TestInjectionOverThreshold:
-    """injection.md over threshold injects injection_size_warning section."""
+    """AGENTS.md over threshold injects injection_size_warning section."""
 
     def test_warning_injected_when_over_threshold(self, data_dir):
         """When injection exceeds threshold, injection_size_warning section is added."""
@@ -80,7 +81,19 @@ class TestInjectionOverThreshold:
 
         assert "injection_size_warning" in result.system_prompt
         assert "⚠️" in result.system_prompt
-        assert "injection.md" in result.system_prompt
+        assert "AGENTS.md" in result.system_prompt
+
+    def test_warning_logs_agents_md(self, data_dir, caplog):
+        long_injection = "x" * 6000
+        anima_dir = _make_anima_with_injection(data_dir, "test-anima", long_injection)
+        caplog.set_level(logging.WARNING, logger="animaworks.prompt_builder")
+
+        from core.memory import MemoryManager
+        from core.prompt.builder import build_system_prompt
+
+        build_system_prompt(MemoryManager(anima_dir), trigger="consolidation:daily")
+
+        assert "AGENTS.md oversized" in caplog.text
 
     def test_warning_contains_size_and_threshold(self, data_dir):
         """Warning text includes actual size and threshold values."""

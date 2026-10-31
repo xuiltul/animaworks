@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from core.config.models import UIConfig, AnimaWorksConfig
+from core.config.models import AnimaWorksConfig, UIConfig
 
 # ── Paths ────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ class TestDemoDataIntegrity:
         for anima in animas:
             log_dir = EXAMPLES_DIR / lang / anima / "activity_log"
             for f in log_dir.glob("*.jsonl"):
-                lines = [l for l in f.read_text(encoding="utf-8").strip().split("\n") if l.strip()]
+                lines = [line for line in f.read_text(encoding="utf-8").strip().split("\n") if line.strip()]
                 assert len(lines) >= 15, (
                     f"{f.relative_to(PROJECT_ROOT)} should have 15+ entries, got {len(lines)}"
                 )
@@ -158,14 +158,14 @@ class TestDemoDataIntegrity:
     def test_channels_general_rich(self, lang):
         general = EXAMPLES_DIR / lang / "channels" / "general.jsonl"
         assert general.exists()
-        lines = [l for l in general.read_text(encoding="utf-8").strip().split("\n") if l.strip()]
+        lines = [line for line in general.read_text(encoding="utf-8").strip().split("\n") if line.strip()]
         assert len(lines) >= 15, f"{lang}/channels/general.jsonl needs 15+ entries"
 
     @pytest.mark.parametrize("lang", ["ja", "en"])
     def test_channels_ops_exists(self, lang):
         ops = EXAMPLES_DIR / lang / "channels" / "ops.jsonl"
         assert ops.exists()
-        lines = [l for l in ops.read_text(encoding="utf-8").strip().split("\n") if l.strip()]
+        lines = [line for line in ops.read_text(encoding="utf-8").strip().split("\n") if line.strip()]
         assert len(lines) >= 8, f"{lang}/channels/ops.jsonl needs 8+ entries"
 
     @pytest.mark.parametrize("lang", ["ja", "en"])

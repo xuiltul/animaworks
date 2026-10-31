@@ -205,8 +205,8 @@ class TestParsefailedFrontmatterFallback:
         assert "origin" not in meta
 
     def test_other_session_trust_file_is_not_used(self, handler: _FakeWriteHandler) -> None:
-        from core.trust import record_session_trust
         from core.execution.session.session_context import RuntimeSessionContext
+        from core.trust import record_session_trust
 
         own_context = RuntimeSessionContext.create(session_type="chat", thread_id="t", trigger="chat")
         other_context = RuntimeSessionContext.create(session_type="chat", thread_id="t", trigger="chat")

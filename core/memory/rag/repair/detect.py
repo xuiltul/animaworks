@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.platform.locks import acquire_file_lock, release_file_lock
 
 from . import state as repair_state
@@ -422,7 +423,7 @@ class RAGRepairService:
         for anima_dir in sorted(animas_dir.iterdir()):
             if (
                 not anima_dir.is_dir()
-                or not (anima_dir / "identity.md").is_file()
+                or not (anima_dir / IDENTITY_FILE).is_file()
                 or not self._anima_enabled(anima_dir)
             ):
                 continue

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -17,7 +18,6 @@ import pytest
 from core.exceptions import MemoryWriteError
 from core.memory.io import atomic_write_text
 from core.platform.atomic_io import cleanup_tmp_files
-
 
 # ── TestAtomicWriteText ────────────────────────────────────────────
 

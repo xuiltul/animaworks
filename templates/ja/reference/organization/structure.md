@@ -1,6 +1,6 @@
 # 組織構造の仕組み
 
-AnimaWorks における組織構造は、各 Anima の `status.json`（または `identity.md`）を Single Source of Truth（SSoT）として構築される。
+AnimaWorks における組織構造は、各 Anima の `status.json`（または `IDENTITY.md`）を Single Source of Truth（SSoT）として構築される。
 `core/org/org_sync.py` がディスク上の **supervisor** を `config.json` に同期し、プロンプト構築時に利用される。
 本ドキュメントでは、組織構造がどのように定義・解釈・表示されるかを説明する。
 
@@ -11,7 +11,7 @@ AnimaWorks における組織構造は、各 Anima の `status.json`（または
 組織の上下関係は、各 Anima の `supervisor` で定義される。読み取り優先順位:
 
 1. **status.json** — `"supervisor"` キー（推奨）
-2. **identity.md** — 表形式 `| 上司 | name |` の行（日本語のみ。`core/config/models.py` の `read_anima_supervisor` が解析）
+2. **IDENTITY.md** — 表形式 `| 上司 | name |` の行（日本語のみ。`core/config/models.py` の `read_anima_supervisor` が解析）
 
 `supervisor` が未設定・空・「なし」「(なし)」「（なし）」「-」「---」の場合はトップレベル（最上位）となる。
 `animaworks config set animas.<name>.supervisor <supervisor>` は root 所有 status/config をまとめて更新する。`config.json` だけを直接変更すると org_sync によってディスクから上書きされるため、CLI/API を使用する。
@@ -32,7 +32,7 @@ AnimaWorks における組織構造は、各 Anima の `status.json`（または
 
 `core/org/org_sync.py` の `sync_org_structure()` が以下を行う:
 
-1. 各 Anima ディレクトリ（`identity.md` が存在するもののみ）から `status.json` / `identity.md` を読み、supervisor を抽出（`read_anima_supervisor`）
+1. 各 Anima ディレクトリ（`IDENTITY.md` が存在するもののみ）から `status.json` / `IDENTITY.md` を読み、supervisor を抽出（`read_anima_supervisor`）
 2. 循環参照を検出（検出された Anima は同期対象外）
 3. `config.json` の `animas.<name>.supervisor` をディスクの値に合わせて更新（**supervisor のみ**）
 4. ディスク上に存在しない Anima の config エントリを削除（prune）

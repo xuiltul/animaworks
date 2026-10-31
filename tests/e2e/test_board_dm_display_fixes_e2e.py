@@ -17,8 +17,9 @@ import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.time_utils import today_local
 from httpx import ASGITransport, AsyncClient
+
+from core.time_utils import today_local
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 def _create_app(shared_dir: Path):
     """Create a test FastAPI app with channels router and real filesystem."""
     from fastapi import FastAPI
+
     from server.routes.channels import create_channels_router
 
     app = FastAPI()

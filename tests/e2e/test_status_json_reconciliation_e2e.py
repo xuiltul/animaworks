@@ -6,7 +6,7 @@
 Verifies the complete flow:
 1. create_blank() produces status.json with enabled=true
 2. Reconciliation recognises blank-created animas and does NOT kill them
-3. Animas with identity.md but no status.json are protected (on_disk_incomplete)
+3. Animas with IDENTITY.md but no status.json are protected (on_disk_incomplete)
 4. Animas truly removed from disk are still killed
 """
 
@@ -27,10 +27,10 @@ from server.supervisor.manager import (
 
 
 def _make_blank_template(tmp_path: Path) -> Path:
-    """Create a minimal _blank template with identity.md (mirrors real template)."""
+    """Create a minimal _blank template with IDENTITY.md (mirrors real template)."""
     blank_dir = tmp_path / "_blank_template"
     blank_dir.mkdir()
-    (blank_dir / "identity.md").write_text(
+    (blank_dir / "IDENTITY.md").write_text(
         "# {name}\n\nBlank identity for {name}.\n",
         encoding="utf-8",
     )
@@ -92,7 +92,7 @@ class TestCreateBlankReconciliationE2E:
             patch("core.anima.factory.BLANK_TEMPLATE_DIR", blank_dir),
             patch("core.anima.factory.BOOTSTRAP_TEMPLATE", tmp_path / "no"),
         ):
-            anima_dir = create_blank(animas_dir, "sakura")
+            create_blank(animas_dir, "sakura")
 
         sup = _make_supervisor(animas_dir, tmp_path)
         sup.processes["sakura"] = MagicMock()
@@ -127,15 +127,15 @@ class TestCreateBlankReconciliationE2E:
 
 
 class TestIncompleteAnimaReconciliationE2E:
-    """End-to-end: anima with identity.md but no status.json is protected."""
+    """End-to-end: anima with IDENTITY.md but no status.json is protected."""
 
     async def test_legacy_anima_not_killed_when_running(self, tmp_path):
-        """A legacy/incomplete anima (identity.md, no status.json) must NOT be killed."""
+        """A legacy/incomplete anima (IDENTITY.md, no status.json) must NOT be killed."""
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir()
         sakura_dir = animas_dir / "sakura"
         sakura_dir.mkdir()
-        (sakura_dir / "identity.md").write_text("# sakura\n", encoding="utf-8")
+        (sakura_dir / "IDENTITY.md").write_text("# sakura\n", encoding="utf-8")
         # No status.json — simulating legacy or factory-in-progress
 
         sup = _make_supervisor(animas_dir, tmp_path)
@@ -178,15 +178,15 @@ class TestIncompleteAnimaReconciliationE2E:
         ):
             create_blank(animas_dir, "sakura")
 
-        # 2. kotoha: legacy, identity.md only, running → PROTECT (on_disk_incomplete)
+        # 2. kotoha: legacy, IDENTITY.md only, running → PROTECT (on_disk_incomplete)
         kotoha_dir = animas_dir / "kotoha"
         kotoha_dir.mkdir()
-        (kotoha_dir / "identity.md").write_text("# kotoha\n", encoding="utf-8")
+        (kotoha_dir / "IDENTITY.md").write_text("# kotoha\n", encoding="utf-8")
 
         # 3. hinata: has status.json, enabled, NOT running → START
         hinata_dir = animas_dir / "hinata"
         hinata_dir.mkdir()
-        (hinata_dir / "identity.md").write_text("# hinata\n", encoding="utf-8")
+        (hinata_dir / "IDENTITY.md").write_text("# hinata\n", encoding="utf-8")
         (hinata_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",

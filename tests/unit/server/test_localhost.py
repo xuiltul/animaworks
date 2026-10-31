@@ -8,9 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from unittest.mock import MagicMock
 
-
 from server.localhost import _extract_host, _is_localhost, _is_safe_localhost_request
-
 
 # ── Helpers ──────────────────────────────────────────────
 

@@ -30,6 +30,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse as StarletteJSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.auth.manager import find_user, load_auth, validate_session
 from core.config import load_config
 from core.i18n import t
@@ -502,7 +503,7 @@ async def _startup_animas_background(app: FastAPI, *, suppress_errors: bool = Tr
         # Start anima processes (parallel internally)
         await app.state.supervisor.start_all(_names_to_start)
 
-        # Sync org structure from identity.md/status.json → config.json
+        # Sync org structure from IDENTITY.md/status.json → config.json
         try:
             from core.org.org_sync import sync_org_structure
 
@@ -1132,7 +1133,7 @@ def create_app(
     anima_names: list[str] = []
     if animas_dir.exists():
         for anima_dir in sorted(animas_dir.iterdir()):
-            if anima_dir.is_dir() and (anima_dir / "identity.md").exists():
+            if anima_dir.is_dir() and (anima_dir / IDENTITY_FILE).exists():
                 if not _PS.read_anima_enabled(anima_dir):
                     logger.info("Skipping disabled anima: %s", anima_dir.name)
                     continue

@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from cli import codex_command_hook as cli_hook
 from core.config.global_permissions import (
     GlobalPermissionsCache,
     _build_injection_re,
@@ -28,7 +29,6 @@ from core.config.schemas import (
     SdkBashInjectionConfig,
 )
 from core.execution.engines.claude._sdk_security import _check_a1_bash_command
-from cli import codex_command_hook as cli_hook
 from core.tooling.handler import ToolHandler
 from core.tooling.policy.command_policy import (
     CommandPolicyContext,
@@ -182,7 +182,7 @@ def test_traversal_resolves_from_cwd(tmp_path: Path, cwd_rel: str, command: str,
 
 def test_other_anima_write(tmp_path: Path) -> None:
     ctx, ad, _dd = make_ctx(tmp_path)
-    other = ad.parent / "other-anima" / "identity.md"
+    other = ad.parent / "other-anima" / "IDENTITY.md"
     other.parent.mkdir(parents=True, exist_ok=True)
     d = evaluate_command(f"cp {other} ./stolen.md", ctx)
     assert (d.allowed, d.layer) == (False, "other_anima_write")
@@ -348,7 +348,7 @@ def _handler_cmd_allowed(ad: Path, command: str) -> bool:
         # traversal
         "cp ../other-anima/report.txt ./a",
         # other-anima write (absolute path)
-        "cp {data}/animas/other/identity.md ./stolen.md",
+        "cp {data}/animas/other/IDENTITY.md ./stolen.md",
     ],
 )
 def test_three_paths_agree(shared_anima: Path, command: str, monkeypatch, capsys) -> None:

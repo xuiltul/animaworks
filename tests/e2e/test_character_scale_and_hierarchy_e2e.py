@@ -38,14 +38,14 @@ def _create_app_with_config(
     for name in anima_names:
         anima_dir = animas_dir / name
         anima_dir.mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     shared_dir = tmp_path / "shared"
     shared_dir.mkdir(parents=True, exist_ok=True)
 
     for n in anima_names:
         d = animas_dir / n
         d.mkdir(parents=True, exist_ok=True)
-        (d / "identity.md").write_text(f"# {n}\ntest identity\n")
+        (d / "IDENTITY.md").write_text(f"# {n}\ntest identity\n")
 
     config_path = tmp_path / "config.json"
     config_path.write_text(
@@ -371,7 +371,7 @@ class TestSupervisorDataRepair:
     """E2E: Verify org-sync can repair supervisor for old-flow animas."""
 
     def test_sync_repairs_rin_aoi_scenario(self, tmp_path: Path) -> None:
-        """Simulate the exact rin/aoi scenario: identity.md has 上司 row
+        """Simulate the exact rin/aoi scenario: IDENTITY.md has 上司 row
         added as data repair, and org-sync picks it up correctly.
         """
         from core.config.models import (
@@ -403,11 +403,11 @@ class TestSupervisorDataRepair:
         save_config(cfg, config_path)
         invalidate_cache()
 
-        # Create anima directories with identity.md
+        # Create anima directories with IDENTITY.md
         # rin: now has the repaired 上司 row
         rin_dir = animas_dir / "rin"
         rin_dir.mkdir(parents=True)
-        (rin_dir / "identity.md").write_text(
+        (rin_dir / "IDENTITY.md").write_text(
             "# Identity: rin\n\n"
             "## 基本プロフィール\n\n"
             "| 項目 | 設定 |\n"
@@ -420,7 +420,7 @@ class TestSupervisorDataRepair:
         # aoi: now has the repaired 上司 row
         aoi_dir = animas_dir / "aoi"
         aoi_dir.mkdir(parents=True)
-        (aoi_dir / "identity.md").write_text(
+        (aoi_dir / "IDENTITY.md").write_text(
             "# Identity: aoi\n\n"
             "## 基本プロフィール\n\n"
             "| 項目 | 設定 |\n"
@@ -434,7 +434,7 @@ class TestSupervisorDataRepair:
         for name in ("sakura", "kotoha", "chatwork_checker"):
             d = animas_dir / name
             d.mkdir(parents=True)
-            (d / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+            (d / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
 
         # Run org-sync
         result = sync_org_structure(animas_dir, config_path)

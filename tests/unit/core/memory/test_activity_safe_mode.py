@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from core.exceptions import MemoryWriteError
 from core.activity.logger import ActivityLogger
+from core.exceptions import MemoryWriteError
 
 
 @pytest.fixture

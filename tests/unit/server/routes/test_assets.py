@@ -84,7 +84,7 @@ class TestGetAssetMetadata:
     async def test_metadata_no_assets(self, tmp_path):
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(animas_dir=tmp_path)
         transport = ASGITransport(app=app)
@@ -98,7 +98,7 @@ class TestGetAssetMetadata:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Alice\nイメージカラー: ピンク #FF69B4\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice\nイメージカラー: ピンク #FF69B4\n", encoding="utf-8")
         (anima_dir / "assets").mkdir()
 
         app = _make_test_app(animas_dir=animas_dir)
@@ -112,7 +112,7 @@ class TestGetAssetMetadata:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir()
         (assets_dir / "avatar_fullbody.png").write_bytes(b"\x89PNG")
@@ -715,7 +715,7 @@ class TestRemakePreview:
         anima_dir = animas_dir / "alice"
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Alice\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice\n", encoding="utf-8")
         (assets_dir / "avatar_fullbody_realistic.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 
         global_style_ref = tmp_path / "global-style.png"

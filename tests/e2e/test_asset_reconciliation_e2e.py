@@ -30,7 +30,7 @@ def _create_anima_with_assets(
 
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text(
+    (anima_dir / "IDENTITY.md").write_text(
         f"# {name}\nimage_prompt: 1girl, {name}\n",
         encoding="utf-8",
     )

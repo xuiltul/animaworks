@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 
-from core.memory.rag.vector_client import VectorClient
 from core.memory.rag.store import CollectionExistence, Document, SearchResult
+from core.memory.rag.vector_client import VectorClient
 
 
 def _make_store(

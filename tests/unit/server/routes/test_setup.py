@@ -957,11 +957,11 @@ class TestCompleteSetup:
         mock_config.credentials = {}
         mock_config.animas = {}
 
-        # Create an anima directory with identity.md so rescan picks it up
+        # Create an anima directory with IDENTITY.md so rescan picks it up
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "sakura"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Sakura", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Sakura", encoding="utf-8")
 
         mock_supervisor = AsyncMock()
         app = _make_test_app(animas_dir=animas_dir, supervisor=mock_supervisor)

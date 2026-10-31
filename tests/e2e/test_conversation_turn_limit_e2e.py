@@ -47,7 +47,7 @@ def _make_conv_memory(
 
 def _populate_turns(conv: ConversationMemory, n: int) -> None:
     """Append *n* alternating human/assistant turns and persist to disk."""
-    state = conv.load()
+    conv.load()
     for i in range(n):
         role = "human" if i % 2 == 0 else "assistant"
         conv.append_turn(role, f"Turn {i}: short message")

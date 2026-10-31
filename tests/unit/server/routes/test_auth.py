@@ -17,6 +17,7 @@ from core.auth.models import AuthConfig, AuthUser
 def _create_test_app(data_dir: Path):
     """Create a minimal test app with auth routes."""
     import json
+
     from server.app import create_app
 
     animas_dir = data_dir / "animas"

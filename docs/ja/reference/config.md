@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 34b4266f4b3eb98b0050e05b06a3821bc9b1435dc191ec4fec13001546c8b2a7 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: b34dfd4de0c888a657c784f70a13b26e8f8f85879a7b888eb25527f224a4dd37 -->
 
 # 設定リファレンス
 
@@ -633,7 +633,7 @@
 | `heartbeat.interval_minutes` | `int` | `30` | — |
 | `heartbeat.current_state_max_chars` | `int` | `8000` | Max chars for current_state.md before trim; 0 = disabled |
 | `heartbeat.current_state_cleanup_chars` | `int` | `2000` | Soft cleanup threshold for current_state.md; 0 = 80% of current_state_max_chars |
-| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of heartbeat.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
+| `heartbeat.heartbeat_md_max_bytes` | `int` | `8000` | Max bytes of HEARTBEAT.md before a compaction instruction is injected into the heartbeat prompt; 0 = disabled |
 | `heartbeat.recent_dialogue_max_age_hours` | `int` | `6` | Include recent chat dialogue in heartbeat context only when the last turn is younger than this many hours; 0 = always include |
 | `heartbeat.soft_timeout_seconds` | `int` | `300` | Seconds before injecting a wrap-up system-reminder into the HB session |
 | `heartbeat.hard_timeout_seconds` | `int` | `0` | Seconds before forcefully terminating the HB session; 0 = disabled |

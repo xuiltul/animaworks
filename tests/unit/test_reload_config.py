@@ -95,7 +95,7 @@ class TestAgentUpdateModelConfig:
 
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# test", encoding="utf-8")
 
         memory = MagicMock(spec=MemoryManager)
         old_config = ModelConfig(model="claude-sonnet-4-6")
@@ -132,7 +132,7 @@ class TestAgentUpdateModelConfig:
 
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# test", encoding="utf-8")
 
         memory = MagicMock(spec=MemoryManager)
         agent = AgentCore(anima_dir, memory, ModelConfig(model="claude-sonnet-4-6"))

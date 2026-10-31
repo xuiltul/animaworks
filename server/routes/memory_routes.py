@@ -14,6 +14,7 @@ from typing import Any
 import networkx as nx
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.memory.conversation.memory import ConversationMemory
 from core.memory.facts.connections import build_connections, entity_detail
 from core.memory.frontmatter import parse_frontmatter
@@ -504,7 +505,7 @@ def _connection_name_sets(request: Request, animas_dir: Path) -> tuple[set[str],
         {
             directory.name
             for directory in animas_dir.iterdir()
-            if directory.is_dir() and (directory / "identity.md").is_file()
+            if directory.is_dir() and (directory / IDENTITY_FILE).is_file()
         }
         if animas_dir.is_dir()
         else set()

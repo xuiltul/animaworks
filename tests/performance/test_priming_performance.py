@@ -332,7 +332,7 @@ async def test_memory_usage_baseline(anima_dir_with_data, memory_tracker):
 
         # Run 100 priming operations
         for i in range(100):
-            result = await engine.prime_memories(
+            await engine.prime_memories(
                 message=f"Test message {i}",
                 sender_name="system",
                 channel="chat",
@@ -533,7 +533,7 @@ async def test_priming_latency_percentiles(anima_dir_with_data):
             message = messages[i % len(messages)]
 
             start = time.perf_counter()
-            result = await engine.prime_memories(
+            await engine.prime_memories(
                 message=message,
                 sender_name="system",
                 channel="chat",

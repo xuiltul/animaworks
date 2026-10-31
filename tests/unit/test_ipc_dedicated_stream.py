@@ -26,8 +26,8 @@ from core.runtime.ipc import (
     IPCResponse,
     IPCServer,
 )
-from server.supervisor.process_handle import ProcessHandle
 from core.runtime.transport import resolve_client_endpoint
+from server.supervisor.process_handle import ProcessHandle
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -257,7 +257,6 @@ async def test_stream_dedicated_connection_closes_on_timeout():
     async def mock_open_unix(*args, **kwargs):
         return mock_reader, mock_writer
 
-    original_wait_for = asyncio.wait_for
 
     async def mock_wait_for(coro, *, timeout):
         # Close the coroutine to avoid RuntimeWarning

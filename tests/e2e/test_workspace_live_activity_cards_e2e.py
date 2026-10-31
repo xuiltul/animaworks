@@ -293,11 +293,11 @@ def _create_app_with_config(tmp_path: Path, anima_names: list[str]):
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config_data), encoding="utf-8")
 
-    # Create identity.md for each anima so the route doesn't skip them
+    # Create IDENTITY.md for each anima so the route doesn't skip them
     for name in anima_names:
         anima_dir = animas_dir / name
         anima_dir.mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
 
     with (
         patch("server.app.ProcessSupervisor") as mock_sup_cls,
@@ -340,7 +340,8 @@ def _create_app_with_config(tmp_path: Path, anima_names: list[str]):
 
     app.state.anima_names = anima_names
 
-    from core.config.models import load_config as _load_config, invalidate_cache
+    from core.config.models import invalidate_cache
+    from core.config.models import load_config as _load_config
 
     invalidate_cache()
     real_config = _load_config(config_path)
@@ -435,7 +436,7 @@ class TestCssDataStatusIntegration:
         self.js = ORG_DASHBOARD_JS.read_text(encoding="utf-8")
 
     def test_all_status_values_have_css(self):
-        status_values = re.findall(r'return "(\w+)"', self.js)
+        re.findall(r'return "(\w+)"', self.js)
         fn_start = self.js.index("function getStatusAttr")
         fn_end = self.js.index("// ── Tree Layout", fn_start)
         fn_body = self.js[fn_start:fn_end]

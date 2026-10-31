@@ -33,7 +33,7 @@ class _AccessCase:
 _CASES = (
     _AccessCase("empty_path_noop", "@empty", False, True),
     _AccessCase("superuser_bypass", "outside:secret.md", False, True, superuser=True),
-    _AccessCase("own_read", "own:identity.md", False, True),
+    _AccessCase("own_read", "own:IDENTITY.md", False, True),
     _AccessCase("own_write", "own:knowledge/note.md", True, True),
     _AccessCase("global_permissions_under_data_dir", "data:nested/permissions.global.json", True, False, ("/",)),
     _AccessCase("explicit_deny", "private:secret.md", False, False, ("/",), denied_roots=("private",)),
@@ -54,7 +54,7 @@ _CASES = (
     _AccessCase("peer_activity_read", "other:activity_log/today.jsonl", False, True, grant="peer_activity"),
     _AccessCase("subordinate_management_read", "other:status.json", False, True, grant="management"),
     _AccessCase("subordinate_management_write", "other:status.json", True, False, grant="management"),
-    _AccessCase("descendant_state_file_read", "other:identity.md", False, True, grant="descendant_file"),
+    _AccessCase("descendant_state_file_read", "other:IDENTITY.md", False, True, grant="descendant_file"),
     _AccessCase("descendant_plans_read", "other:state/plans/plan.md", False, True, grant="descendant_dir"),
     _AccessCase("subordinate_root_listing", "other:", False, True, grant="subordinate_root"),
     _AccessCase("framework_shared_read", "shared:public.md", False, True),
@@ -164,7 +164,7 @@ def _make_handler(
     elif grant == "management":
         handler._subordinate_management_files = [other_anima_dir / "status.json"]
     elif grant == "descendant_file":
-        handler._descendant_state_files = [other_anima_dir / "identity.md"]
+        handler._descendant_state_files = [other_anima_dir / "IDENTITY.md"]
     elif grant == "descendant_dir":
         handler._descendant_state_dirs = [other_anima_dir / "state" / "plans"]
     elif grant == "subordinate_root":
@@ -240,7 +240,7 @@ def test_sdk_and_handler_use_the_shared_file_access_policy(
                 else None
             ),
             subordinate_management_files=[other_anima_dir / "status.json"] if case.grant == "management" else None,
-            descendant_read_files=[other_anima_dir / "identity.md"] if case.grant == "descendant_file" else None,
+            descendant_read_files=[other_anima_dir / "IDENTITY.md"] if case.grant == "descendant_file" else None,
             descendant_read_dirs=[other_anima_dir / "state" / "plans"] if case.grant == "descendant_dir" else None,
             peer_activity_dirs=[other_anima_dir / "activity_log"] if case.grant == "peer_activity" else None,
             task_cwd=task_cwd,
@@ -300,3 +300,24 @@ def test_protected_directory_marker_matches_path_components_only(tmp_path: Path)
     anima_dir = tmp_path / "animas" / "alice"
     assert evaluate_protected_write(anima_dir, anima_dir / "activity_log" / "2026-09-30.jsonl") is not None
     assert evaluate_protected_write(anima_dir, anima_dir / "knowledge" / "activity_log_notes.md") is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "IDENTITY.md",
+        "identity.MD",
+        "SOUL.md",
+        "soul.md",
+        "AGENTS.md",
+        "agents.Md",
+        "BOOTSTRAP.md",
+        "bootstrap.md",
+        "injection.md",
+    ],
+)
+def test_protected_write_names_are_case_insensitive_and_include_legacy(tmp_path: Path, name: str) -> None:
+    from core.config.file_access_policy import evaluate_protected_write
+
+    anima_dir = tmp_path / "animas" / "alice"
+    assert evaluate_protected_write(anima_dir, anima_dir / name) is not None

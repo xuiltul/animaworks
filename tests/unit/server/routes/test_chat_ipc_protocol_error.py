@@ -8,8 +8,6 @@ Unit tests for IPC protocol error handling in chat SSE streaming.
 
 from __future__ import annotations
 
-
-
 # ── Helper: replicate error classification logic from chat.py ──
 
 

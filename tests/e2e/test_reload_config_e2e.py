@@ -75,7 +75,6 @@ class TestReloadConfigE2E:
         from core.anima.digital_anima import DigitalAnima
 
         anima = DigitalAnima(anima_dir=anima_dir, shared_dir=shared_dir)
-        original_max_tokens = anima.model_config.max_tokens
 
         _write_status_json(anima_dir, max_tokens=32768)
 

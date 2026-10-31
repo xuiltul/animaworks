@@ -25,7 +25,7 @@ if rel.startswith("common_knowledge/"):
 
 ### 脆弱性 2: create_anima の character_sheet_path
 
-`core/tooling/handler_org.py` の `_handle_create_anima()` で `character_sheet_path` が相対パスの場合に `self._anima_dir / md_path` で解決されるが、`_check_file_permission` が呼ばれておらず、`../../other_anima/identity.md` のような指定で他 Anima のファイルを読める。
+`core/tooling/handler_org.py` の `_handle_create_anima()` で `character_sheet_path` が相対パスの場合に `self._anima_dir / md_path` で解決されるが、`_check_file_permission` が呼ばれておらず、`../../other_anima/IDENTITY.md` のような指定で他 Anima のファイルを読める。
 
 ```python
 # handler_org.py
@@ -79,6 +79,6 @@ if not md_path.is_relative_to(self._anima_dir.resolve()):
 - [ ] `write_memory_file("common_knowledge/../../../tmp/test", "x")` が拒否されること
 - [ ] `read_memory_file("common_knowledge/valid_file.md")` が正常動作すること
 - [ ] `write_memory_file("common_knowledge/valid_file.md", "x")` が正常動作すること
-- [ ] `create_anima` で `character_sheet_path="../../other/identity.md"` が拒否されること
+- [ ] `create_anima` で `character_sheet_path="../../other/IDENTITY.md"` が拒否されること
 - [ ] 正規の `character_sheet_path` が正常動作すること
 - [ ] `sender_name` に `../` を含む場合に sender_profile が空を返すこと

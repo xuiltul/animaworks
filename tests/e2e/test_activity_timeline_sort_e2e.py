@@ -15,11 +15,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from core.time_utils import now_jst
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from core.time_utils import now_jst
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -68,7 +67,7 @@ def _create_app(tmp_path: Path, anima_names: list[str] | None = None):
 def _setup_anima(animas_dir: Path, name: str) -> Path:
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     return anima_dir
 
 

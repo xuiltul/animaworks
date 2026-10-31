@@ -9,11 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.schemas import CronTask
 from core.runtime.runner import AnimaRunner
 from core.runtime.scheduler_manager import SchedulerManager
 from core.runtime.streaming_handler import StreamingIPCHandler
 from core.runtime.task_runner_supervisor import TaskRunnerSupervisor
+from core.schemas import CronTask
 from core.tasks.pending_executor import PendingTaskExecutor
 
 

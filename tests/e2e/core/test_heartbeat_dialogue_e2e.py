@@ -81,7 +81,7 @@ def _setup_anima_dir(tmp_path: Path, name: str = "alice") -> Path:
     """Create an anima directory with required subdirectories."""
     d = tmp_path / "animas" / name
     d.mkdir(parents=True)
-    (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+    (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     for sub in (
         "state",
         "episodes",

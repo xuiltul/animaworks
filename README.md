@@ -195,7 +195,7 @@ Unlike stateless chat wrappers that reset every session, each Anima has a filesy
 - **Sleep-Cycle Consolidation & Active Forgetting (`core/memory/maintenance/`)**: Every night, Animas consolidate raw daily logs into structured knowledge and prune stale, low-value memories while strictly protecting identity, procedures, and active tasks.
 
 ### 2. Act on Their Own Clock — Heartbeat, Cron, SQLite TaskStore & GitHub Gateway
-- **Heartbeat & Cron**: Periodic autonomous patrols (`heartbeat.md` with adaptive intervals and quiet hours) and exact-time schedules (`cron.md`).
+- **Heartbeat & Cron**: Periodic autonomous patrols (`HEARTBEAT.md` with adaptive intervals and quiet hours) and exact-time schedules (`cron.md`).
 - **SQLite TaskStore (`shared/taskboard.sqlite3`)**: An atomic, organization-wide task board supporting dependencies, mutex keys (`mutex_key` to prevent two Animas from editing the same resource simultaneously), delegation contracts (`delegated_tasks` with automatic supervisor review on completion), and automatic retry/recovery for stalled workers.
 - **GitHub Webhook Gateway**: Automatically turns CI failures, PR review comments, and merge conflicts into actionable tasks routed to the responsible engineer Anima.
 
@@ -339,7 +339,7 @@ Because autonomous agents are given shell and external tool access, AnimaWorks i
 1. **Enclave (PII & Production Data Isolation Runtime)**: Locks personal data and production DB/S3 credentials inside a separate OS user domain, returning only safe, Egress-masked facts over a Unix domain socket (`SO_PEERCRED`).
 2. **Provenance & Trust Boundary Labeling**: External inputs from web search, Slack, email, etc. are tagged as `untrusted`, propagating the minimum session trust level and tracking RAG metadata provenance to prevent privilege escalation via prompt injection.
 3. **5-Stage Command & Path Inspection**: Shell injection detection → Global blocklist (server refuses to start if `permissions.global.json` is missing) → Per-Anima blocked commands → Per-Anima allowlist → Path traversal & symlink escape prevention (including CWD-relative checks).
-4. **Filesystem Sandbox & Action Gates**: Each Anima can write only within allowed `file_roots`, with self-modification protection on its own `identity.md` and `permissions.json`. High-impact external tools are guarded by pre-execution Action Gates.
+4. **Filesystem Sandbox & Action Gates**: Each Anima can write only within allowed `file_roots`, with self-modification protection on its own `IDENTITY.md` / `SOUL.md` and `permissions.json`. High-impact external tools are guarded by pre-execution Action Gates.
 5. **Authentication, SSRF Prevention & Webhook Verification**: Argon2id password hashing, 48-byte session tokens, HMAC signature verification with replay protection for Slack/Chatwork/Zoom/GitHub, and a media proxy that blocks private IPs and DNS rebinding.
 
 </details>

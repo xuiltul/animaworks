@@ -12,7 +12,6 @@ import pytest
 
 from server.stream_registry import ResponseStream, StreamRegistry
 
-
 # ── Helpers ──────────────────────────────────────────────
 
 

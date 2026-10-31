@@ -109,7 +109,7 @@ class TestSlackCredentialCascade:
         # SlackClient needs slack_sdk, mock it
         with patch("core.integrations._slack_client._require_slack_sdk"):
             with patch("core.integrations._slack_client.WebClient") as mock_wc:
-                client = SlackClient()
+                SlackClient()
                 mock_wc.assert_called_with(token="xoxb-config-test")
 
     def test_env_fallback(self, config_dir, monkeypatch):
@@ -120,7 +120,7 @@ class TestSlackCredentialCascade:
 
         with patch("core.integrations._slack_client._require_slack_sdk"):
             with patch("core.integrations._slack_client.WebClient") as mock_wc:
-                client = SlackClient()
+                SlackClient()
                 mock_wc.assert_called_with(token="xoxb-env-test")
 
 
@@ -305,7 +305,7 @@ class TestSharedCredentialsCascadeE2E:
         _save_credentials(config_dir, {})
         self._write_shared_creds(config_dir, {env_var: token})
         monkeypatch.delenv(env_var, raising=False)
-        cred_name = env_var.lower().rsplit("_", maxsplit=2)[0]
+        env_var.lower().rsplit("_", maxsplit=2)[0]
         # Map env_var to credential_name used in get_credential
         cred_map = {
             "CHATWORK_API_TOKEN": "chatwork",

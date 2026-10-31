@@ -16,6 +16,13 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    BOOTSTRAP_FILE,
+    IDENTITY_FILE,
+    SOUL_FILE,
+    split_legacy_identity,
+)
 from core.paths import TEMPLATES_DIR
 
 logger = logging.getLogger("animaworks.anima_factory")
@@ -43,10 +50,10 @@ def _get_bootstrap_template(locale: str | None = None) -> Path:
 
     loc = locale or _get_locale()
     for fallback in dict.fromkeys([loc, "en", "ja"]):
-        p = TEMPLATES_DIR / fallback / "bootstrap.md"
+        p = TEMPLATES_DIR / fallback / BOOTSTRAP_FILE
         if p.exists():
             return p
-    return TEMPLATES_DIR / "ja" / "bootstrap.md"
+    return TEMPLATES_DIR / "ja" / BOOTSTRAP_FILE
 
 
 def _get_roles_dir(locale: str | None = None) -> Path:
@@ -161,7 +168,7 @@ _RUNTIME_SUBDIRS = [
     "shortterm",
     "shortterm/archive",
 ]
-_ROOT_OWNED_TEMPLATE_FILES = frozenset({"identity.md", "injection.md", "permissions.json", "status.json"})
+_ROOT_OWNED_TEMPLATE_FILES = frozenset({IDENTITY_FILE, SOUL_FILE, AGENTS_FILE, "permissions.json", "status.json"})
 
 
 def _copy_template_tree(template_dir: Path, anima_dir: Path, *, name: str, replace_name: bool = False) -> None:
@@ -175,9 +182,19 @@ def _copy_template_tree(template_dir: Path, anima_dir: Path, *, name: str, repla
 
     shutil.copytree(template_dir, anima_dir, ignore=ignore_root_owned_settings)
 
-    from core.anima.settings_store import update_status, write_identity, write_injection, write_permissions
+    from core.anima.settings_store import (
+        update_status,
+        write_agents,
+        write_identity,
+        write_permissions,
+        write_soul,
+    )
 
-    for filename, writer in (("identity.md", write_identity), ("injection.md", write_injection)):
+    for filename, writer in (
+        (IDENTITY_FILE, write_identity),
+        (SOUL_FILE, write_soul),
+        (AGENTS_FILE, write_agents),
+    ):
         source = template_dir / filename
         if source.is_file():
             content = source.read_text(encoding="utf-8")
@@ -275,10 +292,15 @@ def create_blank(animas_dir: Path, name: str) -> Path:
                 if "{name}" not in content:
                     continue
                 rendered = content.replace("{name}", name)
-                if md_file.parent == anima_dir and md_file.name in {"identity.md", "injection.md"}:
-                    from core.anima.settings_store import write_identity, write_injection
+                if md_file.parent == anima_dir and md_file.name in {IDENTITY_FILE, SOUL_FILE, AGENTS_FILE}:
+                    from core.anima.settings_store import write_agents, write_identity, write_soul
 
-                    writer = write_identity if md_file.name == "identity.md" else write_injection
+                    if md_file.name == IDENTITY_FILE:
+                        writer = write_identity
+                    elif md_file.name == SOUL_FILE:
+                        writer = write_soul
+                    else:
+                        writer = write_agents
                     writer(anima_dir, rendered)
                 else:
                     md_file.write_text(rendered, encoding="utf-8")
@@ -312,8 +334,8 @@ def create_from_md(
     """Create an anima from an MD character-sheet file or content string.
 
     The MD content is validated, then placed as ``character_sheet.md`` in the
-    new anima directory.  Sections in the sheet are applied to identity.md,
-    injection.md, permissions.json, and status.json.
+    new anima directory.  Sections in the sheet are applied to IDENTITY.md,
+    AGENTS.md, permissions.json, and status.json.
 
     On any failure after the anima directory has been created the directory
     is rolled back (removed) so no partial state is left behind.
@@ -477,8 +499,8 @@ def _validate_character_sheet(content: str) -> None:
     Supports both Japanese and English section headings based on detected
     locale. Required sections:
         - Basic Information (基本情報 / Basic Information)
-        - Personality (人格 / Personality) or ``→ identity.md``
-        - Role & Guidelines (役割・行動方針 / Role & Guidelines) or ``→ injection.md``
+        - Personality (人格 / Personality) or ``→ SOUL.md``
+        - Role & Guidelines (役割・行動方針 / Role & Guidelines) or ``→ AGENTS.md``
 
     Args:
         content: Full markdown content of the character sheet.
@@ -496,17 +518,17 @@ def _validate_character_sheet(content: str) -> None:
 
     has_personality = (
         re.search(rf"^##\s+{re.escape(headings['personality'])}", content, re.MULTILINE) is not None
-        or "→ identity.md" in content
+        or f"→ {SOUL_FILE}" in content
     )
     if not has_personality:
-        missing.append(f"{headings['personality']} (or '→ identity.md')")
+        missing.append(f"{headings['personality']} (or '→ {SOUL_FILE}')")
 
     has_injection = (
         re.search(rf"^##\s+{re.escape(headings['role_guidelines'])}", content, re.MULTILINE) is not None
-        or "→ injection.md" in content
+        or f"→ {AGENTS_FILE}" in content
     )
     if not has_injection:
-        missing.append(f"{headings['role_guidelines']} (or '→ injection.md')")
+        missing.append(f"{headings['role_guidelines']} (or '→ {AGENTS_FILE}')")
 
     if missing:
         expected = [f"## {headings[k]}" for k in ("basic_info", "personality", "role_guidelines")]
@@ -638,7 +660,7 @@ def _extract_section_content(md_content: str, heading: str) -> str | None:
     Returns the content between the heading and the next ``##`` heading
     (or end-of-file), stripped.  Returns ``None`` if the heading is not
     found or the section body is empty / only contains a redirect marker
-    like ``→ identity.md``.
+    like ``→ SOUL.md``.
 
     Args:
         md_content: Full markdown text.
@@ -676,12 +698,13 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     """Apply character-sheet sections to anima files, keeping template defaults.
 
     For sections marked ``[省略可]`` in the sheet, if they are omitted or
-    empty the existing template files (heartbeat.md, cron.md, permissions.json)
+    empty the existing template files (HEARTBEAT.md, cron.md, permissions.json)
     are left untouched.
 
     Sections that **are** present overwrite the corresponding file:
-        - Personality (人格 / Personality)          → ``identity.md``
-        - Role & Guidelines (役割・行動方針 / …)   → ``injection.md``
+        - Basic Information (基本情報 / Basic Information) → ``IDENTITY.md``
+        - Personality (人格 / Personality)          → ``SOUL.md`` (profile H2s → IDENTITY.md)
+        - Role & Guidelines (役割・行動方針 / …)   → ``AGENTS.md``
         - Permissions (権限 / Permissions)         → ``permissions.json`` (via migrate from MD)
 
     Args:
@@ -690,22 +713,33 @@ def _apply_defaults_from_sheet(anima_dir: Path, md_content: str) -> None:
     """
     locale = _detect_sheet_locale(md_content)
     headings = SECTION_HEADINGS[locale]
+    name = anima_dir.name
 
-    # Identity
+    # Identity / Soul
+    basic_info = _extract_section_content(md_content, headings["basic_info"])
     personality = _extract_section_content(md_content, headings["personality"])
-    if personality:
-        from core.anima.settings_store import write_identity
+    if basic_info or personality:
+        from core.anima.settings_store import write_identity, write_soul
 
-        write_identity(anima_dir, personality + "\n")
-        logger.debug("Wrote identity.md from character sheet for %s", anima_dir.name)
+        identity = f"# Identity: {name}\n\n## {headings['basic_info']}\n\n{basic_info or ''}\n"
+        soul = f"# Soul: {name}\n\n{personality or ''}\n"
+        if personality:
+            personality_identity, soul = split_legacy_identity(f"# Identity: {name}\n\n{personality}\n")
+            # The synthetic title line is replaced by the explicit IDENTITY title above.
+            profile = personality_identity.split("\n", 1)[1].strip() if "\n" in personality_identity else ""
+            if profile:
+                identity = f"{identity}\n{profile}\n"
+        write_identity(anima_dir, identity)
+        write_soul(anima_dir, soul)
+        logger.debug("Wrote IDENTITY.md and SOUL.md from character sheet for %s", name)
 
-    # Injection
+    # Agents
     injection = _extract_section_content(md_content, headings["role_guidelines"])
     if injection:
-        from core.anima.settings_store import write_injection
+        from core.anima.settings_store import write_agents
 
-        write_injection(anima_dir, injection + "\n")
-        logger.debug("Wrote injection.md from character sheet for %s", anima_dir.name)
+        write_agents(anima_dir, injection + "\n")
+        logger.debug("Wrote AGENTS.md from character sheet for %s", name)
 
     # Permissions
     permissions = _extract_section_content(md_content, headings["permissions"])
@@ -776,20 +810,20 @@ def _init_state_files(anima_dir: Path) -> None:
 
 
 def _should_create_bootstrap(anima_dir: Path) -> bool:
-    """Check if bootstrap.md should be created for this anima.
+    """Check if BOOTSTRAP.md should be created for this anima.
 
     Bootstrap is needed when:
-    - identity.md doesn't exist
-    - identity.md exists but is empty or contains "未定義"
+    - IDENTITY.md doesn't exist
+    - IDENTITY.md exists but is empty or contains "未定義"
     - character_sheet.md exists (will be processed by bootstrap)
 
     Bootstrap is NOT needed when:
-    - identity.md exists and is fully defined (e.g., from template)
+    - IDENTITY.md exists and is fully defined (e.g., from template)
 
     Returns:
-        True if bootstrap.md should be created, False otherwise.
+        True if BOOTSTRAP.md should be created, False otherwise.
     """
-    identity = anima_dir / "identity.md"
+    identity = anima_dir / IDENTITY_FILE
     if not identity.exists():
         return True
 
@@ -821,8 +855,8 @@ def _place_bootstrap(anima_dir: Path) -> None:
         # so the new Anima does not have to guess where prompts/ lives.
         text = bootstrap_tpl.read_text(encoding="utf-8")
         text = text.replace("{data_dir}", str(anima_dir.parent.parent))
-        (anima_dir / "bootstrap.md").write_text(text, encoding="utf-8")
-        logger.debug("Placed bootstrap.md in %s", anima_dir)
+        (anima_dir / BOOTSTRAP_FILE).write_text(text, encoding="utf-8")
+        logger.debug("Placed BOOTSTRAP.md in %s", anima_dir)
     try:
         from core.anima.bootstrap_state import initialize_bootstrap_state
 

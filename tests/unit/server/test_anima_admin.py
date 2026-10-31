@@ -11,7 +11,7 @@ def _make_runtime(data_dir: Path) -> tuple[Path, Path]:
     animas_dir = data_dir / "animas"
     anima_dir = animas_dir / "alice"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
     (anima_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
     subordinate_dir = animas_dir / "bob"
     subordinate_dir.mkdir()
@@ -56,6 +56,6 @@ def test_delete_anima_files_stops_on_rmtree_error_without_unregistering(tmp_path
     assert result.deleted is False
     assert result.archive_path is None
     assert result.error == "locked"
-    assert (anima_dir / "identity.md").is_file()
+    assert (anima_dir / "IDENTITY.md").is_file()
     config = json.loads((data_dir / "config.json").read_text(encoding="utf-8"))
     assert "alice" in config["animas"]

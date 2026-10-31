@@ -107,7 +107,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d.mkdir(parents=True)
     (d / "shortterm" / "chat").mkdir(parents=True)
     (d / "shortterm" / "heartbeat").mkdir(parents=True)
-    (d / "identity.md").write_text("# Test Codex Anima", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Codex Anima", encoding="utf-8")
     (d / "state").mkdir()
     (d / "state" / "current_state.md").write_text("status: idle\n", encoding="utf-8")
     return d
@@ -692,7 +692,10 @@ class TestConfigWriting:
 
         permissions = SimpleNamespace(file_roots=["/"], file_roots_denied=[])
         with patch("core.config.models.load_permissions", return_value=permissions):
-            assert executor._codex_thread_kwargs("prompt")["config"] == {"bypass_hook_trust": True}
+            assert executor._codex_thread_kwargs("prompt")["config"] == {
+                "bypass_hook_trust": True,
+                "project_doc_max_bytes": 0,
+            }
         with patch("core.execution.engines.codex.setup.get_codex_executable", return_value="/usr/bin/codex"):
             assert "--dangerously-bypass-hook-trust" in executor._build_cli_exec_command()
 
@@ -706,9 +709,23 @@ class TestConfigWriting:
         assert "[mcp_servers.aw]" in config_toml
         parsed = tomllib.loads(config_toml)
         assert parsed["approval_policy"] == "never"
+        assert parsed["project_doc_max_bytes"] == 0
         assert parsed["mcp_servers"]["aw"]["default_tools_approval_mode"] == "approve"
         assert parsed["mcp_servers"]["aw"]["command"] == sys.executable
         assert parsed["mcp_servers"]["aw"]["args"] == ["-m", "core.mcp.server"]
+
+    def test_project_doc_disabled_only_without_task_cwd(self, executor, anima_dir, tmp_path):
+        permissions = SimpleNamespace(file_roots=["/"], file_roots_denied=[])
+        with patch("core.config.models.load_permissions", return_value=permissions):
+            assert executor._codex_thread_kwargs("prompt")["config"]["project_doc_max_bytes"] == 0
+        with patch("core.execution.engines.codex.setup.get_codex_executable", return_value="/usr/bin/codex"):
+            assert "project_doc_max_bytes=0" in executor._build_cli_exec_command()
+
+        executor.set_task_cwd(tmp_path / "repo")
+        with patch("core.config.models.load_permissions", return_value=permissions):
+            assert "project_doc_max_bytes" not in executor._codex_thread_kwargs("prompt")["config"]
+        with patch("core.execution.engines.codex.setup.get_codex_executable", return_value="/usr/bin/codex"):
+            assert "project_doc_max_bytes=0" not in executor._build_cli_exec_command()
 
     def test_write_codex_config_sets_task_auto_compaction_limit(self, model_config, anima_dir):
         model_config.task_compaction_tokens = 75_000
@@ -779,6 +796,7 @@ class TestConfigWriting:
         assert "sandbox_workspace_write" not in parsed
         assert parsed["default_permissions"] == "animaworks"
         assert parsed["approval_policy"] == "never"
+        assert "project_doc_max_bytes" not in parsed
 
         profile = parsed["permissions"]["animaworks"]
         filesystem = profile["filesystem"]

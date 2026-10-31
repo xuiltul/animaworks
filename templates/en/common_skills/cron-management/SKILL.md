@@ -297,11 +297,11 @@ When a parse or registration error is detected during the initial registration o
 
 ## cron.md Operating Procedures
 
-### Target Paths and Subordinate Editing
+### Target Paths and Editing Descendants
 
-- Read your own `cron.md` via `read_memory_file(path="cron.md")`, and update it via `write_memory_file(path="cron.md", ...)`.
-- A supervisor can edit subordinates' `cron.md` / `heartbeat.md` using the write memory tool by specifying them as in `../{anima_name}/cron.md` (applies to all subordinates, including children, grandchildren, and below).
-- `status.json` / `identity.md` / `permissions.json` are owned by root and cannot be written to from memory or file tools. Authorized supervisor `injection.md` changes and identity creation requests during bootstrap are forwarded to and authorized by root. No direct file operations are performed.
+- Read your own `cron.md` with `read_memory_file(path="cron.md")`, and update it with `write_memory_file(path="cron.md", ...)`.
+- A supervisor can edit descendants' `cron.md` / `HEARTBEAT.md` using the write memory tool by specifying them as `../{anima_name}/cron.md` (all descendants, including children and grandchildren, are covered).
+- `status.json` / `IDENTITY.md` / `SOUL.md` / `permissions.json` are owned by root and cannot be written to using memory or file tools. Changes to `AGENTS.md` by an authorized supervisor and requests to create IDENTITY.md / SOUL.md during bootstrap are forwarded to root for authorization. Do not manipulate files directly.
 
 ### Adding a New Task
 
@@ -445,11 +445,11 @@ type: llm
 
 ## Notes
 
-- **Hot reload**: When `cron.md` / `heartbeat.md` are updated via Anima's `write_memory_file`, etc., the schedule change callback triggers `reload_schedule` and re-registers immediately. Subordinate management files are also edited with the write memory tool as in `../{anima_name}/cron.md`. External direct edits are also detected by the mtime check (`_check_schedule_freshness`) just before the next **heartbeat or any cron fires**, but this is not the standard procedure for supervisor edits to subordinate files
-- **Old jobs immediately after reload**: When the scheduler is rebuilt upon detecting an mtime change, cron firings tied to the **previous definition** may be skipped as "stale" (intentional duplicate execution prevention)
-- **Time zone**: APScheduler uses `get_app_timezone()`. The `system.timezone` of `config.json` can be set to an IANA name (e.g., `Asia/Tokyo`). When **empty**, the OS time zone is auto-detected, falling back to `Asia/Tokyo` on failure
-- **Concurrency**: **If task names differ**, multiple jobs in the same minute may run in parallel via `asyncio.create_task`. The same task name will not re-enter while running (skipped via `_cron_running`). Each job is `max_instances=1`
-- Command type does not stop the process on failure (`cron_executed` is recorded, and `stderr` / exit_code remain in the log). **The follow-up cron LLM runs only on success and when stdout exists** (as described above)
-- Periodic execution of `type: llm` uses the **background model** (`background_model` of `status.json`, etc.; the main model is used if not set)
-- Detailed command output accumulates in `state/cron_logs/` (daily JSONL) and is housekept for up to 14 days
-- **When accessing another Anima's tools/ directory, check permissions in advance**
+- **Hot reload**: When `cron.md` / `HEARTBEAT.md` are updated through Anima's `write_memory_file`, etc., the schedule-change callback runs `reload_schedule` and immediately registers them again. Edits to descendant management files should also be made using the write memory tool, as in `../{anima_name}/cron.md`. External direct edits are also detected by the mtime check (`_check_schedule_freshness`) immediately before the next **heartbeat or any cron fires**, but this is not the standard procedure for a supervisor editing descendants.
+- **Stale jobs immediately after reload**: When the scheduler is rebuilt after detecting an mtime change, cron firings tied to the **previous definition may be skipped as “stale”** (to intentionally prevent duplicate execution).
+- **Time zone**: APScheduler uses `get_app_timezone()`. In `config.json`, set `system.timezone` to an IANA name (e.g., `Asia/Tokyo`). When it is an **empty string**, the OS time zone is detected automatically, and if that fails, it falls back to `Asia/Tokyo`.
+- **Concurrency**: **If task names differ**, multiple jobs can run concurrently via `asyncio.create_task` even when they overlap within the same minute. The same task name will not re-enter while running (skipped by `_cron_running`). Each job is `max_instances=1`.
+- Even if a command-type task fails, the process does not stop (`cron_executed` is recorded, and `stderr` / exit_code are logged). **The follow-up cron LLM runs only when the command succeeds and has stdout** (as mentioned above).
+- Periodic execution of `type: llm` uses the **background model** (such as `background_model` in `status.json`; the main model is used if unset).
+- Detailed command output accumulates in `state/cron_logs/` (daily JSONL) and is housekeeping-cleaned after a maximum of 14 days.
+- **Check permissions in advance when accessing another Anima's tools/ directory.**

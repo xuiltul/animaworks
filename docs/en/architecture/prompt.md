@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/architecture/prompt.md -->
-<!-- i18n: source-sha256=87c388a389b02d102bc322504f639598ced27b0c348ed22fafb70fde9f3e49a6 generated=2026-10-16 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=4efd5e6044c341500cee440726a5e0ae86fc499c7ff7c73f6109d91d97138208 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: b304b7dc
 
@@ -7,18 +7,18 @@
 
 `core/prompt/builder.py` builds the system prompt based on memory, execution mode, trigger, and the current request, and `core/prompt/assembler.py` assembles sections with XML boundary tags to fit within the budget. Fixed parts are grouped at the beginning, with status information that changes each turn placed afterward.
 
-## Section structure and order
+## Section Structure and Order
 
-The builder creates six logical groups. The assembly order is groups 1, 2, 4, 5, 6, and finally the dynamic group 3.
+The builder creates six logical groups. They are assembled in this order: groups 1, 2, 4, 5, and 6, followed by the dynamic group 3.
 
-1. **Environment and behavior rules** — runtime information, workspace, Anima's identity, `injection.md`, behavior rules.
-2. **Anima's own information** — bootstrap status, company vision, speciality, permissions.
-3. **Memory and capabilities** — memory guide, tool guide tailored to trigger / mode, available external tools, active skill context, skill catalog.
-4. **Organization and communication** — organizational relationships, internal messages, notification methods for humans.
-5. **Meta configuration** — emotion instructions during chat and response rules for specific engines.
-6. **Current situation** — current time, `current_state.md`, recent resolutions, priming, relevant human notifications, short-term memory.
+1. **Environment and behavior rules** — Runtime information, workspace, Anima’s `IDENTITY.md` / `SOUL.md`, `AGENTS.md`, and behavior rules.
+2. **Information about Anima itself** — Bootstrap status, the company vision, speciality, and permissions.
+3. **Memory and capabilities** — Memory guide, tool guide tailored to the trigger / mode, available external tools, active skill context, and skill catalog.
+4. **Organization and communication** — Organization relationships, internal messages, and how to notify humans.
+5. **Meta configuration** — Instructions for emotion during chat and response rules for specific engines.
+6. **Current situation** — Current time, `current_state.md`, recent resolutions, priming, relevant human notifications, and short-term memory.
 
-Group 3 contains information that changes per turn. By treating the preceding groups as a stable prefix, the provider's prompt cache can be reused more easily. If the context window is small, some environment information and optional sections are omitted depending on the prompt tier.
+Group 3 collects information that changes from turn to turn. Treating the preceding groups as a stable prefix makes it easier to reuse the provider’s prompt cache. When the context window is small, some environment information and optional sections are omitted according to the prompt tier.
 
 ## Skills and tool guide
 
@@ -26,11 +26,11 @@ The skill list is assembled after indexing Anima-specific, common, and procedure
 
 The tool guide switches depending on heartbeat, engines using MCP, and other engines. Skill bodies and actual tool inputs/outputs are loaded on demand, while the system prompt contains available entry points and necessary rules.
 
-## Budget and bloat handling
+## Handling Budget and Bloat
 
-The assembler allocates budget based on section priority, and elastic sections are trimmed at the Markdown paragraph level. Individual paragraphs are not cut mid-way; if the hard ceiling is exceeded, lower-priority rigid sections are also removed. The default normal target is 6,000 tokens, with a cap of 35% of the context window, adjustable via configuration.
+The assembler allocates the budget based on section priority and trims elastic sections by Markdown paragraph. It never cuts off an individual paragraph mid-way, and removes lower-priority rigid sections if the hard ceiling would otherwise be exceeded. The default normal target is 6,000 tokens, with a cap of 35% of the context window; these values can be changed through configuration.
 
-The `injection.md` size warning is added only during consolidation, when the configured character threshold is exceeded. The skill catalog also has a count limit. See the [configuration reference](../reference/config.md) for the full list of global and individual settings.
+Size warnings for `AGENTS.md` are added only during consolidation, when the configured character-count threshold is exceeded. The skill catalog also has an item limit. For a list of global and individual settings, see the [Configuration Reference](../reference/config.md).
 
 ## Template resolution
 

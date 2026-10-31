@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/tool-cli.md -->
-<!-- i18n: source-sha256=658df3f85c8666e262c051000087778fe185fc827a30ab7bc1a82f8131c61935 generated=2026-10-29 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=658df3f85c8666e262c051000087778fe185fc827a30ab7bc1a82f8131c61935 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 도구 CLI 참조: `animaworks-tool`
 

@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 from core.config.models import (
-    AnimaWorksConfig,
     AnimaModelConfig,
+    AnimaWorksConfig,
     _resolve_supervisor_name,
     invalidate_cache,
     load_config,
@@ -24,7 +24,6 @@ from core.config.models import (
     register_anima_in_config,
     save_config,
 )
-
 
 # ── Fixtures ─────────────────────────────────────────────────────
 
@@ -43,11 +42,11 @@ def _make_anima(
     identity_content: str | None = None,
     status_content: dict | None = None,
 ) -> Path:
-    """Helper to create an anima directory with optional identity.md and status.json."""
+    """Helper to create an anima directory with optional IDENTITY.md and status.json."""
     anima_dir = tmp_path / name
     anima_dir.mkdir(parents=True, exist_ok=True)
     if identity_content is not None:
-        (anima_dir / "identity.md").write_text(identity_content, encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(identity_content, encoding="utf-8")
     if status_content is not None:
         (anima_dir / "status.json").write_text(
             json.dumps(status_content, ensure_ascii=False), encoding="utf-8",
@@ -129,7 +128,7 @@ class TestResolveSupervisorName:
 
 
 class TestReadAnimaSupervisor:
-    """Tests for reading supervisor from status.json / identity.md."""
+    """Tests for reading supervisor from status.json / IDENTITY.md."""
 
     def test_status_json_with_supervisor(self, tmp_path: Path) -> None:
         """Reads supervisor from status.json when present."""
@@ -142,7 +141,7 @@ class TestReadAnimaSupervisor:
     def test_status_json_without_supervisor_falls_to_identity(
         self, tmp_path: Path,
     ) -> None:
-        """Falls through to identity.md when status.json lacks supervisor."""
+        """Falls through to IDENTITY.md when status.json lacks supervisor."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content="| 上司 | 琴葉（kotoha） |\n",
@@ -151,7 +150,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) == "kotoha"
 
     def test_identity_md_table_fullwidth_parens(self, tmp_path: Path) -> None:
-        """Parses supervisor from identity.md table with full-width parens."""
+        """Parses supervisor from IDENTITY.md table with full-width parens."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content=(
@@ -170,7 +169,7 @@ class TestReadAnimaSupervisor:
     def test_status_json_empty_supervisor_falls_to_identity(
         self, tmp_path: Path,
     ) -> None:
-        """Falls through to identity.md when status.json supervisor is empty."""
+        """Falls through to IDENTITY.md when status.json supervisor is empty."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content="| 上司 | sakura |\n",
@@ -179,7 +178,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) == "sakura"
 
     def test_status_json_takes_priority(self, tmp_path: Path) -> None:
-        """status.json supervisor wins over identity.md when both present."""
+        """status.json supervisor wins over IDENTITY.md when both present."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content="| 上司 | alice |\n",
@@ -188,7 +187,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) == "bob"
 
     def test_status_json_nashi_falls_to_identity(self, tmp_path: Path) -> None:
-        """status.json with なし resolves to None, falls to identity.md."""
+        """status.json with なし resolves to None, falls to IDENTITY.md."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content="| 上司 | sakura |\n",
@@ -198,7 +197,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) == "sakura"
 
     def test_identity_no_supervisor_row(self, tmp_path: Path) -> None:
-        """Returns None when identity.md has no supervisor row."""
+        """Returns None when IDENTITY.md has no supervisor row."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content="# Identity\n| 項目 | 設定 |\n| 誕生日 | 1月1日 |\n",
@@ -213,7 +212,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) is None
 
     def test_identity_embedded_in_real_file(self, tmp_path: Path) -> None:
-        """Extracts supervisor from a realistic multi-row identity.md."""
+        """Extracts supervisor from a realistic multi-row IDENTITY.md."""
         anima_dir = _make_anima(
             tmp_path, "hinata",
             identity_content=(
@@ -344,7 +343,7 @@ class TestRegisterAnimaInConfig:
         assert cfg.animas["hinata"].supervisor is None
 
     def test_registers_with_status_json_supervisor(self, tmp_path: Path) -> None:
-        """Anima registered with supervisor from status.json when identity.md has none."""
+        """Anima registered with supervisor from status.json when IDENTITY.md has none."""
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         animas_dir = data_dir / "animas"

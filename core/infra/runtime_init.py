@@ -13,6 +13,7 @@ import logging
 import shutil
 from pathlib import Path
 
+from core.anima.workspace_files import BOOTSTRAP_FILE, IDENTITY_FILE
 from core.paths import TEMPLATES_DIR, get_data_dir
 
 logger = logging.getLogger("animaworks.init")
@@ -157,8 +158,8 @@ def _copy_infrastructure(data_dir: Path) -> None:
             if item.name in _INFRASTRUCTURE_DIRS and item.name != "prompts":
                 shutil.copytree(item, target, dirs_exist_ok=True)
         else:
-            # bootstrap.md is only placed per-anima, not at data root
-            if item.name == "bootstrap.md":
+            # BOOTSTRAP.md is only placed per-anima, not at data root
+            if item.name == BOOTSTRAP_FILE:
                 continue
             shutil.copy2(item, target)
 
@@ -257,7 +258,7 @@ def merge_templates(data_dir: Path) -> list[str]:
             parts = rel.parts
             if not parts or parts[0] in {"anima_templates", "roles"}:
                 continue
-            if rel.name == "bootstrap.md" and len(parts) == 1:
+            if rel.name == BOOTSTRAP_FILE and len(parts) == 1:
                 continue
             if parts[0] == "prompts" and Path(*parts[1:]).as_posix() not in RUNTIME_PROMPT_FILES:
                 continue
@@ -399,7 +400,7 @@ def _create_default_config(data_dir: Path) -> None:
     animas_dir = data_dir / "animas"
     if animas_dir.exists():
         for d in sorted(animas_dir.iterdir()):
-            if d.is_dir() and (d / "identity.md").exists():
+            if d.is_dir() and (d / IDENTITY_FILE).exists():
                 config.animas[d.name] = AnimaModelConfig()
 
     save_config(config, data_dir / "config.json")

@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.platform.claude_code import get_claude_auth_status
 from core.platform.codex import (
     get_codex_device_login,
@@ -370,7 +371,7 @@ def create_setup_router() -> APIRouter:
         new_anima_names: list[str] = []
         if animas_dir.exists():
             for anima_dir in sorted(animas_dir.iterdir()):
-                if anima_dir.is_dir() and (anima_dir / "identity.md").exists():
+                if anima_dir.is_dir() and (anima_dir / IDENTITY_FILE).exists():
                     new_anima_names.append(anima_dir.name)
         request.app.state.anima_names = new_anima_names
 

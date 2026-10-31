@@ -43,7 +43,7 @@ class TestGetAnimaHeartbeat:
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         hb_content = "# Heartbeat: Alice\n## 活動時間\n9:00 - 22:00\n"
-        (anima_dir / "heartbeat.md").write_text(hb_content, encoding="utf-8")
+        (anima_dir / "HEARTBEAT.md").write_text(hb_content, encoding="utf-8")
 
         app = _create_app(tmp_path, anima_names=["alice"])
         transport = ASGITransport(app=app)

@@ -22,9 +22,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from core.auth.manager import hash_password, save_auth, load_auth
+from core.auth.manager import hash_password, load_auth, save_auth
 from core.auth.models import AuthConfig, AuthUser
-
 
 # ── Helpers ──────────────────────────────────────────────
 

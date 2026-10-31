@@ -61,15 +61,31 @@ class TestReadIdentity:
         assert mm.read_identity() == ""
 
     def test_with_file(self, mm, anima_dir):
-        (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
         assert mm.read_identity() == "I am Alice"
 
     def test_strips_frontmatter(self, mm, anima_dir):
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "---\nname: Alice\nrole: engineer\n---\n\n# Identity\nI am Alice",
             encoding="utf-8",
         )
         assert mm.read_identity() == "# Identity\nI am Alice"
+
+
+class TestReadSoul:
+    def test_no_file(self, mm):
+        assert mm.read_soul() == ""
+
+    def test_with_file(self, mm, anima_dir):
+        (anima_dir / "SOUL.md").write_text("Curious and kind", encoding="utf-8")
+        assert mm.read_soul() == "Curious and kind"
+
+    def test_strips_frontmatter(self, mm, anima_dir):
+        (anima_dir / "SOUL.md").write_text(
+            "---\nversion: 1\n---\n\n# Soul: Alice\nCurious",
+            encoding="utf-8",
+        )
+        assert mm.read_soul() == "# Soul: Alice\nCurious"
 
 
 class TestReadInjection:
@@ -77,7 +93,7 @@ class TestReadInjection:
         assert mm.read_injection() == ""
 
     def test_with_file(self, mm, anima_dir):
-        (anima_dir / "injection.md").write_text("Role info", encoding="utf-8")
+        (anima_dir / "AGENTS.md").write_text("Role info", encoding="utf-8")
         assert mm.read_injection() == "Role info"
 
 
@@ -146,7 +162,7 @@ class TestReadHeartbeatConfig:
         assert mm.read_heartbeat_config() == ""
 
     def test_with_file(self, mm, anima_dir):
-        (anima_dir / "heartbeat.md").write_text("巡回間隔: 15分", encoding="utf-8")
+        (anima_dir / "HEARTBEAT.md").write_text("巡回間隔: 15分", encoding="utf-8")
         assert "15分" in mm.read_heartbeat_config()
 
 
@@ -160,7 +176,7 @@ class TestReadBootstrap:
         assert mm.read_bootstrap() == ""
 
     def test_with_file(self, mm, anima_dir):
-        (anima_dir / "bootstrap.md").write_text("Bootstrap", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("Bootstrap", encoding="utf-8")
         assert mm.read_bootstrap() == "Bootstrap"
 
 

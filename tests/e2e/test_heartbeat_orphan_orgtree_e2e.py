@@ -205,7 +205,7 @@ class TestSyncOrgPruneE2E:
         assert "sakura" in updated.animas
 
     def test_existing_dir_without_identity_not_pruned(self, data_dir, make_anima):
-        """Dirs that exist on disk (even without identity.md) keep their config entry."""
+        """Dirs that exist on disk (even without IDENTITY.md) keep their config entry."""
         make_anima("sakura")
 
         from core.config.models import (

@@ -338,11 +338,11 @@ def test_discover_suspect_animas_from_state_and_native_log(data_dir: Path):
     for name in ("rin", "sora"):
         anima_dir = data_dir / "animas" / name
         (anima_dir / "state").mkdir(parents=True)
-        (anima_dir / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     (data_dir / "animas" / "rin" / "vectordb").mkdir()
     disabled = data_dir / "animas" / "mika"
     disabled.mkdir(parents=True)
-    (disabled / "identity.md").write_text("# mika", encoding="utf-8")
+    (disabled / "IDENTITY.md").write_text("# mika", encoding="utf-8")
     (disabled / "status.json").write_text('{"enabled": false}', encoding="utf-8")
 
     (data_dir / "animas" / "sora" / "state" / "rag_repair.json").write_text(
@@ -378,7 +378,7 @@ def test_discover_suspect_animas_from_state_and_native_log(data_dir: Path):
 def test_discover_suspect_animas_includes_quick_check_corruption(data_dir: Path, monkeypatch):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "vectordb").mkdir()
 
     calls: list[dict[str, object]] = []
@@ -416,7 +416,7 @@ def test_discover_suspect_animas_includes_quick_check_corruption(data_dir: Path,
 def test_discover_suspect_animas_includes_phase3_db_in_quick_check(data_dir: Path, monkeypatch):
     anima_dir = data_dir / "animas" / "sora"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "status.json").write_text('{"process_model":"phase3"}', encoding="utf-8")
     quick_check = MagicMock(return_value=MagicMock(corrupt=False))
     monkeypatch.setattr(
@@ -438,7 +438,7 @@ def test_discover_suspect_animas_includes_phase3_db_in_quick_check(data_dir: Pat
 def test_discover_suspect_animas_ignores_signals_before_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     now = datetime.now(UTC)
 
     (anima_dir / "state" / "rag_repair.json").write_text(
@@ -473,7 +473,7 @@ def test_discover_suspect_animas_ignores_signals_before_success(data_dir: Path):
 def test_discover_suspect_animas_keeps_signals_after_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     now = datetime.now(UTC)
 
     (anima_dir / "state" / "rag_repair.json").write_text(
@@ -508,7 +508,7 @@ def test_discover_suspect_animas_keeps_signals_after_success(data_dir: Path):
 def test_discover_suspect_animas_ignores_failed_state_before_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     now = datetime.now(UTC)
 
     (anima_dir / "state" / "rag_repair.json").write_text(
@@ -537,7 +537,7 @@ def test_discover_suspect_animas_ignores_failed_state_before_success(data_dir: P
 def test_discover_suspect_animas_keeps_failed_state_after_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     now = datetime.now(UTC)
 
     (anima_dir / "state" / "rag_repair.json").write_text(
@@ -565,7 +565,7 @@ def test_discover_suspect_animas_keeps_failed_state_after_success(data_dir: Path
 def test_discover_suspect_animas_ignores_logs_before_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "vectordb").mkdir()
     now = datetime.now(UTC)
 
@@ -597,7 +597,7 @@ def test_discover_suspect_animas_ignores_logs_before_success(data_dir: Path):
 def test_discover_suspect_animas_keeps_logs_after_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "vectordb").mkdir()
     now = datetime.now(UTC)
 
@@ -629,7 +629,7 @@ def test_discover_suspect_animas_keeps_logs_after_success(data_dir: Path):
 def test_discover_suspect_animas_ignores_timestampless_logs_after_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "vectordb").mkdir()
     now = datetime.now(UTC)
 
@@ -661,7 +661,7 @@ def test_discover_suspect_animas_ignores_timestampless_logs_after_success(data_d
 def test_discover_suspect_animas_keeps_timestampless_logs_without_success(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     (anima_dir / "vectordb").mkdir()
 
     log_path = data_dir / "logs" / "server-daemon.log"
@@ -683,7 +683,7 @@ def test_discover_suspect_animas_keeps_timestampless_logs_without_success(data_d
 def test_discover_suspect_animas_ignores_legacy_unclean_exit_state(data_dir: Path):
     anima_dir = data_dir / "animas" / "sora"
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# sora", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# sora", encoding="utf-8")
     now = datetime.now(UTC)
 
     (anima_dir / "state" / "rag_repair.json").write_text(

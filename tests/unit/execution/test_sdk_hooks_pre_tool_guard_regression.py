@@ -85,7 +85,7 @@ async def test_security_guard_denials_are_logged_once_with_original_reason(
 async def test_allowed_tool_is_logged_once_without_block_metadata(hook_builder) -> None:
     anima_dir, build_hook = hook_builder
     hook = build_hook()
-    tool_input = {"file_path": str(anima_dir / "identity.md")}
+    tool_input = {"file_path": str(anima_dir / "IDENTITY.md")}
 
     with (
         patch("core.execution.engines.claude._sdk_hooks._check_a1_file_access", return_value=None),
@@ -114,7 +114,7 @@ async def test_context_observation_and_final_decision_keep_their_log_records(hoo
         "trigger": "chat",
     }
     hook = build_hook(session_stats=stats)
-    tool_input = {"file_path": str(anima_dir / "identity.md")}
+    tool_input = {"file_path": str(anima_dir / "IDENTITY.md")}
 
     with (
         patch("core.execution.engines.claude._sdk_hooks._check_a1_file_access", return_value=None),

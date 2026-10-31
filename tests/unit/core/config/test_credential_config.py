@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-
 from core.config.models import CredentialConfig
 
 

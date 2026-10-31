@@ -59,8 +59,8 @@ class TestProtectedDirs:
 
     def test_protected_files_unchanged(self):
         assert "permissions.md" in _PROTECTED_FILES
-        assert "identity.md" in _PROTECTED_FILES
-        assert "bootstrap.md" in _PROTECTED_FILES
+        assert "IDENTITY.md" in _PROTECTED_FILES
+        assert "BOOTSTRAP.md" in _PROTECTED_FILES
         assert "state/bm25_longterm_index.json" in _PROTECTED_FILES
         assert "state/bm25_longterm_index.dirty" in _PROTECTED_FILES
 
@@ -258,9 +258,9 @@ class TestMinTrustSeenSDKHook:
 
     @pytest.mark.asyncio
     async def test_sdk_hook_persists_trust_by_runtime_session(self, tmp_path):
-        from core.trust import read_session_trust
         from core.execution.engines.claude._sdk_hooks import _build_pre_tool_hook
         from core.execution.session.session_context import RuntimeSessionContext, runtime_session_scope
+        from core.trust import read_session_trust
 
         anima_dir = tmp_path / "animas" / "hook-test"
         anima_dir.mkdir(parents=True)
@@ -382,8 +382,8 @@ class TestKnowledgeOriginFrontmatter:
 
     def test_mode_s_file_trust_fallback(self, tmp_path):
         """A session's isolated trust-state file contributes to the write origin."""
-        from core.trust import record_session_trust
         from core.execution.session.session_context import RuntimeSessionContext
+        from core.trust import record_session_trust
 
         handler = _make_handler(tmp_path)
         ctx = RuntimeSessionContext.create(session_type="chat", thread_id="t", trigger="chat")

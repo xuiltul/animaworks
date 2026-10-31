@@ -16,9 +16,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 from core.schemas import ModelConfig
+
+if TYPE_CHECKING:
+    from core.agent.agent_core import AgentCore
 
 # ── Helpers ───────────────────────────────────────────────
 

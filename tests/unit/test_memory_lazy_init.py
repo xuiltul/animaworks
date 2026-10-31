@@ -17,7 +17,7 @@ def anima_dir(tmp_path: Path) -> Path:
     """Create a minimal anima directory structure."""
     d = tmp_path / "animas" / "test-anima"
     d.mkdir(parents=True)
-    (d / "identity.md").write_text("test identity")
+    (d / "IDENTITY.md").write_text("test identity")
     return d
 
 
