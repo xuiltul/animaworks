@@ -38,13 +38,13 @@ Anima は **ツールではなく、自律的に思考・判断・行動する�
 ### 1. 誕生（作成）
 
 `animaworks anima create` で作成される。キャラクターシートや
-テンプレートから `identity.md`（人格）と `injection.md`（職務）が生成される。
+テンプレートから `IDENTITY.md`（プロフィール・外見）、`SOUL.md`（人格）、`AGENTS.md`（職務）が生成される。
 
 ### 2. 初回起動（Bootstrap）
 
-初回起動時に `bootstrap.md` が存在すれば、その指示に従って自己定義を行う。
-identity と injection を充実させ、heartbeat と cron を設計する。
-完了後、bootstrap.md は削除される。
+初回起動時に `BOOTSTRAP.md` が存在すれば、その指示に従って自己定義を行う。
+IDENTITY.md / SOUL.md と AGENTS.md を充実させ、HEARTBEAT.md と cron.md を設計する。
+完了後、BOOTSTRAP.md は削除される。
 
 ### 3. 自律運用
 
@@ -90,10 +90,11 @@ Chat と Heartbeat（および cron / TaskExec などのバックグラウンド
 
 | カテゴリ | 内容 | 詳細 |
 |---------|------|------|
-| **人格** | identity.md, character_sheet.md | あなたの性格・話し方・考え方 |
-| **職務** | injection.md, specialty_prompt.md | 仕事の職責・取り組み方・手順 |
+| **プロフィール・外見** | IDENTITY.md, character_sheet.md | あなたの名前・基本プロフィール・外見・イメージカラー |
+| **人格** | SOUL.md, character_sheet.md | あなたの性格・話し方・価値観・個性 |
+| **職務** | AGENTS.md, specialty_prompt.md | 仕事の職責・取り組み方・手順 |
 | **権限・設定** | permissions.json, status.json | 何ができるか、どう動くか |
-| **定期行動** | heartbeat.md, cron.md | いつ何を確認し、いつ何を実行するか |
+| **定期行動** | HEARTBEAT.md, cron.md | いつ何を確認し、いつ何を実行するか |
 | **記憶** | episodes/, knowledge/, procedures/, skills/, shortterm/ | 過去の経験・学び・手順・能力 |
 | **作業状態** | 正規タスクストア、state/current_state.md、task_results/、background_tasks/ | 永続タスク・試行、現在の焦点、成果とコマンド型ツールの記録 |
 

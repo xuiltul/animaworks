@@ -49,12 +49,12 @@ def _create_app(
 
     names = anima_names if anima_names is not None else []
 
-    # Create per-anima directories with identity.md so the list endpoint
-    # does not skip them (it checks identity.md existence on disk).
+    # Create per-anima directories with IDENTITY.md so the list endpoint
+    # does not skip them (it checks IDENTITY.md existence on disk).
     for n in names:
         d = animas_dir / n
         d.mkdir(parents=True, exist_ok=True)
-        (d / "identity.md").write_text(f"# {n}\ntest identity\n")
+        (d / "IDENTITY.md").write_text(f"# {n}\ntest identity\n")
 
     with (
         patch("server.app.ProcessSupervisor") as mock_sup_cls,

@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 from typing import Literal, cast
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
+
 PROCESS_ROLE_ENV = "ANIMAWORKS_PROCESS_ROLE"
 
 ProcessRole = Literal["root", "anima", "task_runner", "cli", "mcp"]
@@ -57,7 +59,7 @@ def assert_settings_write_allowed(path: Path | None = None) -> None:
             target = Path(os.path.abspath(path))
             if target.name == "config.json":
                 data_dir = target.parent
-            elif target.name in {"status.json", "identity.md", "injection.md", "permissions.json"}:
+            elif target.name in {"status.json", IDENTITY_FILE, SOUL_FILE, AGENTS_FILE, "permissions.json"}:
                 anima_dir = target.parent
                 data_dir = anima_dir.parent.parent if anima_dir.parent.name == "animas" else get_data_dir()
             else:

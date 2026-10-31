@@ -356,7 +356,7 @@ class TestSpecialtyPromptInjection:
         )
 
     def test_specialty_prompt_between_injection_and_permissions(self, data_dir: Path, tmp_path: Path):
-        """specialty_prompt should appear after injection.md and before permissions.md."""
+        """specialty_prompt should appear after AGENTS.md and before permissions.md."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_sheet(tmp_path, ENGINEER_SHEET)
 
@@ -373,7 +373,7 @@ class TestSpecialtyPromptInjection:
         specialty_content = memory.read_specialty_prompt()
         permissions_content = memory.read_permissions()
 
-        assert injection_content, "injection.md should have content"
+        assert injection_content, "AGENTS.md should have content"
         assert specialty_content, "specialty_prompt.md should have content"
         # Default (open) permissions render no section; ordering only applies when present.
         injection_pos = prompt.find("テスト用の行動方針です")

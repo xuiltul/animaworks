@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import BOOTSTRAP_FILE, HEARTBEAT_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -561,14 +563,14 @@ class LocalStateWriter:
         await self._run(str(path), lambda: atomic_write_text(path, digest + "\n"))
 
     async def archive_heartbeat_md_snapshot(self) -> str | None:
-        source = self.anima_dir / "heartbeat.md"
+        source = self.anima_dir / HEARTBEAT_FILE
         archive_dir = self.anima_dir / "archive" / "heartbeat"
-        archive_path = archive_dir / f"heartbeat.md.{now_local().strftime('%Y%m%d')}"
+        archive_path = archive_dir / f"{HEARTBEAT_FILE}.{now_local().strftime('%Y%m%d')}"
 
         def _archive() -> str | None:
             try:
                 if not source.is_file():
-                    raise FileNotFoundError(f"heartbeat.md not found at {source}")
+                    raise FileNotFoundError(f"{HEARTBEAT_FILE} not found at {source}")
                 archive_dir.mkdir(parents=True, exist_ok=True)
                 if not archive_path.exists():
                     shutil.copy2(source, archive_path)
@@ -576,7 +578,7 @@ class LocalStateWriter:
                     raise OSError(f"archive target is not a file: {archive_path}")
                 return str(archive_path.relative_to(self.anima_dir))
             except OSError:
-                logger.warning("Failed to archive heartbeat.md before cleanup", exc_info=True)
+                logger.warning("Failed to archive %s before cleanup", HEARTBEAT_FILE, exc_info=True)
                 return None
 
         return await self._run(str(archive_path), _archive)
@@ -615,7 +617,12 @@ class LocalStateWriter:
         await self._run(str(path), lambda: atomic_write_json(path, state))
 
     async def archive_bootstrap_file(self, source_name: str) -> Path:
-        allowed = {"bootstrap.md", "bootstrap.md.auto_resolved", "bootstrap.md.failed", "character_sheet.md"}
+        allowed = {
+            BOOTSTRAP_FILE,
+            f"{BOOTSTRAP_FILE}.auto_resolved",
+            f"{BOOTSTRAP_FILE}.failed",
+            "character_sheet.md",
+        }
         if source_name not in allowed:
             raise ValueError(f"unsupported bootstrap archive source: {source_name!r}")
         source = self.anima_dir / source_name
@@ -624,13 +631,13 @@ class LocalStateWriter:
         def _archive() -> Path:
             archive_dir.mkdir(parents=True, exist_ok=True)
             timestamp = now_local().strftime("%Y%m%d_%H%M%S")
-            if source_name == "bootstrap.md":
+            if source_name == BOOTSTRAP_FILE:
                 archive_path = archive_dir / f"bootstrap-{timestamp}.md"
             else:
                 archive_path = archive_dir / f"{source_name}.{timestamp}"
             counter = 1
             while archive_path.exists():
-                if source_name == "bootstrap.md":
+                if source_name == BOOTSTRAP_FILE:
                     archive_path = archive_dir / f"bootstrap-{timestamp}-{counter}.md"
                 else:
                     archive_path = archive_dir / f"{source_name}.{timestamp}-{counter}"

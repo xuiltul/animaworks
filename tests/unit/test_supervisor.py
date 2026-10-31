@@ -274,7 +274,7 @@ async def test_reconcile_recovery_loop_stops_at_shutdown(supervisor):
     supervisor.animas_dir.mkdir(parents=True, exist_ok=True)
     anima_dir = supervisor.animas_dir / "test_anima"
     anima_dir.mkdir()
-    (anima_dir / "identity.md").write_text("x")
+    (anima_dir / "IDENTITY.md").write_text("x")
     (anima_dir / "status.json").write_text('{"enabled": true}')
 
     handle = AsyncMock(spec=ProcessHandle)

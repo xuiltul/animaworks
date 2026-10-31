@@ -15,7 +15,7 @@ def _make_anima_dir(tmp_path: Path, name: str) -> Path:
     """Create a minimal anima directory with an activity log."""
     anima_dir = tmp_path / "animas" / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(f"# {name}\n\nテスト用Anima。\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}\n\nテスト用Anima。\n", encoding="utf-8")
     (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     (anima_dir / "activity_log").mkdir(exist_ok=True)
     return anima_dir

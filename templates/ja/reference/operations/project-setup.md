@@ -195,7 +195,7 @@ Anima の追加方法は3つある。いずれも `animaworks anima create` ま�
 ### 方法1: テンプレートから作成
 
 事前定義されたテンプレート（`templates/ja/anima_templates/` または `templates/en/anima_templates/` 配下）を使う方法。
-テンプレートには identity.md, injection.md, permissions.json, スキル等が含まれている。
+テンプレートには IDENTITY.md, SOUL.md, AGENTS.md, permissions.json, スキル等が含まれている。
 
 ```bash
 # テンプレートから作成（テンプレート名はディレクトリ名）
@@ -220,14 +220,14 @@ animaworks anima create --from-md /path/to/character.md [--name ken] [--role eng
 - `--supervisor`: 上司 Anima 名（キャラクターシートの「上司」を上書き）
 
 Markdown ファイルは `character_sheet.md` として Anima ディレクトリにコピーされる。
-シートの「人格」「役割・行動方針」セクションは identity.md と injection.md に反映される。
+シートの「基本情報」は IDENTITY.md、「人格」は SOUL.md（プロフィール見出しは IDENTITY.md）、「役割・行動方針」は AGENTS.md に反映される。
 ロールテンプレートから permissions.json と specialty_prompt.md が適用される。
 
 Markdown ファイルには以下を SHOULD で含める:
 - `# Character: 名前` 形式の見出し、または基本情報テーブルの「英名」行（名前の自動抽出に使用）
-- `## 基本情報` — 英名、上司、モデル等のテーブル
-- `## 人格` — identity.md に反映
-- `## 役割・行動方針` — injection.md に反映
+- `## 基本情報` — 英名、上司、モデル等のテーブル。IDENTITY.md に反映
+- `## 人格` — SOUL.md に反映（プロフィール系の見出しは IDENTITY.md に振り分け）
+- `## 役割・行動方針` — AGENTS.md に反映
 
 ### 方法3: ブランク作成
 
@@ -246,11 +246,12 @@ animaworks anima create --name aoi
 
 ```
 ~/.animaworks/animas/{name}/
-├── identity.md          # 人格定義（不変ベースライン）
-├── injection.md         # 役割・行動指針（可変）
-├── bootstrap.md         # 初回起動指示（完了後に削除）
+├── IDENTITY.md          # プロフィール・外見（不変ベースライン）
+├── SOUL.md              # 人格・価値観（不変ベースライン）
+├── AGENTS.md            # 役割・行動指針（可変）
+├── BOOTSTRAP.md         # 初回起動指示（完了後に削除）
 ├── permissions.json       # ツール・コマンド権限
-├── heartbeat.md         # ハートビート設定
+├── HEARTBEAT.md         # ハートビート設定
 ├── cron.md              # 定時タスク設定
 ├── episodes/            # エピソード記憶（日別ログ）
 ├── knowledge/           # 意味記憶（学んだ知識）

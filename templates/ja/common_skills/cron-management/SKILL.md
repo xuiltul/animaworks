@@ -299,8 +299,8 @@ cron.md の初回登録または `reload_schedule` 時に解析・登録エラ�
 ### 対象パスと配下編集
 
 - 自分の `cron.md` は `read_memory_file(path="cron.md")` で読み、`write_memory_file(path="cron.md", ...)` で更新する。
-- 上司は配下の `cron.md` / `heartbeat.md` を write memory ツールで `../{anima_name}/cron.md` のように指定して編集できる（子・孫以下の全配下が対象）。
-- `status.json` / `identity.md` / `permissions.json` は root 所有で、記憶・ファイルツールから書き込めない。許可された上司の `injection.md` 変更と bootstrap 中の identity 作成依頼は root に転送・認可される。直接ファイル操作はしない。
+- 上司は配下の `cron.md` / `HEARTBEAT.md` を write memory ツールで `../{anima_name}/cron.md` のように指定して編集できる（子・孫以下の全配下が対象）。
+- `status.json` / `IDENTITY.md` / `SOUL.md` / `permissions.json` は root 所有で、記憶・ファイルツールから書き込めない。許可された上司の `AGENTS.md` 変更と bootstrap 中の IDENTITY.md / SOUL.md 作成依頼は root に転送・認可される。直接ファイル操作はしない。
 
 ### 新規タスク追加
 
@@ -444,7 +444,7 @@ type: llm
 
 ## 注意事項
 
-- **ホットリロード**: `cron.md` / `heartbeat.md` を Anima の `write_memory_file` 等で更新すると、スケジュール変更コールバックで `reload_schedule` が走り即時再登録される。配下管理ファイルの編集も `../{anima_name}/cron.md` のように write memoryツールで行う。外部の直接編集は、次回 **heartbeat または任意の cron が発火する直前** の mtime チェック（`_check_schedule_freshness`）でも検出されるが、上司による配下編集の標準手順にはしない
+- **ホットリロード**: `cron.md` / `HEARTBEAT.md` を Anima の `write_memory_file` 等で更新すると、スケジュール変更コールバックで `reload_schedule` が走り即時再登録される。配下管理ファイルの編集も `../{anima_name}/cron.md` のように write memoryツールで行う。外部の直接編集は、次回 **heartbeat または任意の cron が発火する直前** の mtime チェック（`_check_schedule_freshness`）でも検出されるが、上司による配下編集の標準手順にはしない
 - **リロード直後の古いジョブ**: mtime 変化を検知したタイミングでスケジューラが再構築されると、**直前の定義に紐づいた cron 発火は「stale」としてスキップ**されうる（意図的な二重実行防止）
 - **タイムゾーン**: APScheduler は `get_app_timezone()` を使用。`config.json` の `system.timezone` に IANA 名（例: `Asia/Tokyo`）を設定可能。**空文字**のときは OS タイムゾーンを自動検出し、失敗時は `Asia/Tokyo` にフォールバック
 - **同時実行**: **タスク名が異なれば**、同一分に複数ジョブが重なっても `asyncio.create_task` により並行しうる。同一タスク名は実行中に再入しない（`_cron_running` でスキップ）。各ジョブは `max_instances=1`

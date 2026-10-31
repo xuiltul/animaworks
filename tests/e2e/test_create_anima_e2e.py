@@ -111,12 +111,12 @@ class TestCreateFromMdFullFlow:
 
         # Core files must exist
         expected_files = [
-            "identity.md",
-            "injection.md",
+            "IDENTITY.md",
+            "AGENTS.md",
             "permissions.json",
             "status.json",
             "character_sheet.md",
-            "bootstrap.md",
+            "BOOTSTRAP.md",
         ]
         for fname in expected_files:
             assert (anima_dir / fname).exists(), f"Missing file: {fname}"
@@ -138,24 +138,24 @@ class TestCreateFromMdFullFlow:
         assert status["credential"] == "anthropic"
 
     def test_identity_md_populated_from_personality_section(self, data_dir: Path, tmp_path: Path):
-        """identity.md should contain the content from the character sheet's personality section."""
+        """IDENTITY.md should contain the content from the character sheet's personality section."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_character_sheet(tmp_path, FULL_CHARACTER_SHEET)
 
         anima_dir = create_from_md(animas_dir, sheet_path)
 
-        identity = (anima_dir / "identity.md").read_text(encoding="utf-8")
+        identity = (anima_dir / "IDENTITY.md").read_text(encoding="utf-8")
         assert "テスト用の人格設定です" in identity
         assert "明るく元気な性格" in identity
 
     def test_injection_md_populated_from_role_section(self, data_dir: Path, tmp_path: Path):
-        """injection.md should contain the content from the role/behavior section."""
+        """AGENTS.md should contain the content from the role/behavior section."""
         animas_dir = data_dir / "animas"
         sheet_path = _write_character_sheet(tmp_path, FULL_CHARACTER_SHEET)
 
         anima_dir = create_from_md(animas_dir, sheet_path)
 
-        injection = (anima_dir / "injection.md").read_text(encoding="utf-8")
+        injection = (anima_dir / "AGENTS.md").read_text(encoding="utf-8")
         assert "テスト業務を担当します" in injection
         assert "品質管理に注力します" in injection
 
@@ -243,8 +243,8 @@ class TestCreateFromMdOmittedSections:
 
         anima_dir = create_from_md(animas_dir, sheet_path)
 
-        # heartbeat.md and cron.md should exist with template defaults
-        heartbeat = anima_dir / "heartbeat.md"
+        # HEARTBEAT.md and cron.md should exist with template defaults
+        heartbeat = anima_dir / "HEARTBEAT.md"
         assert heartbeat.exists()
         heartbeat_content = heartbeat.read_text(encoding="utf-8")
         # Template defaults have {name} replaced with the anima name
@@ -368,7 +368,7 @@ class TestCreateAnimaToolHandler:
         # Set up a caller anima directory (the anima invoking create_anima)
         caller_dir = animas_dir / "caller"
         caller_dir.mkdir(parents=True)
-        (caller_dir / "identity.md").write_text("# Caller\nI am the caller.", encoding="utf-8")
+        (caller_dir / "IDENTITY.md").write_text("# Caller\nI am the caller.", encoding="utf-8")
         (caller_dir / "permissions.md").write_text("# Permissions\nAll tools allowed.", encoding="utf-8")
         for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm", "shortterm/archive"]:
             (caller_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -408,7 +408,7 @@ class TestCreateAnimaToolHandler:
 
         caller_dir = animas_dir / "caller"
         caller_dir.mkdir(parents=True)
-        (caller_dir / "identity.md").write_text("# Caller", encoding="utf-8")
+        (caller_dir / "IDENTITY.md").write_text("# Caller", encoding="utf-8")
         (caller_dir / "permissions.md").write_text("# Perms", encoding="utf-8")
         for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm", "shortterm/archive"]:
             (caller_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -429,7 +429,7 @@ class TestCreateAnimaToolHandler:
 
         caller_dir = animas_dir / "caller"
         caller_dir.mkdir(parents=True)
-        (caller_dir / "identity.md").write_text("# Caller", encoding="utf-8")
+        (caller_dir / "IDENTITY.md").write_text("# Caller", encoding="utf-8")
         (caller_dir / "permissions.md").write_text("# Perms", encoding="utf-8")
         for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm", "shortterm/archive"]:
             (caller_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -468,7 +468,7 @@ class TestCreateAnimaToolHandler:
 
         caller_dir = animas_dir / "caller"
         caller_dir.mkdir(parents=True)
-        (caller_dir / "identity.md").write_text("# Caller", encoding="utf-8")
+        (caller_dir / "IDENTITY.md").write_text("# Caller", encoding="utf-8")
         (caller_dir / "permissions.md").write_text("# Perms", encoding="utf-8")
         for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm", "shortterm/archive"]:
             (caller_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -498,7 +498,7 @@ class TestCreateAnimaToolHandler:
 
         caller_dir = animas_dir / "caller"
         caller_dir.mkdir(parents=True)
-        (caller_dir / "identity.md").write_text("# Caller", encoding="utf-8")
+        (caller_dir / "IDENTITY.md").write_text("# Caller", encoding="utf-8")
         (caller_dir / "permissions.md").write_text("# Perms", encoding="utf-8")
         for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm", "shortterm/archive"]:
             (caller_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -538,11 +538,11 @@ class TestCharacterSheetValidation:
         bad_sheet = """\
 # キャラクターシート: テスト
 
-## 人格 (→ identity.md)
+## 人格 (→ IDENTITY.md)
 
 テスト用の人格設定です。
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 テスト業務を担当します。
 """
@@ -563,7 +563,7 @@ class TestCharacterSheetValidation:
 |------|------|
 | 英名 | badanima |
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 テスト業務を担当します。
 """
@@ -584,7 +584,7 @@ class TestCharacterSheetValidation:
 |------|------|
 | 英名 | badanima |
 
-## 人格 (→ identity.md)
+## 人格 (→ IDENTITY.md)
 
 テスト用の人格設定です。
 """

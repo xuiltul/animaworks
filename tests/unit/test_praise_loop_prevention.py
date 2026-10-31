@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 if TYPE_CHECKING:
-    from core.messaging.messenger import Messenger
     from core.tooling.handler import ToolHandler
 
 

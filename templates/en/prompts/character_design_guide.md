@@ -51,11 +51,12 @@ Order is **personality → face type → appearance → speech**. Role is applie
 - Choose from personality, not from the department (finance ≠ navy by default)
 - Japanese color name + HEX code (e.g., Cherry blossom (#FFB7C5))
 
-### Canonical identity.md shape
+### Canonical IDENTITY.md / SOUL.md shape
 
-`identity.md` is the only personality canon. Appearance that lives only in a character sheet or prompt is forbidden.
+`IDENTITY.md` is the canonical profile and appearance file; `SOUL.md` is the canonical personality file (personality, voice, values, individuality). Appearance that lives only in a character sheet or prompt is forbidden.
 
-Required sections: profile (name, English name, age, birthday, zodiac, blood type, height, org, role, supervisor, face type), appearance, personality, individuality as AI employee.
+- IDENTITY.md required sections: profile (name, English name, age, birthday, zodiac, blood type, height, org, role, supervisor, face type), appearance, image color, AI model information
+- SOUL.md required sections: personality and character, voice and values, individuality as AI employee, catchphrase
 
 ## Internal Consistency Check
 
@@ -77,7 +78,7 @@ Only execute when `image_gen` is available (permissions.json allows image_gen).
 
 ### Conversion to NovelAI Prompts
 
-Convert appearance settings from identity.md to NovelAI-compatible anime tags.
+Convert appearance settings from IDENTITY.md to NovelAI-compatible anime tags.
 
 **Basic structure:**
 
@@ -87,7 +88,7 @@ masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean line
 
 **Conversion examples:**
 
-| identity.md appearance | NovelAI prompt |
+| IDENTITY.md appearance | NovelAI prompt |
 |---|---|
 | 158cm, black long hair, red eyes, sailor uniform | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
 | 175cm, silver short hair, blue eyes, suit | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |

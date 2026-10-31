@@ -927,7 +927,7 @@ class HeartbeatConfig(BaseModel):
 
     interval_minutes: int = Field(
         default=30, ge=1, le=1440
-    )  # heartbeat interval (config-driven, not parsed from heartbeat.md)
+    )  # heartbeat interval (config-driven, not parsed from HEARTBEAT.md)
     current_state_max_chars: int = Field(
         default=8000,
         ge=0,
@@ -942,7 +942,7 @@ class HeartbeatConfig(BaseModel):
         default=8000,
         ge=0,
         description=(
-            "Max bytes of heartbeat.md before a compaction instruction is "
+            "Max bytes of HEARTBEAT.md before a compaction instruction is "
             "injected into the heartbeat prompt; 0 = disabled"
         ),
     )

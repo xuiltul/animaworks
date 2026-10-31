@@ -236,7 +236,7 @@ send_message(
    - 시스템 프롬프트에 주입되는 권한 설명은 런타임이 JSON에서 정리한 텍스트가 됨
 
 2. **허용된 작업인지 확인**
-   - 자신의 `anima_dir` 내는 원칙적으로 읽기·쓰기 가능(`identity.md` 등의 보호 파일은 제외). 상급자·동료의 `activity_log`이나 하위의 `state/` 읽기는 역할에 따라 `check_permissions`의 `file_access`에 반영됨
+   - 자신의 `anima_dir` 내는 원칙적으로 읽기·쓰기 가능(`IDENTITY.md` / `SOUL.md` 등의 보호 파일은 제외). 상급자·동료의 `activity_log`이나 하위의 `state/` 읽기는 역할에 따라 `check_permissions`의 `file_access`에 반영됨
    - 셸 명령: `permissions.json`의 `commands`(allow/deny）에 따름. 전역 위험 패턴은 프레임워크 측에서도 차단됨)
 
 3. **권한이 필요한 경우의 대응**

@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 def _make_test_app(supervisor=None):
     from fastapi import FastAPI
+
     from server.routes.animas import create_animas_router
 
     app = FastAPI()

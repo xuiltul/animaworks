@@ -22,7 +22,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "test"
     d.mkdir(parents=True)
     (d / "permissions.md").write_text("", encoding="utf-8")
-    (d / "identity.md").write_text("# Test", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test", encoding="utf-8")
     for sub in ["episodes", "knowledge", "procedures", "skills", "state", "shortterm"]:
         (d / sub).mkdir(exist_ok=True)
     return d

@@ -14,8 +14,8 @@ def anima_dir(tmp_path):
     """Create a minimal anima directory structure."""
     (tmp_path / "knowledge").mkdir()
     (tmp_path / "procedures").mkdir()
-    (tmp_path / "identity.md").write_text("identity")
-    (tmp_path / "injection.md").write_text("injection")
+    (tmp_path / "IDENTITY.md").write_text("identity")
+    (tmp_path / "AGENTS.md").write_text("injection")
     return tmp_path
 
 
@@ -135,17 +135,17 @@ class TestArchiveMemoryFile:
         assert not target.exists()
 
     def test_reject_protected_file(self, handler, anima_dir):
-        """Reject archiving protected files like identity.md."""
+        """Reject archiving protected files like IDENTITY.md."""
         result = handler.handle(
             "archive_memory_file",
             {
-                "path": "identity.md",
+                "path": "IDENTITY.md",
                 "reason": "test",
             },
         )
 
         assert "error" in result.lower() or "Error" in result or "denied" in result.lower() or "only" in result.lower()
-        assert (anima_dir / "identity.md").exists()
+        assert (anima_dir / "IDENTITY.md").exists()
 
     def test_reject_non_memory_directory(self, handler, anima_dir):
         """Reject archiving from non-knowledge/procedures directories."""

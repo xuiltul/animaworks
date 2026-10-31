@@ -66,8 +66,8 @@ In the Mode A schema, they use **PascalCase names**. Inside `ToolHandler`, they 
 - File operations: Prioritize Read / Write / Edit. Using `cat` / `sed` / `awk` in Bash is not recommended.
 - Search: Prioritize Grep (content) and Glob (paths). Using `grep` / `find` in Bash is not recommended.
 - Within Anima's memory tree: Use **`read_memory_file` / `write_memory_file` / `archive_memory_file`** (relative paths). Use Read / Write when absolute path operations across the entire project are needed—this is the division of roles.
-- For schedules Anima can edit (`cron.md` / `heartbeat.md`), even if they are subordinate, edit them using the **write memory tool** by specifying them as `../{anima_name}/cron.md`.
-- `config.json` / `status.json` / `identity.md` / `injection.md` / `permissions.json` are owned by root, and Anima does not write to them directly. Identity creation during bootstrap and authorized supervisor injection changes are forwarded from `write_memory_file` to root for authorization. For other changes, use supervisor tools or root CLI/API; do not configure them via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection.
+- For schedules Anima can edit (`cron.md` / `HEARTBEAT.md`), even if they are subordinate, edit them using the **write memory tool** by specifying them as `../{anima_name}/cron.md`.
+- `config.json` / `status.json` / `IDENTITY.md` / `SOUL.md` / `AGENTS.md` / `permissions.json` are owned by root, and Anima does not write to them directly. IDENTITY.md / SOUL.md creation during bootstrap and authorized supervisor AGENTS.md changes are forwarded from `write_memory_file` to root for authorization. For other changes, use supervisor tools or root CLI/API; do not configure them via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection.
 
 ### Exploration Scope Limits (Runaway Prevention)
 

@@ -300,8 +300,8 @@ When a parse or registration error is detected during the initial registration o
 ### Target Paths and Subordinate Editing
 
 - Read your own `cron.md` via `read_memory_file(path="cron.md")`, and update it via `write_memory_file(path="cron.md", ...)`.
-- A supervisor can edit subordinates' `cron.md` / `heartbeat.md` using the write memory tool by specifying them as in `../{anima_name}/cron.md` (applies to all subordinates, including children, grandchildren, and below).
-- `status.json` / `identity.md` / `permissions.json` are owned by root and cannot be written to from memory or file tools. Authorized supervisor `injection.md` changes and identity creation requests during bootstrap are forwarded to and authorized by root. No direct file operations are performed.
+- A supervisor can edit subordinates' `cron.md` / `HEARTBEAT.md` using the write memory tool by specifying them as in `../{anima_name}/cron.md` (applies to all subordinates, including children, grandchildren, and below).
+- `status.json` / `IDENTITY.md` / `SOUL.md` / `permissions.json` are owned by root and cannot be written to from memory or file tools. Authorized supervisor `AGENTS.md` changes and IDENTITY.md / SOUL.md creation requests during bootstrap are forwarded to and authorized by root. No direct file operations are performed.
 
 ### Adding a New Task
 
@@ -445,7 +445,7 @@ type: llm
 
 ## Notes
 
-- **Hot reload**: When `cron.md` / `heartbeat.md` are updated via Anima's `write_memory_file`, etc., the schedule change callback triggers `reload_schedule` and re-registers immediately. Subordinate management files are also edited with the write memory tool as in `../{anima_name}/cron.md`. External direct edits are also detected by the mtime check (`_check_schedule_freshness`) just before the next **heartbeat or any cron fires**, but this is not the standard procedure for supervisor edits to subordinate files
+- **Hot reload**: When `cron.md` / `HEARTBEAT.md` are updated via Anima's `write_memory_file`, etc., the schedule change callback triggers `reload_schedule` and re-registers immediately. Subordinate management files are also edited with the write memory tool as in `../{anima_name}/cron.md`. External direct edits are also detected by the mtime check (`_check_schedule_freshness`) just before the next **heartbeat or any cron fires**, but this is not the standard procedure for supervisor edits to subordinate files
 - **Old jobs immediately after reload**: When the scheduler is rebuilt upon detecting an mtime change, cron firings tied to the **previous definition** may be skipped as "stale" (intentional duplicate execution prevention)
 - **Time zone**: APScheduler uses `get_app_timezone()`. The `system.timezone` of `config.json` can be set to an IANA name (e.g., `Asia/Tokyo`). When **empty**, the OS time zone is auto-detected, falling back to `Asia/Tokyo` on failure
 - **Concurrency**: **If task names differ**, multiple jobs in the same minute may run in parallel via `asyncio.create_task`. The same task name will not re-enter while running (skipped via `_cron_running`). Each job is `max_instances=1`

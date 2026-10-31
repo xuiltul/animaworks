@@ -35,7 +35,7 @@ _AGY_SESSION_IDS = EngineSessionIds("agy")
 def anima_dir(tmp_path: Path) -> Path:
     path = tmp_path / "animas" / "test-agy"
     path.mkdir(parents=True)
-    (path / "identity.md").write_text("# Test Agy Anima", encoding="utf-8")
+    (path / "IDENTITY.md").write_text("# Test Agy Anima", encoding="utf-8")
     return path
 
 

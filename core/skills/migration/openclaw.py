@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -64,8 +66,8 @@ def import_openclaw(options: OpenClawImportOptions) -> MigrationReport:
             backup_path,
             data_dir=options.data_dir,
             targets=[
-                _anima_dir(options) / "identity.md",
-                _anima_dir(options) / "injection.md",
+                _anima_dir(options) / IDENTITY_FILE,
+                _anima_dir(options) / AGENTS_FILE,
                 _anima_dir(options) / "permissions.md",
                 _anima_dir(options) / "permissions.json",
                 migration_dir / "drafts",
@@ -101,7 +103,7 @@ def _draft_soul(
     body = (
         provenance_header("openclaw", soul, report.batch_id)
         + "# OpenClaw Identity / Injection Draft\n\n"
-        + "This draft is not applied to identity.md or injection.md automatically.\n\n"
+        + "This draft is not applied to IDENTITY.md, SOUL.md, or AGENTS.md automatically.\n\n"
         + redact_credentials(soul.read_text(encoding="utf-8"))
     )
     target = _migration_dir(options) / "drafts" / "openclaw_SOUL_identity_injection_draft.md"

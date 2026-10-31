@@ -31,8 +31,8 @@ class TestProcessMessageStreamBootstrapGuard:
 
         anima_dir = tmp_path / "animas" / "test-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
-        (anima_dir / "bootstrap.md").write_text("# Bootstrap", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
+        (anima_dir / "BOOTSTRAP.md").write_text("# Bootstrap", encoding="utf-8")
         for sub in [
             "episodes",
             "knowledge",
@@ -86,8 +86,8 @@ class TestProcessMessageStreamBootstrapGuard:
 
         anima_dir = tmp_path / "animas" / "test-anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
-        # No bootstrap.md
+        (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
+        # No BOOTSTRAP.md
         for sub in [
             "episodes",
             "knowledge",
@@ -112,7 +112,7 @@ class TestProcessMessageStreamBootstrapGuard:
 
         with (
             patch("core.anima.digital_anima.MemoryManager"),
-            patch("core.anima.digital_anima.AgentCore") as mock_agent_cls,
+            patch("core.anima.digital_anima.AgentCore"),
             patch("core.anima.digital_anima.Messenger"),
         ):
             dp = DigitalAnima(anima_dir, shared_dir)

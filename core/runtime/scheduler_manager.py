@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from core.anima.workspace_files import HEARTBEAT_FILE
 from core.config.models import load_config
 from core.i18n import t
 from core.platform.atomic_io import atomic_write_json, atomic_write_text
@@ -181,7 +182,7 @@ class SchedulerManager:
         return read_per_anima_heartbeat_interval(self._anima_dir, app_config)
 
     def _setup_heartbeat(self) -> None:
-        """Register heartbeat job from heartbeat.md + config.json + activity_level."""
+        """Register heartbeat job from HEARTBEAT.md + config.json + activity_level."""
         if not self._anima or not self.scheduler:
             return
 
@@ -1002,9 +1003,9 @@ class SchedulerManager:
     # ── Schedule Freshness ─────────────────────────────────────
 
     def _record_schedule_mtimes(self) -> None:
-        """Snapshot cron.md and heartbeat.md mtimes for later freshness checks."""
+        """Snapshot cron.md and HEARTBEAT.md mtimes for later freshness checks."""
         cron_path = self._anima_dir / "cron.md"
-        hb_path = self._anima_dir / "heartbeat.md"
+        hb_path = self._anima_dir / HEARTBEAT_FILE
         try:
             self._cron_md_mtime = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
         except OSError:
@@ -1015,13 +1016,13 @@ class SchedulerManager:
             self._heartbeat_md_mtime = 0.0
 
     def _check_schedule_freshness(self) -> bool:
-        """Check if cron.md or heartbeat.md changed since last setup.
+        """Check if cron.md or HEARTBEAT.md changed since last setup.
 
         If a change is detected, reloads the schedule and returns True.
         Returns False when no change is detected.
         """
         cron_path = self._anima_dir / "cron.md"
-        hb_path = self._anima_dir / "heartbeat.md"
+        hb_path = self._anima_dir / HEARTBEAT_FILE
         try:
             cron_mtime = cron_path.stat().st_mtime if cron_path.is_file() else 0.0
         except OSError:

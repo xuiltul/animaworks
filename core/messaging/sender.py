@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -25,7 +27,7 @@ def resolve_sender_source(name: str) -> str:
     if name in known:
         return "anima"
     try:
-        if (get_animas_dir() / name / "identity.md").exists():
+        if (get_animas_dir() / name / IDENTITY_FILE).exists():
             return "anima"
     except Exception:
         logger.debug("Could not inspect identity file for %s", name, exc_info=True)

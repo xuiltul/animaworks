@@ -42,7 +42,7 @@ def _make_anima(
 ) -> Path:
     anima_dir = data_dir / "animas" / name
     (anima_dir / "state").mkdir(parents=True)
-    (anima_dir / "identity.md").write_text(f"# Identity: {name}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# Identity: {name}\n", encoding="utf-8")
     status: dict[str, object] = {"enabled": True}
     if company is not None:
         status["company"] = company

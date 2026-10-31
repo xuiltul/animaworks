@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from core.integrations._base import ToolConfigError, ToolResult, auto_cli_guide
 from core.credentials import get_credential, get_env_or_fail, resolve_env_style_credential
+from core.integrations._base import ToolConfigError, ToolResult, auto_cli_guide
 
 # ── ToolConfigError ───────────────────────────────────────────────
 

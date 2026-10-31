@@ -144,7 +144,7 @@ class TestFitPromptBudgetShrink:
         anima_dir = make_anima("fit-safety")
         identity = "MANDATORY_IDENTITY_BEGIN\n" + "Always preserve human authority. " * 12_000
         identity += "\nMANDATORY_IDENTITY_END"
-        (anima_dir / "identity.md").write_text(identity, encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text(identity, encoding="utf-8")
         agent = _make_agent(anima_dir)
         agent.memory = MemoryManager(anima_dir)
         priming = (
@@ -177,5 +177,5 @@ class TestFitPromptBudgetShrink:
                 mode="a",
                 trigger="chat",
             )
-        assert (anima_dir / "identity.md").read_text(encoding="utf-8") == identity
+        assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == identity
         agent._executor.execute.assert_not_called()

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from core.time_utils import now_jst
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
@@ -22,8 +21,8 @@ import pytest
 
 from core.exceptions import IPCConnectionError
 from core.runtime.ipc import IPCClient, IPCRequest, IPCResponse, IPCServer
+from core.time_utils import now_jst
 from server.supervisor.process_handle import ProcessHandle, ProcessState
-
 
 # ── Test 1: stop() sends shutdown via IPC while still RUNNING ────────
 

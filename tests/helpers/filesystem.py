@@ -107,9 +107,9 @@ def create_anima_dir(
     anima_dir.mkdir(parents=True, exist_ok=True)
 
     # Write identity and config files
-    (anima_dir / "identity.md").write_text(identity, encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity, encoding="utf-8")
     if injection:
-        (anima_dir / "injection.md").write_text(injection, encoding="utf-8")
+        (anima_dir / "AGENTS.md").write_text(injection, encoding="utf-8")
     if permissions:
         (anima_dir / "permissions.md").write_text(permissions, encoding="utf-8")
 

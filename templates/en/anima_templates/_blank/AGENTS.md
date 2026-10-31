@@ -1,4 +1,4 @@
-# Injection: {name}
+# Agents: {name}
 
 (Undefined - set during bootstrap)
 

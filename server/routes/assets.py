@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.i18n import t
 from core.platform.tasks import spawn
 from server.events import emit
@@ -642,8 +643,8 @@ def create_assets_router() -> APIRouter:
                         "size": st.st_size,
                     }
 
-        # Extract image_color from identity.md
-        identity_path = anima_dir / "identity.md"
+        # Extract image_color from IDENTITY.md
+        identity_path = anima_dir / IDENTITY_FILE
         if identity_path.exists():
             try:
                 text = identity_path.read_text(encoding="utf-8")
@@ -1185,7 +1186,7 @@ def create_assets_router() -> APIRouter:
             # Fast path: check cached prompt files
             prompt = _resolve_prompt(anima_dir, style="realistic" if is_realistic else "anime")
             if not prompt:
-                # Slow path: extract from identity.md / character_sheet.md via LLM
+                # Slow path: extract from IDENTITY.md / character_sheet.md via LLM
                 logger.info("No cached prompt for '%s', attempting LLM synthesis…", name)
                 try:
                     import asyncio as _asyncio

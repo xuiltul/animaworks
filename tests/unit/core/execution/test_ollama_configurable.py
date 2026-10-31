@@ -6,7 +6,6 @@ from __future__ import annotations
 
 """Issue B: Verify Ollama keep_alive and total_timeout are configurable."""
 
-from unittest.mock import MagicMock, patch
 
 from core.config.schemas import ServerConfig
 

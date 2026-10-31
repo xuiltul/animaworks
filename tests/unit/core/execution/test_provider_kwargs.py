@@ -9,9 +9,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-
-from core.schemas import ModelConfig
 from core.execution.base import BaseExecutor
+from core.schemas import ModelConfig
 
 
 class _StubExecutor(BaseExecutor):
@@ -167,7 +166,7 @@ class TestModelConfigExtraKeys:
 
 class TestVertexAIModeResolution:
     def test_vertex_ai_resolves_to_mode_a(self):
-        from core.config.models import resolve_execution_mode, AnimaWorksConfig
+        from core.config.models import AnimaWorksConfig, resolve_execution_mode
         config = AnimaWorksConfig()
         mode = resolve_execution_mode(config, "vertex_ai/gemini-2.5-flash")
         assert mode == "A"

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -219,7 +221,7 @@ _PLAIN_MENTION_NAMES_TTL = 60.0
 
 
 def _known_anima_names() -> frozenset[str]:
-    """Return enabled Anima names (identity.md present), cached for 60s."""
+    """Return enabled Anima names (IDENTITY.md present), cached for 60s."""
     global _plain_mention_names_cache
     import time
 
@@ -234,7 +236,7 @@ def _known_anima_names() -> frozenset[str]:
         names = frozenset(
             p.name.lower()
             for p in get_animas_dir().iterdir()
-            if p.is_dir() and (p / "identity.md").exists() and ProcessSupervisor.read_anima_enabled(p)
+            if p.is_dir() and (p / IDENTITY_FILE).exists() and ProcessSupervisor.read_anima_enabled(p)
         )
     except OSError:
         return cached

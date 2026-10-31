@@ -3,7 +3,7 @@ name: newstaff
 description: >-
   AnimaWorks組織に新しいDigital Animaを雇用・作成するスキル。
   キャラクターシート(Markdown)をヒアリングに基づき作成し、CLIコマンド(animaworks anima create)で
-  identity/injection/permissions等を一括生成する。作成後はbootstrapで自己整備。
+  IDENTITY/SOUL/AGENTS/permissions等を一括生成する。作成後はbootstrapで自己整備。
   「新しい社員を作って」「人を雇って」「新しい社員」「雇用」「Anima作成」「採用」「チームメンバーを増やす」「人員追加」「部下を作る」「スタッフ追加」「hire」「recruit」「team member」
 ---
 
@@ -89,11 +89,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 | モデル | {model name — ユーザーが指定した時だけ書く} |
 | credential | {ユーザーがモデルを指定した時だけ書く} |
 
-## 人格 (→ identity.md)
+## 人格 (→ SOUL.md)
 
 {Personality, speaking style, values, backstory, appearance, etc.}
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
@@ -101,11 +101,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 
 {If omitted: default template applied}
 
-## 定期業務 (→ heartbeat.md, cron.md) [省略可]
+## 定期業務 (→ HEARTBEAT.md, cron.md) [省略可]
 
 {If omitted: generic template applied. New Anima self-adjusts in bootstrap}
 
-## 初回起動指示 (→ bootstrap.md 追加指示) [省略可]
+## 初回起動指示 (→ BOOTSTRAP.md 追加指示) [省略可]
 
 {If omitted: standard bootstrap only}
 ```
@@ -116,7 +116,7 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 これにより以下が自動実行される:
 - ディレクトリ構造の一括作成
 - skeleton ファイルの配置
-- bootstrap.md の配置
+- BOOTSTRAP.md の配置
 - status.json の作成（supervisor含む）
 - config.json への登録（model, supervisor等）
 - 省略セクションへのデフォルト適用
@@ -160,8 +160,8 @@ Bash: curl -s -X POST "${ANIMAWORKS_SERVER_URL:-http://localhost:18500}"/api/sys
 ⚠️ アバター画像の生成は報告しない（新Anima自身がbootstrapで生成する）
 
 ### 以降は新Anima自身が自律的に実行:
-- identity.md / injection.md の充実化
-- heartbeat.md / cron.md の自己設計
+- IDENTITY.md / SOUL.md / AGENTS.md の充実化
+- HEARTBEAT.md / cron.md の自己設計
 - アバター画像の生成（上司参照付き）
 - 上司への着任報告
 - 最初の小さな仕事（ユーザーの役に立つもの）に着手し、結果を上司へ報告

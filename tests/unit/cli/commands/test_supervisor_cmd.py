@@ -33,7 +33,7 @@ def runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (d / "state").mkdir(parents=True)
         (d / "activity_log").mkdir(exist_ok=True)
         (d / "status.json").write_text('{"enabled": true}', encoding="utf-8")
-        (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
 
     (animas_dir / "sub" / "state" / "current_state.md").write_text(
         "working on sub task",

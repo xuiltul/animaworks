@@ -18,9 +18,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from core.config.models import AnimaModelConfig, load_config, save_config
-from server.supervisor.manager import ProcessSupervisor
 from core.tooling.handler import ToolHandler
-
+from server.supervisor.manager import ProcessSupervisor
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -233,10 +232,10 @@ class TestReconciliationRestartRequestedE2E:
         run_dir = data_dir / "run"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create worker with both identity.md and status.json (restart_requested)
+        # Create worker with both IDENTITY.md and status.json (restart_requested)
         worker_dir = animas_dir / "worker"
         worker_dir.mkdir(parents=True, exist_ok=True)
-        (worker_dir / "identity.md").write_text(
+        (worker_dir / "IDENTITY.md").write_text(
             "# Worker\nTest anima.", encoding="utf-8"
         )
         _write_status(

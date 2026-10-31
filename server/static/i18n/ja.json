@@ -361,7 +361,7 @@
   "chat.episode_log": "エピソードログ",
   "chat.error_prefix": "[エラー]",
   "chat.heartbeat_activity": "ハートビート",
-  "chat.heartbeat_not_configured": "heartbeat.md が設定されていません",
+  "chat.heartbeat_not_configured": "HEARTBEAT.md が設定されていません",
   "chat.heartbeat_relay": "ハートビート処理中...",
   "chat.heartbeat_relay_done": "応答を準備中...",
   "chat.history_archive": "セッションアーカイブ",

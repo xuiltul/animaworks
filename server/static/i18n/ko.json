@@ -319,7 +319,7 @@
   "chat.episode_log": "에피소드 로그",
   "chat.error_prefix": "[오류]",
   "chat.heartbeat_activity": "하트비트",
-  "chat.heartbeat_not_configured": "heartbeat.md가 설정되지 않았습니다",
+  "chat.heartbeat_not_configured": "HEARTBEAT.md가 설정되지 않았습니다",
   "chat.heartbeat_relay": "하트비트 처리 중...",
   "chat.heartbeat_relay_done": "응답 준비 중...",
   "chat.history_archive": "세션 아카이브",

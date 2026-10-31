@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import AGENTS_FILE, HEARTBEAT_FILE, IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -205,14 +207,14 @@ class ToolHandler(
             _all_descendants = self._get_all_descendants()
             for _desc_name in _all_descendants:
                 _desc_dir = (_animas_dir / _desc_name).resolve()
-                for _fname in ("cron.md", "heartbeat.md"):
+                for _fname in ("cron.md", HEARTBEAT_FILE):
                     self._subordinate_management_files.append(_desc_dir / _fname)
                 self._subordinate_root_dirs.append(_desc_dir)
                 self._descendant_activity_dirs.append(_desc_dir / "activity_log")
                 self._descendant_state_files.append(_desc_dir / "state" / "current_state.md")
                 self._descendant_state_files.append(_desc_dir / "status.json")
-                self._descendant_state_files.append(_desc_dir / "identity.md")
-                self._descendant_state_files.append(_desc_dir / "injection.md")
+                self._descendant_state_files.append(_desc_dir / IDENTITY_FILE)
+                self._descendant_state_files.append(_desc_dir / AGENTS_FILE)
                 self._descendant_state_files.append(_desc_dir / "state" / "task_queue.jsonl")
                 self._descendant_state_dirs.append(_desc_dir / "state" / "plans")
         except (ConfigError, OSError, PermissionError, KeyError, AttributeError):

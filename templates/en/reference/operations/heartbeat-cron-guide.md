@@ -59,14 +59,14 @@ The message trigger is activated by a change notification for the Inbox JSON fil
 Only one Inbox process runs at a time; messages that arrive during execution are batched into the next single pass. On a Provider error, wait for the recovery time in `rate_guard` and leave unread messages.
 There is no startup filter based on received intent, nor message-originated cooldown or cascade suppression. The behavior rule of not replying to messages that only acknowledge or thank is instructed in the Inbox prompt.
 
-## heartbeat.md Configuration
+## HEARTBEAT.md Configuration
 
-`heartbeat.md` is each Anima's configuration file, defining activity hours and check items.
-The Heartbeat execution interval can be set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). It cannot be changed via `heartbeat.md`.
+`HEARTBEAT.md` is each Anima's configuration file, defining activity hours and check items.
+The Heartbeat execution interval can be set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). It cannot be changed via `HEARTBEAT.md`.
 Each Anima is assigned a name-based offset of 0–9 minutes to distribute simultaneous startups.
-File path: `~/.animaworks/animas/{name}/heartbeat.md`
+File path: `~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-When a supervisor edits `heartbeat.md` of a subordinate Anima, use `read_memory_file` / `write_memory_file` rather than direct file operations, and specify it with a relative path such as `../{anima_name}/heartbeat.md`.
+When a supervisor edits `HEARTBEAT.md` of a subordinate Anima, use `read_memory_file` / `write_memory_file` rather than direct file operations, and specify it with a relative path such as `../{anima_name}/HEARTBEAT.md`.
 
 ### Format
 
@@ -90,7 +90,7 @@ When a supervisor edits `heartbeat.md` of a subordinate Anima, use `read_memory_
 ### Configuration Fields
 
 **Execution interval**:
-- Set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). Cannot be changed via `heartbeat.md`
+- Set via `heartbeat.interval_minutes` in `config.json` (1–1440 minutes, default 30). Cannot be changed via `HEARTBEAT.md`
 
 **Activity hours** (SHOULD):
 - Write in `HH:MM - HH:MM` format (e.g., `9:00 - 22:00`)
@@ -182,7 +182,7 @@ Otherwise (e.g., effective 61 minutes, or an interval like 43 minutes that does 
 
 ### Heartbeat configuration hot reload
 
-When heartbeat.md is updated on the file system, `_check_schedule_freshness()` detects the change at the next heartbeat execution, and SchedulerManager automatically reloads the schedule.
+When HEARTBEAT.md is updated on the file system, `_check_schedule_freshness()` detects the change at the next heartbeat execution, and SchedulerManager automatically reloads the schedule.
 No server restart is required (MAY skip restart). APScheduler jobs are re-registered.
 
 ## Per-anima Heartbeat interval configuration
@@ -538,9 +538,9 @@ The `## ` heading inside the comment is ignored by the parser.
 
 ## Hot Reload of Cron Configuration
 
-When cron.md is updated, the schedule is automatically reloaded, just like heartbeat.md.
+When cron.md is updated, the schedule is automatically reloaded, just like HEARTBEAT.md.
 If Anima itself rewrites cron.md, the change is reflected immediately (self-modify pattern).
-Supervisors can edit the `cron.md` / `heartbeat.md` of their subordinates using the write memory tool. Change requests for `injection.md` from authorized supervisors are also forwarded to root and authorized. For changes to `status.json`, use the corresponding supervisor tool or root CLI/API. Do not write directly to root-owned files via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection, etc.
+Supervisors can edit the `cron.md` / `HEARTBEAT.md` of their subordinates using the write memory tool. Change requests for `AGENTS.md` from authorized supervisors are also forwarded to root and authorized. For changes to `status.json`, use the corresponding supervisor tool or root CLI/API. Do not write directly to root-owned files via Read / Write / Edit / apply_patch / `Path.write_text` / shell redirection, etc.
 
 Behavior on reload:
 1. Delete all existing cron jobs for the relevant Anima

@@ -31,7 +31,7 @@ def _make_anima(data_dir: Path, name: str) -> Path:
     anima_dir = data_dir / "animas" / name
     (anima_dir / "knowledge").mkdir(parents=True)
     _write_json(anima_dir / "status.json", {"enabled": True, "model": "test-model"})
-    (anima_dir / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
     (anima_dir / "knowledge" / "owned.md").write_text(
         f"knowledge owned by {name}\n",
         encoding="utf-8",
@@ -134,7 +134,7 @@ def test_export_company_collects_transfer_bundle_and_handles_symlinks(tmp_path: 
     external_link.symlink_to(outside_file)
 
     other_company_link = member_dir / "other-company-link.md"
-    other_company_link.symlink_to(Path("../") / SECONDARY_MEMBER / "identity.md")
+    other_company_link.symlink_to(Path("../") / SECONDARY_MEMBER / "IDENTITY.md")
 
     output_dir = tmp_path / "export"
     result = export_company(PRIMARY_COMPANY, output_dir, data_dir=data_dir)
@@ -146,7 +146,7 @@ def test_export_company_collects_transfer_bundle_and_handles_symlinks(tmp_path: 
     assert any("other-company-link.md" in item for item in result.skipped_symlinks)
 
     exported_member = output_dir / "animas" / PRIMARY_MEMBER
-    assert (exported_member / "identity.md").read_text(encoding="utf-8") == (member_dir / "identity.md").read_text(
+    assert (exported_member / "IDENTITY.md").read_text(encoding="utf-8") == (member_dir / "IDENTITY.md").read_text(
         encoding="utf-8"
     )
     assert (output_dir / "animas" / PRIMARY_HELPER / "knowledge" / "owned.md").is_file()

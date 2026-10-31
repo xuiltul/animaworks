@@ -79,7 +79,7 @@ class TestListAnimas:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(
             animas_dir=animas_dir,
@@ -98,7 +98,7 @@ class TestListAnimas:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(json.dumps({"enabled": False}), encoding="utf-8")
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
@@ -297,7 +297,7 @@ class TestUpdateAnimaModel:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"model": "claude-sonnet-4-6", "credential": "anthropic", "mode_s_auth": "max"}),
             encoding="utf-8",
@@ -334,7 +334,7 @@ class TestUpdateAnimaModel:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"model": "gpt-4", "credential": "openai"}),
             encoding="utf-8",
@@ -372,7 +372,7 @@ class TestUpdateAnimaModel:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"model": "gpt-4", "credential": "openai"}),
             encoding="utf-8",
@@ -415,7 +415,7 @@ class TestEnableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=[])
         supervisor = app.state.supervisor
@@ -447,7 +447,7 @@ class TestEnableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
         supervisor = app.state.supervisor
@@ -473,7 +473,7 @@ class TestEnableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         status_file = alice_dir / "status.json"
         original = b"{broken status"
         status_file.write_bytes(original)
@@ -505,11 +505,11 @@ class TestEnableAnima:
         assert "not found" in resp.json()["detail"]
 
     async def test_enable_no_identity(self, tmp_path):
-        """Directory exists but no identity.md returns 404."""
+        """Directory exists but no IDENTITY.md returns 404."""
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        # No identity.md created
+        # No IDENTITY.md created
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=[])
         supervisor = app.state.supervisor
@@ -532,7 +532,7 @@ class TestDisableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=["alice"])
         supervisor = app.state.supervisor
@@ -564,7 +564,7 @@ class TestDisableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
 
         app = _make_test_app(animas_dir=animas_dir, anima_names=[])
         supervisor = app.state.supervisor
@@ -590,7 +590,7 @@ class TestDisableAnima:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         status_file = alice_dir / "status.json"
         original = b"{broken status"
         status_file.write_bytes(original)
@@ -631,7 +631,7 @@ class TestStartAnimaEndpoint:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": False}),
             encoding="utf-8",
@@ -655,7 +655,7 @@ class TestStartAnimaEndpoint:
         supervisor.start_anima.assert_not_awaited()
 
     async def test_start_not_found_returns_404(self, tmp_path):
-        """Missing anima directory / identity.md → 404."""
+        """Missing anima directory / IDENTITY.md → 404."""
         animas_dir = tmp_path / "animas"
         animas_dir.mkdir(parents=True)
 
@@ -676,7 +676,7 @@ class TestStartAnimaEndpoint:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",
@@ -707,7 +707,7 @@ class TestStartAnimaEndpoint:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",
@@ -736,7 +736,7 @@ class TestStartAnimaEndpoint:
         animas_dir = tmp_path / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(
             json.dumps({"enabled": True}),
             encoding="utf-8",
@@ -766,7 +766,7 @@ class TestDeleteAnima:
         animas_dir = data_dir / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
         (data_dir / "config.json").write_text(
             json.dumps({"version": 1, "animas": {"alice": {}}}),
@@ -789,7 +789,7 @@ class TestDeleteAnima:
 
         assert resp.status_code == 409
         assert alice_dir.is_dir()
-        assert (alice_dir / "identity.md").is_file()
+        assert (alice_dir / "IDENTITY.md").is_file()
         assert not (data_dir / "archive").exists()
         assert "alice" in app.state.anima_names
         supervisor.stop_anima.assert_awaited_once_with("alice")
@@ -799,7 +799,7 @@ class TestDeleteAnima:
         animas_dir = data_dir / "animas"
         alice_dir = animas_dir / "alice"
         alice_dir.mkdir(parents=True)
-        (alice_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (alice_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
         bob_dir = animas_dir / "bob"
         bob_dir.mkdir()
@@ -841,7 +841,7 @@ class TestRootOwnedPromptSettings:
     async def test_background_model_update_reloads_running_anima(self, tmp_path):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("Alice\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("Alice\n", encoding="utf-8")
         (anima_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
         app = _make_test_app(animas_dir=tmp_path / "animas")
         app.state.supervisor.processes = {"alice": MagicMock()}
@@ -861,8 +861,8 @@ class TestRootOwnedPromptSettings:
     async def test_identity_injection_and_permissions_use_atomic_settings_writers(self, tmp_path):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("Old identity\n", encoding="utf-8")
-        (anima_dir / "injection.md").write_text("Old injection\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("Old identity\n", encoding="utf-8")
+        (anima_dir / "AGENTS.md").write_text("Old injection\n", encoding="utf-8")
         (anima_dir / "permissions.json").write_text("{}\n", encoding="utf-8")
         app = _make_test_app(animas_dir=tmp_path / "animas")
 
@@ -875,8 +875,8 @@ class TestRootOwnedPromptSettings:
             )
 
         assert identity.status_code == injection.status_code == permissions.status_code == 200
-        assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "New identity"
-        assert (anima_dir / "injection.md").read_text(encoding="utf-8") == "New injection"
+        assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "New identity"
+        assert (anima_dir / "AGENTS.md").read_text(encoding="utf-8") == "New injection"
         assert json.loads((anima_dir / "permissions.json").read_text(encoding="utf-8"))["file_roots"] == [
             "/tmp/workspace"
         ]
@@ -888,7 +888,7 @@ class TestRootOwnedPromptSettings:
         animas_dir = data_dir / "animas"
         old_dir = animas_dir / "alice"
         old_dir.mkdir(parents=True)
-        (old_dir / "identity.md").write_text("Alice\n", encoding="utf-8")
+        (old_dir / "IDENTITY.md").write_text("Alice\n", encoding="utf-8")
         (old_dir / "status.json").write_text(json.dumps({"enabled": True, "role": "general"}), encoding="utf-8")
         (old_dir / "permissions.json").write_text(json.dumps({"version": 1, "file_roots": []}), encoding="utf-8")
         save_config(AnimaWorksConfig(animas={"alice": AnimaModelConfig(supervisor=None)}), data_dir / "config.json")
@@ -904,7 +904,7 @@ class TestRootOwnedPromptSettings:
         assert response.status_code == 200
         assert response.json()["new_name"] == "alicia"
         assert not old_dir.exists()
-        assert (animas_dir / "alicia" / "identity.md").is_file()
+        assert (animas_dir / "alicia" / "IDENTITY.md").is_file()
         assert "alicia" in load_config(data_dir / "config.json").animas
         app.state.supervisor.stop_anima.assert_awaited_once_with("alice")
         app.state.supervisor.start_anima.assert_awaited_once_with("alicia")

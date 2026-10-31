@@ -29,7 +29,6 @@ from starlette.testclient import TestClient
 from server.routes.websocket_route import create_websocket_router
 from server.websocket import WebSocketManager
 
-
 # ── Fixtures ────────────────────────────────────────────────────
 
 
@@ -74,9 +73,8 @@ class TestWebSocketConnectionLifecycle:
     ) -> None:
         """Opening a WebSocket connection adds it to active_connections."""
         app, ws_manager = ws_app
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as _ws:
-                assert len(ws_manager.active_connections) == 1
+        with TestClient(app) as client, client.websocket_connect("/ws") as _ws:
+            assert len(ws_manager.active_connections) == 1
 
     def test_disconnect_removes_from_active_connections(
         self, ws_app: tuple[FastAPI, WebSocketManager],
@@ -106,11 +104,10 @@ class TestWebSocketConnectionLifecycle:
         """New connections get an initial _last_pong timestamp on connect."""
         app, ws_manager = ws_app
         before = time.time()
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws"):
-                assert len(ws_manager._last_pong) == 1
-                pong_ts = next(iter(ws_manager._last_pong.values()))
-                assert pong_ts >= before
+        with TestClient(app) as client, client.websocket_connect("/ws"):
+            assert len(ws_manager._last_pong) == 1
+            pong_ts = next(iter(ws_manager._last_pong.values()))
+            assert pong_ts >= before
 
 
 # ── Multiple Clients ────────────────────────────────────────────
@@ -141,12 +138,10 @@ class TestWebSocketMultipleClients:
     ) -> None:
         """Each connection gets its own _last_pong key (id-based)."""
         app, ws_manager = ws_app
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws"):
-                with client.websocket_connect("/ws"):
-                    pong_keys = list(ws_manager._last_pong.keys())
-                    assert len(pong_keys) == 2
-                    assert pong_keys[0] != pong_keys[1]
+        with TestClient(app) as client, client.websocket_connect("/ws"), client.websocket_connect("/ws"):
+            pong_keys = list(ws_manager._last_pong.keys())
+            assert len(pong_keys) == 2
+            assert pong_keys[0] != pong_keys[1]
 
 
 # ── Client Pong Handling ────────────────────────────────────────
@@ -160,47 +155,44 @@ class TestWebSocketPongHandling:
     ) -> None:
         """Sending a pong message from the client updates _last_pong."""
         app, ws_manager = ws_app
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                conn = ws_manager.active_connections[0]
-                initial_pong = ws_manager._last_pong[id(conn)]
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            conn = ws_manager.active_connections[0]
+            initial_pong = ws_manager._last_pong[id(conn)]
 
-                # Small delay so the updated timestamp is measurably later
-                time.sleep(0.05)
+            # Small delay so the updated timestamp is measurably later
+            time.sleep(0.05)
 
-                ws.send_json({"type": "pong"})
-                # Give the server-side handler a moment to process
-                time.sleep(0.05)
+            ws.send_json({"type": "pong"})
+            # Give the server-side handler a moment to process
+            time.sleep(0.05)
 
-                updated_pong = ws_manager._last_pong[id(conn)]
-                assert updated_pong > initial_pong
+            updated_pong = ws_manager._last_pong[id(conn)]
+            assert updated_pong > initial_pong
 
     def test_non_pong_message_does_not_update_timestamp(
         self, ws_app: tuple[FastAPI, WebSocketManager],
     ) -> None:
         """Sending a non-pong message should not change _last_pong."""
         app, ws_manager = ws_app
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                conn = ws_manager.active_connections[0]
-                initial_pong = ws_manager._last_pong[id(conn)]
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            conn = ws_manager.active_connections[0]
+            initial_pong = ws_manager._last_pong[id(conn)]
 
-                ws.send_json({"type": "some_other_message", "data": "hello"})
-                time.sleep(0.05)
+            ws.send_json({"type": "some_other_message", "data": "hello"})
+            time.sleep(0.05)
 
-                assert ws_manager._last_pong[id(conn)] == initial_pong
+            assert ws_manager._last_pong[id(conn)] == initial_pong
 
     def test_malformed_json_does_not_crash_endpoint(
         self, ws_app: tuple[FastAPI, WebSocketManager],
     ) -> None:
         """Sending invalid JSON should not crash the WebSocket endpoint."""
         app, ws_manager = ws_app
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                ws.send_text("this is not json")
-                time.sleep(0.05)
-                # Connection should still be alive
-                assert len(ws_manager.active_connections) == 1
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            ws.send_text("this is not json")
+            time.sleep(0.05)
+            # Connection should still be alive
+            assert len(ws_manager.active_connections) == 1
 
 
 # ── Notification Queue Flush ────────────────────────────────────
@@ -233,20 +225,19 @@ class TestWebSocketNotificationQueueFlush:
         # 2 events queued: proactive_message + notification
         assert len(ws_manager._notification_queue) == 2
 
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                # The queued events should be flushed immediately
-                data1 = ws.receive_json()
-                assert data1["type"] == "anima.proactive_message"
-                assert data1["data"]["subject"] == "Queued Alert"
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            # The queued events should be flushed immediately
+            data1 = ws.receive_json()
+            assert data1["type"] == "anima.proactive_message"
+            assert data1["data"]["subject"] == "Queued Alert"
 
-                data2 = ws.receive_json()
-                assert data2["type"] == "anima.notification"
-                assert data2["data"]["subject"] == "Queued Alert"
-                assert data2["data"]["body"] == "This was queued while offline"
+            data2 = ws.receive_json()
+            assert data2["type"] == "anima.notification"
+            assert data2["data"]["subject"] == "Queued Alert"
+            assert data2["data"]["body"] == "This was queued while offline"
 
-                # Queue should be empty after flush
-                assert len(ws_manager._notification_queue) == 0
+            # Queue should be empty after flush
+            assert len(ws_manager._notification_queue) == 0
 
     def test_multiple_queued_notifications_flushed_in_order(
         self, ws_app: tuple[FastAPI, WebSocketManager],
@@ -272,19 +263,18 @@ class TestWebSocketNotificationQueueFlush:
         # 3 calls x 2 events each = 6 queued events
         assert len(ws_manager._notification_queue) == 6
 
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                for i in range(3):
-                    # Each notification produces a proactive_message then a notification
-                    proactive = ws.receive_json()
-                    assert proactive["type"] == "anima.proactive_message"
-                    assert proactive["data"]["subject"] == f"Alert {i}"
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            for i in range(3):
+                # Each notification produces a proactive_message then a notification
+                proactive = ws.receive_json()
+                assert proactive["type"] == "anima.proactive_message"
+                assert proactive["data"]["subject"] == f"Alert {i}"
 
-                    notif = ws.receive_json()
-                    assert notif["type"] == "anima.notification"
-                    assert notif["data"]["subject"] == f"Alert {i}"
+                notif = ws.receive_json()
+                assert notif["type"] == "anima.notification"
+                assert notif["data"]["subject"] == f"Alert {i}"
 
-                assert len(ws_manager._notification_queue) == 0
+            assert len(ws_manager._notification_queue) == 0
 
     def test_queue_empty_after_flush(
         self, ws_app: tuple[FastAPI, WebSocketManager],
@@ -302,10 +292,9 @@ class TestWebSocketNotificationQueueFlush:
         }))
         loop.close()
 
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                _ = ws.receive_json()
-                assert ws_manager._notification_queue == []
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            _ = ws.receive_json()
+            assert ws_manager._notification_queue == []
 
 
 # ── Notification Queue Cap ──────────────────────────────────────
@@ -357,27 +346,26 @@ class TestWebSocketBroadcastDelivery:
         """A notification broadcast while a client is connected is received."""
         app, ws_manager = ws_app
 
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws:
-                # Broadcast a notification from another thread since the
-                # WebSocket endpoint's event loop is managed by TestClient
-                import asyncio
-                import threading
+        with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+            # Broadcast a notification from another thread since the
+            # WebSocket endpoint's event loop is managed by TestClient
+            import asyncio
+            import threading
 
-                def _broadcast() -> None:
-                    loop = asyncio.new_event_loop()
-                    loop.run_until_complete(
-                        ws_manager.broadcast({"type": "test.event", "data": "hello"})
-                    )
-                    loop.close()
+            def _broadcast() -> None:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(
+                    ws_manager.broadcast({"type": "test.event", "data": "hello"})
+                )
+                loop.close()
 
-                t = threading.Thread(target=_broadcast)
-                t.start()
-                t.join(timeout=5.0)
+            t = threading.Thread(target=_broadcast)
+            t.start()
+            t.join(timeout=5.0)
 
-                data = ws.receive_json()
-                assert data["type"] == "test.event"
-                assert data["data"] == "hello"
+            data = ws.receive_json()
+            assert data["type"] == "test.event"
+            assert data["data"] == "hello"
 
     def test_broadcast_after_disconnect_no_crash(
         self, ws_app: tuple[FastAPI, WebSocketManager],
@@ -385,23 +373,21 @@ class TestWebSocketBroadcastDelivery:
         """broadcast() works correctly after a client disconnect (regression guard)."""
         app, ws_manager = ws_app
 
-        with TestClient(app) as client:
-            with client.websocket_connect("/ws") as ws1:
-                with client.websocket_connect("/ws") as ws2:
-                    assert len(ws_manager.active_connections) == 2
+        with TestClient(app) as client, client.websocket_connect("/ws"), client.websocket_connect("/ws"):
+            assert len(ws_manager.active_connections) == 2
 
-                    import asyncio
-                    import threading
+            import asyncio
+            import threading
 
-                    def _broadcast_and_disconnect() -> None:
-                        loop = asyncio.new_event_loop()
-                        conn_to_drop = ws_manager.active_connections[0]
-                        ws_manager.disconnect(conn_to_drop)
-                        loop.run_until_complete(
-                            ws_manager.broadcast({"type": "race.test", "ok": True})
-                        )
-                        loop.close()
+            def _broadcast_and_disconnect() -> None:
+                loop = asyncio.new_event_loop()
+                conn_to_drop = ws_manager.active_connections[0]
+                ws_manager.disconnect(conn_to_drop)
+                loop.run_until_complete(
+                    ws_manager.broadcast({"type": "race.test", "ok": True})
+                )
+                loop.close()
 
-                    t = threading.Thread(target=_broadcast_and_disconnect)
-                    t.start()
-                    t.join(timeout=5.0)
+            t = threading.Thread(target=_broadcast_and_disconnect)
+            t.start()
+            t.join(timeout=5.0)

@@ -23,7 +23,6 @@ from core.runtime.ipc import IPCResponse
 from server.app import create_app
 from tests.helpers.filesystem import create_anima_dir, create_test_data_dir
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────
 
 

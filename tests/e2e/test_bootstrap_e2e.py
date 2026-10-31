@@ -20,8 +20,9 @@ from server.stream_registry import StreamRegistry
 def _make_test_app_with_bootstrap():
     """Build a test FastAPI app with a mock bootstrapping anima."""
     from fastapi import FastAPI
-    from server.routes.chat import create_chat_router
+
     from core.runtime.ipc import IPCResponse
+    from server.routes.chat import create_chat_router
 
     app = FastAPI()
     app.state.ws_manager = MagicMock()
@@ -91,6 +92,7 @@ def _make_test_app_bootstrap_busy():
     consulting the IPC stream.
     """
     from fastapi import FastAPI
+
     from server.routes.chat import create_chat_router
 
     app = FastAPI()

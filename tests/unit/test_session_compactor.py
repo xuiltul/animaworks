@@ -298,7 +298,7 @@ class TestModeSpecificCompaction:
         d.mkdir(parents=True)
         for sub in ["state", "episodes", "knowledge", "shortterm", "activity_log"]:
             (d / sub).mkdir(parents=True, exist_ok=True)
-        (d / "identity.md").write_text("# Test", encoding="utf-8")
+        (d / "IDENTITY.md").write_text("# Test", encoding="utf-8")
         (d / "status.json").write_text(
             '{"enabled": true, "model": "claude-sonnet-4-6"}',
             encoding="utf-8",
@@ -1280,8 +1280,8 @@ class TestAnimaIntegration:
             shared_dir / "inbox" / "test-session",
         ]:
             d.mkdir(parents=True, exist_ok=True)
-        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
-        (anima_dir / "injection.md").write_text("Test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
+        (anima_dir / "AGENTS.md").write_text("Test", encoding="utf-8")
         (anima_dir / "status.json").write_text(
             '{"enabled": true, "model": "claude-sonnet-4-6"}',
             encoding="utf-8",

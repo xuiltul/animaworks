@@ -45,7 +45,7 @@ class TestBehaviorRulesTemplate:
             "knowledge/",
             "procedures/",
             "skills/{name}/SKILL.md",
-            "heartbeat.md",
+            "HEARTBEAT.md",
             "cron.md",
             "current_state.md",
             "create_skill",

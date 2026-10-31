@@ -12,7 +12,6 @@ from pydantic import ValidationError
 
 from core.auth.models import AuthConfig, AuthUser, Session
 
-
 # ── AuthUser ─────────────────────────────────────────────
 
 

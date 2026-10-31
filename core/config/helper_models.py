@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -440,7 +442,7 @@ def validate_helper_model_credentials(
             anima_dirs.extend(
                 child
                 for child in sorted(root.iterdir())
-                if child.is_dir() and ((child / "status.json").is_file() or (child / "identity.md").is_file())
+                if child.is_dir() and ((child / "status.json").is_file() or (child / IDENTITY_FILE).is_file())
             )
 
     credentials = _get(config, "credentials", {})

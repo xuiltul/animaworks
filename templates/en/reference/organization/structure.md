@@ -1,6 +1,6 @@
 # How the Organization Structure Works
 
-In AnimaWorks, the organization structure is built using each Anima's `status.json` (or `identity.md`) as the Single Source of Truth (SSoT).
+In AnimaWorks, the organization structure is built using each Anima's `status.json` (or `IDENTITY.md`) as the Single Source of Truth (SSoT).
 `core/org/org_sync.py` synchronizes the **supervisor** on disk to `config.json`, which is then used during prompt construction.
 This document explains how the organization structure is defined, interpreted, and displayed.
 
@@ -11,7 +11,7 @@ This document explains how the organization structure is defined, interpreted, a
 The hierarchical relationships within the organization are defined by each Anima's `supervisor`. Read priority:
 
 1. **status.json** — `"supervisor"` key (recommended)
-2. **identity.md** — Row in the table format `| 上司 | name |` (Japanese only. The `read_anima_supervisor` of `core/config/models.py` is parsed)
+2. **IDENTITY.md** — Row in the table format `| 上司 | name |` (Japanese only. The `read_anima_supervisor` of `core/config/models.py` is parsed)
 
 If `supervisor` is unset, empty, "none", "(none)", "（none）", "-", or "---", the Anima is at the top level (highest rank).
 `animaworks config set animas.<name>.supervisor <supervisor>` updates the root-owned status/config collectively. Directly modifying only `config.json` will be overwritten from disk by org_sync, so use CLI/API.
@@ -32,7 +32,7 @@ To use a custom display (e.g., "development lead"), use `animaworks config set a
 
 The `sync_org_structure()` of `core/org/org_sync.py` performs the following:
 
-1. Reads `status.json` / `identity.md` from each Anima directory (only those where `identity.md` exists) and extracts the supervisor (`read_anima_supervisor`)
+1. Reads `status.json` / `IDENTITY.md` from each Anima directory (only those where `IDENTITY.md` exists) and extracts the supervisor (`read_anima_supervisor`)
 2. Detects circular references (Animas with circular references are excluded from synchronization)
 3. Updates the `animas.<name>.supervisor` of `config.json` to match the values on disk (**supervisor only**)
 4. Removes config entries for Animas that no longer exist on disk (prune)

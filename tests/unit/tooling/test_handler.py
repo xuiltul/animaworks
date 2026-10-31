@@ -1492,7 +1492,7 @@ class TestScheduleChangedCallback:
             memory=memory,
             on_schedule_changed=callback,
         )
-        h.handle("write_memory_file", {"path": "heartbeat.md", "content": "new config"})
+        h.handle("write_memory_file", {"path": "HEARTBEAT.md", "content": "new config"})
         callback.assert_called_once_with("test-anima")
 
     def test_write_cron_triggers_callback(
@@ -1534,14 +1534,14 @@ class TestScheduleChangedCallback:
             memory=memory,
             on_schedule_changed=callback,
         )
-        result = h.handle("write_memory_file", {"path": "heartbeat.md", "content": "cfg"})
+        result = h.handle("write_memory_file", {"path": "HEARTBEAT.md", "content": "cfg"})
         assert "Written to" in result
         # File should still be written despite callback error
-        assert (anima_dir / "heartbeat.md").read_text(encoding="utf-8") == "cfg"
+        assert (anima_dir / "HEARTBEAT.md").read_text(encoding="utf-8") == "cfg"
 
     def test_no_callback_set_does_not_error(self, handler: ToolHandler, anima_dir: Path):
         # handler has no on_schedule_changed set (default None)
-        result = handler.handle("write_memory_file", {"path": "heartbeat.md", "content": "cfg"})
+        result = handler.handle("write_memory_file", {"path": "HEARTBEAT.md", "content": "cfg"})
         assert "Written to" in result
 
 
@@ -1555,8 +1555,8 @@ class TestMemoryWriteSecurity:
         "protected_file",
         [
             "permissions.md",
-            "identity.md",
-            "bootstrap.md",
+            "IDENTITY.md",
+            "BOOTSTRAP.md",
             "status.json",
         ],
     )
@@ -1644,10 +1644,10 @@ class TestMemoryWriteSecurity:
         # Create another anima's directory with a file
         other = tmp_path / "animas" / "other-anima"
         other.mkdir(parents=True)
-        (other / "identity.md").write_text("secret identity", encoding="utf-8")
+        (other / "IDENTITY.md").write_text("secret identity", encoding="utf-8")
         result = handler.handle(
             "read_memory_file",
-            {"path": "../other-anima/identity.md"},
+            {"path": "../other-anima/IDENTITY.md"},
         )
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
@@ -1671,10 +1671,10 @@ class TestMemoryWriteSecurity:
         handler: ToolHandler,
         anima_dir: Path,
     ):
-        """heartbeat.md is NOT in the protected list."""
+        """HEARTBEAT.md is NOT in the protected list."""
         result = handler.handle(
             "write_memory_file",
-            {"path": "heartbeat.md", "content": "new heartbeat config"},
+            {"path": "HEARTBEAT.md", "content": "new heartbeat config"},
         )
         assert "Written to" in result
 
@@ -1717,7 +1717,7 @@ class TestFilePermissionWriteProtection:
         anima_dir: Path,
     ):
         result = handler._check_file_permission(
-            str(anima_dir / "identity.md"),
+            str(anima_dir / "IDENTITY.md"),
             write=True,
         )
         assert result is not None
@@ -1791,12 +1791,12 @@ class TestFilePermissionWriteProtection:
         handler: ToolHandler,
         anima_dir: Path,
     ):
-        """edit_file tool should block edits to identity.md."""
-        (anima_dir / "identity.md").write_text("original identity", encoding="utf-8")
+        """edit_file tool should block edits to IDENTITY.md."""
+        (anima_dir / "IDENTITY.md").write_text("original identity", encoding="utf-8")
         result = handler.handle(
             "edit_file",
             {
-                "path": str(anima_dir / "identity.md"),
+                "path": str(anima_dir / "IDENTITY.md"),
                 "old_string": "original",
                 "new_string": "hacked",
             },
@@ -1804,7 +1804,7 @@ class TestFilePermissionWriteProtection:
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
         # Verify file was NOT modified
-        assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "original identity"
+        assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "original identity"
 
 
 # ── Command path traversal ───────────────────────────────────
@@ -2204,7 +2204,7 @@ class TestValidateEpisodePath:
         assert _validate_episode_path("episodes/2026-02-17.md") is None
 
     def test_suffixed_pattern_no_warning(self):
-        assert _validate_episode_path("episodes/2026-02-17_heartbeat.md") is None
+        assert _validate_episode_path("episodes/2026-02-17_HEARTBEAT.md") is None
 
     def test_suffixed_long_name_no_warning(self):
         assert _validate_episode_path("episodes/2026-02-17_heartbeat_emergency_response.md") is None
@@ -2249,7 +2249,7 @@ class TestEpisodeFilenameRegex:
         [
             "2026-02-17.md",
             "2026-01-01.md",
-            "2026-12-31_heartbeat.md",
+            "2026-12-31_HEARTBEAT.md",
             "2026-02-17_cron_batch.md",
             "2026-02-17_a.md",
         ],
@@ -2298,7 +2298,7 @@ class TestWriteMemoryFileEpisodeWarning:
     ):
         result = handler.handle(
             "write_memory_file",
-            {"path": "episodes/2026-02-17_heartbeat.md", "content": "check"},
+            {"path": "episodes/2026-02-17_HEARTBEAT.md", "content": "check"},
         )
         assert "Written to" in result
         assert "WARNING" not in result

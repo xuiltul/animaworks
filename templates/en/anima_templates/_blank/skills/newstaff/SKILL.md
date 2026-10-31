@@ -3,7 +3,7 @@ name: newstaff
 description: >-
   A skill for hiring and creating a new Digital Anima in the AnimaWorks organization.
   Based on an interview, create a character sheet (Markdown) and use the CLI command (animaworks anima create) to
-  identity/injection/permissionsgenerate everything at once. After creation, self-maintain via bootstrap.
+  IDENTITY/SOUL/AGENTS/permissions generate everything at once. After creation, self-maintain via bootstrap.
   "Create a new employee" "Hire someone" "New employee" "Hiring" "Create Anima" "Recruit" "Add a team member" "Add personnel" "Create a subordinate" "Add staff" "hire" "recruit" "team member"
 ---
 
@@ -90,11 +90,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 | モデル | {model name — ユーザーが指定した時だけ書く} |
 | credential | {ユーザーがモデルを指定した時だけ書く} |
 
-## 人格 (→ identity.md)
+## 人格 (→ SOUL.md)
 
 {Personality, speaking style, values, backstory, appearance, etc.}
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
@@ -102,11 +102,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 
 {If omitted: default template applied}
 
-## 定期業務 (→ heartbeat.md, cron.md) [省略可]
+## 定期業務 (→ HEARTBEAT.md, cron.md) [省略可]
 
 {If omitted: generic template applied. New Anima self-adjusts in bootstrap}
 
-## 初回起動指示 (→ bootstrap.md 追加指示) [省略可]
+## 初回起動指示 (→ BOOTSTRAP.md 追加指示) [省略可]
 
 {If omitted: standard bootstrap only}
 ```
@@ -117,7 +117,7 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 This automatically executes the following:
 - Batch creation of the directory structure
 - Placement of skeleton files
-- Placement of bootstrap.md
+- Placement of BOOTSTRAP.md
 - Creation of status.json (including supervisor)
 - Registration in config.json (model, supervisor, etc.)
 - Applying defaults to omitted sections
@@ -161,8 +161,8 @@ Report the completion of hiring:
 ⚠️ Do not report avatar image generation (the new Anima itself generates it via bootstrap)
 
 ### From here on, the new Anima executes autonomously:
-- Enrichment of identity.md / injection.md
-- Self-design of heartbeat.md / cron.md
+- Enrichment of IDENTITY.md / SOUL.md / AGENTS.md
+- Self-design of HEARTBEAT.md / cron.md
 - Avatar image generation (with supervisor reference)
 - Arrival report to the supervisor
 - Start the first small task (something useful to the user) and report the results to the supervisor

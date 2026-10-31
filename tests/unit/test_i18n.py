@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 
-
 class TestTranslationFunction:
     """Tests for the t() function."""
 
@@ -46,7 +45,7 @@ class TestTranslationFunction:
 
     def test_fallback_chain_en_then_ja(self):
         """When locale entry missing, falls back en → ja."""
-        from core.i18n import t, _STRINGS
+        from core.i18n import _STRINGS, t
         # Temporarily add a key with only ja
         _STRINGS["_test_only_ja"] = {"ja": "日本語のみ"}
         try:

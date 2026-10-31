@@ -59,14 +59,14 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 동시에 실행되는 Inbox 처리는 1개뿐이며, 실행 중 도착한 메시지는 다음 1회에 모아서 처리한다. Provider 오류 시 `rate_guard`의 복구 시간을 기다리고, 읽지 않은 메시지를 남긴다.
 수신 intent에 의한 시작 필터나 메시지 기반 cooldown / cascade 억제는 없다. 이해·감사만 있는 메시지에 답장하지 않는 행동 규칙은 Inbox 프롬프트에서 지시한다.
 
-## heartbeat.md의 설정
+## HEARTBEAT.md의 설정
 
-`heartbeat.md`은 각 Anima의 설정 파일로, 활동 시간·체크 항목을 정의한다.
-하트비트의 실행 간격은 `config.json`의 `heartbeat.interval_minutes`로 설정 가능(1~1440분, 기본 30). `heartbeat.md`에서는 변경할 수 없다.
+`HEARTBEAT.md`은 각 Anima의 설정 파일로, 활동 시간·체크 항목을 정의한다.
+하트비트의 실행 간격은 `config.json`의 `heartbeat.interval_minutes`로 설정 가능(1~1440분, 기본 30). `HEARTBEAT.md`에서는 변경할 수 없다.
 각 Anima에는 이름 기반의 0~9분 오프셋이 부여되어 동시 시작을 분산한다.
-파일 경로: `~/.animaworks/animas/{name}/heartbeat.md`
+파일 경로: `~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-상급자가 산하 Anima의 `heartbeat.md`을 편집하는 경우, 직접 파일 조작이 아니라 `read_memory_file` / `write_memory_file`을 사용하고, `../{anima_name}/heartbeat.md`과 같은 상대 경로로 지정한다.
+상급자가 산하 Anima의 `HEARTBEAT.md`을 편집하는 경우, 직접 파일 조작이 아니라 `read_memory_file` / `write_memory_file`을 사용하고, `../{anima_name}/HEARTBEAT.md`과 같은 상대 경로로 지정한다.
 
 ### 포맷
 
@@ -90,7 +90,7 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ### 설정 필드
 
 **실행 간격**:
-- `config.json`의 `heartbeat.interval_minutes`로 설정(1~1440분, 기본 30). `heartbeat.md`에서의 변경은 불가
+- `config.json`의 `heartbeat.interval_minutes`로 설정(1~1440분, 기본 30). `HEARTBEAT.md`에서의 변경은 불가
 
 **활동 시간**(SHOULD):
 - `HH:MM - HH:MM` 형식으로 기재한다(예: `9:00 - 22:00`)
@@ -182,7 +182,7 @@ Chat(인간과의 대화)과 TaskExec(실작업)은 메인 모델을 유지한�
 
 ### 하트비트 설정의 핫 리로드
 
-파일 시스템에서 heartbeat.md을 업데이트하면, 다음 하트비트 실행 시 `_check_schedule_freshness()`이 변경을 감지하고 SchedulerManager가 스케줄을 자동으로 리로드한다.
+파일 시스템에서 HEARTBEAT.md을 업데이트하면, 다음 하트비트 실행 시 `_check_schedule_freshness()`이 변경을 감지하고 SchedulerManager가 스케줄을 자동으로 리로드한다.
 서버 재시작은 필요 없다(MAY skip restart). APScheduler의 작업이 다시 등록된다.
 
 ## Anima별 하트비트 간격 설정
@@ -538,9 +538,9 @@ type: llm
 
 ## Cron 설정의 핫 리로드
 
-cron.md를 업데이트하면, heartbeat.md과 동일하게 스케줄이 자동 리로드됩니다.
+cron.md를 업데이트하면, HEARTBEAT.md과 동일하게 스케줄이 자동 리로드됩니다.
 Anima 자신이 cron.md을 다시 쓴 경우에도 즉시 반영됩니다 (self-modify 패턴).
-상급자는 산하의 `cron.md` / `heartbeat.md`을 write memory 도구로 편집할 수 있습니다. 허가된 상급자로부터의 `injection.md` 변경 요청도 root로 전송·인가됩니다. `status.json`의 변경에는 대응하는 상급자용 도구 또는 root CLI/API을 사용합니다. root 소유 파일을 Read / Write / Edit / apply_patch / `Path.write_text` / 셸 리다이렉트 등으로 직접 쓰지 않습니다.
+상급자는 산하의 `cron.md` / `HEARTBEAT.md`을 write memory 도구로 편집할 수 있습니다. 허가된 상급자로부터의 `AGENTS.md` 변경 요청도 root로 전송·인가됩니다. `status.json`의 변경에는 대응하는 상급자용 도구 또는 root CLI/API을 사용합니다. root 소유 파일을 Read / Write / Edit / apply_patch / `Path.write_text` / 셸 리다이렉트 등으로 직접 쓰지 않습니다.
 
 리로드 시 동작:
 1. 해당 Anima의 기존 cron 작업을 모두 삭제

@@ -6,7 +6,7 @@
 Verifies:
 - _reconcile() skips bootstrapping animas in all 3 decision points
 - _run_bootstrap() logs warnings when process is not running after bootstrap
-- _run_bootstrap() tracks retry counts and renames bootstrap.md on max retries
+- _run_bootstrap() tracks retry counts and renames BOOTSTRAP.md on max retries
 """
 
 from __future__ import annotations
@@ -50,13 +50,13 @@ def _create_anima_dir(
     d = animas_dir / name
     d.mkdir(parents=True, exist_ok=True)
     if has_identity:
-        (d / "identity.md").write_text(f"# {name}", encoding="utf-8")
+        (d / "IDENTITY.md").write_text(f"# {name}", encoding="utf-8")
     if has_injection:
-        (d / "injection.md").write_text(f"# {name} instructions", encoding="utf-8")
+        (d / "AGENTS.md").write_text(f"# {name} instructions", encoding="utf-8")
     if has_status:
         (d / "status.json").write_text(json.dumps({"enabled": enabled}), encoding="utf-8")
     if has_bootstrap:
-        (d / "bootstrap.md").write_text("# Bootstrap instructions", encoding="utf-8")
+        (d / "BOOTSTRAP.md").write_text("# Bootstrap instructions", encoding="utf-8")
     return d
 
 
@@ -265,7 +265,7 @@ class TestBootstrapRetryLimit:
         assert "kotoha" not in sup._bootstrap_retry_counts
 
     async def test_bootstrap_md_renamed_on_max_retries(self, tmp_path: Path):
-        """bootstrap.md should be renamed to .failed after max retries."""
+        """BOOTSTRAP.md should be renamed to .failed after max retries."""
         sup = _make_supervisor(tmp_path)
         anima_dir = _create_anima_dir(sup.animas_dir, "kotoha", has_bootstrap=True)
         sup.ws_manager = None
@@ -273,8 +273,8 @@ class TestBootstrapRetryLimit:
 
         await sup._run_bootstrap("kotoha")
 
-        assert not (anima_dir / "bootstrap.md").exists()
-        assert (anima_dir / "bootstrap.md.failed").exists()
+        assert not (anima_dir / "BOOTSTRAP.md").exists()
+        assert (anima_dir / "BOOTSTRAP.md.failed").exists()
 
     async def test_bootstrap_not_started_on_max_retries(self, tmp_path: Path):
         """Bootstrap should not add to _bootstrapping set when max retries reached."""
@@ -334,10 +334,10 @@ class TestBootstrapRetryLimit:
             await sup._run_bootstrap("kotoha")
             assert sup._bootstrap_retry_counts["kotoha"] == expected_count
 
-        # 4th attempt should hit max retries and rename bootstrap.md
+        # 4th attempt should hit max retries and rename BOOTSTRAP.md
         await sup._run_bootstrap("kotoha")
-        assert not (sup.animas_dir / "kotoha" / "bootstrap.md").exists()
-        assert (sup.animas_dir / "kotoha" / "bootstrap.md.failed").exists()
+        assert not (sup.animas_dir / "kotoha" / "BOOTSTRAP.md").exists()
+        assert (sup.animas_dir / "kotoha" / "BOOTSTRAP.md.failed").exists()
 
     async def test_max_retries_broadcast_event(self, tmp_path: Path):
         """Max retries should broadcast a max_retries_exceeded event."""

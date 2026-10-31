@@ -11,6 +11,7 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from core.anima.workspace_files import AGENTS_FILE, BOOTSTRAP_FILE, HEARTBEAT_FILE, IDENTITY_FILE, SOUL_FILE
 from core.config.file_access_policy import find_denied_root, load_denied_roots
 from core.i18n import t
 from core.memory.config_reader import ConfigReader
@@ -258,19 +259,28 @@ class MemoryManager:
         return summary, reference_path
 
     def read_identity(self) -> str:
-        """Read identity.md, stripping YAML frontmatter if present."""
+        """Read IDENTITY.md, stripping YAML frontmatter if present."""
         from core.memory.frontmatter import strip_frontmatter
 
-        raw = self._read(self.anima_dir / "identity.md")
+        raw = self._read(self.anima_dir / IDENTITY_FILE)
+        if raw and raw.lstrip().startswith("---"):
+            return strip_frontmatter(raw)
+        return raw
+
+    def read_soul(self) -> str:
+        """Read SOUL.md, stripping YAML frontmatter if present."""
+        from core.memory.frontmatter import strip_frontmatter
+
+        raw = self._read(self.anima_dir / SOUL_FILE)
         if raw and raw.lstrip().startswith("---"):
             return strip_frontmatter(raw)
         return raw
 
     def read_injection(self) -> str:
-        """Read injection.md, stripping YAML frontmatter if present."""
+        """Read AGENTS.md, stripping YAML frontmatter if present."""
         from core.memory.frontmatter import strip_frontmatter
 
-        raw = self._read(self.anima_dir / "injection.md")
+        raw = self._read(self.anima_dir / AGENTS_FILE)
         if raw and raw.lstrip().startswith("---"):
             return strip_frontmatter(raw)
         return raw
@@ -294,7 +304,7 @@ class MemoryManager:
         return self._read(self.state_dir / "current_state.md") or "status: idle"
 
     def read_heartbeat_config(self) -> str:
-        return self._read(self.anima_dir / "heartbeat.md")
+        return self._read(self.anima_dir / HEARTBEAT_FILE)
 
     def load_recent_heartbeat_summary(self, limit: int = 5) -> str:
         """Load recent heartbeat summaries for dialogue context injection."""
@@ -335,7 +345,7 @@ class MemoryManager:
         return self._read(self.anima_dir / "cron.md")
 
     def read_bootstrap(self) -> str:
-        return self._read(self.anima_dir / "bootstrap.md")
+        return self._read(self.anima_dir / BOOTSTRAP_FILE)
 
     # ── List helpers ──────────────────────────────────────
 

@@ -10,10 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from core.schemas import CronTask, CycleResult
 from core.runtime.ipc_v2 import IPCV2ConnectionState, IPCV2Identity
 from core.runtime.scheduler_manager import SchedulerManager
 from core.runtime.task_runner_supervisor import TaskRunnerJob, TaskRunnerSupervisor
+from core.schemas import CronTask, CycleResult
 
 
 def _manager(tmp_path: Path) -> tuple[SchedulerManager, MagicMock]:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -53,7 +55,7 @@ def _discover_other_animas(anima_dir: Path) -> list[str]:
         resolved_dir = _resolved_visible_path(d, denied_roots)
         if resolved_dir is None or not resolved_dir.is_dir() or resolved_dir.name == self_name:
             continue
-        identity_path = _resolved_visible_path(resolved_dir / "identity.md", denied_roots)
+        identity_path = _resolved_visible_path(resolved_dir / IDENTITY_FILE, denied_roots)
         other_company = read_anima_company(resolved_dir)
         if company is not None and other_company is not None and other_company != company:
             continue
@@ -197,7 +199,7 @@ def _scan_all_animas(animas_dir: Path, denied_roots: tuple[Path, ...] = ()) -> d
         d = _resolved_visible_path(unresolved_dir, denied_roots)
         if d is None or not d.is_dir() or d.name.startswith((".", "_", "tmp")):
             continue
-        identity_path = _resolved_visible_path(d / "identity.md", denied_roots)
+        identity_path = _resolved_visible_path(d / IDENTITY_FILE, denied_roots)
         if identity_path is None or not identity_path.is_file():
             continue
 

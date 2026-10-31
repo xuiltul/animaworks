@@ -29,8 +29,8 @@
 5. **프롬프트** (`{data_dir}/prompts/`): 읽기 전용. 캐릭터 설계 가이드 등의 템플릿
 6. **다른 사원의 디렉토리**: permissions.json에 명시된 범위만 접근 가능
 7. **부하의 디렉토리** (supervisor만. 자식·손자·증손자… 모든 부하에게 동일한 권한):
-   - **Anima가 편집할 수 있는 스케줄**: supervisor는 `cron.md` / `heartbeat.md`을 읽기 및 쓰기 가능
-   - **root 소유 설정**: `status.json`, `identity.md`, `injection.md`, `permissions.json` 및 root의 `config.json`은 Anima 프로세스에서 직접 쓸 수 없음. 해당 상급자용 도구 또는 root 관리 API/CLI을 사용
+   - **Anima가 편집할 수 있는 스케줄**: supervisor는 `cron.md` / `HEARTBEAT.md`을 읽기 및 쓰기 가능
+   - **root 소유 설정**: `status.json`, `IDENTITY.md`, `SOUL.md`, `AGENTS.md`, `permissions.json` 및 root의 `config.json`은 Anima 프로세스에서 직접 쓸 수 없음. 해당 상급자용 도구 또는 root 관리 API/CLI을 사용
    - **상태 참조**: `activity_log/`와 `state/current_state.md`은 **읽기 전용**. 부하의 작업은 권한이 있는 작업 도구로 확인. 원본의 저장 위치는 호스트 관리로 직접 편집 금지.
-   - **그 외 부하 메모리** (`identity.md` 포함): 전용 root 관리 작업이 없는 한 읽기 전용
+   - **그 외 부하 메모리** (`IDENTITY.md` / `SOUL.md` 포함): 전용 root 관리 작업이 없는 한 읽기 전용
 8. **동료의 activity_log**: 같은 supervisor를 가진 동료의 `activity_log/`는 읽기 가능(검증용). 쓰기는 불가

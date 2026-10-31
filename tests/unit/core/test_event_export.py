@@ -14,10 +14,10 @@ from unittest.mock import Mock
 import pytest
 import requests
 
+from core.activity.logger import ActivityLogger
 from core.config import invalidate_cache, save_config
 from core.config.schemas import AnimaWorksConfig, EventExportConfig
 from core.infra.event_export import EventExporter, get_event_exporter, reset_event_exporters
-from core.activity.logger import ActivityLogger
 from core.usage.token_usage import TokenUsageLogger
 
 

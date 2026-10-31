@@ -51,11 +51,12 @@
 - 성격에서 연상되는 색을 선택한다. 직능의 이미지 컬러(경리=남색)에 끌려가지 않는다
 - 일본어 색 이름 + HEX 코드 (예: 벚꽃색 (#FFB7C5))
 
-### identity.md 의 정본 서식
+### IDENTITY.md / SOUL.md 의 정본 서식
 
-`identity.md` 이 유일한 인격 정본. character_sheet 이나 prompt 에만 있는 외모는 금지.
+`IDENTITY.md`는 프로필과 외모, `SOUL.md`는 인격(성격·말투·가치관·개성)의 정본. character_sheet 이나 prompt 에만 있는 외모는 금지.
 
-필수 섹션: 기본 프로필 (이름·영문 이름·나이·생일·별자리·혈액형·키·소속·직책·상급자·얼굴 타입), 외모, 성격·캐릭터, AI 사원으로서의 개성.
+- IDENTITY.md 필수 섹션: 기본 프로필 (이름·영문 이름·나이·생일·별자리·혈액형·키·소속·직책·상급자·얼굴 타입), 외모, 이미지 컬러, AI 모델 정보
+- SOUL.md 필수 섹션: 성격·캐릭터, 말투·가치관, AI 사원으로서의 개성, 결정적 한마디
 
 ## 내부 정합성 체크
 
@@ -77,7 +78,7 @@
 
 ### NovelAI 프롬프트로의 변환
 
-identity.md 의 외모 설정을 NovelAI 호환 애니메 태그로 변환한다.
+IDENTITY.md 의 외모 설정을 NovelAI 호환 애니메 태그로 변환한다.
 
 **기본 구조:**
 
@@ -87,7 +88,7 @@ masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean line
 
 **변환 예:**
 
-| identity.md 의 외모 | NovelAI 프롬프트 |
+| IDENTITY.md 의 외모 | NovelAI 프롬프트 |
 |---|---|
 | 키 158cm·검은 머리 롱·빨간 눈·세일러복 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1girl, black hair, long hair, red eyes, sailor uniform, full body, standing, white background, looking at viewer` |
 | 키 175cm·은발 숏·파란 눈·정장 | `masterpiece, best quality, very aesthetic, absurdres, anime coloring, clean lineart, soft shading, 1boy, silver hair, short hair, blue eyes, business suit, full body, standing, white background, looking at viewer` |
@@ -126,7 +127,7 @@ lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, wor
 
 - `assets/prompt_realistic.txt` 이 존재 → **그대로 사용** (최우선)
 - `assets/prompt.txt` 이 존재 → 애니메 스타일이면 그대로 사용. 리얼리스틱이 필요하면 아래 규칙으로 변환
-- 모두 존재하지 않음 → identity.md 의 외모 설정에서 새로 작성
+- 모두 존재하지 않음 → IDENTITY.md 의 외모 설정에서 새로 작성
 
 **스텝 2: 프롬프트 작성**
 

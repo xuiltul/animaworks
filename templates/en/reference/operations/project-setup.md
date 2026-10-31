@@ -195,7 +195,7 @@ There are three ways to add an Anima. All are executed with `animaworks anima cr
 ### Method 1: Create from Template
 
 Use a predefined template (under `templates/ja/anima_templates/` or `templates/en/anima_templates/`).
-Templates include identity.md, injection.md, permissions.json, skills, etc.
+Templates include IDENTITY.md, SOUL.md, AGENTS.md, permissions.json, skills, etc.
 
 ```bash
 # テンプレートから作成（テンプレート名はディレクトリ名）
@@ -220,14 +220,14 @@ animaworks anima create --from-md /path/to/character.md [--name ken] [--role eng
 - `--supervisor`: Supervisor Anima name (overrides "supervisor" in the character sheet)
 
 The Markdown file is copied to the Anima directory as `character_sheet.md`.
-The "personality" and "role and action policy" sections of the sheet are reflected in identity.md and injection.md.
+The "basic information" section of the sheet is reflected in IDENTITY.md; the "personality" section is reflected in SOUL.md (profile headings are routed to IDENTITY.md), and the "role and action policy" section in AGENTS.md.
 permissions.json and specialty_prompt.md are applied from the role template.
 
 The Markdown file SHOULD include:
 - `# Character: 名前`-format heading, or an "English name" row in the basic information table (used for automatic name extraction)
-- `## 基本情報` — table with English name, supervisor, model, etc.
-- `## 人格` — reflected in identity.md
-- `## 役割・行動方針` — reflected in injection.md
+- `## 基本情報` — table with English name, supervisor, model, etc. Reflected in IDENTITY.md
+- `## 人格` — reflected in SOUL.md (profile headings are routed to IDENTITY.md)
+- `## 役割・行動方針` — reflected in AGENTS.md
 
 ### Method 3: Blank Creation
 
@@ -246,11 +246,12 @@ Regardless of method, the following directories and files are generated:
 
 ```
 ~/.animaworks/animas/{name}/
-├── identity.md          # 人格定義（不変ベースライン）
-├── injection.md         # 役割・行動指針（可変）
-├── bootstrap.md         # 初回起動指示（完了後に削除）
+├── IDENTITY.md          # Profile and appearance (immutable baseline)
+├── SOUL.md              # Personality and values (immutable baseline)
+├── AGENTS.md            # Role and behavioral guidelines (mutable)
+├── BOOTSTRAP.md         # 初回起動指示（完了後に削除）
 ├── permissions.json       # ツール・コマンド権限
-├── heartbeat.md         # ハートビート設定
+├── HEARTBEAT.md         # ハートビート設定
 ├── cron.md              # 定時タスク設定
 ├── episodes/            # エピソード記憶（日別ログ）
 ├── knowledge/           # 意味記憶（学んだ知識）

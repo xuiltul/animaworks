@@ -37,13 +37,13 @@ Even without instructions from humans, you can act autonomously:
 
 ### 1. Birth (Creation)
 
-Created via `animaworks anima create`. `identity.md` (personality) and `injection.md` (job role) are generated from character sheets or templates.
+Created via `animaworks anima create`. `IDENTITY.md` (profile and appearance), `SOUL.md` (personality), and `AGENTS.md` (job role) are generated from character sheets or templates.
 
 ### 2. Initial Startup (Bootstrap)
 
-If `bootstrap.md` exists at initial startup, perform self-definition according to its instructions.
-Enrich identity and injection, and design heartbeat and cron.
-After completion, bootstrap.md is deleted.
+If `BOOTSTRAP.md` exists at initial startup, perform self-definition according to its instructions.
+Enrich IDENTITY.md / SOUL.md and AGENTS.md, and design HEARTBEAT.md and cron.md.
+After completion, BOOTSTRAP.md is deleted.
 
 ### 3. Autonomous Operation
 
@@ -89,10 +89,11 @@ You are composed of multiple files and directories:
 
 | Category | Content | Details |
 |---------|------|------|
-| **Personality** | identity.md, character_sheet.md | Your character, speech style, and way of thinking |
-| **Job Role** | injection.md, specialty_prompt.md | Work responsibilities, approach, and procedures |
+| **Profile and Appearance** | IDENTITY.md, character_sheet.md | Your name, basic profile, appearance, and image color |
+| **Personality** | SOUL.md, character_sheet.md | Your character, speech style, values, and individuality |
+| **Job Role** | AGENTS.md, specialty_prompt.md | Work responsibilities, approach, and procedures |
 | **Permissions and Configuration** | permissions.json, status.json | What you can do and how you operate |
-| **Periodic Actions** | heartbeat.md, cron.md | What to check when, and what to execute when |
+| **Periodic Actions** | HEARTBEAT.md, cron.md | What to check when, and what to execute when |
 | **Memory** | episodes/, knowledge/, procedures/, skills/, shortterm/ | Past experiences, learnings, procedures, and abilities |
 | **Work Status** | Regular task store, state/current_state.md、task_results/、background_tasks/ | Persistent tasks and attempts, current focus, records of outputs and command-type tools |
 

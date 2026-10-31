@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import AGENTS_FILE, BOOTSTRAP_FILE, IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -47,8 +49,8 @@ def bootstrap_state_path(anima_dir: Path) -> Path:
 
 def _bootstrap_artifacts(anima_dir: Path) -> list[Path]:
     return [
-        anima_dir / "bootstrap.md.auto_resolved",
-        anima_dir / "bootstrap.md.failed",
+        anima_dir / f"{BOOTSTRAP_FILE}.auto_resolved",
+        anima_dir / f"{BOOTSTRAP_FILE}.failed",
     ]
 
 
@@ -120,11 +122,11 @@ def file_is_defined(path: Path) -> bool:
 
 
 def _identity_is_undefined(anima_dir: Path) -> bool:
-    return not file_is_defined(anima_dir / "identity.md")
+    return not file_is_defined(anima_dir / IDENTITY_FILE)
 
 
 def _injection_is_undefined(anima_dir: Path) -> bool:
-    return not file_is_defined(anima_dir / "injection.md")
+    return not file_is_defined(anima_dir / AGENTS_FILE)
 
 
 def _pending_task_files(anima_dir: Path) -> list[Path]:
@@ -146,7 +148,7 @@ def _pending_task_files(anima_dir: Path) -> list[Path]:
 
 def _apply_flags(anima_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
     state = str(payload.get("state") or STATE_NEEDS_REPAIR)
-    has_bootstrap = (anima_dir / "bootstrap.md").exists()
+    has_bootstrap = (anima_dir / BOOTSTRAP_FILE).exists()
     has_character_sheet = (anima_dir / "character_sheet.md").exists()
     has_blocking_artifact = any(path.exists() for path in _bootstrap_artifacts(anima_dir))
 
@@ -193,7 +195,7 @@ def get_bootstrap_status(anima_dir: Path) -> dict[str, Any]:
             ),
         )
 
-    has_bootstrap = (anima_dir / "bootstrap.md").exists()
+    has_bootstrap = (anima_dir / BOOTSTRAP_FILE).exists()
     has_character_sheet = (anima_dir / "character_sheet.md").exists()
 
     if persisted_state in {STATE_RUNNING, STATE_FAILED, STATE_NEEDS_REPAIR}:
@@ -264,7 +266,7 @@ def get_bootstrap_status(anima_dir: Path) -> dict[str, Any]:
         return _apply_flags(anima_dir, payload)
 
     if persisted_state == STATE_PENDING_USER_INPUT:
-        if file_is_defined(anima_dir / "identity.md") and file_is_defined(anima_dir / "injection.md"):
+        if file_is_defined(anima_dir / IDENTITY_FILE) and file_is_defined(anima_dir / AGENTS_FILE):
             payload = _base_state(
                 STATE_COMPLETED,
                 mode=str(persisted.get("mode") or "interactive"),
@@ -272,7 +274,7 @@ def get_bootstrap_status(anima_dir: Path) -> dict[str, Any]:
                 retry_count=retry_count,
             )
             return _apply_flags(anima_dir, payload)
-        if file_is_defined(anima_dir / "identity.md") and not file_is_defined(anima_dir / "injection.md"):
+        if file_is_defined(anima_dir / IDENTITY_FILE) and not file_is_defined(anima_dir / AGENTS_FILE):
             payload = _base_state(
                 STATE_NEEDS_REPAIR,
                 mode=str(persisted.get("mode") or "interactive"),
@@ -283,9 +285,9 @@ def get_bootstrap_status(anima_dir: Path) -> dict[str, Any]:
             return _apply_flags(anima_dir, payload)
         if not has_bootstrap:
             errors = ["bootstrap_missing"]
-            if not file_is_defined(anima_dir / "identity.md"):
+            if not file_is_defined(anima_dir / IDENTITY_FILE):
                 errors.append("identity_undefined")
-            if not file_is_defined(anima_dir / "injection.md"):
+            if not file_is_defined(anima_dir / AGENTS_FILE):
                 errors.append("injection_undefined")
             payload = _base_state(
                 STATE_NEEDS_REPAIR,
@@ -345,9 +347,9 @@ def mark_bootstrap_failed(anima_dir: Path, error: str, *, reason: str = "bootstr
 
 def validate_bootstrap(anima_dir: Path) -> dict[str, Any]:
     errors: list[str] = []
-    if not file_is_defined(anima_dir / "identity.md"):
+    if not file_is_defined(anima_dir / IDENTITY_FILE):
         errors.append("identity_undefined")
-    if not file_is_defined(anima_dir / "injection.md"):
+    if not file_is_defined(anima_dir / AGENTS_FILE):
         errors.append("injection_undefined")
     for artifact in _bootstrap_artifacts(anima_dir):
         if artifact.exists():
@@ -398,7 +400,7 @@ def _archive_processed_character_sheet(anima_dir: Path) -> None:
     character_sheet = anima_dir / "character_sheet.md"
     if not character_sheet.exists():
         return
-    if not (file_is_defined(anima_dir / "identity.md") and file_is_defined(anima_dir / "injection.md")):
+    if not (file_is_defined(anima_dir / IDENTITY_FILE) and file_is_defined(anima_dir / AGENTS_FILE)):
         return
     timestamp = now_local().strftime("%Y%m%d_%H%M%S")
     _archive_named_file(anima_dir, character_sheet, f"character_sheet-{timestamp}.md")
@@ -413,7 +415,7 @@ def finalize_bootstrap_run(anima_dir: Path) -> dict[str, Any]:
         payload["mode"] = read_bootstrap_state(anima_dir).get("mode") or "background"
         return write_bootstrap_state(anima_dir, payload)
 
-    bootstrap_file = anima_dir / "bootstrap.md"
+    bootstrap_file = anima_dir / BOOTSTRAP_FILE
     if bootstrap_file.exists():
         archive_path = _archive_bootstrap_file(anima_dir, bootstrap_file)
         status["reason"] = "completed_bootstrap_archived"
@@ -440,7 +442,7 @@ def _remove_contents(path: Path) -> None:
 def repair_bootstrap_retry(anima_dir: Path, *, retry_counts_file: Path | None = None) -> dict[str, Any]:
     """Prepare a partially initialized Anima for another bootstrap attempt."""
     restored = False
-    bootstrap_file = anima_dir / "bootstrap.md"
+    bootstrap_file = anima_dir / BOOTSTRAP_FILE
     archive_dir = anima_dir / "state" / "bootstrap_archive"
     archive_dir.mkdir(parents=True, exist_ok=True)
 
@@ -494,9 +496,9 @@ def repair_bootstrap_complete(anima_dir: Path, *, retry_counts_file: Path | None
         raise FileNotFoundError(f"Anima not found: {anima_dir.name}")
 
     errors: list[str] = []
-    if not file_is_defined(anima_dir / "identity.md"):
+    if not file_is_defined(anima_dir / IDENTITY_FILE):
         errors.append("identity_undefined")
-    if not file_is_defined(anima_dir / "injection.md"):
+    if not file_is_defined(anima_dir / AGENTS_FILE):
         errors.append("injection_undefined")
     if errors:
         payload = _base_state(
@@ -509,7 +511,7 @@ def repair_bootstrap_complete(anima_dir: Path, *, retry_counts_file: Path | None
         return get_bootstrap_status(anima_dir)
 
     archived_bootstrap: list[str] = []
-    bootstrap_file = anima_dir / "bootstrap.md"
+    bootstrap_file = anima_dir / BOOTSTRAP_FILE
     if bootstrap_file.exists():
         archived_bootstrap.append(str(_archive_bootstrap_file(anima_dir, bootstrap_file)))
 

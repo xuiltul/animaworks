@@ -3,7 +3,7 @@ name: newstaff
 description: >-
   AnimaWorks 조직에 새로운 Digital Anima를 고용·생성하는 스킬.
   캐릭터 시트(Markdown)를 히어링에 기반하여 작성하고, CLI 명령어(animaworks anima create)로
-  identity/injection/permissions등을 일괄 생성한다. 생성 후에는 bootstrap으로 자체 정비.
+  IDENTITY/SOUL/AGENTS/permissions 등을 일괄 생성한다. 생성 후에는 bootstrap으로 자체 정비.
   「새로운 사원을 만들어」「사람을 고용해서」「새로운 사원」「고용」「Anima 작성」「채용」「팀 멤버를 늘리기」「인원 추가」「부하를 만들기」「스태프 추가」「hire」「recruit」「team member」
 ---
 
@@ -90,11 +90,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 | モデル | {model name — ユーザーが指定した時だけ書く} |
 | credential | {ユーザーがモデルを指定した時だけ書く} |
 
-## 人格 (→ identity.md)
+## 人格 (→ SOUL.md)
 
 {Personality, speaking style, values, backstory, appearance, etc.}
 
-## 役割・行動方針 (→ injection.md)
+## 役割・行動方針 (→ AGENTS.md)
 
 {Responsible areas, decision criteria, reporting rules, conduct standards, etc.}
 
@@ -102,11 +102,11 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 
 {If omitted: default template applied}
 
-## 定期業務 (→ heartbeat.md, cron.md) [省略可]
+## 定期業務 (→ HEARTBEAT.md, cron.md) [省略可]
 
 {If omitted: generic template applied. New Anima self-adjusts in bootstrap}
 
-## 初回起動指示 (→ bootstrap.md 追加指示) [省略可]
+## 初回起動指示 (→ BOOTSTRAP.md 追加指示) [省略可]
 
 {If omitted: standard bootstrap only}
 ```
@@ -117,7 +117,7 @@ animaworks anima create --from-md /tmp/{english_name}.md --name {english_name} -
 이로써 다음이 자동 실행된다:
 - 디렉터리 구조 일괄 생성
 - skeleton 파일 배치
-- bootstrap.md 배치
+- BOOTSTRAP.md 배치
 - status.json 생성 (supervisor 포함)
 - config.json 등록 (model, supervisor 등)
 - 생략 섹션에 기본값 적용
@@ -161,8 +161,8 @@ Bash: curl -s -X POST "${ANIMAWORKS_SERVER_URL:-http://localhost:18500}"/api/sys
 ⚠️ 아바타 이미지 생성은 보고하지 않음 (새 Anima 자신이 bootstrap에서 생성)
 
 ### 이후는 새 Anima 자신이 자율적으로 실행:
-- identity.md / injection.md 충실화
-- heartbeat.md / cron.md 자기 설계
+- IDENTITY.md / SOUL.md / AGENTS.md 충실화
+- HEARTBEAT.md / cron.md 자기 설계
 - 아바타 이미지 생성 (상급자 참조 포함)
 - 상급자에게 착임 보고
 - 첫 번째 작은 일 (사용자에게 도움이 되는 것)에 착수하고, 결과를 상급자에게 보고

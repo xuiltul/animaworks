@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.messaging.messenger import Messenger
 from core.tooling.handler import ToolHandler
 from core.tooling.handler_base import meeting_context
 from core.tooling.handler_base import meeting_mode as meeting_mode_var

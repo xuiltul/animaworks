@@ -21,7 +21,7 @@ def _layout(tmp_path: Path) -> Path:
 
     # Active anima
     (animas / "sakura").mkdir()
-    (animas / "sakura" / "identity.md").write_text("# sakura\n", encoding="utf-8")
+    (animas / "sakura" / "IDENTITY.md").write_text("# sakura\n", encoding="utf-8")
     # Tombstoned anima still on disk
     (animas / "oldbot").mkdir()
     (animas / "oldbot" / "status.json").write_text(

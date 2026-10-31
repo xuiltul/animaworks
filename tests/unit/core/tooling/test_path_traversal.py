@@ -273,7 +273,7 @@ class TestCreateAnimaPathTraversal:
         handler = _make_handler(tmp_path)
 
         result = handler._handle_create_anima(
-            {"character_sheet_path": "../../other_anima/identity.md"},
+            {"character_sheet_path": "../../other_anima/IDENTITY.md"},
         )
 
         assert "PermissionDenied" in result

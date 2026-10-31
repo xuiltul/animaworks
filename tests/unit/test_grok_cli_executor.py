@@ -51,7 +51,7 @@ _REAL_GROK_QUOTA_ERROR = "API error (status 402 Payment Required): Grok Build us
 def anima_dir(tmp_path: Path) -> Path:
     path = tmp_path / "animas" / "test-grok"
     path.mkdir(parents=True)
-    (path / "identity.md").write_text("# Test Grok Anima", encoding="utf-8")
+    (path / "IDENTITY.md").write_text("# Test Grok Anima", encoding="utf-8")
     return path
 
 

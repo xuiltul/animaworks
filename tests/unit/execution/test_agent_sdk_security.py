@@ -53,8 +53,8 @@ def anima_dir(animas_dir: Path) -> Path:
     d = animas_dir / "test-anima"
     d.mkdir()
     (d / "permissions.md").write_text("", encoding="utf-8")
-    (d / "identity.md").write_text("", encoding="utf-8")
-    (d / "bootstrap.md").write_text("", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("", encoding="utf-8")
+    (d / "BOOTSTRAP.md").write_text("", encoding="utf-8")
     (d / "knowledge").mkdir()
     return d
 
@@ -63,7 +63,7 @@ def anima_dir(animas_dir: Path) -> Path:
 def other_anima_dir(animas_dir: Path) -> Path:
     d = animas_dir / "other-anima"
     d.mkdir()
-    (d / "identity.md").write_text("secret", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("secret", encoding="utf-8")
     (d / "episodes").mkdir()
     return d
 
@@ -74,8 +74,12 @@ def other_anima_dir(animas_dir: Path) -> Path:
 class TestConstants:
     def test_protected_files_contains_expected(self):
         assert "permissions.md" in _PROTECTED_FILES
+        assert "IDENTITY.md" in _PROTECTED_FILES
+        assert "SOUL.md" in _PROTECTED_FILES
+        assert "AGENTS.md" in _PROTECTED_FILES
+        assert "BOOTSTRAP.md" in _PROTECTED_FILES
         assert "identity.md" in _PROTECTED_FILES
-        assert "bootstrap.md" in _PROTECTED_FILES
+        assert "injection.md" in _PROTECTED_FILES
         assert "status.json" in _PROTECTED_FILES
 
     def test_protected_files_is_frozenset(self):
@@ -101,14 +105,23 @@ class TestCheckA1FileAccess:
         assert "protected file" in result
 
     def test_write_to_own_identity_blocked(self, anima_dir: Path):
-        """identity.md is protected — personality baseline stays fixed."""
-        path = str(anima_dir / "identity.md")
+        """IDENTITY.md is protected — the profile baseline stays fixed."""
+        path = str(anima_dir / "IDENTITY.md")
         result = _check_a1_file_access(path, anima_dir, write=True)
         assert result is not None
         assert "protected file" in result
 
+    @pytest.mark.parametrize(
+        "name",
+        ["IDENTITY.md", "identity.MD", "SOUL.md", "soul.md", "AGENTS.md", "agents.Md", "injection.md"],
+    )
+    def test_protected_write_names_are_case_insensitive_and_include_legacy(self, anima_dir: Path, name: str):
+        result = _check_a1_file_access(str(anima_dir / name), anima_dir, write=True)
+        assert result is not None
+        assert "protected file" in result
+
     def test_write_to_own_bootstrap_blocked(self, anima_dir: Path):
-        path = str(anima_dir / "bootstrap.md")
+        path = str(anima_dir / "BOOTSTRAP.md")
         result = _check_a1_file_access(path, anima_dir, write=True)
         assert result is not None
         assert "protected file" in result
@@ -191,7 +204,7 @@ class TestCheckA1FileAccess:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        path = str(other_anima_dir / "identity.md")
+        path = str(other_anima_dir / "IDENTITY.md")
         result = _check_a1_file_access(path, anima_dir, write=False)
         assert result is not None
         assert "other anima" in result.lower()
@@ -229,8 +242,8 @@ class TestCheckA1FileAccess:
         assert "permissions.global.json" in result
 
     def test_write_to_own_heartbeat_allowed(self, anima_dir: Path):
-        """heartbeat.md is not protected."""
-        path = str(anima_dir / "heartbeat.md")
+        """HEARTBEAT.md is not protected."""
+        path = str(anima_dir / "HEARTBEAT.md")
         result = _check_a1_file_access(path, anima_dir, write=True)
         assert result is None
 
@@ -247,9 +260,9 @@ class TestCheckA1FileAccess:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        """Supervisor can read direct subordinate's injection.md."""
-        mgmt = [other_anima_dir / "injection.md"]
-        path = str(other_anima_dir / "injection.md")
+        """Supervisor can read direct subordinate's AGENTS.md."""
+        mgmt = [other_anima_dir / "AGENTS.md"]
+        path = str(other_anima_dir / "AGENTS.md")
         result = _check_a1_file_access(
             path,
             anima_dir,
@@ -263,9 +276,9 @@ class TestCheckA1FileAccess:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        """Supervisor can write direct subordinate's injection.md."""
-        mgmt = [other_anima_dir / "injection.md"]
-        path = str(other_anima_dir / "injection.md")
+        """Supervisor can write direct subordinate's AGENTS.md."""
+        mgmt = [other_anima_dir / "AGENTS.md"]
+        path = str(other_anima_dir / "AGENTS.md")
         result = _check_a1_file_access(
             path,
             anima_dir,
@@ -296,8 +309,8 @@ class TestCheckA1FileAccess:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        desc_read = [other_anima_dir / "identity.md"]
-        path = str(other_anima_dir / "identity.md")
+        desc_read = [other_anima_dir / "IDENTITY.md"]
+        path = str(other_anima_dir / "IDENTITY.md")
         result = _check_a1_file_access(
             path,
             anima_dir,
@@ -312,8 +325,8 @@ class TestCheckA1FileAccess:
         other_anima_dir: Path,
     ):
         """descendant_read_files should NOT grant write access."""
-        desc_read = [other_anima_dir / "identity.md"]
-        path = str(other_anima_dir / "identity.md")
+        desc_read = [other_anima_dir / "IDENTITY.md"]
+        path = str(other_anima_dir / "IDENTITY.md")
         result = _check_a1_file_access(
             path,
             anima_dir,
@@ -327,8 +340,8 @@ class TestCheckA1FileAccess:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        desc_read = [other_anima_dir / "injection.md"]
-        path = str(other_anima_dir / "injection.md")
+        desc_read = [other_anima_dir / "AGENTS.md"]
+        path = str(other_anima_dir / "AGENTS.md")
         result = _check_a1_file_access(
             path,
             anima_dir,
@@ -392,7 +405,7 @@ class TestCheckA1BashCommand:
         anima_dir: Path,
         other_anima_dir: Path,
     ):
-        cmd = f"cp {other_anima_dir}/identity.md ./stolen.md"
+        cmd = f"cp {other_anima_dir}/IDENTITY.md ./stolen.md"
         result = _check_a1_bash_command(cmd, anima_dir)
         assert result is not None
         assert "other anima" in result.lower()
@@ -426,7 +439,7 @@ class TestCheckA1BashCommand:
         other_anima_dir: Path,
     ):
         """Non-write commands like 'cat' are not checked."""
-        cmd = f"cat {other_anima_dir}/identity.md"
+        cmd = f"cat {other_anima_dir}/IDENTITY.md"
         result = _check_a1_bash_command(cmd, anima_dir)
         assert result is None
 

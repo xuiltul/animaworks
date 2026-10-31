@@ -677,7 +677,7 @@ def _make_handler_with_hierarchy(tmp_path: Path, *, anima_name: str = "sakura") 
         (d / "state").mkdir(exist_ok=True)
         (d / "state" / "pending").mkdir(exist_ok=True)
         (d / "activity_log").mkdir(exist_ok=True)
-        for fname in ("cron.md", "heartbeat.md", "status.json", "injection.md", "identity.md"):
+        for fname in ("cron.md", "HEARTBEAT.md", "status.json", "AGENTS.md", "IDENTITY.md"):
             (d / fname).write_text("", encoding="utf-8")
         (d / "state" / "current_state.md").write_text("", encoding="utf-8")
         (d / "state" / "pending.md").write_text("", encoding="utf-8")
@@ -708,7 +708,7 @@ def _make_handler_with_hierarchy(tmp_path: Path, *, anima_name: str = "sakura") 
 
 
 class TestDescendantManagementFilePermission:
-    """Only cron.md and heartbeat.md remain direct-write management files."""
+    """Only cron.md and HEARTBEAT.md remain direct-write management files."""
 
     def test_grandchild_cron_readable(self, tmp_path):
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
@@ -722,26 +722,26 @@ class TestDescendantManagementFilePermission:
 
     def test_grandchild_heartbeat_readable(self, tmp_path):
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        result = handler._check_file_permission(str(animas_dir / "natsume" / "heartbeat.md"))
+        result = handler._check_file_permission(str(animas_dir / "natsume" / "HEARTBEAT.md"))
         assert result is None
 
     def test_grandchild_heartbeat_writable(self, tmp_path):
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        result = handler._check_file_permission(str(animas_dir / "natsume" / "heartbeat.md"), write=True)
+        result = handler._check_file_permission(str(animas_dir / "natsume" / "HEARTBEAT.md"), write=True)
         assert result is None
 
     def test_grandchild_injection_and_status_are_not_directly_writable(self, tmp_path):
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        for filename in ("injection.md", "status.json"):
+        for filename in ("AGENTS.md", "status.json"):
             result = handler._check_file_permission(str(animas_dir / "natsume" / filename), write=True)
             assert result is not None
 
     def test_grandchild_identity_read_only(self, tmp_path):
-        """identity.md must remain read-only even for descendants."""
+        """IDENTITY.md must remain read-only even for descendants."""
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        result = handler._check_file_permission(str(animas_dir / "natsume" / "identity.md"))
+        result = handler._check_file_permission(str(animas_dir / "natsume" / "IDENTITY.md"))
         assert result is None
-        result = handler._check_file_permission(str(animas_dir / "natsume" / "identity.md"), write=True)
+        result = handler._check_file_permission(str(animas_dir / "natsume" / "IDENTITY.md"), write=True)
         assert result is not None
 
     def test_grandchild_root_dir_listable(self, tmp_path):
@@ -751,10 +751,10 @@ class TestDescendantManagementFilePermission:
 
     def test_direct_child_management_files_match_root_ownership(self, tmp_path):
         handler, animas_dir = _make_handler_with_hierarchy(tmp_path)
-        for fname in ("cron.md", "heartbeat.md"):
+        for fname in ("cron.md", "HEARTBEAT.md"):
             result = handler._check_file_permission(str(animas_dir / "hinata" / fname), write=True)
             assert result is None, f"Write to direct child {fname} should be allowed"
-        for fname in ("status.json", "injection.md"):
+        for fname in ("status.json", "AGENTS.md"):
             result = handler._check_file_permission(str(animas_dir / "hinata" / fname), write=True)
             assert result is not None, f"Write to root-owned {fname} should be denied"
 
@@ -913,7 +913,7 @@ class TestSdkHooksDescendantManagementFiles:
 
         natsume_dir = (animas_dir / "natsume").resolve()
         mgmt_names = {p.name for p in sub_mgmt_files if p.parent == natsume_dir}
-        assert mgmt_names == {"cron.md", "heartbeat.md", "status.json", "injection.md"}
+        assert mgmt_names == {"cron.md", "HEARTBEAT.md", "status.json", "SOUL.md", "AGENTS.md"}
 
     def test_direct_child_mgmt_files_still_present(self, tmp_path):
         from core.execution.engines.claude._sdk_hooks import _cache_subordinate_paths
@@ -942,4 +942,4 @@ class TestSdkHooksDescendantManagementFiles:
 
         hinata_dir = (animas_dir / "hinata").resolve()
         mgmt_names = {p.name for p in sub_mgmt_files if p.parent == hinata_dir}
-        assert mgmt_names == {"cron.md", "heartbeat.md", "status.json", "injection.md"}
+        assert mgmt_names == {"cron.md", "HEARTBEAT.md", "status.json", "SOUL.md", "AGENTS.md"}

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from core.anima.workspace_files import AGENTS_FILE
 from core.migrations.registry import MigrationStep, StepResult
 from core.platform.status_store import update_status
 
@@ -154,7 +155,7 @@ _SCRATCH_INJECTION_OLD_LINES: dict[str, str] = {
 def _scratch_injection_new_line(locale: str) -> str | None:
     from core.paths import TEMPLATES_DIR
 
-    template = TEMPLATES_DIR / locale / "anima_templates" / "dev-engineer" / "injection.md"
+    template = TEMPLATES_DIR / locale / "anima_templates" / "dev-engineer" / AGENTS_FILE
     if not template.is_file():
         return None
     for line in template.read_text(encoding="utf-8").splitlines():

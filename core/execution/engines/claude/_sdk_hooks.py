@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import AGENTS_FILE, HEARTBEAT_FILE, IDENTITY_FILE, SOUL_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -83,10 +85,10 @@ def _cache_subordinate_paths(
         (sub_activity_dirs, sub_mgmt_files, peer_activity_dirs,
          descendant_read_files, descendant_read_dirs)
 
-    - sub_mgmt_files: all descendants' cron.md, heartbeat.md, status.json,
-      injection.md (read/write)
-    - descendant_read_files: all descendants' identity.md, injection.md,
-      status.json, state files (read-only)
+    - sub_mgmt_files: all descendants' cron.md, HEARTBEAT.md, status.json,
+      SOUL.md, AGENTS.md (read/write)
+    - descendant_read_files: all descendants' IDENTITY.md, SOUL.md,
+      AGENTS.md, status.json, state files (read-only)
     - descendant_read_dirs: all descendants' state/plans/ (read-only dir)
     """
     sub_activity_dirs: list[Path] = []
@@ -107,11 +109,12 @@ def _cache_subordinate_paths(
             sub_dir = (animas_dir / sub_name).resolve()
             sub_activity_dirs.append(sub_dir / "activity_log")
 
-            for fname in ("cron.md", "heartbeat.md", "status.json", "injection.md"):
+            for fname in ("cron.md", HEARTBEAT_FILE, "status.json", SOUL_FILE, AGENTS_FILE):
                 sub_mgmt_files.append(sub_dir / fname)
 
-            descendant_read_files.append(sub_dir / "identity.md")
-            descendant_read_files.append(sub_dir / "injection.md")
+            descendant_read_files.append(sub_dir / IDENTITY_FILE)
+            descendant_read_files.append(sub_dir / SOUL_FILE)
+            descendant_read_files.append(sub_dir / AGENTS_FILE)
             descendant_read_files.append(sub_dir / "status.json")
             descendant_read_files.append(sub_dir / "state" / "current_state.md")
             descendant_read_files.append(sub_dir / "state" / "task_queue.jsonl")

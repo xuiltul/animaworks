@@ -16,21 +16,21 @@ from __future__ import annotations
 
 import asyncio
 import json
-from core.time_utils import now_jst
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from core.runtime.ipc import IPCResponse
+from core.time_utils import now_jst
+from server.stream_registry import StreamRegistry
 from server.supervisor.manager import (
     HealthConfig,
     ProcessSupervisor,
     RestartPolicy,
 )
 from server.supervisor.process_handle import ProcessHandle, ProcessState, ProcessStats
-from server.stream_registry import StreamRegistry
-
 
 # ── Fixtures ──────────────────────────────────────────────────
 
@@ -453,8 +453,6 @@ class TestBootstrapLifecycle:
 
 def _make_test_app_with_supervisor(supervisor: ProcessSupervisor) -> FastAPI:
     """Build a test FastAPI app wired to the given supervisor."""
-    from fastapi import FastAPI
-
     from server.routes.chat import create_chat_router
 
     app = FastAPI()

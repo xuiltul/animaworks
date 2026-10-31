@@ -62,7 +62,7 @@ def test_resolve_sender_source_known_anima_dir(tmp_path: Path) -> None:
 
     anima_dir = tmp_path / "animas" / "alice"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("# alice\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# alice\n", encoding="utf-8")
     with (
         patch("core.paths.get_animas_dir", return_value=tmp_path / "animas"),
         patch("core.config.models.load_config", side_effect=Exception("no config")),

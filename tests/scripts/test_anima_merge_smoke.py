@@ -12,7 +12,7 @@ def _create_animas(data_dir: Path) -> tuple[Path, Path]:
     target = data_dir / "animas" / "target"
     for anima, name in ((source, "source"), (target, "target")):
         anima.mkdir(parents=True)
-        (anima / "identity.md").write_text(f"# {name}\n", encoding="utf-8")
+        (anima / "IDENTITY.md").write_text(f"# {name}\n", encoding="utf-8")
         (anima / "status.json").write_text('{"enabled": true}\n', encoding="utf-8")
         (anima / "state").mkdir()
     return source, target

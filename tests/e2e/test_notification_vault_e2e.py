@@ -20,7 +20,6 @@ from core.config.models import (
 from core.notification.notifier import HumanNotifier
 from core.tooling.handler import ToolHandler
 
-
 # ── Fixtures ──────────────────────────────────────────────────
 
 

@@ -156,7 +156,7 @@ class AgentCore(
         self._tool_handler.on_message_sent = fn
 
     def set_on_schedule_changed(self, fn: Callable[[str], None] | None) -> None:
-        """Inject a callback invoked when heartbeat.md or cron.md is modified."""
+        """Inject a callback invoked when HEARTBEAT.md or cron.md is modified."""
         self._tool_handler.on_schedule_changed = fn
 
     def set_task_cwd(self, cwd: Path | None) -> None:

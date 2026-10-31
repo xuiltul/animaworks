@@ -85,7 +85,7 @@ def _setup_anima_with_assets(
     """Create an anima directory with optional assets and prompt.txt."""
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(
+    (anima_dir / "IDENTITY.md").write_text(
         f"# {name}\nA test anima.\n",
         encoding="utf-8",
     )

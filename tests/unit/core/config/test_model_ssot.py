@@ -15,7 +15,6 @@ import pytest
 
 from core.config.models import update_status_model
 
-
 # ── update_status_model ────────────────────────────────────
 
 

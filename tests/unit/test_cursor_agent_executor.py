@@ -43,7 +43,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d.mkdir(parents=True)
     (d / "shortterm" / "chat").mkdir(parents=True)
     (d / "shortterm" / "heartbeat").mkdir(parents=True)
-    (d / "identity.md").write_text("# Test Cursor Anima", encoding="utf-8")
+    (d / "IDENTITY.md").write_text("# Test Cursor Anima", encoding="utf-8")
     (d / "state").mkdir()
     (d / "state" / "current_state.md").write_text("status: idle\n", encoding="utf-8")
     return d
@@ -115,6 +115,17 @@ class TestWorkspace:
         executor._ensure_workspace()
         assert executor._workspace.is_dir()
         assert (executor._workspace / ".cursor").is_dir()
+
+    def test_ensure_workspace_ignores_root_agents_md(self, executor, anima_dir):
+        ignore_path = anima_dir / ".cursorignore"
+        ignore_path.write_text("custom.log\n", encoding="utf-8")
+
+        executor._ensure_workspace()
+        executor._ensure_workspace()
+
+        lines = ignore_path.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "custom.log"
+        assert lines.count("/AGENTS.md") == 1
 
     def test_write_mcp_config(self, executor):
         executor._ensure_workspace()
@@ -1074,33 +1085,33 @@ class TestCursorRules:
 
     def test_write_cursor_rules_creates_files(self, executor, anima_dir):
         executor._ensure_workspace()
-        (anima_dir / "identity.md").write_text("# Test Identity", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test Identity", encoding="utf-8")
         (anima_dir / "permissions.md").write_text("# Permissions", encoding="utf-8")
 
         executor._write_cursor_rules()
 
         rules_dir = executor._workspace / ".cursor" / "rules"
-        assert (rules_dir / "identity.md").exists()
-        assert (rules_dir / "identity.md").read_text(encoding="utf-8") == "# Test Identity"
+        assert (rules_dir / "IDENTITY.md").exists()
+        assert (rules_dir / "IDENTITY.md").read_text(encoding="utf-8") == "# Test Identity"
         assert (rules_dir / "permissions.md").exists()
         assert (rules_dir / "permissions.md").read_text(encoding="utf-8") == "# Permissions"
 
     def test_write_cursor_rules_skips_empty(self, executor, anima_dir):
         executor._ensure_workspace()
-        (anima_dir / "identity.md").write_text("", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("", encoding="utf-8")
 
         executor._write_cursor_rules()
 
         rules_dir = executor._workspace / ".cursor" / "rules"
-        assert not (rules_dir / "identity.md").exists()
+        assert not (rules_dir / "IDENTITY.md").exists()
 
     def test_write_cursor_rules_skips_unchanged(self, executor, anima_dir):
         executor._ensure_workspace()
-        (anima_dir / "identity.md").write_text("# Same Content", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Same Content", encoding="utf-8")
 
         rules_dir = executor._workspace / ".cursor" / "rules"
         rules_dir.mkdir(parents=True, exist_ok=True)
-        dest = rules_dir / "identity.md"
+        dest = rules_dir / "IDENTITY.md"
         dest.write_text("# Same Content", encoding="utf-8")
         mtime_before = dest.stat().st_mtime
 
@@ -1113,7 +1124,7 @@ class TestCursorRules:
 
     def test_write_cursor_rules_missing_files_no_error(self, executor, anima_dir):
         executor._ensure_workspace()
-        (anima_dir / "identity.md").unlink(missing_ok=True)
+        (anima_dir / "IDENTITY.md").unlink(missing_ok=True)
         (anima_dir / "permissions.md").unlink(missing_ok=True)
 
         executor._write_cursor_rules()

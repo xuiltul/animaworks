@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.platform.env import get_env
 
 # AnimaWorks - Digital Anima Framework
@@ -422,7 +423,7 @@ class RAGRepairService:
         for anima_dir in sorted(animas_dir.iterdir()):
             if (
                 not anima_dir.is_dir()
-                or not (anima_dir / "identity.md").is_file()
+                or not (anima_dir / IDENTITY_FILE).is_file()
                 or not self._anima_enabled(anima_dir)
             ):
                 continue

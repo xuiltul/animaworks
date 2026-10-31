@@ -29,12 +29,12 @@ def test_openclaw_apply_writes_only_drafts_redacts_credentials_and_preserves_ide
     data_dir = tmp_path / "runtime"
     anima_dir = data_dir / "animas" / "mei"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("existing identity", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("existing identity", encoding="utf-8")
     (anima_dir / "permissions.json").write_text('{"existing": true}', encoding="utf-8")
 
     report = import_openclaw(OpenClawImportOptions(source_path=source, data_dir=data_dir, target_anima="mei", apply=True))
 
-    assert (anima_dir / "identity.md").read_text(encoding="utf-8") == "existing identity"
+    assert (anima_dir / "IDENTITY.md").read_text(encoding="utf-8") == "existing identity"
     assert (anima_dir / "permissions.json").read_text(encoding="utf-8") == '{"existing": true}'
     draft_text = "\n".join(
         path.read_text(encoding="utf-8")

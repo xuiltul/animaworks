@@ -117,7 +117,7 @@ class TestFindAnimasWithMissingAssets:
             anima_dir = animas_dir / name
             assets_dir = anima_dir / "assets"
             assets_dir.mkdir(parents=True)
-            (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
+            (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
             for filename in REQUIRED_ASSETS.values():
                 (assets_dir / filename).write_bytes(b"fake")
 
@@ -134,21 +134,21 @@ class TestFindAnimasWithMissingAssets:
         complete_dir = animas_dir / "alice"
         assets_dir = complete_dir / "assets"
         assets_dir.mkdir(parents=True)
-        (complete_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (complete_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
         # Incomplete anima
         incomplete_dir = animas_dir / "bob"
         incomplete_dir.mkdir(parents=True)
-        (incomplete_dir / "identity.md").write_text("# Bob", encoding="utf-8")
+        (incomplete_dir / "IDENTITY.md").write_text("# Bob", encoding="utf-8")
 
         result = find_animas_with_missing_assets(animas_dir, image_style="anime")
         assert len(result) == 1
         assert result[0][0] == "bob"
 
     def test_skips_dirs_without_identity(self, tmp_path: Path) -> None:
-        """Directories without identity.md are ignored."""
+        """Directories without IDENTITY.md are ignored."""
         from core.anima.asset_reconciler import find_animas_with_missing_assets
 
         animas_dir = tmp_path / "animas"
@@ -171,7 +171,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Alice\nimage_prompt: 1girl, black hair, red eyes\n",
             encoding="utf-8",
         )
@@ -185,7 +185,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Alice\n外見: 1girl, blue hair\n",
             encoding="utf-8",
         )
@@ -199,7 +199,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Alice\nJust an anima.\n",
             encoding="utf-8",
         )
@@ -209,7 +209,7 @@ class TestExtractPrompt:
 
     @pytest.mark.asyncio
     async def test_returns_none_no_identity(self, tmp_path: Path) -> None:
-        """Returns None when identity.md doesn't exist."""
+        """Returns None when IDENTITY.md doesn't exist."""
         from core.anima.asset_reconciler import _extract_prompt
 
         anima_dir = tmp_path / "anima"
@@ -224,7 +224,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Alice\nNo prompt field here.\n",
             encoding="utf-8",
         )
@@ -244,7 +244,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\n\n| 項目 | 設定 |\n|------|------|\n| 髪色 | 黒 |\n| 瞳の色 | 赤 |\n",
             encoding="utf-8",
         )
@@ -275,7 +275,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\n| 髪色 | 青 |\n",
             encoding="utf-8",
         )
@@ -308,7 +308,7 @@ class TestExtractPrompt:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\n| 髪色 | 黒 |\n",
             encoding="utf-8",
         )
@@ -334,12 +334,12 @@ class TestExtractPrompt:
 
     @pytest.mark.asyncio
     async def test_no_appearance_table_returns_none(self, tmp_path: Path) -> None:
-        """Returns None when identity.md has no appearance table."""
+        """Returns None when IDENTITY.md has no appearance table."""
         from core.anima.asset_reconciler import _extract_prompt
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\n\nJust personality description, no table.\n",
             encoding="utf-8",
         )
@@ -411,7 +411,7 @@ class TestReconcileAnimaAssets:
         anima_dir = tmp_path / "anima"
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
@@ -430,7 +430,7 @@ class TestReconcileAnimaAssets:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\nNo prompt here.",
             encoding="utf-8",
         )
@@ -460,7 +460,7 @@ class TestReconcileAnimaAssets:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Test", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test", encoding="utf-8")
 
         mock_result = MagicMock()
         mock_result.fullbody_path = anima_dir / "assets" / "avatar_fullbody.png"
@@ -496,7 +496,7 @@ class TestReconcileAnimaAssets:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\nimage_prompt: 1girl\n",
             encoding="utf-8",
         )
@@ -521,7 +521,7 @@ class TestReconcileAnimaAssets:
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Test\nimage_prompt: 1girl\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Test\nimage_prompt: 1girl\n", encoding="utf-8")
         caplog.set_level(logging.WARNING, logger="animaworks.asset_reconciler")
 
         with patch("core.integrations.image_gen.ImageGenPipeline", side_effect=RuntimeError("API down")) as pipeline:
@@ -543,7 +543,7 @@ class TestReconcileAnimaAssets:
 
         anima_dir = tmp_path / "concurrent-test"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Test\nimage_prompt: 1girl\n",
             encoding="utf-8",
         )
@@ -573,7 +573,7 @@ class TestReconcileAllAssets:
         anima_dir = animas_dir / "alice"
         assets_dir = anima_dir / "assets"
         assets_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Alice", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Alice", encoding="utf-8")
         for filename in REQUIRED_ASSETS.values():
             (assets_dir / filename).write_bytes(b"fake")
 
@@ -589,7 +589,7 @@ class TestReconcileAllAssets:
         for name in ("aoi", "rin"):
             anima_dir = animas_dir / name
             anima_dir.mkdir(parents=True)
-            (anima_dir / "identity.md").write_text(
+            (anima_dir / "IDENTITY.md").write_text(
                 f"# {name}\nimage_prompt: 1girl, {name}\n",
                 encoding="utf-8",
             )
@@ -622,7 +622,7 @@ class TestReconcileAllAssets:
         animas_dir = tmp_path / "animas"
         anima_dir = animas_dir / "aoi"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Aoi\nimage_prompt: 1girl\n",
             encoding="utf-8",
         )
@@ -688,9 +688,9 @@ async def test_first_profile_wait_does_not_record_asset_failure(tmp_path):
 
     anima_dir = tmp_path / "newcomer"
     anima_dir.mkdir()
-    (anima_dir / "identity.md").write_text("# Identity\n未定義\n", encoding="utf-8")
-    (anima_dir / "injection.md").write_text("未定義\n", encoding="utf-8")
-    (anima_dir / "bootstrap.md").write_text("First conversation", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Identity\n未定義\n", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("未定義\n", encoding="utf-8")
+    (anima_dir / "BOOTSTRAP.md").write_text("First conversation", encoding="utf-8")
     assert get_bootstrap_status(anima_dir)["needs_user_input"]
     with patch("core.anima.asset_reconciler._extract_prompt", new_callable=AsyncMock) as extract:
         result = await reconcile_anima_assets(anima_dir)

@@ -27,7 +27,7 @@ class TestWebSocketRoute:
 
         client = TestClient(app)
         with patch("server.routes.websocket_route.load_auth", return_value=_LOCAL_TRUST_AUTH):
-            with client.websocket_connect("/ws") as ws:
+            with client.websocket_connect("/ws"):
                 assert len(ws_manager.active_connections) == 1
 
         # After disconnect

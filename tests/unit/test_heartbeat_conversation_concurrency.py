@@ -50,8 +50,8 @@ def anima(tmp_path: Path) -> DigitalAnima:
         d.mkdir(parents=True, exist_ok=True)
 
     # Write minimal required files
-    (anima_dir / "identity.md").write_text("# Test Anima", encoding="utf-8")
-    (anima_dir / "injection.md").write_text("Test injection", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Test Anima", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("Test injection", encoding="utf-8")
     (anima_dir / "status.json").write_text(
         '{"enabled": true, "role": "general", "model": "claude-sonnet-4-6"}',
         encoding="utf-8",

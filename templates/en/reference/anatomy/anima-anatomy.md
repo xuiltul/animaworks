@@ -7,14 +7,15 @@ Use when: checking "what is this file for" or "can I change it myself."
 
 ```
 ~/.animaworks/animas/{name}/
-├── identity.md          # あなたの人格（性格・話し方・考え方）
-├── injection.md         # あなたの職務（職責・行動指針・必須手順）
+├── IDENTITY.md          # Your profile (name, appearance, image color)
+├── SOUL.md              # Your personality (character, voice, values)
+├── AGENTS.md            # Your job (responsibilities, behavioral guidelines, required procedures)
 ├── specialty_prompt.md  # ロール別専門プロンプト
 ├── character_sheet.md   # 作成時の設計図（参照用）
 ├── permissions.json       # 権限（使えるツール・アクセス範囲）
 ├── status.json          # 設定情報（モデル・パラメータ）
-├── bootstrap.md         # 初回起動指示（完了後に削除）
-├── heartbeat.md         # 定期巡回の設定
+├── BOOTSTRAP.md         # 初回起動指示（完了後に削除）
+├── HEARTBEAT.md         # 定期巡回の設定
 ├── cron.md              # 定時タスクの設定
 ├── state/               # 作業状態
 │   ├── current_state.md
@@ -36,30 +37,47 @@ This classification serves as the basis for "who is allowed to modify which file
 
 | Classification | Files | Reason |
 |------|---------|------|
-| **Inside the capsule** (thoughts, memories) | `identity.md`, `episodes/`, `knowledge/`, `procedures/`, `skills/`, `state/`, `shortterm/` | Personality, experience, and learning belong to the individual. Cannot be modified externally |
-| **Boundary of the capsule** (interface between organization and individual) | `injection.md`, `cron.md`, `heartbeat.md`, `permissions.json` | Organization settings owned by root. Supervisors can edit `cron.md` / `heartbeat.md`; other files are changed via root-managed API/CLI |
+| **Inside the capsule** (thoughts, memories) | `IDENTITY.md`, `SOUL.md`, `episodes/`, `knowledge/`, `procedures/`, `skills/`, `state/`, `shortterm/` | Profile, personality, experience, and learning belong to the individual. Cannot be modified externally |
+| **Boundary of the capsule** (interface between organization and individual) | `AGENTS.md`, `cron.md`, `HEARTBEAT.md`, `permissions.json` | Organization settings owned by root. Supervisors can edit `cron.md` / `HEARTBEAT.md`; other files are changed via root-managed API/CLI |
 | **Outside the capsule** (administrative information) | `status.json`, `specialty_prompt.md` | Settings handled by the root server and the CLI during shutdown. Cannot be written directly from the Anima process |
 
 - Changing the **inside** means "becoming a different person" or "losing memories." This is not permitted
 - Changing the **boundary** means "changing jobs" or "changing the scope of work." This is legitimate for organizational operations, but is done via root-owned APIs/tools
 - Changing the **outside** has no direct effect on the individual's personality or behavior
 
-> **Relationship between growth and identity.md**: identity.md is the immutable baseline of personality (temperament) and cannot be rewritten by Anima itself. "Growth" is expressed through accumulation in `knowledge/` (lessons learned), `procedures/` (procedures acquired), and `skills/` (skills refined). Even if identity.md is fixed, behavior reliably changes through the accumulation of memories—this is the model of "the same person growing." If changes are needed, a human administrator uses root-managed API/CLI. Write requests during bootstrap are also authorized and saved by root.
+> **Relationship between growth and IDENTITY.md / SOUL.md**: IDENTITY.md (profile and appearance) and SOUL.md (personality and values) are immutable baselines and cannot be rewritten by Anima itself. "Growth" is expressed through accumulation in `knowledge/` (lessons learned), `procedures/` (procedures acquired), and `skills/` (skills refined). Even if IDENTITY.md / SOUL.md are fixed, behavior reliably changes through the accumulation of memories—this is the model of "the same person growing." If changes are needed, a human administrator uses root-managed API/CLI. Write requests during bootstrap are also authorized and saved by root.
 
 ---
 
-## Your Identity
+## Your Profile and Personality (IDENTITY / SOUL)
 
-### identity.md — Who You Are
+### IDENTITY.md — Your Profile and Appearance
+
+**Your name, basic profile, appearance, image color, and AI model information.**
+
+- Name, age setting, affiliation, role, supervisor
+- Appearance, height, hair color, eye color
+- Image color
+- AI model information
+
+IDENTITY.md is the **immutable baseline** of your profile and appearance. Changing it changes how others see you.
+
+| Item | Value |
+|------|-----|
+| Modification permission | In principle, not changed. Only supervisor or administrator |
+| Modification frequency | Immutable (fixed at creation) |
+| Impact of modification | Profile and appearance change |
+
+### SOUL.md — Your Character and Values
 
 **Your "personality" itself.**
 
-- Name, age setting, appearance image
 - Tone of speech, manner of speaking, phrasing
 - Thinking habits, values, decision-making principles
 - Preferences, interests
+- Catchphrase, beliefs
 
-identity.md is the **immutable baseline** of your personality. Changing this makes you a "different person."
+SOUL.md is the **immutable baseline** of your personality. Changing this makes you a "different person."
 
 | Item | Value |
 |------|-----|
@@ -69,7 +87,7 @@ identity.md is the **immutable baseline** of your personality. Changing this mak
 
 ### character_sheet.md — Blueprint
 
-A copy of the Markdown file used at creation. The source material for identity.md and injection.md.
+A copy of the Markdown file used at creation. The source material for IDENTITY.md / SOUL.md and AGENTS.md.
 Saved for reference purposes; normally not modified.
 
 | Item | Value |
@@ -79,9 +97,9 @@ Saved for reference purposes; normally not modified.
 
 ---
 
-## Your Job (injection)
+## Your Job (AGENTS)
 
-### injection.md — What you do
+### AGENTS.md — What you do
 
 **Your professional duties, responsibilities, and approach to work.**
 
@@ -90,7 +108,7 @@ Saved for reference purposes; normally not modified.
 - Reporting obligations, escalation criteria
 - **Procedures that must never be skipped** (e.g., not disclosing confidential information externally, confirming before operating in production environments)
 
-injection.md is your **mutable behavioral guideline**. Authorized supervisors or human administrators can request changes via root, and writes during bootstrap are also authorized by root. Do not write directly from the Anima process.
+AGENTS.md is your **mutable behavioral guideline**. Authorized supervisors or human administrators can request changes via root, and writes during bootstrap are also authorized by root. Do not write directly from the Anima process.
 
 | Item | Value |
 |------|-----|
@@ -98,23 +116,24 @@ injection.md is your **mutable behavioral guideline**. Authorized supervisors or
 | Change frequency | As needed (when work changes) |
 | Impact of change | Changing behavioral guidelines is like changing jobs |
 
-### Difference Between identity and injection
+### Difference Between IDENTITY.md / SOUL.md and AGENTS.md
 
 This is the most important distinction:
 
-| | identity.md | injection.md |
-|--|------------|-------------|
-| What it defines | **Who you are** (personality) | **What you do** (job) |
-| Human analogy | Innate temperament and personality | Chosen profession and workplace rules |
-| What happens if changed | Become a different person | Change jobs |
-| Whether modifiable | In principle, immutable | Updated as needed |
-| What it includes | Speech style, thinking, values | Responsibilities, procedures, behavioral norms |
+| | IDENTITY.md | SOUL.md | AGENTS.md |
+|--|------------|----------|-------------|
+| What it defines | **Profile and appearance** (name, appearance) | **Who you are** (personality) | **What you do** (job) |
+| Human analogy | Registry, profile, and appearance | Innate temperament and personality | Chosen profession and workplace rules |
+| What happens if changed | How others see you changes | Become a different person | Change jobs |
+| Whether modifiable | In principle, immutable | In principle, immutable | Updated as needed |
+| What it includes | Name, basic profile, appearance, image color | Speech style, thinking, values, individuality | Responsibilities, procedures, behavioral norms |
 
 **Specific examples:**
-- "Speak with polite honorifics" → identity (speech personality)
-- "Always run tests before production deployment" → injection (work procedure)
-- "Cautious personality that crosses bridges after checking them" → identity (thinking habit)
-- "Report security incidents to the supervisor immediately" → injection (job rule)
+- "158cm tall, silver hair" → IDENTITY.md (appearance)
+- "Speak with polite honorifics" → SOUL.md (speech personality)
+- "Always run tests before production deployment" → AGENTS.md (work procedure)
+- "Cautious personality that crosses bridges after checking them" → SOUL.md (thinking habit)
+- "Report security incidents to the supervisor immediately" → AGENTS.md (job rule)
 
 ### specialty_prompt.md — Specialized Prompt
 
@@ -173,9 +192,9 @@ Your **Single Source of Truth (SSoT)** for execution parameters.
 | Change permission | CLI command or administrator. Supervisor can change via `set_subordinate_model` |
 | Change frequency | Anytime |
 
-### bootstrap.md — Initial Startup Instruction
+### BOOTSTRAP.md — Initial Startup Instruction
 
-A file that exists only at the first startup. Instructs the enrichment of identity and injection, and the initial design of heartbeat and cron. Automatically deleted after completion.
+A file that exists only at the first startup. Instructs the enrichment of IDENTITY.md / SOUL.md and AGENTS.md, and the initial design of HEARTBEAT.md and cron.md. Automatically deleted after completion.
 
 | Item | Value |
 |------|-----|
@@ -186,7 +205,7 @@ A file that exists only at the first startup. Instructs the enrichment of identi
 
 ## Periodic Actions
 
-### heartbeat.md — Periodic Patrol
+### HEARTBEAT.md — Periodic Patrol
 
 **Configuration for automatically starting at fixed intervals to check the situation and make plans.**
 Like a human periodically checking the inbox and reviewing ongoing work.
@@ -230,7 +249,7 @@ command: /usr/local/bin/backup.sh
 
 ### Difference Between heartbeat and cron
 
-| | heartbeat.md | cron.md |
+| | HEARTBEAT.md | cron.md |
 |--|-------------|---------|
 | Purpose | Check the situation and make plans | Execute fixed tasks |
 | Trigger | Fixed interval (default 30 minutes) | Specified time (cron expression) |
@@ -305,14 +324,15 @@ Asset files such as character images and 3D models.
 
 | File | Modification permission | Modification frequency |
 |---------|---------|---------|
-| `identity.md` | In principle, immutable (administrator only) | Immutable |
+| `IDENTITY.md` | In principle, immutable (administrator only) | Immutable |
+| `SOUL.md` | In principle, immutable (administrator only) | Immutable |
 | `character_sheet.md` | Reference only | Immutable |
-| `injection.md` | Self / supervisor | As needed |
+| `AGENTS.md` | Self / supervisor | As needed |
 | `specialty_prompt.md` | System automatic | Rare |
 | `permissions.json` | Supervisor / administrator | Rare |
 | `status.json` | CLI / administrator / supervisor | As needed |
-| `bootstrap.md` | Once only | Deleted |
-| `heartbeat.md` | Self / supervisor | As needed |
+| `BOOTSTRAP.md` | Once only | Deleted |
+| `HEARTBEAT.md` | Self / supervisor | As needed |
 | `cron.md` | Self / supervisor | As needed |
 | `state/*` | Self (via tools) | As needed |
 | `episodes/` | System automatic | Daily |

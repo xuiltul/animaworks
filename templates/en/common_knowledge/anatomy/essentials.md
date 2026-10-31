@@ -46,7 +46,7 @@ Both are mechanisms that "run without human instruction," but their purposes are
 | **Purpose** | Situation check, planning, reflection | Execution of assigned work |
 | **Does it execute?** | **No**. If it finds a task, it only submits it via `submit_tasks` or `delegate_task` | **Yes**. LLM type thinks and executes; Command type executes immediately |
 | **Interval** | Fixed interval (default 30 minutes, varies with Activity Level) | Flexibly specified with cron syntax (every day at 9:00, every Friday at 17:00, etc.) |
-| **Configuration file** | `heartbeat.md` (checklist) | `cron.md` (task definition) |
+| **Configuration file** | `HEARTBEAT.md` (checklist) | `cron.md` (task definition) |
 | **Typical examples** | Checking unread messages, detecting blockers, progress reflection | Morning work planning, weekly reports, running backups |
 
 **If unsure**: "Just check and decide" → add to the Heartbeat checklist. "Do something at a fixed time" → define as a Cron task.

@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.schemas import CronTask
 from core.runtime.scheduler_manager import SchedulerManager
+from core.schemas import CronTask
 
 
 @pytest.fixture

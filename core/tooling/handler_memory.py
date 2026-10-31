@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
 from core.tooling._handler_protocols import (
     _MemoryToolsHost,
 )
@@ -51,6 +59,33 @@ _CASE_RECORD_SHA_RE = re.compile(
 _CASE_RECORD_DATE_RE = re.compile(
     r"(?<!\d)(?:19|20)\d{2}(?:-\d{1,2}-\d{1,2}|/\d{1,2}/\d{1,2}|年\d{1,2}月\d{1,2}日)(?!\d)"
 )
+
+_PROMPT_SETTING_FILES = {
+    "identity": IDENTITY_FILE,
+    "soul": SOUL_FILE,
+    "agents": AGENTS_FILE,
+    "injection": AGENTS_FILE,
+}
+_PROMPT_SETTINGS_BY_FILE = {
+    IDENTITY_FILE: "identity",
+    SOUL_FILE: "soul",
+    AGENTS_FILE: "agents",
+}
+
+
+def _legacy_workspace_name(rel: str, legacy_names: set[str] | frozenset[str]) -> str | None:
+    """Return the legacy basename when *rel* points at an anima workspace root file."""
+    parts = rel.split("/")
+    if len(parts) == 1 and parts[0] in legacy_names:
+        return parts[0]
+    if len(parts) == 3 and parts[0] == ".." and parts[2] in legacy_names:
+        return parts[2]
+    return None
+
+
+def _replace_workspace_basename(rel: str, new_name: str) -> str:
+    parent, sep, _old = rel.rpartition("/")
+    return f"{parent}/{new_name}" if sep else new_name
 
 
 def _looks_like_case_record(content: str) -> bool:
@@ -457,7 +492,7 @@ class MemoryToolsMixin:
             for d in sorted(animas_dir.iterdir()):
                 if not d.is_dir() or d.name == self._anima_name:
                     continue
-                if not (d / "identity.md").exists():
+                if not (d / IDENTITY_FILE).exists():
                     continue
                 if d.name.lower() in query_lower:
                     matched_name = d.name
@@ -750,6 +785,20 @@ class MemoryToolsMixin:
             return self._handle_read_channel({"channel": norm.channel_redirect})
         rel = args["path"] = norm.rel
 
+        redirect_note = ""
+        legacy_identity_read = _legacy_workspace_name(rel, {LEGACY_IDENTITY}) is not None
+        if legacy_identity_read:
+            rel = args["path"] = _replace_workspace_basename(rel, IDENTITY_FILE)
+        else:
+            legacy_name = _legacy_workspace_name(rel, frozenset(LEGACY_RENAMES))
+            if legacy_name is not None:
+                redirect_note = t(
+                    "handler.memory_file_renamed",
+                    old=legacy_name,
+                    new=LEGACY_RENAMES[legacy_name],
+                )
+                rel = args["path"] = _replace_workspace_basename(rel, LEGACY_RENAMES[legacy_name])
+
         if rel == "state/current_task.md":
             rel = args["path"] = "state/current_state.md"
 
@@ -852,7 +901,8 @@ class MemoryToolsMixin:
         err = self._check_file_permission(str(path))
         if err:
             return err
-        if path.exists() and path.is_file():
+        soul_path = path.with_name(SOUL_FILE) if legacy_identity_read else None
+        if (path.exists() and path.is_file()) or (soul_path is not None and soul_path.is_file()):
             # Block loading of skills with blocked trust_level or dangerous scan verdict
             if self._is_skill_path(rel):
                 try:
@@ -879,9 +929,16 @@ class MemoryToolsMixin:
             self._record_skill_view_if_applicable(rel)
             self._record_memory_file_used(rel)
 
-            content = path.read_text(encoding="utf-8")
+            content = path.read_text(encoding="utf-8") if path.is_file() else ""
+            if soul_path is not None:
+                soul_content = soul_path.read_text(encoding="utf-8") if soul_path.is_file() else ""
+                content = "\n\n".join(part for part in (content, soul_content) if part)
+                self._read_paths.add(rel)
+                self._read_paths.add(_replace_workspace_basename(rel, SOUL_FILE))
             if ext_origin is not None and rel.endswith("SKILL.md"):
                 content = f"> Real directory: {ext_origin}\n{content}"
+            if redirect_note:
+                content = f"{content}\n\n{redirect_note}" if content else redirect_note
             lines = content.splitlines(keepends=True)
             MAX_LINES = 2000
             if len(lines) > MAX_LINES:
@@ -980,6 +1037,9 @@ class MemoryToolsMixin:
         if not isinstance(mode, str) or mode not in {"overwrite", "append"}:
             return _error_result("InvalidArguments", "Root-owned settings support overwrite or append only")
         target_dir = self._anima_dir.parent / target_name
+        filename = _PROMPT_SETTING_FILES.get(setting)
+        if filename is None:
+            return _error_result("InvalidArguments", f"Unknown prompt setting: {setting}")
         from core.platform.process_role import get_process_role
 
         role = get_process_role()
@@ -988,20 +1048,21 @@ class MemoryToolsMixin:
         if role == "root" or (role == "cli" and not settings_server_running()):
             try:
                 if mode == "append":
-                    path = target_dir / f"{setting}.md"
+                    path = target_dir / filename
                     content = (path.read_text(encoding="utf-8") if path.is_file() else "") + content
-                if setting == "identity":
-                    from core.anima.settings_store import write_identity
+                from core.anima.settings_store import write_agents, write_identity, write_soul
 
-                    write_identity(target_dir, content)
-                else:
-                    from core.anima.settings_store import write_injection
-
-                    write_injection(target_dir, content)
+                writer = {
+                    "identity": write_identity,
+                    "soul": write_soul,
+                    "agents": write_agents,
+                    "injection": write_agents,
+                }[setting]
+                writer(target_dir, content)
             except Exception as exc:
-                return _error_result("WriteError", f"Failed to update {setting}.md: {exc}")
-            self._activity.log("memory_write", summary=f"../{target_name}/{setting}.md (offline root settings)")
-            return f"Written to ../{target_name}/{setting}.md through the offline root settings store"
+                return _error_result("WriteError", f"Failed to update {filename}: {exc}")
+            self._activity.log("memory_write", summary=f"../{target_name}/{filename} (offline root settings)")
+            return f"Written to ../{target_name}/{filename} through the offline root settings store"
 
         from urllib.parse import quote
 
@@ -1028,8 +1089,8 @@ class MemoryToolsMixin:
                 "HostAPIError",
             )
             return _error_result(error_type, response_detail(response))
-        self._activity.log("memory_write", summary=f"../{target_name}/{setting}.md (root API)")
-        return f"Written to ../{target_name}/{setting}.md through the root settings API"
+        self._activity.log("memory_write", summary=f"../{target_name}/{filename} (root API)")
+        return f"Written to ../{target_name}/{filename} through the root settings API"
 
     def _write_memory_scope(self: _MemoryToolsHost, request: _MemoryWriteRequest) -> _MemoryWriteOutcome:
         scope = next(
@@ -1053,6 +1114,21 @@ class MemoryToolsMixin:
                 }
             )
         rel = args["path"] = norm.rel
+
+        redirect_note = ""
+        if _legacy_workspace_name(rel, {LEGACY_IDENTITY}) is not None:
+            return _error_result(
+                "InvalidArguments",
+                t("handler.identity_write_rejected", old=LEGACY_IDENTITY),
+            )
+        legacy_name = _legacy_workspace_name(rel, frozenset(LEGACY_RENAMES))
+        if legacy_name is not None:
+            redirect_note = t(
+                "handler.memory_file_renamed",
+                old=legacy_name,
+                new=LEGACY_RENAMES[legacy_name],
+            )
+            rel = args["path"] = _replace_workspace_basename(rel, LEGACY_RENAMES[legacy_name])
 
         if rel == "state/current_task.md":
             rel = args["path"] = "state/current_state.md"
@@ -1112,11 +1188,14 @@ class MemoryToolsMixin:
                 target_relative = None
             if target_relative is not None and len(target_relative.parts) == 2:
                 target_name, filename = target_relative.parts
-                if filename in {"identity.md", "injection.md"}:
+                if filename in _PROMPT_SETTINGS_BY_FILE:
                     if "content" not in args or not isinstance(content, str):
                         return _error_result("InvalidArguments", "content must be a string")
-                    setting = filename.removesuffix(".md")
-                    return self._write_root_prompt_setting(target_name, setting, content, mode)
+                    setting = _PROMPT_SETTINGS_BY_FILE[filename]
+                    result = self._write_root_prompt_setting(target_name, setting, content, mode)
+                    if redirect_note:
+                        result = f"{result}\n\n{redirect_note}"
+                    return result
 
         # Security check: block protected files and path traversal
         if not self._superuser and not rel.startswith(("common_knowledge/", "common_skills/")):
@@ -1188,7 +1267,10 @@ class MemoryToolsMixin:
         finally:
             if lock:
                 lock.release()
-        return self._complete_memory_write(request, auto_frontmatter_applied=outcome.auto_frontmatter_applied)
+        result = self._complete_memory_write(request, auto_frontmatter_applied=outcome.auto_frontmatter_applied)
+        if redirect_note:
+            result = f"{result}\n\n{redirect_note}"
+        return result
 
     def _complete_memory_write(
         self: _MemoryToolsHost,
@@ -1254,7 +1336,7 @@ class MemoryToolsMixin:
         return t("handler.similar_knowledge_hint", files=lines)
 
     def _reload_schedule_if_needed(self: _MemoryToolsHost, rel: str) -> None:
-        if rel not in ("heartbeat.md", "cron.md") or not self._on_schedule_changed:
+        if rel not in (HEARTBEAT_FILE, "cron.md") or not self._on_schedule_changed:
             return
         try:
             self._on_schedule_changed(self._anima_name)

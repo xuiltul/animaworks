@@ -216,9 +216,8 @@ class TestEdgeCases:
         with patch(
             "core.config.models.load_config",
             side_effect=RuntimeError("config broken"),
-        ):
-            with pytest.raises(exc.ToolExecutionError) as ctx:
-                handler.handle("disable_subordinate", {"name": "hinata"})
+        ), pytest.raises(exc.ToolExecutionError) as ctx:
+            handler.handle("disable_subordinate", {"name": "hinata"})
 
         assert "config" in str(ctx.value).lower()
 

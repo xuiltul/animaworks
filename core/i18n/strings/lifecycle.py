@@ -55,41 +55,41 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "heartbeat.heartbeat_md_cleanup_required": {
         "ja": (
-            "【要圧縮】heartbeat.md が {current_kb}KB あり、上限 {max_kb}KB を超えています。"
+            "【要圧縮】HEARTBEAT.md が {current_kb}KB あり、上限 {max_kb}KB を超えています。"
             "このファイルは毎回の heartbeat プロンプトに丸ごと読み込まれるため、肥大すると毎回の巡回が重くなり、"
-            "恒常の手順が経緯の中に埋もれます。本題に入る前に heartbeat.md を自分で書き直してください: "
+            "恒常の手順が経緯の中に埋もれます。本題に入る前に HEARTBEAT.md を自分で書き直してください: "
             "(1) 特定の PR 番号・日付に紐づく経緯や事例、終わった案件のゲート・観測項目は削除する"
             "（経緯は episodes と knowledge に残っている）、"
             "(2) 同じルールの重複は 1 か所にまとめる、"
             "(3) 毎回の巡回で使う判断と手順の要点だけを残す。詳しいコマンドや手順は procedures/ 配下のファイルに移し、"
-            "heartbeat.md にはその参照1行を残す、"
+            "HEARTBEAT.md にはその参照1行を残す、"
             "(4) 「## 活動時間」「## 通知ルール」セクションは変えない。"
             "{archive_notice}"
-            '書き直し後は {target_kb}KB 以内を目安とし、write_memory_file(path="heartbeat.md", mode="overwrite") で保存する。'
+            '書き直し後は {target_kb}KB 以内を目安とし、write_memory_file(path="HEARTBEAT.md", mode="overwrite") で保存する。'
         ),
         "en": (
-            "[Compaction required] Your heartbeat.md is {current_kb}KB, over the {max_kb}KB limit. "
+            "[Compaction required] Your HEARTBEAT.md is {current_kb}KB, over the {max_kb}KB limit. "
             "This file is loaded in full into every heartbeat prompt, so bloat makes every run heavier "
-            "and buries the recurring steps under case history. Before the main task, rewrite heartbeat.md yourself: "
+            "and buries the recurring steps under case history. Before the main task, rewrite HEARTBEAT.md yourself: "
             "(1) delete history and examples tied to specific PR numbers or dates, and gates/observation items "
             "for finished cases (their history remains in episodes and knowledge), "
             "(2) merge duplicated rules into one place, "
             "(3) keep only the decision and procedure essentials used on every run. Move detailed commands and procedures "
-            "to files under procedures/ and leave a one-line pointer in heartbeat.md, "
+            "to files under procedures/ and leave a one-line pointer in HEARTBEAT.md, "
             "(4) leave the '## 活動時間' and '## 通知ルール' sections unchanged. "
             "{archive_notice} "
-            'Aim for {target_kb}KB or less and save with write_memory_file(path="heartbeat.md", mode="overwrite").'
+            'Aim for {target_kb}KB or less and save with write_memory_file(path="HEARTBEAT.md", mode="overwrite").'
         ),
         "ko": (
-            "[압축 필요] heartbeat.md가 {current_kb}KB이며 상한 {max_kb}KB를 초과했습니다. "
+            "[압축 필요] HEARTBEAT.md가 {current_kb}KB이며 상한 {max_kb}KB를 초과했습니다. "
             "이 파일은 매 heartbeat 프롬프트에 전체 포함되므로 비대해지면 매번 실행이 무거워지고 반복 절차가 이력에 묻힙니다. "
-            "주 작업 전에 heartbeat.md를 직접 다시 작성하세요: "
+            "주 작업 전에 HEARTBEAT.md를 직접 다시 작성하세요: "
             "(1) 특정 PR 번호·날짜에 연결된 이력·사례와 완료된 건의 게이트·관찰 항목은 삭제하세요 "
             "(이력은 episodes와 knowledge에 남아 있습니다). (2) 중복 규칙은 한곳으로 합치세요. "
             "(3) 매번 순회에서 사용하는 판단과 절차의 핵심만 남기세요. 자세한 명령과 절차는 procedures/ 아래 파일로 옮기고 "
-            "heartbeat.md에는 해당 참조를 한 줄 남기세요. "
+            "HEARTBEAT.md에는 해당 참조를 한 줄 남기세요. "
             "(4) '## 活動時間' 및 '## 通知ルール' 섹션은 변경하지 마세요. {archive_notice} "
-            '정리 후 {target_kb}KB 이내를 목표로 하고 write_memory_file(path="heartbeat.md", mode="overwrite")로 저장하세요.'
+            '정리 후 {target_kb}KB 이내를 목표로 하고 write_memory_file(path="HEARTBEAT.md", mode="overwrite")로 저장하세요.'
         ),
     },
     "heartbeat.heartbeat_md_archive_notice": {

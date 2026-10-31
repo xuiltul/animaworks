@@ -15,8 +15,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from core.schemas import CycleResult
 from core.runtime.ipc import IPCRequest, IPCResponse
+from core.schemas import CycleResult
 from core.time_utils import now_jst
 
 # ── CycleResult model_dump(mode="json") Tests ────────────────────────

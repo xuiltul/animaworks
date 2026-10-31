@@ -232,7 +232,7 @@ There is no such state as "waiting until conditions are met" or "blocked" (`bloc
    - The permission description injected into the system prompt is text formatted by the runtime from the JSON
 
 2. **Check whether the operation is permitted**
-   - In principle, you can read and write within your own `anima_dir` (except protected files like `identity.md`). Read access to your supervisor's or colleagues' `activity_log` and subordinate `state/` is reflected in `file_access` of `check_permissions` depending on the role
+   - In principle, you can read and write within your own `anima_dir` (except protected files like `IDENTITY.md` / `SOUL.md`). Read access to your supervisor's or colleagues' `activity_log` and subordinate `state/` is reflected in `file_access` of `check_permissions` depending on the role
    - Shell commands: `commands` of `permissions.json` (follow allow/deny）. Global dangerous patterns are also blocked on the framework side)
 
 3. **If you need additional permissions**

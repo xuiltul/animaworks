@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -155,7 +163,10 @@ def _mode_s_file_access_error(
     if decision.reason == "global_permissions":
         return "permissions.global.json cannot be modified via Mode S tools"
     if decision.reason == "protected_file":
-        if str(decision.protected_path).endswith(("identity.md", "injection.md")):
+        prompt_files = tuple(
+            name.casefold() for name in (IDENTITY_FILE, SOUL_FILE, AGENTS_FILE, LEGACY_IDENTITY, *LEGACY_RENAMES)
+        )
+        if str(decision.protected_path).casefold().endswith(prompt_files):
             return (
                 f"'{decision.protected_path}' is a protected file (root-owned setting); "
                 "use write_memory_file with this path to update it"

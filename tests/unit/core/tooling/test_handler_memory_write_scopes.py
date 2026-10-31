@@ -82,7 +82,7 @@ def writer(tmp_path: Path) -> _WriteHandler:
         ("common_knowledge", "common_knowledge/shared.md", "common_knowledge/shared.md", None, None, False),
         ("common_skills", "common_skills/guide.md", "common_skills/guide.md", None, None, False),
         ("shortterm", "shortterm/session.md", "shortterm/session.md", None, None, False),
-        ("root", "heartbeat.md", "heartbeat.md", None, None, False),
+        ("root", "HEARTBEAT.md", "HEARTBEAT.md", None, None, False),
     ],
 )
 def test_each_memory_scope_writes_to_its_destination_and_updates_expected_indexes(
@@ -204,14 +204,14 @@ def test_protected_path_and_path_traversal_are_rejected(writer: _WriteHandler) -
     writer._superuser = False
     outside = writer._anima_dir.parent / "outside.md"
 
-    protected = writer._handle_write_memory_file({"path": "identity.md", "content": "replacement"})
+    protected = writer._handle_write_memory_file({"path": "IDENTITY.md", "content": "replacement"})
     traversed = writer._handle_write_memory_file(
         {"path": "../outside.md", "content": "escape"},
     )
 
     assert json.loads(protected)["error_type"] == "PermissionDenied"
     assert json.loads(traversed)["error_type"] == "PermissionDenied"
-    assert not (writer._anima_dir / "identity.md").exists()
+    assert not (writer._anima_dir / "IDENTITY.md").exists()
     assert not outside.exists()
 
 
@@ -289,3 +289,63 @@ def test_episode_archive_failure_does_not_overwrite_existing_content(writer: _Wr
     assert "WriteError" in result
     assert "archive unavailable" in result
     assert episode.read_text(encoding="utf-8") == "original episode"
+
+
+def test_legacy_identity_read_concatenates_identity_and_soul(writer: _WriteHandler) -> None:
+    (writer._anima_dir / "IDENTITY.md").write_text("# Identity: Alice\n\nProfile", encoding="utf-8")
+    (writer._anima_dir / "SOUL.md").write_text("# Soul: Alice\n\nPersonality", encoding="utf-8")
+
+    result = writer._handle_read_memory_file({"path": "identity.md"})
+
+    assert "Profile" in result
+    assert "Personality" in result
+    assert result.index("Profile") < result.index("Personality")
+
+
+@pytest.mark.parametrize(
+    ("legacy", "canonical"),
+    [
+        ("injection.md", "AGENTS.md"),
+        ("heartbeat.md", "HEARTBEAT.md"),
+        ("bootstrap.md", "BOOTSTRAP.md"),
+    ],
+)
+def test_legacy_read_redirects_to_canonical_file(writer: _WriteHandler, legacy: str, canonical: str) -> None:
+    (writer._anima_dir / canonical).write_text(f"content of {canonical}", encoding="utf-8")
+
+    result = writer._handle_read_memory_file({"path": legacy})
+
+    assert f"content of {canonical}" in result
+    assert canonical in result
+
+
+@pytest.mark.parametrize(
+    ("legacy", "canonical"),
+    [
+        ("injection.md", "AGENTS.md"),
+        ("heartbeat.md", "HEARTBEAT.md"),
+        ("bootstrap.md", "BOOTSTRAP.md"),
+    ],
+)
+def test_legacy_write_redirects_to_canonical_file(
+    writer: _WriteHandler,
+    monkeypatch: pytest.MonkeyPatch,
+    legacy: str,
+    canonical: str,
+) -> None:
+    monkeypatch.setattr("core.anima.settings_store.settings_server_running", lambda: False)
+    monkeypatch.setattr("core.platform.process_role.get_process_role", lambda: "cli")
+
+    result = writer._handle_write_memory_file({"path": legacy, "content": f"new {canonical}"})
+
+    assert (writer._anima_dir / canonical).read_text(encoding="utf-8") == f"new {canonical}"
+    assert canonical in result
+
+
+def test_legacy_identity_write_is_rejected(writer: _WriteHandler) -> None:
+    result = writer._handle_write_memory_file({"path": "identity.md", "content": "should not be written"})
+
+    assert "InvalidArguments" in result
+    assert "SOUL.md" in result
+    assert "IDENTITY.md" in result
+    assert not (writer._anima_dir / "IDENTITY.md").exists()

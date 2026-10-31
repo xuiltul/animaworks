@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """E2E tests for org-structure-config-sync feature.
 
-Tests the full pipeline of supervisor synchronization between identity.md /
+Tests the full pipeline of supervisor synchronization between IDENTITY.md /
 status.json on disk and config.json, including:
 
-1. register_anima_in_config reads supervisor from identity.md/status.json
+1. register_anima_in_config reads supervisor from IDENTITY.md/status.json
 2. sync_org_structure repairs missing/null supervisors in a realistic scenario
 3. Server startup triggers org sync via create_app
 4. Full pipeline: create_from_md + register_anima_in_config -> supervisor in config
@@ -69,10 +69,10 @@ def _make_anima(
     identity_content: str = "# Identity\nNo supervisor info.",
     status_json: dict | None = None,
 ) -> Path:
-    """Create an anima directory with identity.md and optional status.json."""
+    """Create an anima directory with IDENTITY.md and optional status.json."""
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(identity_content, encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity_content, encoding="utf-8")
     if status_json is not None:
         (anima_dir / "status.json").write_text(
             json.dumps(status_json, ensure_ascii=False),
@@ -85,13 +85,13 @@ def _make_anima(
 
 
 class TestRegisterAnimaSupervisor:
-    """Verify register_anima_in_config reads supervisor from identity.md."""
+    """Verify register_anima_in_config reads supervisor from IDENTITY.md."""
 
     def test_register_picks_up_supervisor_from_identity_md(
         self,
         tmp_path: Path,
     ) -> None:
-        """When identity.md contains '| 上司 | sakura |',
+        """When IDENTITY.md contains '| 上司 | sakura |',
         register_anima_in_config should set supervisor='sakura' in config.json.
         """
         from core.config.models import register_anima_in_config
@@ -105,10 +105,10 @@ class TestRegisterAnimaSupervisor:
 
         _create_config(config_path)
 
-        # Create anima directory with supervisor in identity.md
+        # Create anima directory with supervisor in IDENTITY.md
         anima_dir = animas_dir / "hinata"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# hinata\n\n| 項目 | 設定 |\n|------|------|\n| 上司 | sakura |\n| 誕生日 | 3月21日 |\n",
             encoding="utf-8",
         )
@@ -141,7 +141,7 @@ class TestRegisterAnimaSupervisor:
 
         anima_dir = animas_dir / "kotoha"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# kotoha\nNo supervisor table here.",
             encoding="utf-8",
         )
@@ -177,7 +177,7 @@ class TestRegisterAnimaSupervisor:
 
         anima_dir = animas_dir / "hinata"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | sakura |\n",
             encoding="utf-8",
         )
@@ -206,7 +206,7 @@ class TestRegisterAnimaSupervisor:
 
         anima_dir = animas_dir / "chatbot"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | 琴葉（kotoha） |\n",
             encoding="utf-8",
         )
@@ -232,11 +232,11 @@ class TestSyncOrgStructureRealisticScenario:
         Setup:
         - config.json: sakura(supervisor=null), kotoha(supervisor="sakura"),
           chatwork_checker(supervisor=null)
-        - animas/sakura/identity.md (no 上司 row)
-        - animas/kotoha/identity.md (上司: サクラ(sakura))
-        - animas/chatwork_checker/identity.md (上司: 琴葉（kotoha）)
-        - animas/rin/identity.md (no 上司 row) -- NOT in config.json
-        - animas/aoi/identity.md (no 上司 row) -- NOT in config.json
+        - animas/sakura/IDENTITY.md (no 上司 row)
+        - animas/kotoha/IDENTITY.md (上司: サクラ(sakura))
+        - animas/chatwork_checker/IDENTITY.md (上司: 琴葉（kotoha）)
+        - animas/rin/IDENTITY.md (no 上司 row) -- NOT in config.json
+        - animas/aoi/IDENTITY.md (no 上司 row) -- NOT in config.json
 
         Expected after sync:
         - chatwork_checker: supervisor="kotoha" (was null, repaired)
@@ -262,7 +262,7 @@ class TestSyncOrgStructureRealisticScenario:
             },
         )
 
-        # Create anima directories with identity.md files
+        # Create anima directories with IDENTITY.md files
 
         # sakura: top-level manager, no supervisor
         _make_anima(
@@ -359,7 +359,7 @@ class TestSyncOrgStructureRealisticScenario:
         tmp_path: Path,
     ) -> None:
         """When disk supervisor differs from config, sync updates config
-        because status.json / identity.md is the single source of truth.
+        because status.json / IDENTITY.md is the single source of truth.
         """
         data_dir = tmp_path / "animaworks"
         data_dir.mkdir()
@@ -409,7 +409,7 @@ class TestServerStartupOrgSync:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test that the reconciliation callback in lifespan properly registers
-        a new anima with supervisor extracted from identity.md.
+        a new anima with supervisor extracted from IDENTITY.md.
 
         This simulates what happens when an anima is discovered after app creation
         (e.g., filesystem reconciliation detects a new directory).
@@ -432,10 +432,10 @@ class TestServerStartupOrgSync:
         # Create config with setup_complete=True but no animas
         _create_config(config_path, setup_complete=True)
 
-        # Create an anima on disk with supervisor in identity.md
+        # Create an anima on disk with supervisor in IDENTITY.md
         anima_dir = animas_dir / "newanima"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "# Identity: newanima\n\n| 項目 | 設定 |\n|------|------|\n| 上司 | sakura |\n",
             encoding="utf-8",
         )
@@ -478,7 +478,7 @@ class TestServerStartupOrgSync:
             animas={"sakura": AnimaModelConfig(supervisor=None)},
         )
 
-        # Create an anima with identity.md
+        # Create an anima with IDENTITY.md
         _make_anima(animas_dir, "sakura", "# Identity: sakura\nTop manager.")
 
         # Mock ProcessSupervisor to avoid spawning real processes
@@ -534,7 +534,7 @@ class TestServerStartupOrgSync:
 
             from server.app import create_app
 
-            app = create_app(animas_dir, shared_dir)
+            create_app(animas_dir, shared_dir)
 
         # The lifespan hasn't run yet, but we can simulate the
         # _on_anima_added callback that it registers.
@@ -551,7 +551,7 @@ class TestServerStartupOrgSync:
         assert "new_hire" in cfg.animas
         assert cfg.animas["new_hire"].supervisor is None
 
-        # But for an anima with identity.md on disk, supervisor IS extracted
+        # But for an anima with IDENTITY.md on disk, supervisor IS extracted
         invalidate_cache()
         _make_anima(
             animas_dir,

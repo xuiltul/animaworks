@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from core.time_utils import now_jst
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock
 
 import pytest
 
-from core.runtime.ipc import IPCClient, IPCServer, IPCRequest, IPCResponse
+from core.runtime.ipc import IPCClient, IPCRequest, IPCResponse, IPCServer
+from core.time_utils import now_jst
 from server.supervisor.process_handle import ProcessHandle, ProcessState
 
 
@@ -106,7 +106,7 @@ async def test_ping_counter_reaches_threshold_when_failed():
 @pytest.mark.asyncio
 async def test_health_check_detects_failed_state():
     """E2E: _check_process_health() should detect FAILED state directly."""
-    from server.supervisor.manager import ProcessSupervisor, HealthConfig
+    from server.supervisor.manager import HealthConfig, ProcessSupervisor
 
     with TemporaryDirectory() as tmpdir:
         supervisor = ProcessSupervisor(
@@ -133,7 +133,6 @@ async def test_health_check_detects_failed_state():
 
         # Track if _handle_process_failure was called
         failure_called = False
-        original_handle_failure = supervisor._handle_process_failure
 
         async def mock_handle_failure(name, h):
             nonlocal failure_called

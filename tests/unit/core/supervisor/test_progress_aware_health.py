@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from core.time_utils import now_jst
 from server.supervisor._mgr_health import HealthMixin
 from server.supervisor.manager import HealthConfig
 from server.supervisor.process_handle import ProcessHandle, ProcessState, ProcessStats
-from core.time_utils import now_jst
 
 
 def _make_handle(tmp_path: Path, *, started_minutes_ago: int = 5) -> ProcessHandle:

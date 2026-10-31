@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 
-
 from core.config.models import (
     AnimaWorksConfig,
     HumanNotificationConfig,

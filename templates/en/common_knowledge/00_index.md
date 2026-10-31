@@ -209,8 +209,8 @@ After reading, follow the table of contents below for details on each topic.
 | audio, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
 | WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
 | Anima, self, configuration, design, lifecycle | `anatomy/what-is-anima.md` |
-| identity, injection, personality, behavioral guidelines, immutable, variable | `reference/anatomy/anima-anatomy.md` |
-| permissions.json, bootstrap, heartbeat.md, cron.md | `reference/anatomy/anima-anatomy.md` |
+| IDENTITY.md, SOUL.md, AGENTS.md, personality, profile, behavioral guidelines, immutable, variable | `reference/anatomy/anima-anatomy.md` |
+| permissions.json, bootstrap, HEARTBEAT.md, cron.md | `reference/anatomy/anima-anatomy.md` |
 | memory, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
 | Priming, RAG, Consolidation, Forgetting, forgetting | `reference/anatomy/memory-system.md` |
 | consolidation, 2-phase, multipass, error traces | `reference/anatomy/memory-system.md` |

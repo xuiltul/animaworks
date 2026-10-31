@@ -55,7 +55,7 @@ def _make_anima(
 ) -> Path:
     anima_dir = animas_dir / name
     anima_dir.mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text(identity_content, encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text(identity_content, encoding="utf-8")
     return anima_dir
 
 
@@ -66,7 +66,7 @@ def _make_orphan(
     subdirs: list[str] | None = None,
     files: dict[str, str] | None = None,
 ) -> Path:
-    """Create an orphan directory (no valid identity.md)."""
+    """Create an orphan directory (no valid IDENTITY.md)."""
     orphan_dir = animas_dir / name
     orphan_dir.mkdir(parents=True, exist_ok=True)
     for subdir in subdirs or []:
@@ -226,7 +226,7 @@ class TestOrphanArchiveFullPipeline:
         assert "sakura" in cfg.animas
 
     def test_valid_animas_never_touched(self, tmp_path: Path) -> None:
-        """Valid animas with proper identity.md are never archived."""
+        """Valid animas with proper IDENTITY.md are never archived."""
         data_dir = tmp_path / "animaworks"
         data_dir.mkdir()
         animas_dir = data_dir / "animas"

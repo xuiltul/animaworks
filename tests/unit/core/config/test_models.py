@@ -1146,24 +1146,24 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) == "bob"
 
     def test_from_identity_md(self, tmp_path: Path) -> None:
-        """Falls back to identity.md table when no status.json."""
+        """Falls back to IDENTITY.md table when no status.json."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | charlie |\n",
             encoding="utf-8",
         )
         assert read_anima_supervisor(anima_dir) == "charlie"
 
     def test_status_json_takes_priority(self, tmp_path: Path) -> None:
-        """status.json supervisor wins over identity.md."""
+        """status.json supervisor wins over IDENTITY.md."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         (anima_dir / "status.json").write_text(
             json.dumps({"supervisor": "bob"}),
             encoding="utf-8",
         )
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | charlie |\n",
             encoding="utf-8",
         )
@@ -1180,7 +1180,7 @@ class TestReadAnimaSupervisor:
         assert read_anima_supervisor(anima_dir) is None
 
     def test_empty_dir_returns_none(self, tmp_path: Path) -> None:
-        """Returns None when anima dir has no status.json or identity.md."""
+        """Returns None when anima dir has no status.json or IDENTITY.md."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         assert read_anima_supervisor(anima_dir) is None
@@ -1189,32 +1189,32 @@ class TestReadAnimaSupervisor:
         """Japanese name with parenthesised English name is resolved."""
         anima_dir = tmp_path / "hinata"
         anima_dir.mkdir()
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | 琴葉（kotoha） |\n",
             encoding="utf-8",
         )
         assert read_anima_supervisor(anima_dir) == "kotoha"
 
     def test_invalid_json_falls_back(self, tmp_path: Path) -> None:
-        """Falls back to identity.md when status.json is invalid JSON."""
+        """Falls back to IDENTITY.md when status.json is invalid JSON."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         (anima_dir / "status.json").write_text("bad json", encoding="utf-8")
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | bob |\n",
             encoding="utf-8",
         )
         assert read_anima_supervisor(anima_dir) == "bob"
 
     def test_empty_supervisor_in_status(self, tmp_path: Path) -> None:
-        """Empty supervisor in status.json falls back to identity.md."""
+        """Empty supervisor in status.json falls back to IDENTITY.md."""
         anima_dir = tmp_path / "alice"
         anima_dir.mkdir()
         (anima_dir / "status.json").write_text(
             json.dumps({"supervisor": ""}),
             encoding="utf-8",
         )
-        (anima_dir / "identity.md").write_text(
+        (anima_dir / "IDENTITY.md").write_text(
             "| 上司 | bob |\n",
             encoding="utf-8",
         )

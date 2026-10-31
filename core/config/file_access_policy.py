@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import (
+    AGENTS_FILE,
+    BOOTSTRAP_FILE,
+    HEARTBEAT_FILE,
+    IDENTITY_FILE,
+    LEGACY_IDENTITY,
+    LEGACY_RENAMES,
+    SOUL_FILE,
+)
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -17,13 +27,18 @@ PROTECTED_FILE_PATHS = frozenset(
     {
         "permissions.md",
         "permissions.json",
-        "identity.md",
-        "injection.md",
-        "bootstrap.md",
+        IDENTITY_FILE,
+        SOUL_FILE,
+        AGENTS_FILE,
+        BOOTSTRAP_FILE,
         "status.json",
         "state/bm25_longterm_index.json",
         "state/bm25_longterm_index.dirty",
     }
+) | (
+    # Legacy names are protected too (APFS case folding).  heartbeat.md is
+    # excluded because it only differs from the writable HEARTBEAT.md by case.
+    frozenset({LEGACY_IDENTITY, *LEGACY_RENAMES}) - frozenset({HEARTBEAT_FILE.casefold()})
 )
 
 PROTECTED_DIRECTORY_MARKERS = frozenset({"activity_log"})
@@ -291,6 +306,11 @@ def find_internal_cache_root(path: str | Path, anima_dir: Path) -> Path | None:
     return None
 
 
+def _is_protected_relative(relative: str, protected_files: frozenset[str]) -> bool:
+    """Compare protected file names case-insensitively for APFS compatibility."""
+    return relative.casefold() in {item.casefold() for item in protected_files}
+
+
 def evaluate_protected_write(
     anima_dir: Path,
     path: str | Path,
@@ -306,7 +326,7 @@ def evaluate_protected_write(
 
     relative_path = resolved.relative_to(anima_root)
     relative = str(relative_path)
-    if relative in protected_files:
+    if _is_protected_relative(relative, protected_files):
         return FileAccessDecision(False, "protected_file", protected_path=relative)
     for marker in sorted(protected_directory_markers):
         if marker in relative_path.parts:
@@ -360,7 +380,7 @@ def evaluate_file_access(
             if len(relative.parts) < 2:
                 continue
             anima_relative = Path(*relative.parts[1:])
-            if str(anima_relative) in ctx.protected_files:
+            if _is_protected_relative(str(anima_relative), ctx.protected_files):
                 return FileAccessDecision(False, "protected_file", protected_path=str(anima_relative))
             for marker in sorted(ctx.protected_directory_markers):
                 if marker in anima_relative.parts:

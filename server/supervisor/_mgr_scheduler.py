@@ -19,6 +19,7 @@ from typing import Literal
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from core.anima.workspace_files import IDENTITY_FILE
 from core.memory.rag.store import CollectionExistence
 from core.platform.tasks import spawn
 from core.time_utils import get_app_timezone, now_local
@@ -331,7 +332,7 @@ class SchedulerMixin:
         for anima_dir in sorted(self.animas_dir.iterdir()):
             if not anima_dir.is_dir():
                 continue
-            if not (anima_dir / "identity.md").exists():
+            if not (anima_dir / IDENTITY_FILE).exists():
                 continue
             if not (anima_dir / "status.json").exists():
                 continue

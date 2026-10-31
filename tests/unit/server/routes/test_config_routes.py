@@ -408,7 +408,7 @@ class TestRootOwnedConfigWrites:
         invalidate_cache()
         anima_dir = get_animas_dir() / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("Alice\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("Alice\n", encoding="utf-8")
         (anima_dir / "status.json").write_text("{}", encoding="utf-8")
         app = _make_test_app()
         app.state.supervisor = MagicMock()

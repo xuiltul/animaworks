@@ -64,7 +64,7 @@ def _build(memory, mode: str, anima_dir) -> str:
 def prompt_factory(tmp_path, data_dir):
     anima_dir = tmp_path / "animas" / "alice"
     anima_dir.mkdir(parents=True)
-    (anima_dir / "identity.md").write_text("I am Alice", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("I am Alice", encoding="utf-8")
     (anima_dir / "state").mkdir()
 
     memory = _make_memory(anima_dir, data_dir)

@@ -65,8 +65,8 @@ Mode A のスキーマでは **PascalCase 名**です。`ToolHandler` 内部で�
 - ファイル操作: Read / Write / Edit を優先。Bash での `cat` / `sed` / `awk` は非推奨。
 - 検索: Grep（内容）, Glob（パス）を優先。Bash の `grep` / `find` は非推奨。
 - Anima の記憶ツリー内: **`read_memory_file` / `write_memory_file` / `archive_memory_file`**（相対パス）。プロジェクト全体の絶対パス操作が必要なときに Read / Write を使う、という住み分け。
-- Anima が編集できるスケジュール（`cron.md` / `heartbeat.md`）は、配下の場合も **write memory ツール**で `../{anima_name}/cron.md` のように指定して編集する。
-- `config.json` / `status.json` / `identity.md` / `injection.md` / `permissions.json` は root 所有で、Anima が直接書き込まない。bootstrap 中の identity 作成と許可された上司の injection 変更は `write_memory_file` から root に転送して認可する。他の変更は上司向けツールまたは root CLI/API を使い、Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクトで設定しない。
+- Anima が編集できるスケジュール（`cron.md` / `HEARTBEAT.md`）は、配下の場合も **write memory ツール**で `../{anima_name}/cron.md` のように指定して編集する。
+- `config.json` / `status.json` / `IDENTITY.md` / `SOUL.md` / `AGENTS.md` / `permissions.json` は root 所有で、Anima が直接書き込まない。bootstrap 中の IDENTITY.md / SOUL.md 作成と許可された上司の AGENTS.md 変更は `write_memory_file` から root に転送して認可する。他の変更は上司向けツールまたは root CLI/API を使い、Read / Write / Edit / apply_patch / `Path.write_text` / シェルリダイレクトで設定しない。
 
 ### 探索範囲の上限（暴走防止）
 

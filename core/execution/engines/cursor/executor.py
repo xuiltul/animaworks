@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import AGENTS_FILE, IDENTITY_FILE, SOUL_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -31,7 +33,7 @@ from core.execution.session.session_context import _resolve_session_type
 from core.execution.session.session_ids import EngineSessionIds
 from core.i18n import t
 from core.memory.conversation.shortterm import ShortTermMemory
-from core.platform.atomic_io import atomic_write_json
+from core.platform.atomic_io import atomic_write_json, atomic_write_text
 from core.platform.cursor import (
     find_cursor_agent_binary as _find_cursor_agent_binary,
 )
@@ -99,6 +101,31 @@ class CursorAgentExecutor(CLIStreamExecutor):
         """Create workspace and .cursor directories."""
         self._workspace.mkdir(parents=True, exist_ok=True)
         (self._workspace / ".cursor").mkdir(parents=True, exist_ok=True)
+        self._ignore_root_agents_md()
+
+    def _ignore_root_agents_md(self) -> None:
+        """Stop cursor-agent from auto-loading the anima-root AGENTS.md.
+
+        cursor-agent walks from the workspace to its ancestors and loads
+        ``AGENTS.md`` as project rules.  The workspace lives under the anima
+        directory, so the root ``AGENTS.md`` would be injected a second time
+        on top of the prompt.  A root-relative ``.cursorignore`` entry
+        suppresses only that file while preserving other project rules.
+        """
+        ignore_path = self._anima_dir / ".cursorignore"
+        pattern = f"/{AGENTS_FILE}"
+        try:
+            existing = ignore_path.read_text(encoding="utf-8") if ignore_path.exists() else ""
+        except OSError:
+            logger.debug("Could not read %s", ignore_path, exc_info=True)
+            return
+        if pattern in existing.splitlines():
+            return
+        prefix = existing.rstrip("\n") + "\n" if existing.strip() else ""
+        try:
+            atomic_write_text(ignore_path, f"{prefix}{pattern}\n")
+        except OSError:
+            logger.warning("Could not update %s to ignore %s", ignore_path, AGENTS_FILE, exc_info=True)
 
     def _write_mcp_config(self) -> None:
         """Write .cursor/mcp.json with AnimaWorks MCP server config."""
@@ -124,10 +151,10 @@ class CursorAgentExecutor(CLIStreamExecutor):
     def _write_cursor_rules(self) -> None:
         """Write static identity/rules to .cursor/rules/ for compaction resilience.
 
-        Writes identity.md, behavior_rules.md, and permissions.md into the
-        cursor-agent workspace so they are loaded as persistent rules that
-        survive context compaction.  Skips writing when the file content
-        has not changed (I/O reduction).
+        Writes IDENTITY.md, SOUL.md, behavior_rules.md, and permissions.md
+        into the cursor-agent workspace so they are loaded as persistent
+        rules that survive context compaction.  Skips writing when the file
+        content has not changed (I/O reduction).
         """
         rules_dir = self._workspace / ".cursor" / "rules"
         try:
@@ -137,7 +164,8 @@ class CursorAgentExecutor(CLIStreamExecutor):
             return
 
         file_sources: dict[str, Path] = {
-            "identity.md": self._anima_dir / "identity.md",
+            IDENTITY_FILE: self._anima_dir / IDENTITY_FILE,
+            SOUL_FILE: self._anima_dir / SOUL_FILE,
             "permissions.md": self._anima_dir / "permissions.md",
         }
         for name, src in file_sources.items():

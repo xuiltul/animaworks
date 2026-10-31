@@ -459,7 +459,7 @@ class TestDownloadRiggingAnimations:
             mock_resp.content = b"armature-data"
             mock_get.return_value = mock_resp
 
-            result = client.download_rigging_animations(task)
+            client.download_rigging_animations(task)
 
             # Verify armature URLs were used
             urls_called = [c.args[0] for c in mock_get.call_args_list]
@@ -484,7 +484,7 @@ class TestDownloadRiggingAnimations:
             mock_resp.content = b"full-data"
             mock_get.return_value = mock_resp
 
-            result = client.download_rigging_animations(task)
+            client.download_rigging_animations(task)
 
             urls_called = [c.args[0] for c in mock_get.call_args_list]
             assert "https://example.com/walking_full.glb" in urls_called
@@ -518,13 +518,11 @@ class TestStripMeshFromGlb:
 
         from core.integrations.image_gen import strip_mesh_from_glb
 
-        with patch("shutil.which", return_value="/usr/bin/node"):
-            with patch(
-                "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
-            ):
-                with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "node")):
-                    result = strip_mesh_from_glb(Path("/tmp/test.glb"))
-                    assert result is False
+        with patch("shutil.which", return_value="/usr/bin/node"), patch(
+            "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
+        ), patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "node")):
+            result = strip_mesh_from_glb(Path("/tmp/test.glb"))
+            assert result is False
 
     def test_returns_false_on_timeout(self):
         """Should return False when subprocess times out."""
@@ -532,13 +530,11 @@ class TestStripMeshFromGlb:
 
         from core.integrations.image_gen import strip_mesh_from_glb
 
-        with patch("shutil.which", return_value="/usr/bin/node"):
-            with patch(
-                "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
-            ):
-                with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("node", 120)):
-                    result = strip_mesh_from_glb(Path("/tmp/test.glb"))
-                    assert result is False
+        with patch("shutil.which", return_value="/usr/bin/node"), patch(
+            "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
+        ), patch("subprocess.run", side_effect=subprocess.TimeoutExpired("node", 120)):
+            result = strip_mesh_from_glb(Path("/tmp/test.glb"))
+            assert result is False
 
     def test_uses_node_path_with_temp_script(self, tmp_path):
         """Should write script to temp file and set NODE_PATH for module resolution."""
@@ -569,17 +565,15 @@ class TestStripMeshFromGlb:
 
         from core.integrations.image_gen import strip_mesh_from_glb
 
-        with patch("shutil.which", return_value="/usr/bin/node"):
-            with patch(
-                "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
-            ):
-                with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "node")):
-                    result = strip_mesh_from_glb(Path("/tmp/test.glb"))
-                    assert result is False
-                    # Verify no leftover .cjs files in temp dir
-                    temp_dir = Path(tempfile.gettempdir())
-                    cjs_files = list(temp_dir.glob("tmp*.cjs"))
-                    assert len(cjs_files) == 0, f"Leftover temp files: {cjs_files}"
+        with patch("shutil.which", return_value="/usr/bin/node"), patch(
+            "core.integrations.image_gen._ensure_gltf_transform_modules", return_value=Path("/fake/node_modules")
+        ), patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "node")):
+            result = strip_mesh_from_glb(Path("/tmp/test.glb"))
+            assert result is False
+            # Verify no leftover .cjs files in temp dir
+            temp_dir = Path(tempfile.gettempdir())
+            cjs_files = list(temp_dir.glob("tmp*.cjs"))
+            assert len(cjs_files) == 0, f"Leftover temp files: {cjs_files}"
 
 
 # ── optimize_glb ─────────────────────────────────────────────────
@@ -639,12 +633,12 @@ class TestSimplifyGlb:
         from core.integrations.image_gen import simplify_glb
 
         glb_path = Path("/tmp/test.glb")
-        simp_path = glb_path.with_suffix(".simp.glb")
+        glb_path.with_suffix(".simp.glb")
 
         with patch("shutil.which", return_value="/usr/bin/npx"), patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             # Mock rename and stat
-            with patch.object(Path, "rename") as mock_rename, patch.object(Path, "stat") as mock_stat:
+            with patch.object(Path, "rename"), patch.object(Path, "stat") as mock_stat:
                 mock_stat.return_value.st_size = 5000
                 with patch.object(Path, "unlink"):
                     result = simplify_glb(glb_path, target_ratio=0.27, error_threshold=0.01)
@@ -736,7 +730,7 @@ class TestCompressTextures:
 
         with patch("shutil.which", return_value="/usr/bin/npx"):
             with patch("subprocess.run", side_effect=side_effect):
-                with patch.object(Path, "rename") as mock_rename:
+                with patch.object(Path, "rename"):
                     with patch.object(Path, "unlink"):
                         result = compress_textures(Path("/tmp/test.glb"))
                         # Should still return True (resize worked)

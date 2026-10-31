@@ -38,7 +38,7 @@ class TestPixelOnlyReconcile:
         anima_dir = tmp_path / "pixel-only"
         assets = anima_dir / "assets"
         assets.mkdir(parents=True)
-        (anima_dir / "identity.md").write_text("# Pixel\n", encoding="utf-8")
+        (anima_dir / "IDENTITY.md").write_text("# Pixel\n", encoding="utf-8")
         for key, filename in asset_reconciler.REQUIRED_ASSETS.items():
             if key == "pixel_sheet":
                 continue

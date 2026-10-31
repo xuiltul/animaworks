@@ -176,13 +176,13 @@ def _whole_reply_phone_session(
 
 class TestBuildVoiceFrontPrompt:
     def test_deterministic_across_turns(self, tmp_path: Path) -> None:
-        (tmp_path / "identity.md").write_text("## あなたは元気な助手です", encoding="utf-8")
+        (tmp_path / "IDENTITY.md").write_text("## あなたは元気な助手です", encoding="utf-8")
         first = build_voice_front_prompt(tmp_path, anima_name="taro")
         second = build_voice_front_prompt(tmp_path, anima_name="taro")
         assert first == second  # fixed system prompt → prefix cache friendly
 
     def test_includes_persona_identity_and_rules(self, tmp_path: Path) -> None:
-        (tmp_path / "identity.md").write_text("IDENTITY_TEXT", encoding="utf-8")
+        (tmp_path / "IDENTITY.md").write_text("IDENTITY_TEXT", encoding="utf-8")
         (tmp_path / "specialty_prompt.md").write_text("SPECIALTY_TEXT", encoding="utf-8")
         prompt = build_voice_front_prompt(tmp_path, anima_name="taro")
         assert "IDENTITY_TEXT" in prompt

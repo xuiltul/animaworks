@@ -13,12 +13,12 @@ from httpx import ASGITransport, AsyncClient
 
 from server.routes.logs_routes import _validate_filename
 
-
 # ── Helper ──────────────────────────────────────────────────
 
 
 def _make_test_app(log_dirs: list[Path] | None = None):
     from fastapi import FastAPI
+
     from server.routes.logs_routes import create_logs_router
 
     app = FastAPI()
@@ -243,9 +243,8 @@ class TestStreamLogs:
         (log_dir / "app.log").write_text("line\n", encoding="utf-8")
 
         # Confirm the file resolves (no 404/400) by checking _resolve_log_path
-        from server.routes.logs_routes import _resolve_log_path
-
         import server.routes.logs_routes as mod
+        from server.routes.logs_routes import _resolve_log_path
         original = mod._LOG_SEARCH_DIRS
         mod._LOG_SEARCH_DIRS = [log_dir]
         try:

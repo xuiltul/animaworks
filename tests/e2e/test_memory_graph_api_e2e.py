@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
 pytestmark = pytest.mark.e2e
 
 
@@ -15,7 +16,7 @@ def _create_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     anima_dir = animas_dir / "alice"
     for directory in ("episodes", "knowledge", "procedures"):
         (anima_dir / directory).mkdir(parents=True, exist_ok=True)
-    (anima_dir / "identity.md").write_text("# Alice\n", encoding="utf-8")
+    (anima_dir / "IDENTITY.md").write_text("# Alice\n", encoding="utf-8")
     shared_dir = tmp_path / "shared"
     shared_dir.mkdir()
 

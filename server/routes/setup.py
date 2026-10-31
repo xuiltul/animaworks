@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.anima.workspace_files import IDENTITY_FILE
+
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -370,7 +372,7 @@ def create_setup_router() -> APIRouter:
         new_anima_names: list[str] = []
         if animas_dir.exists():
             for anima_dir in sorted(animas_dir.iterdir()):
-                if anima_dir.is_dir() and (anima_dir / "identity.md").exists():
+                if anima_dir.is_dir() and (anima_dir / IDENTITY_FILE).exists():
                     new_anima_names.append(anima_dir.name)
         request.app.state.anima_names = new_anima_names
 

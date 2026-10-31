@@ -9,7 +9,7 @@ See `operations/scratch-and-worktrees.md` for where worktrees, builds, and tempo
 ### The Concept of Home and Workplace
 
 Anima normally resides in its "home" (`~/.animaworks/animas/{name}/`).
-This is where Anima-specific data such as identity, memory, and configuration are stored.
+This is where Anima-specific data such as IDENTITY.md / SOUL.md, memory, and configuration are stored.
 
 When performing project work (code changes, research, builds, etc.),
 Anima goes out to the "workplace" (workspace) to work.

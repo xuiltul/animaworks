@@ -18,7 +18,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
-
 # ── Helpers ──────────────────────────────────────────────────
 
 
@@ -91,11 +90,11 @@ def _create_anima_on_disk(animas_dir: Path, name: str) -> Path:
     anima_dir.mkdir(parents=True, exist_ok=True)
     for subdir in ("episodes", "knowledge", "procedures", "state", "shortterm"):
         (anima_dir / subdir).mkdir(exist_ok=True)
-    (anima_dir / "identity.md").write_text(
+    (anima_dir / "IDENTITY.md").write_text(
         f"# {name}\nTest anima.",
         encoding="utf-8",
     )
-    (anima_dir / "injection.md").write_text("", encoding="utf-8")
+    (anima_dir / "AGENTS.md").write_text("", encoding="utf-8")
     (anima_dir / "permissions.md").write_text("", encoding="utf-8")
     return anima_dir
 

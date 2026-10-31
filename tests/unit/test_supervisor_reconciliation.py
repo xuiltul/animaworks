@@ -133,7 +133,7 @@ async def test_reconcile_starts_enabled_anima(supervisor, temp_dirs):
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
 
     supervisor.start_anima = AsyncMock()
@@ -155,7 +155,7 @@ async def test_reconcile_stops_disabled_anima(supervisor, temp_dirs):
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     (alice_dir / "status.json").write_text(json.dumps({"enabled": False}), encoding="utf-8")
 
     # Simulate running process
@@ -200,12 +200,12 @@ async def test_reconcile_stops_removed_anima(supervisor, temp_dirs):
 
 @pytest.mark.asyncio
 async def test_reconcile_no_status_file_incomplete_protection(supervisor, temp_dirs):
-    """Anima with identity.md but no status.json → on_disk_incomplete, not started, not killed."""
+    """Anima with IDENTITY.md but no status.json → on_disk_incomplete, not started, not killed."""
     animas_dir = temp_dirs["animas_dir"]
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     # No status.json — treated as incomplete (legacy or factory-in-progress)
 
     supervisor.start_anima = AsyncMock()
@@ -222,12 +222,12 @@ async def test_reconcile_no_status_file_incomplete_protection(supervisor, temp_d
 
 @pytest.mark.asyncio
 async def test_reconcile_skips_dir_without_identity(supervisor, temp_dirs):
-    """Directory exists but no identity.md → skipped."""
+    """Directory exists but no IDENTITY.md → skipped."""
     animas_dir = temp_dirs["animas_dir"]
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    # No identity.md
+    # No IDENTITY.md
 
     supervisor.start_anima = AsyncMock()
     supervisor.stop_anima = AsyncMock()
@@ -245,7 +245,7 @@ async def test_reconcile_skips_already_running(supervisor, temp_dirs):
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
 
     # Already running
@@ -269,11 +269,11 @@ async def test_reconcile_start_anima_failure(supervisor, temp_dirs):
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
     bob_dir = animas_dir / "bob"
     bob_dir.mkdir()
-    (bob_dir / "identity.md").write_text("Bob identity", encoding="utf-8")
+    (bob_dir / "IDENTITY.md").write_text("Bob identity", encoding="utf-8")
     (bob_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
 
     # start_anima fails for alice but succeeds for bob
@@ -302,7 +302,7 @@ async def test_reconcile_callback_not_set(supervisor, temp_dirs):
     animas_dir.mkdir(parents=True)
     alice_dir = animas_dir / "alice"
     alice_dir.mkdir()
-    (alice_dir / "identity.md").write_text("Alice identity", encoding="utf-8")
+    (alice_dir / "IDENTITY.md").write_text("Alice identity", encoding="utf-8")
     (alice_dir / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
 
     supervisor.start_anima = AsyncMock()
