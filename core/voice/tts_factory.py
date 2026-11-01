@@ -13,6 +13,7 @@ from core.voice.tts_elevenlabs import ElevenLabsTTS
 from core.voice.tts_gemini import GeminiTTS
 from core.voice.tts_irodori import IrodoriTTS
 from core.voice.tts_sbv2 import StyleBertVits2TTS
+from core.voice.tts_silero import SileroTTS
 from core.voice.tts_voicevox import VoicevoxTTS
 
 # ── Factory ────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ def create_tts_provider(
     """Create TTS provider instance by name.
 
     Args:
-        provider_name: One of "voicevox", "style_bert_vits2", "elevenlabs", "irodori", "gemini".
+        provider_name: One of "voicevox", "style_bert_vits2", "elevenlabs", "irodori", "gemini", "silero".
         voice_config: Voice configuration object (e.g. config.voice).
 
     Returns:
@@ -40,6 +41,7 @@ def create_tts_provider(
         "elevenlabs": ElevenLabsTTS,
         "irodori": IrodoriTTS,
         "gemini": GeminiTTS,
+        "silero": SileroTTS,
     }
     cls = providers.get(provider_name.lower())
     if cls is None:

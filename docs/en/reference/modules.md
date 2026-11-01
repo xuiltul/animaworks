@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=cd6635966f15217f3ae3071c3f71db8be50f27e98447582c4b87f5a9b9441516 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=9ca99b37c7b3ff435d3433e7c9907e8c5825c9cd0f4d154eb5d1e0cf4af40e16 generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -192,7 +192,7 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Application configuration schema, loading, validation, and migration.
+Application configuration schemas, loading, validation, and migration.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -212,7 +212,7 @@ Application configuration schema, loading, validation, and migration.
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1540 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -1079,10 +1079,11 @@ Audio input/output and voice conversations.
 | `core.voice.transport` | 21 | Transport protocol for voice-session output. |
 | `core.voice.tts_base` | 63 | TTS abstract base — provider interface and config. |
 | `core.voice.tts_elevenlabs` | 133 | ElevenLabs TTS provider — REST API streaming. |
-| `core.voice.tts_factory` | 47 | TTS provider factory. |
+| `core.voice.tts_factory` | 49 | TTS provider factory. |
 | `core.voice.tts_gemini` | 220 | Gemini TTS provider — Gemini API ``streamGenerateContent`` (SSE streaming). |
 | `core.voice.tts_irodori` | 79 | Irodori-TTS provider — HTTP API. |
 | `core.voice.tts_sbv2` | 112 | Style-BERT-VITS2 / AivisSpeech TTS provider. |
+| `core.voice.tts_silero` | 132 | Silero TTS provider for AnimaWorks. |
 | `core.voice.tts_voicevox` | 110 | VOICEVOX TTS provider — Engine HTTP API. |
 | `core.voice.turn_detector` | 398 | — |
 | `core.voice.voice_config` | 76 | — |

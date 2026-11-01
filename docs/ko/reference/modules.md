@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=cd6635966f15217f3ae3071c3f71db8be50f27e98447582c4b87f5a9b9441516 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=9ca99b37c7b3ff435d3433e7c9907e8c5825c9cd0f4d154eb5d1e0cf4af40e16 generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -192,28 +192,28 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.config`
 
-애플리케이션 설정의 스키마, 로드, 검증, 마이그레이션.
+애플리케이션 설정 스키마, 로드, 검증, 마이그레이션.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.config` | 42 | — |
-| `core.config.anima_registry` | 314 | config.json에서 Anima 등록: 등록, 등록 해제, 이름 변경. |
+| `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
 | `core.config.env_slots` | 92 | — |
 | `core.config.file_access_policy` | 588 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 500 | — |
-| `core.config.io` | 317 | 설정 I/O: 싱글턴 캐시, 로드 및 저장. |
-| `core.config.local_llm` | 69 | 로컬 Ollama 기반 모델 기본값 및 역할 프리셋을 위한 헬퍼. |
+| `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
-| `core.config.model_catalog` | 197 | 정적 모델 카탈로그 및 요청별 모델 재정의 검증. |
-| `core.config.model_config` | 885 | 모델 설정 해석: load_model_config, penalties, max_tokens. |
-| `core.config.model_discovery` | 581 | 설치된 CLI에서 “모드 + 모델” 카탈로그를 동적으로 탐색합니다. |
-| `core.config.model_mode` | 458 | 표준 S/C/D/G/X/Y/A 모드의 모델 실행 모드 해석. |
-| `core.config.models` | 100 | 중앙 설정 모듈 — 분리된 모듈을 다시 내보내는 파사드. |
-| `core.config.ops` | 203 | AnimaWorks 설정을 읽고 업데이트하는 애플리케이션 작업. |
-| `core.config.resolver` | 160 | 설정 해석: anima_defaults와 status.json 병합. |
-| `core.config.schemas` | 1540 | AnimaWorks용 Pydantic 설정 스키마. |
-| `core.config.vault` | 461 | PyNaCl SealedBox 암호화를 사용하는 자격 증명 보관소. |
+| `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |
+| `core.config.model_config` | 885 | Model configuration resolution: load_model_config, penalties, max_tokens. |
+| `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
+| `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
+| `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
+| `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
+| `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
+| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
 
@@ -1079,10 +1079,11 @@ LLM 사용량 및 비용 기록·집계.
 | `core.voice.transport` | 21 | Transport protocol for voice-session output. |
 | `core.voice.tts_base` | 63 | TTS abstract base — provider interface and config. |
 | `core.voice.tts_elevenlabs` | 133 | ElevenLabs TTS provider — REST API streaming. |
-| `core.voice.tts_factory` | 47 | TTS provider factory. |
+| `core.voice.tts_factory` | 49 | TTS provider factory. |
 | `core.voice.tts_gemini` | 220 | Gemini TTS provider — Gemini API ``streamGenerateContent`` (SSE streaming). |
 | `core.voice.tts_irodori` | 79 | Irodori-TTS provider — HTTP API. |
 | `core.voice.tts_sbv2` | 112 | Style-BERT-VITS2 / AivisSpeech TTS provider. |
+| `core.voice.tts_silero` | 132 | Silero TTS provider for AnimaWorks. |
 | `core.voice.tts_voicevox` | 110 | VOICEVOX TTS provider — Engine HTTP API. |
 | `core.voice.turn_detector` | 398 | — |
 | `core.voice.voice_config` | 76 | — |
