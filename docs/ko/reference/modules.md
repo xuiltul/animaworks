@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=b739062c18e93089cb49affb2fd390fe3815268e0c5465f7fd42d737aef197d8 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=cd6635966f15217f3ae3071c3f71db8be50f27e98447582c4b87f5a9b9441516 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -50,7 +50,7 @@
 | `cli.commands.rag_repair_status` | 147 | 영구 RAG 복구 상태 보고. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
-| `cli.commands.server` | 868 | — |
+| `cli.commands.server` | 891 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
@@ -813,8 +813,8 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
 | `core.platform.locks` | 125 | — |
-| `core.platform.pid` | 42 | — |
-| `core.platform.process` | 327 | — |
+| `core.platform.pid` | 46 | — |
+| `core.platform.process` | 379 | — |
 | `core.platform.process_role` | 68 | 프로세스 역할 메타데이터에 대한 저수준 환경 접근. |
 | `core.platform.processing_lease` | 344 | — |
 | `core.platform.scratch` | 99 | — |
