@@ -48,10 +48,13 @@ def ensure_runtime_dir(*, skip_animas: bool = False) -> Path:
 
         assert_supported_runtime_version(data_dir)
         # Run supported migrations and synchronize bundled runtime templates.
-        try:
-            _run_auto_migrations(data_dir)
-        except Exception:
-            logger.exception("Auto-migration failed — partial state may exist; run 'animaworks migrate' manually")
+        # Migrations rewrite root-owned settings, so only a process that may
+        # write them runs them: the server at startup, or an offline CLI.
+        if _may_write_settings(data_dir):
+            try:
+                _run_auto_migrations(data_dir)
+            except Exception:
+                logger.exception("Auto-migration failed — partial state may exist; run 'animaworks migrate' manually")
         # Incremental sync must run on every startup (not as a one-shot
         # migration step) so new common_skills/common_knowledge templates
         # reach existing installations after upgrades.
@@ -408,6 +411,24 @@ def _create_default_config(data_dir: Path) -> None:
 
 
 # ── Unified migration on startup ────────────────────────────
+
+
+def _may_write_settings(data_dir: Path) -> bool:
+    """Return whether this process may write the root-owned settings in *data_dir*.
+
+    A CLI command run while the server is up (for example ``animaworks send``)
+    may not, and neither may anima or task-runner processes. Their migration
+    steps would fail on every invocation, and the server already ran the
+    migrations when it started.
+    """
+    from core.platform.process_role import assert_settings_write_allowed
+
+    try:
+        assert_settings_write_allowed(data_dir / "config.json")
+    except PermissionError as exc:
+        logger.debug("Skipping auto-migration: %s", exc)
+        return False
+    return True
 
 
 def _run_auto_migrations(data_dir: Path) -> None:
