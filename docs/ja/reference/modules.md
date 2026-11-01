@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: d130187428e7b5131b0d8e5e9f6ef345db0146df0c2a0d854640fb0036ab2839 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 6195e3ca3f187801da9b2ec648219669176d658abc62a2310289829b09f92c1e -->
 
 # モジュール一覧
 
@@ -212,7 +212,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1540 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -1079,10 +1079,11 @@ LLM 利用量とコストの記録・集計。
 | `core.voice.transport` | 21 | Transport protocol for voice-session output. |
 | `core.voice.tts_base` | 63 | TTS abstract base — provider interface and config. |
 | `core.voice.tts_elevenlabs` | 133 | ElevenLabs TTS provider — REST API streaming. |
-| `core.voice.tts_factory` | 47 | TTS provider factory. |
+| `core.voice.tts_factory` | 49 | TTS provider factory. |
 | `core.voice.tts_gemini` | 220 | Gemini TTS provider — Gemini API ``streamGenerateContent`` (SSE streaming). |
 | `core.voice.tts_irodori` | 79 | Irodori-TTS provider — HTTP API. |
 | `core.voice.tts_sbv2` | 112 | Style-BERT-VITS2 / AivisSpeech TTS provider. |
+| `core.voice.tts_silero` | 132 | Silero TTS provider for AnimaWorks. |
 | `core.voice.tts_voicevox` | 110 | VOICEVOX TTS provider — Engine HTTP API. |
 | `core.voice.turn_detector` | 398 | — |
 | `core.voice.voice_config` | 76 | — |
