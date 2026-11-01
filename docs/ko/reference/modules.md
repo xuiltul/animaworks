@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=6ad25bdca92bb36eac0185f14a9054a5b66849b676b5e4ac95a1921e942f0930 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=2e10a8e0a7b9a71915cc332cdb7c010bdefb3467eb09d2265201016bd7e3e927 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -429,7 +429,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.infra.execution_sdk_preflight` | 126 | — |
 | `core.infra.gpu` | 173 | — |
 | `core.infra.logging_config` | 530 | Centralized logging configuration for AnimaWorks. |
-| `core.infra.runtime_init` | 430 | First-launch initialization: copy templates to runtime data directory. |
+| `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 
