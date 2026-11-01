@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: fa22e9cc4abf6a506b895b8aeba02d35d23cc1784cf6fa972a46aa018e20792b -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: d130187428e7b5131b0d8e5e9f6ef345db0146df0c2a0d854640fb0036ab2839 -->
 
 # モジュール一覧
 
@@ -50,7 +50,7 @@
 | `cli.commands.rag_repair_status` | 147 | Status reporting for persistent RAG repair state. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
-| `cli.commands.server` | 868 | — |
+| `cli.commands.server` | 891 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
@@ -813,8 +813,8 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
 | `core.platform.locks` | 125 | — |
-| `core.platform.pid` | 42 | — |
-| `core.platform.process` | 327 | — |
+| `core.platform.pid` | 46 | — |
+| `core.platform.process` | 379 | — |
 | `core.platform.process_role` | 68 | Low-level environment access for process-role metadata. |
 | `core.platform.processing_lease` | 344 | — |
 | `core.platform.scratch` | 99 | — |

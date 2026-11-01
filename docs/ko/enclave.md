@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=0adbff37775b910578240908d22e4e7e98b9dc8b9b6baac6d5788cba607cc41e generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=96c1898a3bf00764d240d786b57cffb1800dd64e45ae15f8cfc9451a102d6da0 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 > 확인한 커밋: f448d7b0
 
@@ -131,7 +131,9 @@ dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
 
 소켓은 재시작해도 사라지지 않는 위치에 두고, 디렉터리를 격리 사용자와 그룹의 `0750`로 설정한다(예: `/usr/local/var/animaworks-enclave`). macOS의 gateway는 접속한 쪽의 uid를 `LOCAL_PEERCRED`으로 확인한다. `allowed_peer_uids`를 지정하는 방법은 Linux와 같다.
 
-`templates/_shared/launchd/com.animaworks.enclave.plist`는 격리 인스턴스의 LaunchDaemon(`UserName`·`Umask=0077`)이고, `com.animaworks.enclave-egress.plist`은 외부 통신 제한을 시작 시와 매시간 적용하는 root의 LaunchDaemon이다. 사용자 이름·경로·포트를 바꿔 `/Library/LaunchDaemons/`에 두고, `launchctl bootstrap system <plist>`으로 불러온다. 비밀 정보는 `enclave.secrets_dir`에 격리 사용자가 소유한 `0600` 파일로 두고, 디렉터리를 `0700`으로 설정한다.
+macOS 업데이트로 소켓 디렉터리가 사라질 수 있다. 상위 디렉터리에 격리 사용자가 쓸 수 없는 배치에서는 격리 인스턴스가 디렉터리를 다시 만들 수 없어 시작에 계속 실패한다. `com.animaworks.enclave-rundir.plist`를 읽어 두면 시작 시 root가 디렉터리를 다시 만든다.
+
+`templates/_shared/launchd/com.animaworks.enclave.plist`는 격리 인스턴스의 LaunchDaemon(`UserName`·`Umask=0077`)이고, `com.animaworks.enclave-egress.plist`은 외부 통신 제한을 시작 시와 매시간 적용하는 root의 LaunchDaemon이며, `com.animaworks.enclave-rundir.plist`은 소켓 디렉터리를 시작 시 다시 만드는 root의 LaunchDaemon이다. 사용자 이름·경로·포트를 바꿔 `/Library/LaunchDaemons/`에 두고, `launchctl bootstrap system <plist>`으로 불러온다. 비밀 정보는 `enclave.secrets_dir`에 격리 사용자가 소유한 `0600` 파일로 두고, 디렉터리를 `0700`으로 설정한다.
 
 외부 통신은 `scripts/enclave/egress_firewall.py --backend pf`로 제한한다. 규칙은 pf의 앵커 `com.apple/250.AnimaworksEnclave`에 불러오며, 기본 `/etc/pf.conf`에서 평가되므로 `pf.conf`은 수정하지 않는다. macOS에서는 pf가 `lo0`을 평가 대상에서 제외(skip)하는 경우가 있어, 그대로 두면 격리 측에서 본체의 API 같은 loopback 서비스에 접속할 수 있다. `--apply`는 적용할 때마다 `lo0`의 skip을 해제한다. pf의 `user` 지정은 TCP와 UDP에만 적용된다. 스크립트는 본체 측과 격리 측 어느 쪽 사용자도 수정할 수 없는 root 소유 위치에 복사해 사용한다.
 
