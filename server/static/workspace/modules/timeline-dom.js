@@ -75,6 +75,8 @@ export function buildTimelineDOM(officePanel, opts) {
   const toggleBtn = document.createElement("button");
   toggleBtn.className = "timeline-toggle-btn";
   toggleBtn.textContent = "\u25B2"; // ▲
+  toggleBtn.setAttribute("aria-label", t("ws.timeline.expand"));
+  toggleBtn.setAttribute("aria-expanded", "false");
 
   bar.appendChild(title);
   bar.appendChild(count);
@@ -137,6 +139,8 @@ export function buildTimelineDOM(officePanel, opts) {
     expanded = !expanded;
     body.classList.toggle("hidden", !expanded);
     toggleBtn.textContent = expanded ? "\u25BC" : "\u25B2"; // ▼ or ▲
+    toggleBtn.setAttribute("aria-expanded", String(expanded));
+    toggleBtn.setAttribute("aria-label", t(expanded ? "ws.timeline.collapse" : "ws.timeline.expand"));
   });
 
   return { container: timeline, listEl: list, countEl: count, bodyEl: body, runningTasksEl: runningTasks };

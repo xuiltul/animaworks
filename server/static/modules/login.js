@@ -17,8 +17,8 @@ async function initLoginScreen() {
       <h2 class="login-title">AnimaWorks</h2>
       <p class="login-subtitle">${t("login.subtitle")}</p>
       <form id="loginForm" class="login-form">
-        <input type="text" id="loginUsername" placeholder="${t("login.placeholder_username")}" autocomplete="username" required>
-        <input type="password" id="loginPassword" placeholder="${t("login.placeholder_password")}" autocomplete="current-password" required>
+        <input type="text" id="loginUsername" placeholder="${t("login.placeholder_username")}" aria-label="${t("login.placeholder_username")}" autocomplete="username" required>
+        <input type="password" id="loginPassword" placeholder="${t("login.placeholder_password")}" aria-label="${t("login.placeholder_password")}" autocomplete="current-password" required>
         <div id="loginError" class="login-error hidden"></div>
         <button type="submit" class="btn-login">${t("login.button")}</button>
       </form>

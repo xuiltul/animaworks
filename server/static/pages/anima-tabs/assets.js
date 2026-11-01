@@ -332,7 +332,7 @@ function _renderExpressionGrid(style) {
         ${imgHtml}
         <div class="assets-expression-card-footer">
           <span class="assets-expression-label">${escapeHtml(label)}</span>
-          <button class="assets-expression-regen-btn" data-emotion="${escapeHtml(emotion)}" data-style="${escapeHtml(style)}" title="${t("assets.regen_expression")}">↻</button>
+          <button class="assets-expression-regen-btn" data-emotion="${escapeHtml(emotion)}" data-style="${escapeHtml(style)}" title="${t("assets.regen_expression")}" aria-label="${escapeHtml(t("assets.regen_expression"))}">↻</button>
         </div>
       </div>
     `;
@@ -515,7 +515,7 @@ function _openRemakeModal() {
     <div class="assets-modal">
       <div class="assets-modal-header">
         <h3>Remake Assets - ${escapeHtml(_selectedAnima)} <span style="font-size:0.75em;color:var(--aw-color-text-secondary,#888);">(${isReal ? "Realistic" : "Anime"})</span></h3>
-        <button class="assets-modal-close" id="assetsModalCloseBtn">&times;</button>
+        <button class="assets-modal-close" id="assetsModalCloseBtn" aria-label="${escapeHtml(t("common.aria_close"))}">&times;</button>
       </div>
 
       <div class="assets-modal-body">

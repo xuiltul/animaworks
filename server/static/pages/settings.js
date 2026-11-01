@@ -192,7 +192,8 @@ function _renderActivity(container) {
         </div>
         <div class="activity-level-slider-row">
           <input type="range" min="10" max="400" value="100" step="10"
-                 class="activity-level-slider" id="activityLevelSlider" />
+                 class="activity-level-slider" id="activityLevelSlider"
+                 aria-label="${escapeHtml(t("settings.activity_level.slider_label"))}" />
           <div class="activity-level-value" id="activityLevelValue">100%</div>
         </div>
         <div class="activity-level-effect" id="activityLevelEffect"></div>
@@ -204,14 +205,15 @@ function _renderActivity(container) {
           </label>
           <div class="night-mode-settings" id="nightModeSettings" style="display:none">
             <div class="night-mode-time">
-              <select id="nightStart">${_buildTimeOptions("22:00")}</select>
+              <select id="nightStart" aria-label="${escapeHtml(t("settings.night_mode.start_label"))}">${_buildTimeOptions("22:00")}</select>
               <span class="night-mode-separator">～</span>
-              <select id="nightEnd">${_buildTimeOptions("08:00")}</select>
+              <select id="nightEnd" aria-label="${escapeHtml(t("settings.night_mode.end_label"))}">${_buildTimeOptions("08:00")}</select>
             </div>
             <div class="night-mode-level-row">
               <span class="night-mode-level-label">${t("settings.night_mode.level_label")}</span>
               <input type="range" min="10" max="400" value="30" step="10"
-                     class="activity-level-slider night-level-slider" id="nightLevelSlider" />
+                     class="activity-level-slider night-level-slider" id="nightLevelSlider"
+                     aria-label="${escapeHtml(t("settings.night_mode.level_slider_label"))}" />
               <div class="activity-level-value night-level-value" id="nightLevelValue">30%</div>
             </div>
           </div>
@@ -258,7 +260,7 @@ function _renderGeneral(container) {
       <p class="settings-section-desc">${t("settings.theme.desc")}</p>
       <div class="settings-theme-grid" id="settingsThemeGrid">
         ${THEMES.map(th => `
-          <button class="settings-theme-card ${th.id === currentTheme ? "active" : ""}" data-theme="${th.id}">
+          <button class="settings-theme-card ${th.id === currentTheme ? "active" : ""}" data-theme="${th.id}" aria-label="${escapeHtml(t("settings.theme.apply", { name: th.label }))}">
             <div class="settings-theme-preview">
               ${th.colors.map(c => `<span style="background:${c}"></span>`).join("")}
             </div>
@@ -279,7 +281,8 @@ function _renderGeneral(container) {
       </div>
       <div class="activity-level-slider-row">
         <input type="range" min="10" max="22" value="${getFontSize()}" step="1"
-               class="activity-level-slider" id="fontSizeSlider" />
+               class="activity-level-slider" id="fontSizeSlider"
+               aria-label="${escapeHtml(t("settings.font_size.slider_label"))}" />
         <div class="activity-level-value" id="fontSizeValue">${getFontSize()}px</div>
       </div>
     </section>

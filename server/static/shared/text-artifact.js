@@ -2,6 +2,8 @@
 // Shared handler for file: code block artifacts.
 // Uses event delegation (attached once to document).
 
+import { t } from "/shared/i18n.js";
+
 let _initialized = false;
 
 const _contentStore = new Map();
@@ -57,7 +59,7 @@ function _openModal(filename, content) {
     <div class="text-artifact-modal">
       <div class="text-artifact-modal-header">
         <span class="text-artifact-modal-filename">${_esc(filename)}</span>
-        <button class="text-artifact-modal-close" aria-label="Close">&times;</button>
+        <button class="text-artifact-modal-close" aria-label="${t("common.aria_close")}">&times;</button>
       </div>
       <div class="text-artifact-modal-body">
         <textarea class="text-artifact-modal-textarea" spellcheck="false">${_esc(content)}</textarea>

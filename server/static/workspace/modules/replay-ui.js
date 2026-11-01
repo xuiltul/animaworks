@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from "../../shared/logger.js";
+import { t } from "/shared/i18n.js";
 
 const logger = createLogger("replay-ui");
 
@@ -118,19 +119,19 @@ export class ReplayUI {
     this._root.innerHTML = `
       <div class="org-replay-row">
         <div class="org-replay-controls">
-          <button class="org-replay-btn" id="replayExitBtn" title="Live mode">✕</button>
-          <button class="org-replay-btn" id="replayPrevBtn" title="Back 5min">◀◀</button>
-          <button class="org-replay-btn org-replay-btn--play" id="replayPlayBtn" title="Play">▶</button>
-          <button class="org-replay-btn" id="replayNextBtn" title="Forward 5min">▶▶</button>
+          <button class="org-replay-btn" id="replayExitBtn" title="Live mode" aria-label="${t("ws.replay.exit")}">✕</button>
+          <button class="org-replay-btn" id="replayPrevBtn" title="Back 5min" aria-label="${t("ws.replay.prev")}">◀◀</button>
+          <button class="org-replay-btn org-replay-btn--play" id="replayPlayBtn" title="Play" aria-label="${t("ws.replay.play")}">▶</button>
+          <button class="org-replay-btn" id="replayNextBtn" title="Forward 5min" aria-label="${t("ws.replay.next")}">▶▶</button>
         </div>
         <div class="org-replay-seek">
           <span class="org-replay-time" id="replayTimeStart">--:--</span>
-          <input type="range" class="org-replay-slider" id="replaySlider" min="0" max="1000" value="0" step="1">
+          <input type="range" class="org-replay-slider" id="replaySlider" min="0" max="1000" value="0" step="1" aria-label="${t("ws.replay.seek")}">
           <span class="org-replay-time" id="replayTimeCurrent">--:--</span>
           <span class="org-replay-time" id="replayTimeEnd">--:--</span>
         </div>
-        <select class="org-replay-range" id="replayRangeSelect" title="遡り時間">${rangeOpts}</select>
-        <button class="org-replay-speed" id="replaySpeedBtn">1x</button>
+        <select class="org-replay-range" id="replayRangeSelect" title="遡り時間" aria-label="${t("ws.replay.range")}">${rangeOpts}</select>
+        <button class="org-replay-speed" id="replaySpeedBtn" aria-label="${t("ws.replay.speed", { speed: "1x" })}">1x</button>
         <div class="org-replay-error" id="replayError" role="status" hidden></div>
       </div>
       <div class="org-replay-narrative" id="orgReplayNarrative">
@@ -211,6 +212,7 @@ export class ReplayUI {
       this._speedIndex = (this._speedIndex + 1) % SPEED_CYCLE.length;
       const speed = SPEED_CYCLE[this._speedIndex];
       this._speedBtn.textContent = `${speed}x`;
+      this._speedBtn.setAttribute("aria-label", t("ws.replay.speed", { speed: `${speed}x` }));
       this._onSpeedChange(speed);
     });
 
@@ -298,6 +300,7 @@ export class ReplayUI {
     this._isPlaying = isPlaying;
     this._playBtn.textContent = isPlaying ? "⏸" : "▶";
     this._playBtn.title = isPlaying ? "Pause" : "Play";
+    this._playBtn.setAttribute("aria-label", t(isPlaying ? "ws.replay.pause" : "ws.replay.play"));
   }
 
   /**
@@ -308,6 +311,7 @@ export class ReplayUI {
     const idx = SPEED_CYCLE.indexOf(speed);
     this._speedIndex = idx >= 0 ? idx : 0;
     this._speedBtn.textContent = `${speed}x`;
+    this._speedBtn.setAttribute("aria-label", t("ws.replay.speed", { speed: `${speed}x` }));
   }
 
   /**

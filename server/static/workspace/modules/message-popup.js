@@ -7,6 +7,7 @@
 
 import { renderSimpleMarkdown, escapeHtml } from "./utils.js";
 import { fetchMessage } from "./api.js";
+import { t } from "/shared/i18n.js";
 
 // ── Module state ────────────────────────────────
 /** @type {HTMLElement|null} */
@@ -40,6 +41,7 @@ function _buildDOM(parentEl) {
   const closeBtn = document.createElement("button");
   closeBtn.className = "ws-msg-popup-close";
   closeBtn.textContent = "\u00D7";
+  closeBtn.setAttribute("aria-label", t("common.aria_close"));
   closeBtn.addEventListener("click", hide);
 
   header.appendChild(title);
