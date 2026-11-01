@@ -5,11 +5,72 @@ from pathlib import Path
 
 import pytest
 
-from scripts.i18n.engine import TranslationResponse
-from scripts.i18n.pipeline import Target, Translator
+from scripts.i18n.engine import EngineClient, TranslationResponse
+from scripts.i18n.pipeline import Target, Translator, _langs_for_target, load_configuration
 from scripts.i18n.protect import protect_text
 from scripts.i18n.segment import split_markdown
 from scripts.i18n.validate import ValidationError, validate_translation
+
+
+def test_per_target_langs_include_zh_for_templates_only() -> None:
+    configuration, targets, _glossary = load_configuration()
+    defaults = configuration["defaults"]
+    by_name = {target.name: target for target in targets}
+
+    assert _langs_for_target(by_name["templates"], defaults, None) == ["en", "ko", "zh"]
+    assert _langs_for_target(by_name["docs"], defaults, None) == ["en", "ko"]
+    assert _langs_for_target(by_name["templates"], defaults, ["zh"]) == ["zh"]
+    assert _langs_for_target(by_name["docs"], defaults, ["zh"]) == []
+
+
+def test_engine_extra_body_is_merged_into_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    captured: dict[str, object] = {}
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "ok"}}], "usage": {}}
+
+    def _post(url: str, *, headers: dict[str, str], json: dict[str, object], timeout: float) -> _Response:
+        captured.update(json)
+        return _Response()
+
+    monkeypatch.setattr(httpx, "post", _post)
+    client = EngineClient(
+        "local",
+        {
+            "kind": "openai",
+            "base_url": "http://127.0.0.1:1/v1",
+            "model": "m",
+            "extra_body": {"chat_template_kwargs": {"thinking": False}},
+        },
+    )
+    assert client.translate("system", "user").text == "ok"
+    assert captured["chat_template_kwargs"] == {"thinking": False}
+    assert captured["model"] == "m"
+
+
+def test_local_engine_disables_thinking() -> None:
+    configuration, _targets, _glossary = load_configuration()
+    assert configuration["engines"]["local"]["extra_body"] == {"chat_template_kwargs": {"thinking": False}}
+
+
+def test_target_langs_is_optional_and_overrides_defaults() -> None:
+    target = Target(
+        name="sample",
+        src="sample/ja",
+        dst="sample/{lang}",
+        include=("**/*.md",),
+        copy=(),
+        header="none",
+        langs=("en", "ko"),
+    )
+    defaults = {"langs": ["en", "ko", "zh"]}
+    assert _langs_for_target(target, defaults, None) == ["en", "ko"]
+    assert _langs_for_target(target, defaults, ["zh"]) == []
 
 
 class EchoEngine:
@@ -142,9 +203,7 @@ def _make_ja_translator(tmp_path: Path) -> tuple[Translator, EchoEngine, Path]:
 
 def test_only_changed_section_is_translated_and_insertions_reuse_other_sections(tmp_path: Path) -> None:
     translator, engine, source = _make_ja_translator(tmp_path)
-    source.write_text(
-        "# 章A\nアルファの説明。\n\n## 章B\nベータの説明。\n\n## 章C\nガンマの説明。\n", encoding="utf-8"
-    )
+    source.write_text("# 章A\nアルファの説明。\n\n## 章B\nベータの説明。\n\n## 章C\nガンマの説明。\n", encoding="utf-8")
 
     assert translator.run("docs", requested_langs=["en"]) == 0
     first_call_count = len(engine.calls)
@@ -265,9 +324,7 @@ def test_heading_stays_at_line_start_when_model_compresses_section_gaps(tmp_path
     source_dir = tmp_path / "docs" / "ja"
     source_dir.mkdir(parents=True)
     source = source_dir / "guide.md"
-    source.write_text(
-        "# 章A\nアルファの説明。\n\n## 章B\nベータの説明。\n", encoding="utf-8"
-    )
+    source.write_text("# 章A\nアルファの説明。\n\n## 章B\nベータの説明。\n", encoding="utf-8")
     engine = EchoEngine(
         _compress_translate(
             {
@@ -292,9 +349,7 @@ def test_sections_without_translatable_japanese_are_kept_and_not_sent(tmp_path: 
     source_dir = tmp_path / "docs" / "ja"
     source_dir.mkdir(parents=True)
     source = source_dir / "guide.md"
-    source.write_text(
-        "# 日本語\nこれは説明。\n\n## ASCII Only\nKeep this verbatim 123.\n", encoding="utf-8"
-    )
+    source.write_text("# 日本語\nこれは説明。\n\n## ASCII Only\nKeep this verbatim 123.\n", encoding="utf-8")
     engine = EchoEngine(lambda text: text.replace("これは説明。", "This is an explanation."))
     translator = _translator(tmp_path, _docs_target(), engine)
 
@@ -343,11 +398,7 @@ def test_language_ratio_excludes_source_shared_japanese_for_korean() -> None:
     source = "# 日本語ガイド\n" + body + "「手順」の通りに操作します。\n"
     # Korean output keeps the same Japanese examples verbatim (as the source has
     # them) while translating the surrounding prose into Hangul.
-    translated = (
-        "# 한국어 가이드\n"
-        "여기에 긴 한국어 설명문이 계속됩니다." * 8 + "\n"
-        "「手順」의 대로 조작합니다.\n"
-    )
+    translated = "# 한국어 가이드\n여기에 긴 한국어 설명문이 계속됩니다." * 8 + "\n「手順」의 대로 조작합니다.\n"
     validate_translation(source, translated, "ko")
 
 

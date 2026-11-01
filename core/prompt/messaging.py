@@ -81,9 +81,10 @@ def _collect_accessible_board_channels(anima_dir: Path) -> tuple[list[str], list
 def _get_prompt_locale() -> str:
     try:
         from core.config.models import load_config
+        from core.paths import normalize_locale
 
-        locale = load_config().locale
-        if locale in {"ja", "en", "ko"}:
+        locale = normalize_locale(load_config().locale)
+        if locale in {"ja", "en", "ko", "zh"}:
             return locale
     except Exception:
         logger.debug("Failed to detect locale, defaulting to ja", exc_info=True)

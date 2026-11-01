@@ -56,6 +56,7 @@ class Target:
     copy: tuple[str, ...]
     header: str
     link_rewrite: tuple[tuple[str, str], ...] = ()
+    langs: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,7 @@ def load_configuration() -> tuple[dict[str, Any], list[Target], list[dict[str, A
             copy=tuple(item.get("copy", ())),
             header=item.get("header", "none"),
             link_rewrite=tuple(tuple(pair) for pair in item.get("link_rewrite", ())),
+            langs=tuple(item["langs"]) if item.get("langs") else None,
         )
         for item in configuration.get("targets", [])
     ]
@@ -164,7 +166,10 @@ def _target_for_command(targets: list[Target], command: str) -> list[Target]:
 
 
 def _langs_for_target(target: Target, defaults: dict[str, Any], requested_langs: list[str] | None) -> list[str]:
-    available = list(target.dst) if isinstance(target.dst, dict) else list(defaults.get("langs", ["en", "ko"]))
+    if isinstance(target.dst, dict):
+        available = list(target.dst)
+    else:
+        available = list(target.langs or defaults.get("langs", ["en", "ko"]))
     return [lang for lang in (requested_langs or available) if lang in available]
 
 

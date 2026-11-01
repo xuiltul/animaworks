@@ -120,10 +120,10 @@ def t(key: str, locale: str | None = None, **kwargs: object) -> str:
     Returns:
         Localized string. Falls back to en, then ja, then key if not found.
     """
-    from core.paths import _get_locale
+    from core.paths import _get_locale, normalize_locale
 
-    loc = locale or _get_locale()
-    if not isinstance(loc, str) or loc not in ("ja", "en", "zh", "ko"):
+    loc = normalize_locale(locale or _get_locale())
+    if loc not in ("ja", "en", "zh", "ko"):
         loc = "ja"
     entry = _STRINGS.get(key, {})
     template = entry.get(loc) or entry.get("en") or entry.get("ja", key)

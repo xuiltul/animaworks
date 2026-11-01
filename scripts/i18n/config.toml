@@ -1,11 +1,13 @@
 [engines.local]
 kind = "openai"
-base_url = "http://100.95.241.88:8888/v1"
-model = "deepseek-v4-flash"
+base_url = "http://127.0.0.1:4100/v1"
+model = "deepseek-v4.1-flash-1017"
 api_key_env = "I18N_LOCAL_API_KEY"
 temperature = 0.0
 max_output_tokens = 16000
 timeout_seconds = 600
+# Translation needs no reasoning; thinking otherwise eats the output budget.
+extra_body = { chat_template_kwargs = { thinking = false } }
 
 [engines.luna]
 kind = "azure_openai"
@@ -37,3 +39,4 @@ dst = "templates/{lang}"
 include = ["**/*.md"]
 copy = ["**/*.json", "**/*.py"]
 header = "none"
+langs = ["en", "ko", "zh"]

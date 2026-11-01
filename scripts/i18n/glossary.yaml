@@ -1,232 +1,308 @@
 - ja: 記憶統合
   en: consolidation
   ko: 기억 통합
+  zh: 记忆整合
   note: Memory consolidation process
 - ja: エピソード
   en: episode
   ko: 에피소드
+  zh: 情节
 - ja: 手続き記憶
   en: procedural memory
   ko: 절차 기억
+  zh: 程序性记忆
 - ja: 手続き
   en: procedure
   ko: 절차
+  zh: 程序
 - ja: 知識
   en: knowledge
   ko: 지식
+  zh: 知识
 - ja: 上司
   en: supervisor
   ko: 상급자
+  zh: 上司
 - ja: 部下
   en: subordinate
   ko: 부하
+  zh: 部下
 - ja: 委任
   en: delegation
   ko: 위임
+  zh: 委派
 - ja: ハートビート
   en: heartbeat
   ko: 하트비트
+  zh: 心跳
 - ja: プライミング
   en: priming
   ko: 프라이밍
+  zh: 预激活
 - ja: チャネル
   en: channel
   ko: 채널
+  zh: 频道
 - ja: 短期記憶
   en: short-term memory
   ko: 단기 기억
+  zh: 短期记忆
 - ja: 作業記憶
   en: working memory
   ko: 작업 기억
+  zh: 工作记忆
 - ja: 長期記憶
   en: long-term memory
   ko: 장기 기억
+  zh: 长期记忆
 - ja: 会話履歴
   en: conversation history
   ko: 대화 기록
+  zh: 对话历史
 - ja: セッション
   en: session
   ko: 세션
+  zh: 会话
 - ja: 要約
   en: summary
   ko: 요약
+  zh: 摘要
 - ja: 圧縮
   en: compression
   ko: 압축
+  zh: 压缩
 - ja: 検索
   en: search
   ko: 검색
+  zh: 搜索
 - ja: 類似度
   en: similarity
   ko: 유사도
+  zh: 相似度
 - ja: 埋め込み
   en: embedding
   ko: 임베딩
+  zh: 嵌入
 - ja: ベクトル
   en: vector
   ko: 벡터
+  zh: 向量
 - ja: ナレッジグラフ
   en: knowledge graph
   ko: 지식 그래프
+  zh: 知识图谱
 - ja: 階層
   en: hierarchy
   ko: 계층
+  zh: 层级
 - ja: 組織
   en: organization
   ko: 조직
+  zh: 组织
 - ja: チーム
   en: team
   ko: 팀
+  zh: 团队
 - ja: タスク
   en: task
   ko: 작업
+  zh: 任务
 - ja: 背景タスク
   en: background task
   ko: 백그라운드 작업
+  zh: 后台任务
 - ja: 期限
   en: deadline
   ko: 마감일
+  zh: 截止日期
 - ja: 進捗
   en: progress
   ko: 진행 상황
+  zh: 进度
 - ja: 状態
   en: status
   ko: 상태
+  zh: 状态
 - ja: 完了
   en: completion
   ko: 완료
+  zh: 完成
 - ja: 失敗
   en: failure
   ko: 실패
+  zh: 失败
 - ja: 再試行
   en: retry
   ko: 재시도
+  zh: 重试
 - ja: 委任先
   en: delegate
   ko: 위임 대상
+  zh: 委派对象
 - ja: メッセージ
   en: message
   ko: 메시지
+  zh: 消息
 - ja: 通知
   en: notification
   ko: 알림
+  zh: 通知
 - ja: 送信
   en: send
   ko: 전송
+  zh: 发送
 - ja: 受信
   en: receive
   ko: 수신
+  zh: 接收
 - ja: 外部ツール
   en: external tool
   ko: 외부 도구
+  zh: 外部工具
 - ja: 権限
   en: permission
   ko: 권한
+  zh: 权限
 - ja: 認証
   en: authentication
   ko: 인증
+  zh: 认证
 - ja: 認可
   en: authorization
   ko: 인가
+  zh: 授权
 - ja: 資格情報
   en: credentials
   ko: 자격 증명
+  zh: 凭证
 - ja: 設定
   en: configuration
   ko: 설정
+  zh: 配置
 - ja: 設定ファイル
   en: configuration file
   ko: 설정 파일
+  zh: 配置文件
 - ja: 環境変数
   en: environment variable
   ko: 환경 변수
+  zh: 环境变量
 - ja: テンプレート
   en: template
   ko: 템플릿
+  zh: 模板
 - ja: プロンプト
   en: prompt
   ko: 프롬프트
+  zh: 提示词
 - ja: 指示
   en: instruction
   ko: 지침
+  zh: 指令
 - ja: 構造化
   en: structured
   ko: 구조화
+  zh: 结构化
 - ja: 検証
   en: validation
   ko: 검증
+  zh: 验证
 - ja: 安全性
   en: safety
   ko: 안전성
+  zh: 安全性
 - ja: 信頼性
   en: reliability
   ko: 신뢰성
+  zh: 可靠性
 - ja: エラー
   en: error
   ko: 오류
+  zh: 错误
 - ja: 例外
   en: exception
   ko: 예외
+  zh: 异常
 - ja: ログ
   en: log
   ko: 로그
+  zh: 日志
 - ja: 監視
   en: monitoring
   ko: 모니터링
+  zh: 监控
 - ja: ブラウザ
   en: browser
   ko: 브라우저
+  zh: 浏览器
 - ja: スクリーンショット
   en: screenshot
   ko: 스크린샷
+  zh: 截图
 - ja: ワークスペース
   en: workspace
   ko: 작업 공간
+  zh: 工作区
 - ja: 作業ディレクトリ
   en: working directory
   ko: 작업 디렉터리
+  zh: 工作目录
 - ja: リファレンス
   en: reference
   ko: 참조
+  zh: 参考
 - ja: ドキュメント
   en: documentation
   ko: 문서
+  zh: 文档
 - ja: 見出し
   en: heading
   ko: 제목
+  zh: 标题
 - ja: 表
   en: table
   ko: 표
+  zh: 表格
 - ja: 箇条書き
   en: bullet list
   ko: 글머리 기호 목록
+  zh: 项目列表
 - ja: リンク
   en: link
   ko: 링크
+  zh: 链接
 - ja: 差分
   en: diff
   ko: 차이
+  zh: 差异
 - ja: 更新
   en: update
   ko: 업데이트
+  zh: 更新
 - ja: 同期
   en: synchronization
   ko: 동기화
+  zh: 同步
 - ja: 再同期
   en: resynchronization
   ko: 재동기화
+  zh: 重新同步
 - ja: 実行時
   en: runtime
   ko: 런타임
+  zh: 运行时
 - ja: 起動
   en: startup
   ko: 시작
+  zh: 启动
 - ja: 停止
   en: shutdown
   ko: 종료
+  zh: 停止
 - ja: 固有名
   en: proper name
   ko: 고유명사
+  zh: 专有名词
 - ja: Anima
   en: Anima
   ko: Anima
