@@ -120,7 +120,7 @@ export function render(container) {
         <span id="extTasksBadge" style="display:none;font-size:0.7rem;background:var(--accent-color,#2563eb);color:#fff;border-radius:10px;padding:0.1rem 0.5rem;margin-left:0.25rem;"></span>
         <span style="flex:1;"></span>
         <span id="extTasksLastUpdated" style="font-size:0.75rem;color:var(--text-secondary,#666);margin-right:0.5rem;"></span>
-        <button id="extTasksRefresh" class="btn-icon" title="${t("home.ext_refresh")}" style="font-size:0.85rem;">&#x21BB;</button>
+        <button id="extTasksRefresh" class="btn-icon" title="${t("home.ext_refresh")}" aria-label="${escapeHtml(t("home.ext_refresh"))}" style="font-size:0.85rem;">&#x21BB;</button>
       </div>
       <div class="card-body" id="extTasksBody">
         <div id="extTasksList">

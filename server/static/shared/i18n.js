@@ -62,6 +62,10 @@ export function applyTranslations() {
     const val = t(el.dataset.i18nTitle);
     if (val !== el.dataset.i18nTitle) el.title = val;
   });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+    const val = t(el.dataset.i18nAriaLabel);
+    if (val !== el.dataset.i18nAriaLabel) el.setAttribute('aria-label', val);
+  });
 }
 
 export function getLocale() {

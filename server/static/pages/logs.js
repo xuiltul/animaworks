@@ -22,7 +22,7 @@ export function render(container) {
 
     <div style="display:flex; gap:1rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
       <label style="font-weight:500;">${t("logs.file_label")}</label>
-      <select id="logFileSelect" style="flex:1; max-width:400px; padding:0.4rem; border:1px solid var(--border-color, #ddd); border-radius:0.375rem;">
+      <select id="logFileSelect" aria-label="${t("logs.file_label")}" style="flex:1; max-width:400px; padding:0.4rem; border:1px solid var(--border-color, #ddd); border-radius:0.375rem;">
         <option value="">${t("logs.file_select")}</option>
       </select>
       <button class="btn-secondary" id="logStreamToggle">${t("logs.stream_start")}</button>

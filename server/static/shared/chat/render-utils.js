@@ -327,8 +327,8 @@ const DEFAULT_TOOL_RESULT_TRUNCATE = 500;
 function _bubbleActionsHtml(rawText) {
   if (!rawText) return "";
   return `<div class="bubble-actions">`
-    + `<button class="bubble-action-btn" data-action="copy" title="Copy"><i data-lucide="copy"></i></button>`
-    + `<button class="bubble-action-btn" data-action="download" title="Download"><i data-lucide="download"></i></button>`
+    + `<button class="bubble-action-btn" data-action="copy" title="${_escapeAttr(t("chat.line.copy"))}" aria-label="${_escapeAttr(t("chat.line.copy"))}"><i data-lucide="copy"></i></button>`
+    + `<button class="bubble-action-btn" data-action="download" title="${_escapeAttr(t("chat.line.download"))}" aria-label="${_escapeAttr(t("chat.line.download"))}"><i data-lucide="download"></i></button>`
     + `</div>`;
 }
 

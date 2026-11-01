@@ -164,19 +164,19 @@ export function renderThreadTabsHtml(threadList, activeThreadId, opts) {
   if (hiddenThreads.length > 0) {
     html += `<span class="thread-more-wrap">` +
       `<label class="thread-more-label">${escapeHtml(t("thread.more_count", { count: hiddenThreads.length }))}</label>` +
-      `<select data-chat-id="${moreSelectId}" class="thread-more-select">` +
+      `<select data-chat-id="${moreSelectId}" class="thread-more-select" aria-label="${escapeHtml(t("thread.select"))}">` +
       `<option value="">${escapeHtml(t("thread.select"))}</option>` +
       hiddenThreads.map(th => `<option value="${escapeHtml(th.id)}">${escapeHtml(th.label)}${th.unread ? " ★" : ""}</option>`).join("") +
       `</select></span>`;
   }
 
-  html += `<button type="button" class="thread-tab-new" data-chat-id="${newBtnId}" title="${escapeHtml(t("thread.new"))}">＋</button>`;
+  html += `<button type="button" class="thread-tab-new" data-chat-id="${newBtnId}" title="${escapeHtml(t("thread.new"))}" aria-label="${escapeHtml(t("thread.new"))}">＋</button>`;
 
   if (archived.length > 0) {
     const archiveBtnId = opts.archiveBtnId || "chatArchiveBtn";
     const archiveMenuId = opts.archiveMenuId || "chatArchiveMenu";
     html += `<span class="thread-archive-wrap">` +
-      `<button type="button" class="thread-archive-btn" data-chat-id="${archiveBtnId}" title="${escapeHtml(t("thread.archive_count", { count: archived.length }))}">` +
+      `<button type="button" class="thread-archive-btn" data-chat-id="${archiveBtnId}" title="${escapeHtml(t("thread.archive_count", { count: archived.length }))}" aria-label="${escapeHtml(t("thread.archive_count", { count: archived.length }))}">` +
       `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
       `<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>` +
       `</svg>` +

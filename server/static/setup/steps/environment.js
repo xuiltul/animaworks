@@ -339,7 +339,7 @@ function renderImageKey(id, label, hint, badge) {
       <div class="image-key-label">${label}<span class="${badgeClass}">${badge}</span></div>
       <div class="form-hint">${hint}</div>
       <div class="api-key-row" style="margin-top: 4px;">
-        <input type="password" class="api-key-input" data-image-key="${id}" data-i18n-placeholder="env.apikey.placeholder" placeholder="${t("env.apikey.placeholder")}" value="${escapeAttr(imageKeys[id] || "")}">
+        <input type="password" class="api-key-input" data-image-key="${id}" data-i18n-placeholder="env.apikey.placeholder" placeholder="${t("env.apikey.placeholder")}" aria-label="${escapeAttr(`${label} ${t("env.apikey")}`)}" value="${escapeAttr(imageKeys[id] || "")}">
       </div>
       <div class="image-key-status" data-image-status="${id}">${statusHtml}</div>
     </div>

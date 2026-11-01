@@ -32,7 +32,7 @@ export async function initBoardTab() {
     _paneBoard.innerHTML = `
       <div class="ws-board-tab">
         <div class="ws-board-dropdown">
-          <select class="ws-board-select" id="wsBoardSelect">
+          <select class="ws-board-select" id="wsBoardSelect" aria-label="${t("board.channel_select")}">
             <option value="">${t("board.loading")}</option>
           </select>
         </div>
@@ -40,7 +40,7 @@ export async function initBoardTab() {
           <div class="loading-placeholder">${t("board.select_channel_prompt")}</div>
         </div>
         <div class="ws-board-input" id="wsBoardInputArea">
-          <textarea class="ws-board-input-field" id="wsBoardInput" placeholder="${t("board.message_placeholder")}" rows="1"></textarea>
+          <textarea class="ws-board-input-field" id="wsBoardInput" placeholder="${t("board.message_placeholder")}" aria-label="${t("board.message_input")}" rows="1"></textarea>
           <button class="ws-board-send-btn" id="wsBoardSend">${t("board.send")}</button>
         </div>
       </div>`;

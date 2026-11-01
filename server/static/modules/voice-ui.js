@@ -44,6 +44,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   micBtn.type = 'button';
   micBtn.className = 'voice-mic-btn';
   micBtn.title = t('voice.mic_input');
+  micBtn.setAttribute('aria-label', t('voice.mic_input'));
   micBtn.innerHTML = MIC_ICON_SVG;
 
   micContainer.append(micBtn);
@@ -79,6 +80,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   modeToggle.className = 'voice-mode-toggle';
   modeToggle.textContent = 'PTT';
   modeToggle.title = t('voice.mode_toggle');
+  modeToggle.setAttribute('aria-label', t('voice.mode_toggle'));
 
   const volumeSlider = document.createElement('input');
   volumeSlider.type = 'range';
@@ -86,6 +88,7 @@ export function initVoiceUI(chatInputForm, animaName, callbacks, opts) {
   volumeSlider.min = '0';
   volumeSlider.max = '100';
   volumeSlider.value = '80';
+  volumeSlider.setAttribute('aria-label', t('voice.volume'));
 
   tbControls.append(modeToggle, volumeSlider);
   toolbar.append(tbStatus, tbControls);

@@ -68,7 +68,7 @@ export function render(container) {
         <div class="board-sidebar-divider"></div>
         <div class="board-sidebar-section board-dm-section-header">
           <span>DMs</span>
-          <select id="boardDmFilter" class="board-dm-filter" title="${t("board.dm_filter_title")}">
+          <select id="boardDmFilter" class="board-dm-filter" title="${t("board.dm_filter_title")}" aria-label="${escapeHtml(t("board.dm_filter_title"))}">
             <option value="">${t("board.dm_filter_all")}</option>
           </select>
         </div>
@@ -98,6 +98,7 @@ export function render(container) {
               id="boardInput"
               class="board-input"
               placeholder="${t("board.message_placeholder")}"
+              aria-label="${escapeHtml(t("board.message_input"))}"
               autocomplete="off"
               rows="1"
             ></textarea>
@@ -459,15 +460,15 @@ async function _renderChannelMembers(channelName, metaEl) {
       const bg = isLead ? "var(--color-warning-light,#fff3cd)" : "var(--color-primary-light,#e8f0fe)";
       const fg = isLead ? "var(--color-warning-dark,#856404)" : "var(--color-primary,#0066cc)";
       const star = isLead ? "★ " : "";
-      const leadBtn = !isLead ? `<button class="board-member-lead" data-name="${escapeHtml(m)}" title="${t("board.members_set_lead")}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#aaa);font-size:0.7rem;padding:0;line-height:1;">☆</button>` : "";
+      const leadBtn = !isLead ? `<button class="board-member-lead" data-name="${escapeHtml(m)}" title="${t("board.members_set_lead")}" aria-label="${escapeHtml(t("board.members_set_lead_label"))}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#aaa);font-size:0.7rem;padding:0;line-height:1;">☆</button>` : "";
       return `<span style="display:inline-flex;align-items:center;gap:0.2rem;background:${bg};color:${fg};border-radius:10px;padding:0.1rem 0.5rem;font-size:0.75rem;">` +
-        `${star}${escapeHtml(m)}${leadBtn}<button class="board-member-rm" data-name="${escapeHtml(m)}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`;
+        `${star}${escapeHtml(m)}${leadBtn}<button class="board-member-rm" data-name="${escapeHtml(m)}" aria-label="${escapeHtml(t("board.members_remove", { name: m }))}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`;
     }).join(" ");
 
     // Animas not in this channel
     const available = allAnimas.filter(a => !members.includes(a));
     const addDropdown = available.length > 0
-      ? `<select id="boardMemberAdd" style="font-size:0.75rem;padding:0.1rem 0.3rem;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--bg-secondary,#f9f9f9);color:var(--text-primary,#333);"><option value="">+ ${t("board.members_add")}</option>${available.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("")}</select>`
+      ? `<select id="boardMemberAdd" aria-label="${escapeHtml(t("board.members_add_select"))}" style="font-size:0.75rem;padding:0.1rem 0.3rem;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--bg-secondary,#f9f9f9);color:var(--text-primary,#333);"><option value="">+ ${t("board.members_add")}</option>${available.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("")}</select>`
       : "";
 
     metaEl.innerHTML = `<span style="font-size:0.75rem;color:var(--text-secondary,#888);margin-right:0.3rem;">${t("board.members")}:</span>${tags || `<span style="font-size:0.75rem;color:var(--text-secondary,#888);">${t("board.members_none")}</span>`} ${addDropdown}`;
