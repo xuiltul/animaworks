@@ -36,6 +36,58 @@ def is_process_alive(pid: int) -> bool:
         return False
 
 
+_PYTHON_IMAGE_TAGS = ("python", "pypy")
+
+
+def _running_as_root() -> bool:
+    return os.name == "posix" and os.geteuid() == 0
+
+
+def _process_image_name(proc: psutil.Process) -> str:
+    """Return the lower-cased executable name of *proc*, or "" when unreadable."""
+    for getter in (proc.exe, proc.name):
+        try:
+            value = getter()
+        except psutil.Error:
+            continue
+        if value:
+            return Path(value).name.lower()
+    return ""
+
+
+def is_unrelated_process(pid: int) -> bool:
+    """Return True when ``pid`` is provably not a Python process of this user.
+
+    A live PID alone does not prove that a PID file is current: PIDs are
+    reused, so a ``server.pid`` left over from before a reboot can name an
+    unrelated process (on macOS a system daemon took the old PID and every
+    start was refused as "already running").  The server writes its own PID
+    file, so its process is a Python interpreter owned by the same user.
+    A process owned by another user (unless the caller is root) or running a
+    non-Python executable is therefore something else.  The command line is
+    not used: it is unreadable for other users' processes on macOS and varies
+    with how the server was launched.  When the owner or the executable cannot
+    be read this returns False, so callers keep treating the PID as a possible
+    server.
+
+    Args:
+        pid: Process ID read from a PID file.
+
+    Returns:
+        True only when the process is known to be something else.
+    """
+    try:
+        proc = psutil.Process(pid)
+        if not _running_as_root() and proc.username() != psutil.Process().username():
+            return True
+    except psutil.Error:
+        return False
+    image = _process_image_name(proc)
+    if not image:
+        return False
+    return not any(tag in image for tag in _PYTHON_IMAGE_TAGS)
+
+
 def _terminate_psutil_process(proc: psutil.Process, *, force: bool) -> None:
     try:
         if force:

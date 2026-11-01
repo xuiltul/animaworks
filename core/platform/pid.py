@@ -13,13 +13,17 @@ logger = logging.getLogger("animaworks")
 
 
 def is_server_running(data_dir: Path | None = None) -> bool:
-    """Return whether a valid server PID file points to a live process."""
+    """Return whether a valid server PID file points to a live server process.
+
+    A PID that a different process reused (for example after a reboot) does
+    not count; see :func:`core.platform.process.is_unrelated_process`.
+    """
     pid = read_server_pid(data_dir)
     if pid is None:
         return False
-    from core.platform.process import is_process_alive
+    from core.platform.process import is_process_alive, is_unrelated_process
 
-    return is_process_alive(pid)
+    return is_process_alive(pid) and not is_unrelated_process(pid)
 
 
 def read_server_pid(data_dir: Path | None = None) -> int | None:

@@ -354,6 +354,69 @@ def _server_test_data_dir(data_dir_at_tmp_path):
     """Keep server command paths inside each test's temporary root."""
 
 
+@pytest.fixture(autouse=True)
+def _pid_owner_check_off(monkeypatch):
+    """Fake PIDs (999, 12345) may be real processes on the test host; keep them "possibly ours".
+
+    Tests of the reused-PID handling switch the check on explicitly.
+    """
+    monkeypatch.setattr("cli.commands.server.is_unrelated_process", lambda _pid: False)
+
+
+class TestReusedPidFile:
+    """A server.pid left from before a reboot can name a live, unrelated process."""
+
+    def test_foreground_start_ignores_pid_reused_by_unrelated_process(self, foreground_server_mocks, monkeypatch):
+        from cli.commands.server import cmd_start
+
+        (foreground_server_mocks["data_dir"] / "server.pid").write_text("599\n", encoding="utf-8")
+        monkeypatch.setattr("cli.commands.server.is_pid_alive", lambda pid: pid == 599)
+        monkeypatch.setattr("cli.commands.server.is_unrelated_process", lambda pid: pid == 599)
+
+        cmd_start(argparse.Namespace(host="127.0.0.1", port=18500, foreground=True))
+
+        foreground_server_mocks["run_server"].assert_called_once()
+
+    def test_foreground_start_ignores_pid_file_naming_itself(self, foreground_server_mocks, monkeypatch):
+        """After a reboot the server can get the same PID it had before."""
+        from cli.commands.server import cmd_start
+
+        (foreground_server_mocks["data_dir"] / "server.pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
+
+        cmd_start(argparse.Namespace(host="127.0.0.1", port=18500, foreground=True))
+
+        foreground_server_mocks["run_server"].assert_called_once()
+
+    def test_foreground_start_still_refuses_possible_server(self, foreground_server_mocks, monkeypatch):
+        from cli.commands.server import EXIT_ALREADY_RUNNING, cmd_start
+
+        (foreground_server_mocks["data_dir"] / "server.pid").write_text("599\n", encoding="utf-8")
+        monkeypatch.setattr("cli.commands.server.is_pid_alive", lambda pid: pid == 599)
+
+        with pytest.raises(SystemExit) as exc:
+            cmd_start(argparse.Namespace(host="127.0.0.1", port=18500, foreground=True))
+
+        assert exc.value.code == EXIT_ALREADY_RUNNING
+        foreground_server_mocks["run_server"].assert_not_called()
+
+    def test_stop_does_not_signal_unrelated_process(self, capsys, monkeypatch):
+        from cli.commands.server import cmd_stop
+
+        monkeypatch.setattr("cli.commands.server.read_server_pid", lambda: 599)
+        monkeypatch.setattr("cli.commands.server.is_pid_alive", lambda pid: pid == 599)
+        monkeypatch.setattr("cli.commands.server.is_unrelated_process", lambda pid: pid == 599)
+        with (
+            patch("cli.commands.server.terminate_pid") as terminate,
+            patch("cli.commands.server.terminate_matching_processes", return_value=0),
+            patch("cli.commands.server._remove_pid_file") as remove_pid_file,
+        ):
+            cmd_stop(argparse.Namespace(force=False))
+
+        terminate.assert_not_called()
+        remove_pid_file.assert_called_once()
+        assert "Stale PID file (pid=599)" in capsys.readouterr().out
+
+
 @pytest.fixture
 def foreground_server_mocks(monkeypatch, data_dir_at_tmp_path):
     from core.platform.pid import read_server_pid
