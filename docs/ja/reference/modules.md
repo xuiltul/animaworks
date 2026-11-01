@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: fa22e9cc4abf6a506b895b8aeba02d35d23cc1784cf6fa972a46aa018e20792b -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 96cd47f6b8137a1ac727c6757ab3b7c306e6bb149890c37aee740638f03c6d7d -->
 
 # モジュール一覧
 
@@ -102,7 +102,7 @@
 | `core.exceptions` | 157 | — |
 | `core.host_api` | 88 | — |
 | `core.internal_api` | 51 | — |
-| `core.paths` | 218 | Centralized path resolution for AnimaWorks. |
+| `core.paths` | 235 | Centralized path resolution for AnimaWorks. |
 | `core.schemas` | 242 | — |
 | `core.time_utils` | 103 | — |
 | `core.trust` | 434 | — |
@@ -737,7 +737,7 @@ anima 間および外部とのメッセージ配送。
 | `core.migrations.registry` | 149 | — |
 | `core.migrations.standard_files_rollback` | 161 | Rollback support for the standard workspace-file migration (A2). |
 | `core.migrations.steps` | 1562 | Migration step implementations for AnimaWorks runtime data. |
-| `core.migrations.template_sync` | 137 | — |
+| `core.migrations.template_sync` | 142 | — |
 | `core.migrations.tracker` | 157 | — |
 
 ## `core.notification`
@@ -833,7 +833,7 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.prompt.assembler` | 307 | — |
 | `core.prompt.builder` | 1297 | — |
 | `core.prompt.context` | 490 | Context window usage tracker. |
-| `core.prompt.messaging` | 147 | — |
+| `core.prompt.messaging` | 148 | — |
 | `core.prompt.org_context` | 379 | — |
 | `core.prompt.sections` | 52 | — |
 

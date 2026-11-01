@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=b739062c18e93089cb49affb2fd390fe3815268e0c5465f7fd42d737aef197d8 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=b02ae28480aec306b6bc995db8c18871bc4eb0bd070c6ce4e590a8aa2a69fb4e generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -102,7 +102,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `core.exceptions` | 157 | — |
 | `core.host_api` | 88 | — |
 | `core.internal_api` | 51 | — |
-| `core.paths` | 218 | Centralized path resolution for AnimaWorks. |
+| `core.paths` | 235 | Centralized path resolution for AnimaWorks. |
 | `core.schemas` | 242 | — |
 | `core.time_utils` | 103 | — |
 | `core.trust` | 434 | — |
@@ -737,7 +737,7 @@ Gradual migration of runtime data formats.
 | `core.migrations.registry` | 149 | — |
 | `core.migrations.standard_files_rollback` | 161 | Rollback support for the standard workspace-file migration (A2). |
 | `core.migrations.steps` | 1562 | Migration step implementations for AnimaWorks runtime data. |
-| `core.migrations.template_sync` | 137 | — |
+| `core.migrations.template_sync` | 142 | — |
 | `core.migrations.tracker` | 157 | — |
 
 ## `core.notification`
@@ -833,7 +833,7 @@ System prompt and context construction.
 | `core.prompt.assembler` | 307 | — |
 | `core.prompt.builder` | 1297 | — |
 | `core.prompt.context` | 490 | Context window usage tracker. |
-| `core.prompt.messaging` | 147 | — |
+| `core.prompt.messaging` | 148 | — |
 | `core.prompt.org_context` | 379 | — |
 | `core.prompt.sections` | 52 | — |
 

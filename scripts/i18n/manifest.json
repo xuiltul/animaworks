@@ -645,14 +645,14 @@
       "translator_version": "2"
     },
     "docs/en/reference/README.md": {
-      "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "engine": "local",
+      "generated": "2026-11-01",
+      "model": "deepseek-v4.1-flash-1017",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "962284c46a9d1f40e53e7e6749e56e521ce8c82bbd1a07c3304d753b1dda48ef",
+      "source_sha256": "9dc5c8a7d438f5cc53ab6220f15f526cc3463f130b8f21a6bc61971de8285b46",
       "statuses": [
         "translated"
       ],
@@ -1107,16 +1107,16 @@
       "translator_version": "2"
     },
     "docs/en/reference/modules.md": {
-      "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "engine": "local",
+      "generated": "2026-11-01",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "59fc9cf8c7e6f7b9bd247ba05b0836f49fc6e4b678e94866d004066d96a1ec3b",
         "ff0ee561eec49fd28b7502be115b790de3ff34e5898a1f80a678c9eac8743f36",
         "9bc8f4e99054207316ec9d309c17b077d92f0f8f08b11af6bd1f39068da916e2",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
-        "fb117c8ad8367adf8993f4dedde962843e0846ec24dc0b813aa4a19046c8eff0",
+        "87a971e4f54afe361a5f65bc82ca30cec1b009ed4956654c2d5e5a4aead2fbd9",
         "c67940e6cb06dd267c8ef258bf5bf4862e138f7722537ae935a51f9d2de7f197",
         "442cfef3e4975d37871e461a95aaac51414445116fa6d54f7b6abb0e20442d45",
         "7435502e5066c86eab1d02871dba8b576a7194a0e95053fdac526476b0ee0bba",
@@ -1155,13 +1155,13 @@
         "7ef10cee4b9e74825a08c56478839dcdc2a0437c523ad1a5ab3778a0c60b8626",
         "9677e170f0a92d30541b1b1f05047a6fff5b1cd9f48c670f041a5215c9b6feed",
         "0140b351f70927de63e3198d847db4db8481c3339b5cff163fea77fd8dc7b704",
-        "51568254b1da735d75171a3d818e8ca2778bfcad604b3ec3b6c37980e7fa71bc",
+        "6090fcdfdfa22ea9cb9dfb7031c6b93785fb3da6de25981ccf1bf268d3210eb5",
         "ad05315f01b897d19dee3b9a50a93c0b802c20d6054169421e72c8358334ff97",
         "f25144984620d4e33c067ce62ecdae1185c3f6f65f092bf449abd2f2fa2c6a45",
         "68d81b317b7a3c346555de0159c2732d93db25f27a2f3bc85551b5252ead6e15",
         "ff4286a9fd7955bbe0e3a7bb332baf63c837a30a3885ee12b9481b9293c39b89",
         "533648dfdb883bcd6cfbb53a7869c7311aca482297c34ebd934e23c228a5157b",
-        "08c0a8876ce5854b05faacf2b3f2fee8e15a323c4d976e268ce168fd8ddca6e8",
+        "9a7f806ee38248df70edd8b936ffd245877bdf38c050f1eeafb0cd1250300d8a",
         "e5b7ddce05523f4ead239ca2cddf41110c1fdee74e11efc1999b1d50c649411f",
         "54a463ae6862125157d4637fa967cb67792ef816b8a666756ed33b21cadea14c",
         "be41131dbd224012ea02f3af189695d451284f08c307f8271f7dbf34e90e5243",
@@ -1183,7 +1183,7 @@
         "749b8ef2d702372d43e65bfa1a3aada0d8457ac21c39a24a2f44e188a826b9c1"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "b739062c18e93089cb49affb2fd390fe3815268e0c5465f7fd42d737aef197d8",
+      "source_sha256": "b02ae28480aec306b6bc995db8c18871bc4eb0bd070c6ce4e590a8aa2a69fb4e",
       "statuses": [
         "translated",
         "translated",
@@ -2013,14 +2013,14 @@
       "translator_version": "2"
     },
     "docs/ko/reference/README.md": {
-      "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "engine": "local",
+      "generated": "2026-11-01",
+      "model": "deepseek-v4.1-flash-1017",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "962284c46a9d1f40e53e7e6749e56e521ce8c82bbd1a07c3304d753b1dda48ef",
+      "source_sha256": "9dc5c8a7d438f5cc53ab6220f15f526cc3463f130b8f21a6bc61971de8285b46",
       "statuses": [
         "translated"
       ],
@@ -2475,16 +2475,16 @@
       "translator_version": "2"
     },
     "docs/ko/reference/modules.md": {
-      "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "engine": "local",
+      "generated": "2026-11-01",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "59fc9cf8c7e6f7b9bd247ba05b0836f49fc6e4b678e94866d004066d96a1ec3b",
         "ff0ee561eec49fd28b7502be115b790de3ff34e5898a1f80a678c9eac8743f36",
         "9bc8f4e99054207316ec9d309c17b077d92f0f8f08b11af6bd1f39068da916e2",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
-        "fb117c8ad8367adf8993f4dedde962843e0846ec24dc0b813aa4a19046c8eff0",
+        "87a971e4f54afe361a5f65bc82ca30cec1b009ed4956654c2d5e5a4aead2fbd9",
         "c67940e6cb06dd267c8ef258bf5bf4862e138f7722537ae935a51f9d2de7f197",
         "442cfef3e4975d37871e461a95aaac51414445116fa6d54f7b6abb0e20442d45",
         "7435502e5066c86eab1d02871dba8b576a7194a0e95053fdac526476b0ee0bba",
@@ -2523,13 +2523,13 @@
         "7ef10cee4b9e74825a08c56478839dcdc2a0437c523ad1a5ab3778a0c60b8626",
         "9677e170f0a92d30541b1b1f05047a6fff5b1cd9f48c670f041a5215c9b6feed",
         "0140b351f70927de63e3198d847db4db8481c3339b5cff163fea77fd8dc7b704",
-        "51568254b1da735d75171a3d818e8ca2778bfcad604b3ec3b6c37980e7fa71bc",
+        "6090fcdfdfa22ea9cb9dfb7031c6b93785fb3da6de25981ccf1bf268d3210eb5",
         "ad05315f01b897d19dee3b9a50a93c0b802c20d6054169421e72c8358334ff97",
         "f25144984620d4e33c067ce62ecdae1185c3f6f65f092bf449abd2f2fa2c6a45",
         "68d81b317b7a3c346555de0159c2732d93db25f27a2f3bc85551b5252ead6e15",
         "ff4286a9fd7955bbe0e3a7bb332baf63c837a30a3885ee12b9481b9293c39b89",
         "533648dfdb883bcd6cfbb53a7869c7311aca482297c34ebd934e23c228a5157b",
-        "08c0a8876ce5854b05faacf2b3f2fee8e15a323c4d976e268ce168fd8ddca6e8",
+        "9a7f806ee38248df70edd8b936ffd245877bdf38c050f1eeafb0cd1250300d8a",
         "e5b7ddce05523f4ead239ca2cddf41110c1fdee74e11efc1999b1d50c649411f",
         "54a463ae6862125157d4637fa967cb67792ef816b8a666756ed33b21cadea14c",
         "be41131dbd224012ea02f3af189695d451284f08c307f8271f7dbf34e90e5243",
@@ -2551,7 +2551,7 @@
         "749b8ef2d702372d43e65bfa1a3aada0d8457ac21c39a24a2f44e188a826b9c1"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "b739062c18e93089cb49affb2fd390fe3815268e0c5465f7fd42d737aef197d8",
+      "source_sha256": "b02ae28480aec306b6bc995db8c18871bc4eb0bd070c6ce4e590a8aa2a69fb4e",
       "statuses": [
         "translated",
         "translated",
