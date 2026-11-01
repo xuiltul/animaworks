@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "heartbeat_enabled": true,
+  "consolidation_enabled": true,
+  "role": "engineer",
+  "speciality": "dev-engineer"
+}

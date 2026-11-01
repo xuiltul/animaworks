@@ -50,7 +50,9 @@ def _is_syncable_file(path: Path, root: Path) -> bool:
 
 
 def _locale_fallbacks(locale: str) -> tuple[str, ...]:
-    return tuple(dict.fromkeys((locale, "en", "ja")))
+    from core.paths import normalize_locale
+
+    return tuple(dict.fromkeys((normalize_locale(locale), "en", "ja")))
 
 
 def resolve_template_sources(locale: str) -> dict[str, Path]:
@@ -82,6 +84,9 @@ def resolve_template_sources(locale: str) -> dict[str, Path]:
 
 def template_fingerprint(locale: str) -> str:
     """Return a stable 12-character ID for the selected locale and file contents."""
+    from core.paths import normalize_locale
+
+    locale = normalize_locale(locale)
     digest = hashlib.sha256()
     digest.update(locale.encode("utf-8"))
     digest.update(b"\0")

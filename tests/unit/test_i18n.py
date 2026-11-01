@@ -1,4 +1,5 @@
 """Unit tests for core/i18n.py."""
+
 from __future__ import annotations
 
 
@@ -8,31 +9,53 @@ class TestTranslationFunction:
     def test_returns_ja_string_for_ja_locale(self):
         """t() returns Japanese string when locale is 'ja'."""
         from core.i18n import t
+
         result = t("anima.status_idle", locale="ja")
         assert result == "待機中"
 
     def test_returns_en_string_for_en_locale(self):
         """t() returns English string when locale is 'en'."""
         from core.i18n import t
+
         result = t("anima.status_idle", locale="en")
         assert result == "Idle"
 
     def test_fallback_to_en_for_unknown_locale(self):
         """t() falls back to 'ja' for unrecognized locales."""
         from core.i18n import t
+
         result = t("anima.status_idle", locale="fr")
         # Should fall back to ja since fr is not in ("ja", "en", "zh", "ko")
         assert result == "待機中"
 
+    def test_zh_cn_uses_zh_string_not_ja(self):
+        """t() normalizes zh-CN to zh and prefers the zh translation."""
+        from core.i18n import t
+
+        result = t("handler.description_field_required", locale="zh-CN")
+        assert result == "需要 `description` 字段。"
+
+    def test_zh_cn_falls_back_to_en_when_zh_missing(self):
+        """A zh locale falls back zh → en (not ja) when only en exists."""
+        from core.i18n import _STRINGS, t
+
+        _STRINGS["_test_only_en"] = {"ja": "日本語のみ", "en": "English only"}
+        try:
+            assert t("_test_only_en", locale="zh-CN") == "English only"
+        finally:
+            del _STRINGS["_test_only_en"]
+
     def test_returns_key_for_missing_entry(self):
         """t() returns the key itself when no translation exists."""
         from core.i18n import t
+
         result = t("nonexistent.key", locale="ja")
         assert result == "nonexistent.key"
 
     def test_placeholder_substitution(self):
         """t() substitutes {placeholder} values."""
         from core.i18n import t
+
         result = t("handler.anima_not_found", locale="en", target_name="TestAnima")
         assert "TestAnima" in result
         assert "{target_name}" not in result
@@ -40,12 +63,14 @@ class TestTranslationFunction:
     def test_missing_placeholder_preserved(self):
         """t() preserves {placeholder} when value not provided."""
         from core.i18n import t
+
         result = t("handler.anima_not_found", locale="en")
         assert "{target_name}" in result
 
     def test_fallback_chain_en_then_ja(self):
         """When locale entry missing, falls back en → ja."""
         from core.i18n import _STRINGS, t
+
         # Temporarily add a key with only ja
         _STRINGS["_test_only_ja"] = {"ja": "日本語のみ"}
         try:
@@ -57,6 +82,7 @@ class TestTranslationFunction:
     def test_all_keys_have_ja_and_en(self):
         """Every key in _STRINGS has both 'ja' and 'en' entries."""
         from core.i18n import _STRINGS
+
         missing = []
         for key, translations in _STRINGS.items():
             if "ja" not in translations:
@@ -68,6 +94,7 @@ class TestTranslationFunction:
     def test_no_empty_translations(self):
         """No translation value should be empty string."""
         from core.i18n import _STRINGS
+
         empty = []
         for key, translations in _STRINGS.items():
             for lang, value in translations.items():
@@ -81,6 +108,7 @@ class TestSafeFormatDict:
 
     def test_missing_key_returns_braced(self):
         from core.i18n import _SafeFormatDict
+
         d = _SafeFormatDict({"a": "1"})
         result = "hello {a} {b}".format_map(d)
         assert result == "hello 1 {b}"

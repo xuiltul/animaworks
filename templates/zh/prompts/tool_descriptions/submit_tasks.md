@@ -1,0 +1,1 @@
+投入的工作由自己的 TaskExec 执行。对直属部下使用 delegate_task。新建时传入 task_id、title、description 以及必要的上下文、约束、依赖关系和 workspace。不要重复创建相同的工作，必要时用 list_tasks 确认。任务和输入会一并持久化，重新投递是幂等的，不是重试。对于中断原因已解决但尚未结束的任务，用现有 task_id 和 resume=true 显式恢复。不要重建已保存的输入。不要恢复运行中或已结束的任务。

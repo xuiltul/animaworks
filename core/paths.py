@@ -120,14 +120,31 @@ class _SafeFormatDict(dict):
         return "{" + key + "}"
 
 
+def normalize_locale(locale: str | None) -> str:
+    """Normalize a locale tag to its lowercase primary language subtag.
+
+    Template lookups only distinguish languages, not regions.  Values such as
+    ``"zh-CN"``, ``"zh-TW"``, ``"zh_CN"``, ``"zh-Hans"`` and ``"ZH"`` therefore
+    all resolve to ``"zh"``; ``"ko-KR"`` resolves to ``"ko"``.  An empty or
+    missing value falls back to ``"ja"`` (the application default).
+
+    Region information is preserved in ``config.locale`` itself; this helper is
+    only for consumers that select templates or translation strings.
+    """
+    if not isinstance(locale, str):
+        return "ja"
+    primary = locale.strip().replace("_", "-").split("-", 1)[0].strip().lower()
+    return primary or "ja"
+
+
 def _get_locale() -> str:
-    """Get locale from config lazily to avoid circular imports."""
+    """Get the normalized locale from config lazily to avoid circular imports."""
     try:
         from core.config.models import load_config
 
         loc = load_config().locale
         if isinstance(loc, str) and loc:
-            return loc
+            return normalize_locale(loc)
         return "ja"
     except Exception:
         return "ja"
@@ -157,7 +174,7 @@ def resolve_template_path(
     Raises:
         FileNotFoundError: If the template is not found in any fallback.
     """
-    loc = locale or _get_locale()
+    loc = normalize_locale(locale or _get_locale())
     if ".." in category or ".." in filename:
         raise ValueError(f"Path traversal not allowed: {category}/{filename}")
     for fallback in _unique([loc, "en", "ja"]):
@@ -191,7 +208,7 @@ def resolve_template_path(
 
 def load_prompt_text(name: str, *, locale: str | None = None) -> str:
     """Read a locale-aware prompt Markdown file without formatting it."""
-    loc = locale or _get_locale()
+    loc = normalize_locale(locale or _get_locale())
     key = (loc, name)
     path = resolve_template_path("prompts", f"{name}.md", loc)
     text = path.read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=9ca99b37c7b3ff435d3433e7c9907e8c5825c9cd0f4d154eb5d1e0cf4af40e16 generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=6ad25bdca92bb36eac0185f14a9054a5b66849b676b5e4ac95a1921e942f0930 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -102,7 +102,7 @@
 | `core.exceptions` | 157 | — |
 | `core.host_api` | 88 | — |
 | `core.internal_api` | 51 | — |
-| `core.paths` | 218 | AnimaWorks의 중앙 집중식 경로 확인. |
+| `core.paths` | 235 | AnimaWorks의 중앙 집중식 경로 확인. |
 | `core.schemas` | 242 | — |
 | `core.time_utils` | 103 | — |
 | `core.trust` | 434 | — |
@@ -737,7 +737,7 @@ anima 간 및 외부와의 메시지 전달.
 | `core.migrations.registry` | 149 | — |
 | `core.migrations.standard_files_rollback` | 161 | Rollback support for the standard workspace-file migration (A2). |
 | `core.migrations.steps` | 1562 | Migration step implementations for AnimaWorks runtime data. |
-| `core.migrations.template_sync` | 137 | — |
+| `core.migrations.template_sync` | 142 | — |
 | `core.migrations.tracker` | 157 | — |
 
 ## `core.notification`
@@ -833,7 +833,7 @@ Twilio 전화 채널의 음성 합성, 통화 상태 및 웹훅 관리.
 | `core.prompt.assembler` | 307 | — |
 | `core.prompt.builder` | 1297 | — |
 | `core.prompt.context` | 490 | 컨텍스트 창 사용량 추적기. |
-| `core.prompt.messaging` | 147 | — |
+| `core.prompt.messaging` | 148 | — |
 | `core.prompt.org_context` | 379 | — |
 | `core.prompt.sections` | 52 | — |
 

@@ -13,6 +13,7 @@ import pytest
 from core.paths import (
     PROJECT_DIR,
     TEMPLATES_DIR,
+    _get_locale,
     _prompt_cache,
     _resolve_templates_dir,
     get_animas_dir,
@@ -24,6 +25,7 @@ from core.paths import (
     get_shared_dir,
     get_tmp_dir,
     load_prompt,
+    normalize_locale,
     resolve_template_path,
 )
 
@@ -194,3 +196,56 @@ class TestLoadPrompt:
             mock_resolve.return_value = prompts_dir / "multi.md"
             result = load_prompt("multi", a="X", b="Y", locale="ja")
             assert result == "X and Y"
+
+
+# ── locale normalization ─────────────────────────────────
+
+
+class TestNormalizeLocale:
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("zh-CN", "zh"),
+            ("zh-TW", "zh"),
+            ("zh_CN", "zh"),
+            ("zh-Hans", "zh"),
+            ("ZH", "zh"),
+            ("ko-KR", "ko"),
+            ("ja", "ja"),
+            ("en", "en"),
+            ("en-US", "en"),
+            ("fr", "fr"),
+            ("", "ja"),
+            (None, "ja"),
+        ],
+    )
+    def test_normalizes_to_primary_subtag(self, raw: str | None, expected: str) -> None:
+        assert normalize_locale(raw) == expected
+
+    def test_get_locale_normalizes_config_value(self) -> None:
+        class _Config:
+            locale = "zh-CN"
+
+        with patch("core.config.models.load_config", return_value=_Config()):
+            assert _get_locale() == "zh"
+
+
+class TestZhTemplateResolution:
+    def test_zh_variants_resolve_to_zh_directory(self, tmp_path: Path) -> None:
+        prompts = tmp_path / "zh" / "prompts"
+        prompts.mkdir(parents=True)
+        (prompts / "environment.md").write_text("环境", encoding="utf-8")
+        with patch("core.paths.TEMPLATES_DIR", tmp_path):
+            for locale in ("zh", "zh-CN", "zh-TW", "zh_CN", "zh-Hans", "ZH"):
+                assert resolve_template_path("prompts", "environment.md", locale=locale) == (prompts / "environment.md")
+
+    def test_missing_zh_template_falls_back_to_en_then_ja(self, tmp_path: Path) -> None:
+        en_prompts = tmp_path / "en" / "prompts"
+        en_prompts.mkdir(parents=True)
+        (en_prompts / "environment.md").write_text("English", encoding="utf-8")
+        ja_prompts = tmp_path / "ja" / "prompts"
+        ja_prompts.mkdir(parents=True)
+        (ja_prompts / "only_ja.md").write_text("日本語", encoding="utf-8")
+        with patch("core.paths.TEMPLATES_DIR", tmp_path):
+            assert resolve_template_path("prompts", "environment.md", locale="zh-CN") == (en_prompts / "environment.md")
+            assert resolve_template_path("prompts", "only_ja.md", locale="zh-CN") == (ja_prompts / "only_ja.md")

@@ -66,6 +66,10 @@ class EngineClient:
         payload[token_field] = int(self.definition.get("max_output_tokens", 16000))
         if "temperature" in self.definition:
             payload["temperature"] = float(self.definition["temperature"])
+        # Engine-specific request fields, e.g. turning off a model's thinking mode.
+        extra_body = self.definition.get("extra_body")
+        if isinstance(extra_body, dict):
+            payload.update(extra_body)
         try:
             import httpx
 
