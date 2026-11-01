@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 96cd47f6b8137a1ac727c6757ab3b7c306e6bb149890c37aee740638f03c6d7d -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: c8892817300c2ba557886c872f922f52a98e17a72f06ab134fa9a43e69f61c0b -->
 
 # モジュール一覧
 
@@ -50,7 +50,7 @@
 | `cli.commands.rag_repair_status` | 147 | Status reporting for persistent RAG repair state. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
-| `cli.commands.server` | 868 | — |
+| `cli.commands.server` | 891 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
@@ -212,7 +212,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1540 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -813,8 +813,8 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
 | `core.platform.locks` | 125 | — |
-| `core.platform.pid` | 42 | — |
-| `core.platform.process` | 327 | — |
+| `core.platform.pid` | 46 | — |
+| `core.platform.process` | 379 | — |
 | `core.platform.process_role` | 68 | Low-level environment access for process-role metadata. |
 | `core.platform.processing_lease` | 344 | — |
 | `core.platform.scratch` | 99 | — |
@@ -1079,10 +1079,11 @@ LLM 利用量とコストの記録・集計。
 | `core.voice.transport` | 21 | Transport protocol for voice-session output. |
 | `core.voice.tts_base` | 63 | TTS abstract base — provider interface and config. |
 | `core.voice.tts_elevenlabs` | 133 | ElevenLabs TTS provider — REST API streaming. |
-| `core.voice.tts_factory` | 47 | TTS provider factory. |
+| `core.voice.tts_factory` | 49 | TTS provider factory. |
 | `core.voice.tts_gemini` | 220 | Gemini TTS provider — Gemini API ``streamGenerateContent`` (SSE streaming). |
 | `core.voice.tts_irodori` | 79 | Irodori-TTS provider — HTTP API. |
 | `core.voice.tts_sbv2` | 112 | Style-BERT-VITS2 / AivisSpeech TTS provider. |
+| `core.voice.tts_silero` | 132 | Silero TTS provider for AnimaWorks. |
 | `core.voice.tts_voicevox` | 110 | VOICEVOX TTS provider — Engine HTTP API. |
 | `core.voice.turn_detector` | 398 | — |
 | `core.voice.voice_config` | 76 | — |

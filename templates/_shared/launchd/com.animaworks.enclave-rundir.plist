@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Root LaunchDaemon that recreates the enclave socket directory at boot.
+  A macOS update can remove the directory that holds enclave.socket_path,
+  and the enclave instance cannot recreate it when the parent directory is
+  not writable by the isolated user.  Replace _awenclave, the group and the
+  path with the directory of enclave.socket_path, then install as root:
+    install -m 0644 -o root -g wheel com.animaworks.enclave-rundir.plist /Library/LaunchDaemons/
+    launchctl bootstrap system /Library/LaunchDaemons/com.animaworks.enclave-rundir.plist
+  launchd has no ordering between daemons.  If the enclave instance starts
+  first it fails once, and KeepAlive in com.animaworks.enclave.plist restarts
+  it after ThrottleInterval.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.animaworks.enclave-rundir</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/install</string>
+		<string>-d</string>
+		<string>-o</string>
+		<string>_awenclave</string>
+		<string>-g</string>
+		<string>animaworks-enclave</string>
+		<string>-m</string>
+		<string>0750</string>
+		<string>/usr/local/var/animaworks-enclave</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/var/log/animaworks-enclave-rundir.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/animaworks-enclave-rundir.log</string>
+</dict>
+</plist>

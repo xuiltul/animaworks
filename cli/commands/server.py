@@ -21,6 +21,7 @@ from core.platform.env import DATA_DIR_ENV, SERVER_URL_ENV, get_env, read_proces
 from core.platform.pid import read_server_pid
 from core.platform.process import (
     find_first_matching_pid,
+    is_unrelated_process,
     subprocess_session_kwargs,
     terminate_matching_processes,
     terminate_pid,
@@ -132,6 +133,28 @@ def _find_server_pid_by_process(
         return pid
 
 
+def _pid_file_names_live_server(pid: int, *, exclude_self: bool = False) -> bool:
+    """Return True when the PID read from ``server.pid`` still names a running server.
+
+    PIDs are reused after a reboot, so the PID file can name a live process
+    that is not the server at all.  Trusting it refuses every start with
+    "already running" and lets ``stop`` signal an unrelated process.
+
+    Args:
+        pid: PID read from the PID file.
+        exclude_self: Treat the current process as stale.  Used by the start
+            paths: a process that is starting the server cannot be the server.
+
+    Returns:
+        True when the PID may belong to a running server.
+    """
+    if exclude_self and pid == os.getpid():
+        return False
+    if not is_pid_alive(pid):
+        return False
+    return not is_unrelated_process(pid)
+
+
 def _read_process_cmdline(pid: int) -> list[str] | None:
     """Read a process command line using the cross-platform process adapter."""
     try:
@@ -217,7 +240,7 @@ def _stop_server(
             return True
         print(f"PID file missing — found server process by scanning (pid={pid}).")
     else:
-        if not is_pid_alive(pid):
+        if not _pid_file_names_live_server(pid):
             print(f"Stale PID file (pid={pid}). Server is not running. Cleaning up.")
             _remove_pid_file()
             _cleanup_orphans()
@@ -354,7 +377,7 @@ def _spawn_daemon(args: argparse.Namespace) -> None:
     from core.paths import get_data_dir
 
     existing_pid = read_server_pid()
-    if existing_pid is not None and is_pid_alive(existing_pid):
+    if existing_pid is not None and _pid_file_names_live_server(existing_pid, exclude_self=True):
         print(f"Error: Server is already running (pid={existing_pid}).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
         sys.exit(EXIT_ALREADY_RUNNING)
@@ -508,7 +531,7 @@ def _start_foreground(args: argparse.Namespace) -> None:
         sys.exit(2)
 
     existing_pid = read_server_pid()
-    if existing_pid is not None and is_pid_alive(existing_pid):
+    if existing_pid is not None and _pid_file_names_live_server(existing_pid, exclude_self=True):
         print(f"Error: Server is already running (pid={existing_pid}).")
         print("Use 'animaworks stop' first, or 'animaworks restart'.")
         sys.exit(EXIT_ALREADY_RUNNING)
@@ -804,7 +827,7 @@ def cmd_restart(args: argparse.Namespace) -> None:
     reports success or failure with log path.
     """
     old_pid = read_server_pid()
-    if old_pid is not None and not is_pid_alive(old_pid):
+    if old_pid is not None and not _pid_file_names_live_server(old_pid):
         old_pid = None
     if old_pid is None:
         old_pid = _find_server_pid_by_process()

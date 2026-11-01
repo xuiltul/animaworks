@@ -64,7 +64,7 @@ export function createAnimaRail({ el, getPanes, getFocused, t, escapeHtml, onToo
       const n = escapeHtml(name);
       const fb = fctx.state.animaTabAvatarUrls?.[name];
       if (!fb) fctx.controllers.anima?.ensureAnimaTabAvatar?.(name);
-      return `<button type="button" class="${cls.join(" ")}" data-anima="${n}" title="${n}" aria-label="${n}"${name === active ? ' aria-current="true"' : ""}>`
+      return `<button type="button" class="${cls.join(" ")}" data-anima="${n}" title="${n}" aria-label="${escapeHtml(t("chat.rail.open_chat", { name }))}"${name === active ? ' aria-current="true"' : ""}>`
         + `<span class="chat-rail-face"><img src="${escapeHtml(src)}" data-face="${n}" alt=""><span class="chat-rail-ring"></span>`
         + (badge ? `<span class="chat-rail-badge ${badge.kind}">${escapeHtml(badge.text)}</span>` : "")
         + `<span class="chat-rail-x" role="button" tabindex="-1" data-hide="${n}" title="${escapeHtml(t("chat.rail.hide"))}" aria-label="${escapeHtml(t("chat.rail.hide"))}">×</span>`

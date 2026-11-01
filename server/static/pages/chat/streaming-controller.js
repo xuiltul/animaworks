@@ -52,6 +52,9 @@ export function createStreamingController(ctx) {
 
   function setSendButtonIcon(sendBtn, mode) {
     sendBtn.innerHTML = SEND_BTN_ICONS[mode] || SEND_BTN_ICONS.send;
+    const labelKey = mode === "stop" ? "chat.stop_stream"
+      : mode === "interrupt" ? "chat.interrupt_send" : "chat.send";
+    sendBtn.setAttribute("aria-label", t(labelKey));
   }
 
   // ── Context Ring Indicator ──────────────────────────────
@@ -164,7 +167,7 @@ export function createStreamingController(ctx) {
       const img = p.images?.length ? ` <span style="opacity:0.6">(+${p.images.length} images)</span>` : "";
       const files = p.files?.length ? ` <span style="opacity:0.6">(${t("chat.attach.file_count", { count: p.files.length })})</span>` : "";
       const fallback = p.files?.length ? t("chat.attach.files_only") : "(images only)";
-      return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || fallback}${img}${files}</span><button class="pending-queue-item-del" data-idx="${i}" type="button">\u2715</button></div>`;
+      return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || fallback}${img}${files}</span><button class="pending-queue-item-del" data-idx="${i}" type="button" aria-label="${escapeHtml(t("chat.queue_item_remove"))}">\u2715</button></div>`;
     }).join("");
     bar.style.display = "";
 

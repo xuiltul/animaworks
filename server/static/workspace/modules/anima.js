@@ -73,7 +73,7 @@ function renderDropdown() {
 
   const { animas, selectedAnima } = getState();
 
-  let html = '<select class="anima-dropdown" id="wsAnimaDropdown">';
+  let html = `<select class="anima-dropdown" id="wsAnimaDropdown" aria-label="${t("ws.select_anima")}">`;
   html += `<option value="" disabled>${t("ws.select_anima")}</option>`;
 
   for (const p of animas) {

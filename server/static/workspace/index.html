@@ -90,7 +90,7 @@
 
             <!-- Memory Browser -->
             <div class="ws-memory-panel" id="wsMemoryPanel"></div>
-            <button class="ws-mobile-memory-close" id="wsMobileMemoryClose" data-i18n-aria-label="common.aria_close">&times;</button>
+            <button class="ws-mobile-memory-close" id="wsMobileMemoryClose" aria-label="Close" data-i18n-aria-label="common.aria_close">&times;</button>
           </aside>
 
           <!-- Mobile sidebar backdrop -->
@@ -99,10 +99,10 @@
           <!-- Center: Chat -->
           <main class="ws-conv-main">
             <div class="ws-conv-header">
-              <button class="ws-mobile-sidebar-toggle" id="wsMobileSidebarToggle" data-i18n-aria-label="common.aria_sidebar">&#9776;</button>
+              <button class="ws-mobile-sidebar-toggle" id="wsMobileSidebarToggle" aria-label="Sidebar" data-i18n-aria-label="common.aria_sidebar">&#9776;</button>
               <button class="ws-conv-back-btn" id="wsConvBack" data-i18n="ws.back_office">&larr; Back to office</button>
               <span class="ws-conv-anima-name" id="wsConvAnimaName"></span>
-              <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" data-i18n-aria-label="common.aria_character">&#128100;</button>
+              <button class="ws-mobile-character-toggle" id="wsMobileCharacterToggle" aria-label="Character" data-i18n-aria-label="common.aria_character">&#128100;</button>
             </div>
             <div class="thread-tabs ws-thread-tabs" id="wsThreadTabs"></div>
             <div class="ws-conv-messages" id="wsConvMessages">
@@ -111,27 +111,27 @@
             <div class="ws-conv-input-area">
               <div class="ws-conv-model-row">
                 <label class="ws-conv-model-label" data-i18n="chat.model_selector" for="wsConvModel">Model</label>
-                <select class="ws-conv-model" id="wsConvModel" data-i18n-title="chat.model_selector" title="Model for this message"><option value="">anima既定</option></select>
+                <select class="ws-conv-model" id="wsConvModel" aria-label="Model for this thread" data-i18n-aria-label="chat.model_selector" data-i18n-title="chat.model_selector" title="Model for this message"><option value="">anima既定</option></select>
               </div>
               <div class="image-preview-bar" id="wsConvPreviewBar" style="display:none"></div>
               <div class="pending-queue-bar" id="wsConvPending" style="display:none">
                 <div class="pending-queue-header">
                   <span class="pending-queue-label" id="wsConvPendingLabel" data-i18n="chat.queue_label">Queue</span>
-                  <button class="pending-queue-clear" id="wsConvPendingCancel" type="button" data-i18n-title="chat.queue_clear_all" title="Clear all">✕ all</button>
+                  <button class="pending-queue-clear" id="wsConvPendingCancel" type="button" aria-label="Clear all" data-i18n-aria-label="chat.queue_clear_all" data-i18n-title="chat.queue_clear_all" title="Clear all">✕ all</button>
                 </div>
                 <div id="wsConvPendingList"></div>
               </div>
               <div class="chat-input-wrap">
-                <textarea class="ws-conv-input" id="wsConvInput" data-i18n-placeholder="ws.message_placeholder" placeholder="Type a message... (Ctrl+Enter, Alt+Enter to queue)" rows="1"></textarea>
+                <textarea class="ws-conv-input" id="wsConvInput" aria-label="Message" data-i18n-aria-label="chat.message_input" data-i18n-placeholder="ws.message_placeholder" placeholder="Type a message... (Ctrl+Enter, Alt+Enter to queue)" rows="1"></textarea>
                 <div class="chat-input-actions">
-                  <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" data-i18n-title="ws.attach_image" title="Attach image">+</button>
-                  <button class="chat-queue-btn" type="button" id="wsConvQueueBtn" data-i18n-title="chat.queue_add" title="Add to queue (Alt+Enter)">
+                  <button class="chat-attach-btn" type="button" id="wsConvAttachBtn" aria-label="Attach image" data-i18n-aria-label="ws.attach_image" data-i18n-title="ws.attach_image" title="Attach image">+</button>
+                  <button class="chat-queue-btn" type="button" id="wsConvQueueBtn" aria-label="Add to queue (Alt+Enter)" data-i18n-aria-label="chat.queue_add" data-i18n-title="chat.queue_add" title="Add to queue (Alt+Enter)">
                     <svg class="chat-queue-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                       <path d="M12 5v14M5 12l7 7 7-7" />
                     </svg>
                   </button>
                   <div class="voice-controls-slot"></div>
-                  <button class="ws-conv-send" id="wsConvSend">
+                  <button class="ws-conv-send" id="wsConvSend" aria-label="Send" data-i18n-aria-label="ws.send">
                     <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                       <path d="M12 19V5M5 12l7-7 7 7" />
                     </svg>

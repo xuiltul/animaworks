@@ -128,7 +128,9 @@ dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
 
 ソケットは再起動で消えない場所に置き、ディレクトリを隔離ユーザーとグループの `0750` にする（例: `/usr/local/var/animaworks-enclave`）。macOS の gateway は接続元 uid を `LOCAL_PEERCRED` で確かめる。`allowed_peer_uids` の指定方法は Linux と同じである。
 
-`templates/_shared/launchd/com.animaworks.enclave.plist` は隔離インスタンスの LaunchDaemon（`UserName`・`Umask=0077`）、`com.animaworks.enclave-egress.plist` は外向き通信の制限を起動時と毎時に適用する root の LaunchDaemon である。ユーザー名・パス・ポートを置き換えて `/Library/LaunchDaemons/` に置き、`launchctl bootstrap system <plist>` で読み込む。秘密は `enclave.secrets_dir` に隔離ユーザー所有の `0600` ファイルで置き、ディレクトリを `0700` にする。
+macOS の更新でソケットのディレクトリが消えることがある。親ディレクトリに隔離ユーザーが書き込めない配置では、隔離インスタンスはディレクトリを作り直せず、起動に失敗し続ける。`com.animaworks.enclave-rundir.plist` を読み込んでおくと、起動時に root がディレクトリを作り直す。
+
+`templates/_shared/launchd/com.animaworks.enclave.plist` は隔離インスタンスの LaunchDaemon（`UserName`・`Umask=0077`）、`com.animaworks.enclave-egress.plist` は外向き通信の制限を起動時と毎時に適用する root の LaunchDaemon、`com.animaworks.enclave-rundir.plist` はソケットのディレクトリを起動時に作り直す root の LaunchDaemon である。ユーザー名・パス・ポートを置き換えて `/Library/LaunchDaemons/` に置き、`launchctl bootstrap system <plist>` で読み込む。秘密は `enclave.secrets_dir` に隔離ユーザー所有の `0600` ファイルで置き、ディレクトリを `0700` にする。
 
 外向き通信の制限は `scripts/enclave/egress_firewall.py --backend pf` で行う。規則は pf のアンカー `com.apple/250.AnimaworksEnclave` に読み込まれ、標準の `/etc/pf.conf` から評価されるため `pf.conf` は書き換えない。macOS では pf が `lo0` を評価対象外（skip）にしていることがあり、そのままでは隔離側から本体の API など loopback 上のサービスに届く。`--apply` は適用のたびに `lo0` の skip を外す。pf の `user` 指定は TCP と UDP にだけ効く。スクリプトは本体側と隔離側のどちらのユーザーも書き換えられない root 所有の場所へコピーして使う。
 

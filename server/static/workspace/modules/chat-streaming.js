@@ -528,6 +528,10 @@ export function wsUpdateSendButton(isStreaming) {
   else if (hasInput) { dom.convSend.innerHTML = _ICONS.send; dom.convSend.disabled = false; }
   else if (q.length > 0) { dom.convSend.innerHTML = _ICONS.interrupt; dom.convSend.classList.add("interrupt"); dom.convSend.disabled = false; }
   else { dom.convSend.innerHTML = _ICONS.stop; dom.convSend.classList.add("stop"); dom.convSend.disabled = false; }
+  dom.convSend.setAttribute("aria-label", t(
+    !isStreaming || hasInput ? "chat.send"
+      : q.length > 0 ? "chat.interrupt_send" : "chat.stop_stream"
+  ));
 }
 
 function wsShowPendingIndicator() {
@@ -542,7 +546,7 @@ function wsShowPendingIndicator() {
   dom.convPendingList.innerHTML = q.map((p, i) => {
     const txt = escapeHtml(p.text.length > 50 ? p.text.slice(0, 50) + "…" : p.text);
     const img = p.images?.length ? ` <span style="opacity:0.6">${t("chat.image_count", { count: p.images.length })}</span>` : "";
-    return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || t("chat.image_only")}${img}</span><button class="pending-queue-item-del" data-idx="${i}" type="button">✕</button></div>`;
+    return `<div class="pending-queue-item" data-idx="${i}"><span class="pending-queue-item-num">${i + 1}.</span><span class="pending-queue-item-text">${txt || t("chat.image_only")}${img}</span><button class="pending-queue-item-del" data-idx="${i}" type="button" aria-label="${escapeHtml(t("chat.queue_item_remove"))}">✕</button></div>`;
   }).join("");
   dom.convPending.style.display = "";
   dom.convPendingList.onclick = (e) => {

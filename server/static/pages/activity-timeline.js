@@ -96,7 +96,7 @@ export function render(container) {
       <section id="activityNowBoard" aria-label="${t("activity.now_title")}"></section>
 
       <div class="activity-filters">
-        <select class="activity-anima-select" id="activityAnimaSelect">
+        <select class="activity-anima-select" id="activityAnimaSelect" aria-label="${t("activity.anima_filter")}">
           <option value="">${t("activity.all_animas")}</option>
         </select>
         <div id="activityTypeChips" style="display:flex; gap:0.35rem; flex-wrap:wrap;"></div>

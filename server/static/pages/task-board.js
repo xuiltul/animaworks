@@ -62,7 +62,7 @@ export async function render(container) {
 
         <label class="taskboard-search">
           <i data-lucide="search" aria-hidden="true"></i>
-          <input id="taskboardSearch" type="search" placeholder="${t("taskboard.search_placeholder")}" />
+          <input id="taskboardSearch" type="search" placeholder="${t("taskboard.search_placeholder")}" aria-label="${t("taskboard.search_placeholder")}" />
         </label>
       </div>
 

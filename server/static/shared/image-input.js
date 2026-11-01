@@ -232,7 +232,7 @@ export function createImageInput({ container, inputArea, previewContainer, onIma
     const imageHtml = pendingImages.map((img, i) => `
       <div class="image-preview-item" data-index="${i}">
         <img src="${img.dataUrl}" alt="Preview ${i + 1}" />
-        <button class="image-preview-remove" data-index="${i}" title="${t("assets.delete")}">&times;</button>
+        <button class="image-preview-remove" data-index="${i}" title="${t("assets.delete")}" aria-label="${t("chat.attach.remove_image")}">&times;</button>
       </div>
     `).join("");
     const fileHtml = pendingFiles.map((file, i) => `
@@ -240,7 +240,7 @@ export function createImageInput({ container, inputArea, previewContainer, onIma
         <span class="attachment-file-icon" aria-hidden="true">${getChatFileIcon(file)}</span>
         <span class="attachment-file-name">${escapeHtml(file.name)}</span>
         <span class="attachment-file-size">${escapeHtml(formatChatFileSize(file.size))}</span>
-        <button class="image-preview-remove attachment-preview-remove" data-file-index="${i}" type="button" title="${t("chat.attach.remove_file")}">&times;</button>
+        <button class="image-preview-remove attachment-preview-remove" data-file-index="${i}" type="button" title="${t("chat.attach.remove_file")}" aria-label="${t("chat.attach.remove_file")}">&times;</button>
       </div>
     `).join("");
     const errorHtml = attachmentError

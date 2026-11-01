@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=0adbff37775b910578240908d22e4e7e98b9dc8b9b6baac6d5788cba607cc41e generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=96c1898a3bf00764d240d786b57cffb1800dd64e45ae15f8cfc9451a102d6da0 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 > Confirmed commit: f448d7b0
 
@@ -131,7 +131,9 @@ dseditgroup -o edit -a "$HOST_USER" -t user animaworks-enclave
 
 Place the socket somewhere that persists across reboots, and set the directory’s ownership to the isolated user and group with `0750` (e.g., `/usr/local/var/animaworks-enclave`). The macOS gateway checks the connecting uid using `LOCAL_PEERCRED`. The way to specify `allowed_peer_uids` is the same as on Linux.
 
-`templates/_shared/launchd/com.animaworks.enclave.plist` is the LaunchDaemon for the isolated instance (`UserName`・`Umask=0077`); `com.animaworks.enclave-egress.plist` is a root LaunchDaemon that applies outbound communication restrictions at startup and every hour. Replace the username, path, and port, place it in `/Library/LaunchDaemons/`, and load it with `launchctl bootstrap system <plist>`. Put secrets in `enclave.secrets_dir` as `0600` files owned by the isolated user, and set the directory to `0700`.
+A macOS update can cause the socket directory to disappear. In a layout where the isolated user cannot write to the parent directory, the isolated instance cannot recreate the directory and continues to fail at startup. If `com.animaworks.enclave-rundir.plist` is loaded, root recreates the directory at startup.
+
+`templates/_shared/launchd/com.animaworks.enclave.plist` is the LaunchDaemon for the isolated instance (`UserName`・`Umask=0077`); `com.animaworks.enclave-egress.plist` is a root LaunchDaemon that applies outbound communication restrictions at startup and every hour; `com.animaworks.enclave-rundir.plist` is a root LaunchDaemon that recreates the socket directory at startup. Replace the username, path, and port, place it in `/Library/LaunchDaemons/`, and load it with `launchctl bootstrap system <plist>`. Put secrets in `enclave.secrets_dir` as `0600` files owned by the isolated user, and set the directory to `0700`.
 
 Outbound communication restrictions are implemented with `scripts/enclave/egress_firewall.py --backend pf`. The rules are loaded into the pf anchor `com.apple/250.AnimaworksEnclave` and evaluated from the standard `/etc/pf.conf`, so do not rewrite `pf.conf`. On macOS, pf may exclude `lo0` from evaluation (skip), which means that, as configured, the isolated side can reach loopback services such as host-side APIs. `--apply` removes the skip for `lo0` each time it is applied. The pf `user` setting applies only to TCP and UDP. Copy the script to a root-owned location that neither the host-side nor isolated-side user can modify.
 

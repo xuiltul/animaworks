@@ -47,11 +47,11 @@ function paneHtml() {
         </div>
         <div class="thread-tabs" data-chat-id="chatThreadTabs">
           <button class="thread-tab active" data-thread="default">${t("thread.default_label")}</button>
-          <button class="thread-tab-new" data-chat-id="chatNewThreadBtn" title="${t("thread.new")}">＋</button>
+          <button class="thread-tab-new" data-chat-id="chatNewThreadBtn" title="${t("thread.new")}" aria-label="${escapeHtml(t("thread.new"))}">＋</button>
         </div>
         <div class="chat-pane-head-tools" data-slot="head-tools"></div>
         <div class="chat-header-actions">
-          <button type="button" class="meeting-mode-toggle" data-chat-id="meetingModeToggle" title="${t("meeting.toggle")}">
+          <button type="button" class="meeting-mode-toggle" data-chat-id="meetingModeToggle" title="${t("meeting.toggle")}" aria-label="${escapeHtml(t("meeting.toggle"))}">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           </button>
           <div class="chat-add-conversation" data-chat-id="chatAddConversationArea">
@@ -115,7 +115,7 @@ function paneHtml() {
         <div class="pending-queue-bar" data-chat-id="chatPagePending" style="display:none">
           <div class="pending-queue-header">
             <span class="pending-queue-label" data-chat-id="chatPagePendingLabel">${t("chat.queue_label")}</span>
-            <button class="pending-queue-clear" data-chat-id="chatPagePendingCancel" type="button" title="${t("chat.queue_clear_all")}">✕ all</button>
+            <button class="pending-queue-clear" data-chat-id="chatPagePendingCancel" type="button" title="${t("chat.queue_clear_all")}" aria-label="${escapeHtml(t("chat.queue_clear_all"))}">✕ all</button>
           </div>
           <div data-chat-id="chatPagePendingList"></div>
         </div>
@@ -125,13 +125,14 @@ function paneHtml() {
             data-chat-id="chatPageInput"
             class="chat-input"
             placeholder="${t("chat.placeholder")}"
+            aria-label="${escapeHtml(t("chat.message_input"))}"
             autocomplete="off"
             rows="1"
             disabled
           ></textarea>
           <div class="chat-input-actions">
-            <button type="button" class="chat-attach-btn" data-chat-id="chatPageAttachBtn" title="${t("chat.attach.add_file")}">+</button>
-            <select class="chat-model-select" data-chat-id="chatPageModel" data-i18n-title="chat.model_selector" title="${t("chat.model_selector")}">
+            <button type="button" class="chat-attach-btn" data-chat-id="chatPageAttachBtn" title="${t("chat.attach.add_file")}" aria-label="${escapeHtml(t("chat.attach.add_file"))}">+</button>
+            <select class="chat-model-select" data-chat-id="chatPageModel" data-i18n-title="chat.model_selector" title="${t("chat.model_selector")}" aria-label="${escapeHtml(t("chat.model_selector"))}">
               <option value=""></option>
             </select>
             <div class="context-ring-wrap" data-chat-id="chatContextRing" title="${t("chat.context_ring_title")}">
@@ -144,7 +145,7 @@ function paneHtml() {
               </svg>
             </div>
             <div class="voice-controls-slot"></div>
-            <button type="submit" class="chat-send-btn" data-chat-id="chatPageSendBtn" disabled>
+            <button type="submit" class="chat-send-btn" data-chat-id="chatPageSendBtn" disabled aria-label="${escapeHtml(t("chat.send"))}">
               <svg class="chat-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 19V5M5 12l7-7 7 7" />
               </svg>

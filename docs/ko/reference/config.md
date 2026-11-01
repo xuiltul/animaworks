@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=899fabc1640f66a3492295f8b9a3c7bcbe4f287e14d69f0ca78eebaf2197690a generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=5ee50afc31da7d7233603b590aa5b8482b71ed7319f9550a4a82cb49b8614f4d generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -675,6 +675,8 @@
 | `voice.gemini.api_key_env` | `str` | `"GEMINI_API_KEY"` | — |
 | `voice.gemini.vault_key` | `str` | `"GEMINI_API_KEY"` | — |
 | `voice.gemini.chunk_seconds` | `float` | `1.0` | — |
+| `voice.silero` | `SileroConfig` | `{SileroConfig}` | — |
+| `voice.silero.base_url` | `str` | `"http://localhost:8000"` | — |
 
 ### `phone`
 
