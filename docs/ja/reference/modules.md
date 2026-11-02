@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: d73f835b98a35691c114a6b36d5d3bde6c090d786c046f3015f1c7c4e4e22790 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 6c4bac8158b018147d95528b152e8b3ce52565e24864ed79ccb11b825236a879 -->
 
 # モジュール一覧
 
@@ -199,7 +199,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
 | `core.config.env_slots` | 92 | — |
-| `core.config.file_access_policy` | 588 | — |
+| `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 500 | — |
 | `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
@@ -1003,7 +1003,7 @@ anima メインの実行時コンポーネント、プロセス間通信、タ�
 | `core.tooling.handler_memory` | 1515 | — |
 | `core.tooling.handler_org` | 39 | — |
 | `core.tooling.handler_org_dashboard` | 203 | — |
-| `core.tooling.handler_perms` | 446 | — |
+| `core.tooling.handler_perms` | 448 | — |
 | `core.tooling.handler_skills` | 864 | — |
 | `core.tooling.handler_subordinate_control` | 457 | — |
 | `core.tooling.handler_workspace` | 279 | — |

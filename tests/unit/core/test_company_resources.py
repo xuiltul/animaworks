@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from core.config.file_access_policy import resolve_memory_source_path
 from core.memory.rag.retriever import MemoryRetriever
 from core.memory.retrieval.rag_search import RAGMemorySearch
@@ -109,6 +111,119 @@ def test_read_memory_file_allows_own_company_and_rejects_other(tmp_path: Path) -
     denied = handler.handle("read_memory_file", {"path": "companies/beta/knowledge/secret.md"})
     assert "PermissionDenied" in denied
     assert "other company secret" not in denied
+
+
+def _narrow_handler(anima_dir: Path, *, file_roots_denied: list[str] | None = None) -> ToolHandler:
+    """Build a handler whose file_roots grant nothing under the data directory."""
+    (anima_dir / "permissions.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "file_roots": ["/nonexistent-work-root"],
+                "file_roots_denied": file_roots_denied or [],
+                "commands": {"allow_all": True},
+                "external_tools": {"allow_all": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    memory = MagicMock()
+    memory.read_permissions.return_value = ""
+    return ToolHandler(anima_dir=anima_dir, memory=memory, messenger=None, tool_registry=[])
+
+
+def _company_file(tmp_path: Path, relative: str, body: str, *, company: str = "alpha") -> Path:
+    path = tmp_path / "companies" / company / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("relative", ["skills/demo/SKILL.md", "knowledge/guide.md", "shared/note.md"])
+def test_file_tools_read_own_company_with_narrow_file_roots(tmp_path: Path, relative: str) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, "alpha")
+    path = _company_file(tmp_path, relative, "---\nname: demo\ndescription: d\n---\nreadable body")
+    handler = _narrow_handler(anima_dir)
+
+    assert "readable body" in handler.handle("read_memory_file", {"path": f"companies/alpha/{relative}"})
+    assert "readable body" in handler.handle("read_memory_file", {"path": str(path)})
+    assert "readable body" in handler.handle("read_file", {"path": str(path)})
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ["credentials/token.txt", "company.json", "animas/bob/note.md", "vision.md"],
+)
+def test_file_tools_deny_rest_of_own_company_with_narrow_file_roots(tmp_path: Path, relative: str) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, "alpha")
+    path = _company_file(tmp_path, relative, "private body")
+    handler = _narrow_handler(anima_dir)
+
+    for result in (
+        handler.handle("read_memory_file", {"path": f"companies/alpha/{relative}"}),
+        handler.handle("read_memory_file", {"path": str(path)}),
+        handler.handle("read_memory_file", {"path": f"companies/alpha/shared/../{relative}"}),
+        handler.handle("read_file", {"path": str(path)}),
+    ):
+        assert "PermissionDenied" in result
+        assert "private body" not in result
+
+
+def test_file_tools_deny_other_company_with_narrow_file_roots(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, "alpha")
+    _company_file(tmp_path, "shared/own.md", "own")
+    other = _company_file(tmp_path, "shared/note.md", "other company body", company="beta")
+    handler = _narrow_handler(anima_dir)
+
+    for result in (
+        handler.handle("read_memory_file", {"path": "companies/beta/shared/note.md"}),
+        handler.handle("read_file", {"path": str(other)}),
+    ):
+        assert "PermissionDenied" in result
+        assert "other company body" not in result
+
+
+def test_file_roots_denied_overrides_company_read_roots(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, "alpha")
+    secret = _company_file(tmp_path, "shared/private/key.pem", "key body")
+    readable = _company_file(tmp_path, "shared/note.md", "note body")
+    handler = _narrow_handler(anima_dir, file_roots_denied=[str(secret.parent)])
+
+    assert "note body" in handler.handle("read_file", {"path": str(readable)})
+    result = handler.handle("read_file", {"path": str(secret)})
+    assert "PermissionDenied" in result
+    assert "key body" not in result
+
+
+def test_unassigned_anima_gets_no_company_read_roots(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, None)
+    path = _company_file(tmp_path, "skills/demo/SKILL.md", "skill body")
+    handler = _narrow_handler(anima_dir)
+
+    result = handler.handle("read_file", {"path": str(path)})
+    assert "PermissionDenied" in result
+    assert "skill body" not in result
+
+
+def test_symlinked_company_resource_root_is_not_granted(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "alice"
+    _assign(anima_dir, "alpha")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "SKILL.md").write_text("outside body", encoding="utf-8")
+    company = tmp_path / "companies" / "alpha"
+    company.mkdir(parents=True)
+    (company / "skills").symlink_to(outside, target_is_directory=True)
+    handler = _narrow_handler(anima_dir)
+
+    result = handler.handle("read_file", {"path": str(company / "skills" / "SKILL.md")})
+    assert "PermissionDenied" in result
+    assert "outside body" not in result
 
 
 def test_vector_sources_resolve_and_filter_to_current_company(tmp_path: Path) -> None:

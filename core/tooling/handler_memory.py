@@ -373,13 +373,13 @@ def _normalize_memory_path(raw: str, anima_dir: Path) -> _PathNormResult:
         except ValueError:
             pass
 
-    from core.org.company_resources import company_resource_pointer, get_company_resources
+    from core.org.company_resources import get_company_resources
 
     company_resources = get_company_resources(anima_dir)
     if company_resources is not None and resolved.is_relative_to(company_resources.root):
-        pointer = company_resource_pointer(resolved)
-        if pointer is not None:
-            return _PathNormResult(rel=pointer)
+        # The permission check decides what is readable; a path left unmapped
+        # here would be misread as relative to the Anima directory.
+        return _PathNormResult(rel=str(resolved.relative_to(company_resources.root.parent.parent)))
 
     channels_dir = (get_data_dir() / "shared" / "channels").resolve()
     if resolved.is_relative_to(channels_dir):

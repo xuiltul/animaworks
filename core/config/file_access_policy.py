@@ -143,6 +143,26 @@ def company_shared_write_root(anima_dir: Path) -> Path | None:
     return shared_root
 
 
+def company_read_roots(anima_dir: Path) -> tuple[Path, ...]:
+    """Return the assigned company's roots readable through file tools.
+
+    ``shared`` is readable under the write-access charter; ``knowledge`` and
+    ``skills`` are the read-only resources the skill catalog and memory search
+    point at.  The rest of the company directory (``credentials``, member
+    links, ...) is deliberately left out, so do not grant the company root.
+    """
+    shared_root = company_shared_write_root(anima_dir)
+    if shared_root is None:
+        return ()
+
+    roots = [shared_root]
+    for name in ("knowledge", "skills"):
+        resource_root = shared_root.parent / name
+        if not resource_root.is_symlink():
+            roots.append(resource_root.resolve())
+    return tuple(roots)
+
+
 def effective_write_roots(
     anima_dir: Path,
     file_roots: list[str],
