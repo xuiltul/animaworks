@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from core.config.file_access_policy import (
     FileAccessContext,
     FileAccessDecision,
+    company_read_roots,
     effective_write_roots,
     evaluate_file_access,
     find_denied_root,
@@ -271,6 +272,7 @@ class PermissionsMixin:
                 ):
                     if shared_dir.exists():
                         additional_read_dirs.append(shared_dir.resolve())
+                additional_read_dirs.extend(company_read_roots(self._anima_dir))
 
                 # External skill roots (host ~/.claude/skills etc.) are
                 # read-only and surfaced via external/<engine>/<name>/SKILL.md.
