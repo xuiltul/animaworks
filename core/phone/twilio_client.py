@@ -12,7 +12,7 @@ import hmac
 import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 import httpx
 
@@ -152,6 +152,28 @@ def build_webhook_url(
     return url
 
 
+def _url_port_variants(url: str) -> list[str]:
+    """Return *url* as given, without its port, and with its port spelled out."""
+    parts = urlsplit(url)
+    if not parts.netloc:
+        return [url]
+    try:
+        explicit_port = parts.port
+    except ValueError:
+        return [url]
+    host = parts.netloc.rsplit(":", 1)[0] if explicit_port else parts.netloc
+    port = explicit_port or (443 if parts.scheme == "https" else 80)
+    return list(
+        dict.fromkeys(
+            (
+                url,
+                urlunsplit(parts._replace(netloc=host)),
+                urlunsplit(parts._replace(netloc=f"{host}:{port}")),
+            )
+        )
+    )
+
+
 def validate_signature(
     auth_token: str,
     url: str,
@@ -164,22 +186,33 @@ def validate_signature(
     each POST parameter name and value in lexicographic parameter-name order.
     Multi-value parameters are appended in sorted value order as in Twilio's
     request-validator implementations.
+
+    Twilio does not sign the port consistently: on a non-default port its voice
+    webhook and status callback can differ. Like its own validators, this accepts
+    the URL with or without the port.
     """
     if not auth_token or not signature:
         return False
 
-    payload = url
+    signed_params = ""
     for key in sorted(params):
         raw_value = params[key]
         values = raw_value if isinstance(raw_value, Sequence) and not isinstance(raw_value, str) else [raw_value]
         for value in sorted(str(item) for item in values):
-            payload += str(key) + value
+            signed_params += str(key) + value
 
-    expected = base64.b64encode(
-        hmac.new(auth_token.encode("utf-8"), payload.encode("utf-8"), hashlib.sha1).digest()
-    ).decode("ascii")
     try:
-        return hmac.compare_digest(expected, signature)
+        return any(
+            hmac.compare_digest(
+                base64.b64encode(
+                    hmac.new(
+                        auth_token.encode("utf-8"), (candidate + signed_params).encode("utf-8"), hashlib.sha1
+                    ).digest()
+                ).decode("ascii"),
+                signature,
+            )
+            for candidate in _url_port_variants(url)
+        )
     except TypeError:
         return False
 
