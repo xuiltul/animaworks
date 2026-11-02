@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=2e10a8e0a7b9a71915cc332cdb7c010bdefb3467eb09d2265201016bd7e3e927 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=077b90c9c06f222c14828a701c83028a7e7c556d3432dadf51abaf58ec53cb8d generated=2026-11-02 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -194,12 +194,12 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 Application configuration schemas, loading, validation, and migration.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
 | `core.config.env_slots` | 92 | — |
-| `core.config.file_access_policy` | 588 | — |
+| `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 500 | — |
 | `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
@@ -782,18 +782,18 @@ Organization models such as companies, departments, and roles.
 
 ## `core.phone`
 
-Speech synthesis, call status, and webhook management for the Twilio phone channel.
+Speech synthesis, call status, and Webhook management for the Twilio phone channel.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.phone` | 7 | — |
-| `core.phone.alert` | 218 | — |
+| `core.phone.alert` | 235 | — |
 | `core.phone.audio_store` | 81 | — |
 | `core.phone.session` | 66 | — |
-| `core.phone.speech` | 83 | — |
+| `core.phone.speech` | 96 | — |
 | `core.phone.stream_tokens` | 101 | — |
 | `core.phone.stream_transport` | 120 | — |
-| `core.phone.twilio_client` | 194 | — |
+| `core.phone.twilio_client` | 227 | — |
 | `core.phone.urgent` | 46 | — |
 
 ## `core.platform`
@@ -986,7 +986,7 @@ Text token estimation and truncation to fit within budget.
 
 Tool schemas, permissions, and execution infrastructure.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.tooling` | 1 | Tooling package; import specific modules to avoid eager handler loading. |
 | `core.tooling._handler_protocols（非公開）` | 233 | Structural host protocols for the compositional mixins. |
@@ -1003,7 +1003,7 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.handler_memory` | 1515 | — |
 | `core.tooling.handler_org` | 39 | — |
 | `core.tooling.handler_org_dashboard` | 203 | — |
-| `core.tooling.handler_perms` | 446 | — |
+| `core.tooling.handler_perms` | 448 | — |
 | `core.tooling.handler_skills` | 864 | — |
 | `core.tooling.handler_subordinate_control` | 457 | — |
 | `core.tooling.handler_workspace` | 279 | — |
@@ -1061,12 +1061,12 @@ Logging and aggregation of LLM usage and costs.
 
 ## `core.voice`
 
-Audio input/output and voice conversations.
+Voice input/output and voice dialogue.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.voice` | 7 | Voice chat subsystem — STT, TTS, and session orchestration. |
-| `core.voice.audio_codec` | 161 | — |
+| `core.voice.audio_codec` | 183 | — |
 | `core.voice.emotion_style` | 114 | — |
 | `core.voice.front` | 385 | Voice front lane — lightweight speech-first chat path via a local LLM. |
 | `core.voice.front_conversation` | 694 | Transport-agnostic front-lane conversation and delegation handling. |
@@ -1124,7 +1124,7 @@ Audio input/output and voice conversations.
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `server.routes` | 63 | — |
 | `server.routes.animas` | 1271 | — |
@@ -1149,7 +1149,7 @@ Audio input/output and voice conversations.
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
-| `server.routes.phone` | 404 | — |
+| `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
 | `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
 | `server.routes.sessions` | 734 | — |
