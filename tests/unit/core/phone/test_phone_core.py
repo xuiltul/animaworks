@@ -52,6 +52,46 @@ def test_twilio_signature_rejects_tampering_and_wrong_public_url() -> None:
     assert validate_signature("", url, params, signature) is False
 
 
+@pytest.mark.parametrize(
+    ("signed_url", "public_url"),
+    [
+        ("https://phone.example.test/voice?alert=a", "https://phone.example.test:8443/voice?alert=a"),
+        ("https://phone.example.test:8443/voice?alert=a", "https://phone.example.test:8443/voice?alert=a"),
+        ("https://phone.example.test:443/voice", "https://phone.example.test/voice"),
+        ("http://phone.example.test:80/voice", "http://phone.example.test/voice"),
+    ],
+)
+def test_twilio_signature_accepts_the_url_with_or_without_its_port(signed_url: str, public_url: str) -> None:
+    secret = "phone-test-auth-token"
+    params = {"CallSid": "CA0001"}
+
+    assert validate_signature(secret, public_url, params, _signature(secret, signed_url, params)) is True
+
+
+@pytest.mark.parametrize(
+    "signed_url",
+    [
+        "https://phone.example.test:9000/voice",
+        "https://other.example.test:8443/voice",
+        "https://other.example.test/voice",
+        "http://phone.example.test:8443/voice",
+    ],
+)
+def test_twilio_signature_rejects_another_port_host_or_scheme(signed_url: str) -> None:
+    secret = "phone-test-auth-token"
+    params = {"CallSid": "CA0001"}
+    signature = _signature(secret, signed_url, params)
+
+    assert validate_signature(secret, "https://phone.example.test:8443/voice", params, signature) is False
+
+
+def test_twilio_signature_handles_a_url_it_cannot_parse_a_port_from() -> None:
+    secret = "phone-test-auth-token"
+    url = "https://phone.example.test:not-a-port/voice"
+
+    assert validate_signature(secret, url, {}, _signature(secret, url, {})) is True
+
+
 def test_twilio_signature_sorts_multi_value_parameters() -> None:
     secret = "multi-value-secret"
     url = "https://phone.example.test/webhook"

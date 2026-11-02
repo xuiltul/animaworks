@@ -189,6 +189,21 @@ def test_pin_failures_hang_up_after_three_attempts(phone_app) -> None:
     assert "1234" not in first.text + second.text + third.text
 
 
+def test_voice_accepts_twilio_signature_without_the_public_port(phone_app) -> None:
+    app, config = phone_app
+    config.phone.public_base_url = "https://phone.example.test:8443"
+    form = {"CallSid": "CA-PORT", "Direction": "inbound", "From": "+15551234567"}
+    without_port = _twilio_signature(f"{_PUBLIC_BASE_URL}{_VOICE_PATH}", form)
+    wrong_port = _twilio_signature(f"{_PUBLIC_BASE_URL}:9000{_VOICE_PATH}", form)
+
+    with TestClient(app) as client:
+        accepted = _signed_post(client, _VOICE_PATH, form, signature=without_port)
+        rejected = _signed_post(client, _VOICE_PATH, form, signature=wrong_port)
+
+    assert accepted.status_code == 200
+    assert rejected.status_code == 403
+
+
 def test_alert_call_plays_audio_and_digit_one_acknowledges(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
     app, _config = phone_app
     token = phone_audio_store.put(b"RIFF-alert-wav")

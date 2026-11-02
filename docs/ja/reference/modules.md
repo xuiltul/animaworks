@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: dafd3d1f22353ac0677fb7e9ddce796a2095008bef512bed40bd87f001229baa -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: d73f835b98a35691c114a6b36d5d3bde6c090d786c046f3015f1c7c4e4e22790 -->
 
 # モジュール一覧
 
@@ -793,7 +793,7 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.phone.speech` | 96 | — |
 | `core.phone.stream_tokens` | 101 | — |
 | `core.phone.stream_transport` | 120 | — |
-| `core.phone.twilio_client` | 194 | — |
+| `core.phone.twilio_client` | 227 | — |
 | `core.phone.urgent` | 46 | — |
 
 ## `core.platform`
