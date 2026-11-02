@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: e636da79783e053caea658dcab200e2275693eb3082edaa349087f3ac7763198 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: dafd3d1f22353ac0677fb7e9ddce796a2095008bef512bed40bd87f001229baa -->
 
 # モジュール一覧
 
@@ -787,10 +787,10 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.phone` | 7 | — |
-| `core.phone.alert` | 218 | — |
+| `core.phone.alert` | 235 | — |
 | `core.phone.audio_store` | 81 | — |
 | `core.phone.session` | 66 | — |
-| `core.phone.speech` | 83 | — |
+| `core.phone.speech` | 96 | — |
 | `core.phone.stream_tokens` | 101 | — |
 | `core.phone.stream_transport` | 120 | — |
 | `core.phone.twilio_client` | 194 | — |
@@ -1066,7 +1066,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.voice` | 7 | Voice chat subsystem — STT, TTS, and session orchestration. |
-| `core.voice.audio_codec` | 161 | — |
+| `core.voice.audio_codec` | 183 | — |
 | `core.voice.emotion_style` | 114 | — |
 | `core.voice.front` | 385 | Voice front lane — lightweight speech-first chat path via a local LLM. |
 | `core.voice.front_conversation` | 694 | Transport-agnostic front-lane conversation and delegation handling. |
@@ -1149,7 +1149,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
-| `server.routes.phone` | 404 | — |
+| `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
 | `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
 | `server.routes.sessions` | 734 | — |

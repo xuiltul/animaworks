@@ -7,6 +7,7 @@ from __future__ import annotations
 """NumPy-only PCM and G.711 μ-law conversion helpers for phone audio."""
 
 import io
+import struct
 import wave
 
 import numpy as np
@@ -146,6 +147,26 @@ def wav_to_mulaw_frames(data: bytes, *, frame_ms: int = TWILIO_FRAME_MS) -> list
     return split_mulaw_frames(pcm16_to_mulaw(pcm8), frame_ms=frame_ms)
 
 
+def wav_to_mulaw_wav(data: bytes) -> bytes:
+    """Convert a PCM WAV to an 8 kHz mono μ-law WAV, which is all a phone line carries."""
+    pcm16, sample_rate = _wav_pcm16(data)
+    encoded = pcm16_to_mulaw(resample_pcm16(pcm16, sample_rate, TWILIO_SAMPLE_RATE))
+    body = b"".join(
+        (
+            b"WAVE",
+            b"fmt ",
+            struct.pack("<IHHIIHHH", 18, 7, 1, TWILIO_SAMPLE_RATE, TWILIO_SAMPLE_RATE, 1, 8, 0),
+            b"fact",
+            struct.pack("<II", 4, len(encoded)),
+            b"data",
+            struct.pack("<I", len(encoded)),
+            encoded,
+            b"\x00" * (len(encoded) % 2),
+        )
+    )
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+
+
 __all__ = [
     "MULAW_SAMPLES_PER_FRAME",
     "TWILIO_FRAME_MS",
@@ -158,4 +179,5 @@ __all__ = [
     "split_mulaw_frames",
     "upsample_8k_to_16k",
     "wav_to_mulaw_frames",
+    "wav_to_mulaw_wav",
 ]

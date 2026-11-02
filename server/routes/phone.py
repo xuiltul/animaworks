@@ -19,7 +19,7 @@ from fastapi.responses import Response
 from core.config.models import load_config
 from core.config.schemas import AnimaWorksConfig, PhoneConfig
 from core.config.vault import get_vault_manager
-from core.phone.alert import acknowledge_alert, get_alert, notify_call_status
+from core.phone.alert import PhoneAlert, acknowledge_alert, get_alert, notify_call_status
 from core.phone.audio_store import phone_audio_store
 from core.phone.session import PhoneSession, phone_sessions
 from core.phone.speech import synthesize_speech
@@ -30,6 +30,8 @@ from core.voice.speech_text import prepare_speech
 logger = logging.getLogger(__name__)
 
 _MAX_PIN_FAILURES = 3
+# Twilio gives up on a webhook after 15 seconds, and one response can need two prompts.
+_PROMPT_TTS_TIMEOUT_SEC = 7.0
 
 
 def _get_phone_config() -> tuple[AnimaWorksConfig, PhoneConfig]:
@@ -91,6 +93,11 @@ def _hangup() -> str:
     return "<Hangup/>"
 
 
+def _say(app_config: AnimaWorksConfig, text: str) -> str:
+    language = "en-US" if app_config.locale == "en" else "ja-JP"
+    return _tag("Say", escape(text), language=language)
+
+
 def _reject() -> str:
     return "<Reject/>"
 
@@ -139,14 +146,17 @@ async def _play_text(
         animas_dir = getattr(request.app.state, "animas_dir", None) or get_animas_dir()
         tts_config = load_per_anima_voice(animas_dir, anima, app_config.voice)
         tts_provider = tts_config.provider
-        audio = await synthesize_speech(
-            anima,
-            text,
-            animas_dir=animas_dir,
-            voice_config=app_config.voice,
-            cache_key=cache_key,
-            link_placeholder=link_placeholder,
-            max_chars=400,
+        audio = await asyncio.wait_for(
+            synthesize_speech(
+                anima,
+                text,
+                animas_dir=animas_dir,
+                voice_config=app_config.voice,
+                cache_key=cache_key,
+                link_placeholder=link_placeholder,
+                max_chars=400,
+            ),
+            timeout=_PROMPT_TTS_TIMEOUT_SEC,
         )
         token = phone_audio_store.put(audio)
         url = build_webhook_url(
@@ -157,8 +167,7 @@ async def _play_text(
     except Exception:
         logger.warning("Phone speech synthesis failed for anima=%s", anima)
         spoken = prepare_speech(text, provider=tts_provider, link_placeholder=link_placeholder, max_chars=400).spoken
-        language = "en-US" if app_config.locale == "en" else "ja-JP"
-        return _tag("Say", escape(spoken), language=language)
+        return _say(app_config, spoken)
 
 
 async def _play_key(
@@ -218,6 +227,17 @@ def _pin_gather(phone_config: PhoneConfig, prompt: str) -> str:
     )
 
 
+def _alert_speech(app_config: AnimaWorksConfig, phone_config: PhoneConfig, alert: PhoneAlert) -> str:
+    """Play the synthesized alert, or have Twilio read it when synthesis failed."""
+    if not alert.audio_token:
+        return _say(app_config, alert.spoken_text)
+    audio_url = build_webhook_url(
+        phone_config.public_base_url,
+        f"/api/webhooks/twilio/audio/{alert.audio_token}.wav",
+    )
+    return _tag("Play", escape(audio_url))
+
+
 def _alert_gather(phone_config: PhoneConfig, alert_id: str, prompt: str) -> str:
     return _tag(
         "Gather",
@@ -265,7 +285,7 @@ def create_phone_router() -> APIRouter:
         phase = request.query_params.get("phase", "")
         if alert_id:
             alert = get_alert(alert_id)
-            if alert is None or alert.anima != phone_config.anima or not alert.audio_token:
+            if alert is None or alert.anima != phone_config.anima or not (alert.audio_token or alert.spoken_text):
                 return _twiml(_hangup())
 
             session = phone_sessions.get(call_sid)
@@ -290,13 +310,11 @@ def create_phone_router() -> APIRouter:
                     acknowledge_alert(alert_id)
                     pin_prompt = await _play_key(request, app_config, phone_config, "phone.pin_prompt")
                     return _twiml(_pin_gather(phone_config, pin_prompt))
-                if not digit and not session.alert_repeat_done:
+                if not digit:
+                    if session.alert_repeat_done:
+                        return _twiml(_hangup())
                     session.alert_repeat_done = True
-                    audio_url = build_webhook_url(
-                        phone_config.public_base_url,
-                        f"/api/webhooks/twilio/audio/{alert.audio_token}.wav",
-                    )
-                    return _twiml(_tag("Play", escape(audio_url)), _hangup())
+                    return _twiml(_alert_gather(phone_config, alert_id, _alert_speech(app_config, phone_config, alert)))
                 invalid_prompt = await _play_key(request, app_config, phone_config, "phone.alert_invalid_choice")
                 choice_prompt = await _play_key(
                     request,
@@ -305,12 +323,9 @@ def create_phone_router() -> APIRouter:
                     "phone.alert_choice",
                     anima=phone_config.anima,
                 )
-                return _twiml(invalid_prompt, _alert_gather(phone_config, alert_id, choice_prompt))
+                return _twiml(_alert_gather(phone_config, alert_id, invalid_prompt + choice_prompt))
 
-            audio_url = build_webhook_url(
-                phone_config.public_base_url,
-                f"/api/webhooks/twilio/audio/{alert.audio_token}.wav",
-            )
+            alert_speech = _alert_speech(app_config, phone_config, alert)
             choice_prompt = await _play_key(
                 request,
                 app_config,
@@ -318,10 +333,10 @@ def create_phone_router() -> APIRouter:
                 "phone.alert_choice",
                 anima=phone_config.anima,
             )
+            # Inside Gather, so a key pressed during the announcement is not thrown away.
             return _twiml(
-                _tag("Play", escape(audio_url)),
-                _alert_gather(phone_config, alert_id, choice_prompt),
-                _tag("Play", escape(audio_url)),
+                _alert_gather(phone_config, alert_id, alert_speech + choice_prompt),
+                alert_speech,
                 _hangup(),
             )
 

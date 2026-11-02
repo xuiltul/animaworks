@@ -3,6 +3,7 @@ from __future__ import annotations
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -191,7 +192,7 @@ def test_pin_failures_hang_up_after_three_attempts(phone_app) -> None:
 def test_alert_call_plays_audio_and_digit_one_acknowledges(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
     app, _config = phone_app
     token = phone_audio_store.put(b"RIFF-alert-wav")
-    alert = SimpleNamespace(alert_id="alert-1", anima="aoi", audio_token=token)
+    alert = SimpleNamespace(alert_id="alert-1", anima="aoi", audio_token=token, spoken_text="")
     acknowledged: list[str] = []
     monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
     monkeypatch.setattr(phone_routes, "acknowledge_alert", acknowledged.append)
@@ -211,8 +212,12 @@ def test_alert_call_plays_audio_and_digit_one_acknowledges(phone_app, monkeypatc
         )
 
     assert started.status_code == 200
-    assert "<Play>https://phone.example.test/api/webhooks/twilio/audio/" in started.text
-    assert 'input="dtmf"' in started.text and "&amp;phase=choice" in started.text
+    gather = ElementTree.fromstring(started.text).find("Gather")
+    assert gather is not None
+    assert gather.get("input") == "dtmf" and "phase=choice" in gather.get("action", "")
+    plays = gather.findall("Play")
+    assert len(plays) == 2
+    assert plays[0].text == f"https://phone.example.test/api/webhooks/twilio/audio/{token}.wav"
     assert choice.status_code == 200 and "<Hangup/>" in choice.text
     assert acknowledged == ["alert-1"]
 
@@ -220,8 +225,10 @@ def test_alert_call_plays_audio_and_digit_one_acknowledges(phone_app, monkeypatc
 def test_alert_silence_replays_alert_once_and_hangs_up(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
     app, _config = phone_app
     token = phone_audio_store.put(b"RIFF-alert-wav")
-    alert = SimpleNamespace(alert_id="alert-2", anima="aoi", audio_token=token)
+    alert = SimpleNamespace(alert_id="alert-2", anima="aoi", audio_token=token, spoken_text="")
+    acknowledged: list[str] = []
     monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
+    monkeypatch.setattr(phone_routes, "acknowledge_alert", acknowledged.append)
 
     with TestClient(app) as client:
         _signed_post(
@@ -236,11 +243,112 @@ def test_alert_silence_replays_alert_once_and_hangs_up(phone_app, monkeypatch: p
             {"CallSid": "CA-ALERT-2", "Digits": ""},
             query="alert=alert-2&phase=choice",
         )
+        still_no_input = _signed_post(
+            client,
+            _VOICE_PATH,
+            {"CallSid": "CA-ALERT-2", "Digits": ""},
+            query="alert=alert-2&phase=choice",
+        )
 
     assert no_input.status_code == 200
-    assert no_input.text.count("<Play>") == 1
-    assert "<Hangup/>" in no_input.text
+    replay = ElementTree.fromstring(no_input.text).find("Gather")
+    assert replay is not None and len(replay.findall("Play")) == 1
+    assert still_no_input.status_code == 200
+    assert "<Hangup/>" in still_no_input.text and "<Gather" not in still_no_input.text
+    assert acknowledged == []
     assert phone_sessions.get("CA-ALERT-2").acknowledged is False
+
+
+def test_alert_key_during_replay_acknowledges(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _config = phone_app
+    token = phone_audio_store.put(b"RIFF-alert-wav")
+    alert = SimpleNamespace(alert_id="alert-3", anima="aoi", audio_token=token, spoken_text="")
+    acknowledged: list[str] = []
+    monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
+    monkeypatch.setattr(phone_routes, "acknowledge_alert", acknowledged.append)
+
+    with TestClient(app) as client:
+        for digits in ("", "1"):
+            _signed_post(
+                client,
+                _VOICE_PATH,
+                {"CallSid": "CA-ALERT-3", "Digits": digits},
+                query="alert=alert-3&phase=choice",
+            )
+
+    assert acknowledged == ["alert-3"]
+
+
+def test_alert_without_audio_is_read_by_twilio(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _config = phone_app
+    alert = SimpleNamespace(alert_id="alert-4", anima="aoi", audio_token="", spoken_text="ディスク障害 <確認>")
+    monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
+
+    with TestClient(app) as client:
+        started = _signed_post(
+            client,
+            _VOICE_PATH,
+            {"CallSid": "CA-ALERT-4", "Direction": "outbound-api"},
+            query="alert=alert-4",
+        )
+        replay = _signed_post(
+            client,
+            _VOICE_PATH,
+            {"CallSid": "CA-ALERT-4", "Digits": ""},
+            query="alert=alert-4&phase=choice",
+        )
+
+    gather = ElementTree.fromstring(started.text).find("Gather")
+    assert gather is not None
+    say = gather.find("Say")
+    assert say is not None and say.text == "ディスク障害 <確認>" and say.get("language") == "ja-JP"
+    assert ElementTree.fromstring(replay.text).find("Gather/Say") is not None
+
+
+def test_alert_without_any_speech_hangs_up(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _config = phone_app
+    alert = SimpleNamespace(alert_id="alert-5", anima="aoi", audio_token="", spoken_text="")
+    monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
+
+    with TestClient(app) as client:
+        started = _signed_post(
+            client,
+            _VOICE_PATH,
+            {"CallSid": "CA-ALERT-5", "Direction": "outbound-api"},
+            query="alert=alert-5",
+        )
+
+    assert "<Hangup/>" in started.text and "<Gather" not in started.text
+
+
+def test_prompts_are_read_by_twilio_when_synthesis_fails_or_hangs(phone_app, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, _config = phone_app
+    token = phone_audio_store.put(b"RIFF-alert-wav")
+    alert = SimpleNamespace(alert_id="alert-6", anima="aoi", audio_token=token, spoken_text="")
+    monkeypatch.setattr(phone_routes, "get_alert", lambda _alert_id: alert)
+    monkeypatch.setattr(phone_routes, "_PROMPT_TTS_TIMEOUT_SEC", 0.01)
+
+    async def broken_speech(_anima: str, _text: str, **_kwargs) -> bytes:
+        raise RuntimeError("TTS is down")
+
+    async def hanging_speech(_anima: str, _text: str, **_kwargs) -> bytes:
+        await asyncio.Event().wait()
+        return b""
+
+    for number, speech in enumerate((broken_speech, hanging_speech)):
+        monkeypatch.setattr(phone_routes, "synthesize_speech", speech)
+        with TestClient(app) as client:
+            started = _signed_post(
+                client,
+                _VOICE_PATH,
+                {"CallSid": f"CA-ALERT-6-{number}", "Direction": "outbound-api"},
+                query="alert=alert-6",
+            )
+
+        assert started.status_code == 200
+        gather = ElementTree.fromstring(started.text).find("Gather")
+        assert gather is not None
+        assert gather.find("Play") is not None and gather.find("Say") is not None
 
 
 def test_status_callback_discards_session_and_revokes_stream_token(phone_app) -> None:
