@@ -89,6 +89,48 @@ async def test_unacknowledged_completed_call_retries_and_ack_stops_future_calls(
 
 
 @pytest.mark.asyncio
+async def test_alert_still_rings_when_speech_synthesis_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.phone import speech
+
+    twilio = _FakeTwilio()
+    _patch_alert_dependencies(monkeypatch, twilio)
+
+    async def broken_synthesize(*_args, **_kwargs) -> bytes:
+        raise RuntimeError("TTS is down")
+
+    monkeypatch.setattr(speech, "synthesize_speech", broken_synthesize)
+
+    alert_id = await phone_alert.start_alert("aoi", "Disk", "Disk failure", phone_config=_config(attempts=1))
+    await phone_alert.wait_for_alert(alert_id)
+
+    state = phone_alert.get_alert(alert_id)
+    assert state is not None
+    assert len(twilio.calls) == 1
+    assert state.audio_token == ""
+    assert "Disk failure" in state.spoken_text
+
+
+@pytest.mark.asyncio
+async def test_alert_still_rings_when_speech_synthesis_hangs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.phone import speech
+
+    twilio = _FakeTwilio()
+    _patch_alert_dependencies(monkeypatch, twilio)
+
+    async def hanging_synthesize(*_args, **_kwargs) -> bytes:
+        await asyncio.Event().wait()
+        return b""
+
+    monkeypatch.setattr(speech, "synthesize_speech", hanging_synthesize)
+    monkeypatch.setattr(phone_alert, "_ALERT_TTS_TIMEOUT_SEC", 0.01)
+
+    alert_id = await phone_alert.start_alert("aoi", "Disk", "Disk failure", phone_config=_config(attempts=1))
+    await phone_alert.wait_for_alert(alert_id)
+
+    assert len(twilio.calls) == 1
+
+
+@pytest.mark.asyncio
 async def test_retry_waits_for_every_owner_call_to_finish(monkeypatch: pytest.MonkeyPatch) -> None:
     twilio = _FakeTwilio()
     _patch_alert_dependencies(monkeypatch, twilio)

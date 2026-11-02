@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import struct
 import wave
 
 import numpy as np
@@ -14,6 +15,7 @@ from core.voice.audio_codec import (
     split_mulaw_frames,
     upsample_8k_to_16k,
     wav_to_mulaw_frames,
+    wav_to_mulaw_wav,
 )
 
 
@@ -111,6 +113,33 @@ def test_wav_conversion_downmixes_stereo_to_mono() -> None:
     assert len(frames) == 1
     decoded = np.frombuffer(mulaw_to_pcm16(frames[0]), dtype="<i2")
     assert np.max(np.abs(decoded)) < 10
+
+
+def test_wav_to_mulaw_wav_shrinks_audio_into_a_telephone_wav() -> None:
+    pcm = (np.sin(np.linspace(0, 200, 24_000)) * 8_000).astype("<i2").tobytes()
+    source = _wav(pcm, sample_rate=24_000)
+
+    converted = wav_to_mulaw_wav(source)
+
+    assert converted[:4] == b"RIFF" and converted[8:12] == b"WAVE"
+    assert struct.unpack("<I", converted[4:8])[0] == len(converted) - 8
+    assert struct.unpack("<HHIIHH", converted[20:36]) == (7, 1, 8_000, 8_000, 1, 8)
+    data_at = converted.index(b"data")
+    assert struct.unpack("<I", converted[data_at + 4 : data_at + 8])[0] == 8_000
+    assert converted[data_at + 8 :] == b"".join(wav_to_mulaw_frames(source))
+    assert len(converted) < len(source) / 5
+
+
+def test_wav_to_mulaw_wav_pads_odd_length_audio_to_a_chunk_boundary() -> None:
+    converted = wav_to_mulaw_wav(_wav(b"\x00\x00" * 3, sample_rate=8_000))
+
+    assert len(converted) % 2 == 0
+    assert struct.unpack("<I", converted[4:8])[0] == len(converted) - 8
+
+
+def test_wav_to_mulaw_wav_rejects_non_wav_audio() -> None:
+    with pytest.raises(ValueError):
+        wav_to_mulaw_wav(b"ID3-not-a-wav")
 
 
 def test_wav_conversion_rejects_non_wav_audio() -> None:

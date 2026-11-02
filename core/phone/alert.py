@@ -15,11 +15,13 @@ from dataclasses import dataclass, field
 from core.config.schemas import PhoneConfig
 from core.phone.audio_store import phone_audio_store
 from core.phone.twilio_client import build_webhook_url, create_twilio_client
+from core.voice.speech_text import prepare_speech
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL_CALL_STATUSES = frozenset({"completed", "busy", "failed", "no-answer", "canceled"})
 _ALERT_RETENTION_SEC = 3600
+_ALERT_TTS_TIMEOUT_SEC = 30.0
 
 
 @dataclass(slots=True)
@@ -31,6 +33,7 @@ class PhoneAlert:
     attempts: int = 0
     acknowledged: bool = False
     audio_token: str = ""
+    spoken_text: str = ""
     task: asyncio.Task[None] | None = None
     attempt_event: asyncio.Event | None = None
     attempt_creating: bool = False
@@ -87,14 +90,28 @@ async def _run_alert(alert: PhoneAlert, subject: str, body: str, *, voice_config
 
     try:
         alert_text = t("phone.alert_intro", locale=locale, anima=alert.anima, subject=subject, body=body)
-        audio = await synthesize_speech(
-            alert.anima,
+        link_placeholder = t("phone.link_placeholder", locale=locale)
+        alert.spoken_text = prepare_speech(
             alert_text,
-            voice_config=voice_config,
-            link_placeholder=t("phone.link_placeholder", locale=locale),
+            provider=None,
+            link_placeholder=link_placeholder,
             max_chars=400,
-        )
-        alert.audio_token = phone_audio_store.put(audio)
+        ).spoken
+        try:
+            audio = await asyncio.wait_for(
+                synthesize_speech(
+                    alert.anima,
+                    alert_text,
+                    voice_config=voice_config,
+                    link_placeholder=link_placeholder,
+                    max_chars=400,
+                ),
+                timeout=_ALERT_TTS_TIMEOUT_SEC,
+            )
+            alert.audio_token = phone_audio_store.put(audio)
+        except Exception:
+            # A call read in Twilio's voice is better than one that never rings.
+            logger.warning("Phone alert speech failed for anima=%s; Twilio will read the alert", alert.anima)
 
         max_attempts = alert.config.alert_max_attempts
         for attempt in range(1, max_attempts + 1):

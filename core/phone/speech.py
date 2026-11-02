@@ -10,12 +10,24 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+from core.voice.audio_codec import wav_to_mulaw_wav
 from core.voice.speech_text import prepare_speech
 from core.voice.tts_factory import create_tts_provider
 from core.voice.voice_config import load_per_anima_voice
 
 _STATIC_AUDIO_CACHE: OrderedDict[tuple[str, str, str, str], bytes] = OrderedDict()
 _STATIC_AUDIO_CACHE_LIMIT = 128
+
+
+def _to_telephone_audio(audio: bytes) -> bytes:
+    """Shrink a WAV to phone quality so Twilio fetches it quickly over a slow tunnel.
+
+    Anything that is not PCM WAV, such as MP3 from a provider, plays as it is.
+    """
+    try:
+        return wav_to_mulaw_wav(audio)
+    except ValueError:
+        return audio
 
 
 async def synthesize_speech(
@@ -66,13 +78,14 @@ async def synthesize_speech(
     audio = await provider.synthesize_full(speech_text.spoken, tts_config)
     if not audio:
         raise ValueError("TTS returned empty audio")
+    audio = _to_telephone_audio(bytes(audio))
 
     if key is not None:
-        _STATIC_AUDIO_CACHE[key] = bytes(audio)
+        _STATIC_AUDIO_CACHE[key] = audio
         _STATIC_AUDIO_CACHE.move_to_end(key)
         while len(_STATIC_AUDIO_CACHE) > _STATIC_AUDIO_CACHE_LIMIT:
             _STATIC_AUDIO_CACHE.popitem(last=False)
-    return bytes(audio)
+    return audio
 
 
 def clear_static_audio_cache() -> None:
