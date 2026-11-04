@@ -704,7 +704,7 @@ class SlackSocketModeManager:
                     token_for_resolve = self._get_per_anima_credential("SLACK_BOT_TOKEN", anima_name) or ""
                     raw_text = event.get("text", "")
                     text = await asyncio.to_thread(resolve_slack_mentions, raw_text, token_for_resolve)
-                    _route_to_board(channel_id, text, bot_name, ts=ts)
+                    await asyncio.to_thread(_route_to_board, channel_id, text, bot_name, ts=ts)
                 return
 
             if _is_duplicate_ts(ts, anima_name):
@@ -771,7 +771,7 @@ class SlackSocketModeManager:
             # This prevents N handlers from each posting the same message.
             if not is_dm and (bool(mention_intent) or is_default):
                 user_name = get_cached_user_name(sender) or sender
-                _route_to_board(channel_id, text, user_name, ts=ts)
+                await asyncio.to_thread(_route_to_board, channel_id, text, user_name, ts=ts)
 
             if should_deliver:
                 has_mention = bool(mention_intent)
@@ -786,7 +786,8 @@ class SlackSocketModeManager:
 
                 shared_dir = get_data_dir() / "shared"
                 messenger = Messenger(shared_dir, anima_name)
-                messenger.receive_external(
+                await asyncio.to_thread(
+                    messenger.receive_external,
                     content=annotated,
                     source="slack",
                     source_message_id=ts,
@@ -848,7 +849,8 @@ class SlackSocketModeManager:
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
-            messenger.receive_external(
+            await asyncio.to_thread(
+                messenger.receive_external,
                 content=text,
                 source="slack",
                 source_message_id=ts,
@@ -963,7 +965,7 @@ class SlackSocketModeManager:
 
             # Route to AnimaWorks board BEFORE adding inbox annotations
             user_name = get_cached_user_name(event.get("user", "")) or event.get("user", "")
-            _route_to_board(channel_id, text, user_name, ts=ts)
+            await asyncio.to_thread(_route_to_board, channel_id, text, user_name, ts=ts)
 
             shared_dir = get_data_dir() / "shared"
 
@@ -976,7 +978,8 @@ class SlackSocketModeManager:
                 annotation = _build_slack_annotation(channel_id, True, channel_name=ch_name)
                 annotated = annotation + text
                 for target in plain_targets:
-                    Messenger(shared_dir, target).receive_external(
+                    await asyncio.to_thread(
+                        Messenger(shared_dir, target).receive_external,
                         content=annotated,
                         source="slack",
                         # Suffix keeps multi-target fanout out of the global
@@ -1014,7 +1017,8 @@ class SlackSocketModeManager:
             intent = mention_intent or _detect_slack_intent(annotated, channel_id, bot_user_id) or "observe"
 
             messenger = Messenger(shared_dir, anima_name)
-            messenger.receive_external(
+            await asyncio.to_thread(
+                messenger.receive_external,
                 content=annotated,
                 source="slack",
                 source_message_id=ts,
@@ -1074,7 +1078,8 @@ class SlackSocketModeManager:
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name_resolved)
-            messenger.receive_external(
+            await asyncio.to_thread(
+                messenger.receive_external,
                 content=text,
                 source="slack",
                 source_message_id=ts,

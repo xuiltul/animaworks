@@ -154,7 +154,7 @@ def create_sessions_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/animas/{name}/sessions")
-    async def list_sessions(name: str, request: Request):
+    def list_sessions(name: str, request: Request):
         """List all available sessions: active conversation, archives, episodes."""
         animas_dir = request.app.state.animas_dir
         anima_dir = animas_dir / name

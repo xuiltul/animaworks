@@ -138,8 +138,8 @@ def create_chat_router() -> APIRouter:
                 return JSONResponse({"error": message}, status_code=status_code)
 
         # Save image and file attachments to disk and build IPC params
-        saved_paths = save_images(name, body.images) if body.images else []
-        saved_files = save_files(name, body.files) if body.files else []
+        saved_paths = await asyncio.to_thread(save_images, name, body.images) if body.images else []
+        saved_files = await asyncio.to_thread(save_files, name, body.files) if body.files else []
         saved_paths.extend(file["path"] for file in saved_files)
 
         await emit(request, "anima.status", {"name": name, "status": "thinking"})
@@ -316,8 +316,8 @@ def create_chat_router() -> APIRouter:
                 return JSONResponse({"error": message}, status_code=status_code)
 
         # Save image and file attachments to disk
-        saved_paths = save_images(name, body.images) if body.images else []
-        saved_files = save_files(name, body.files) if body.files and not body.resume else []
+        saved_paths = await asyncio.to_thread(save_images, name, body.images) if body.images else []
+        saved_files = await asyncio.to_thread(save_files, name, body.files) if body.files and not body.resume else []
         saved_paths.extend(file["path"] for file in saved_files)
 
         # Guard: return immediately if anima is bootstrapping

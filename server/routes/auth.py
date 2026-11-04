@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from core.auth.manager import (
+    auth_write_lock,
     create_session,
     find_user,
     get_session_cookie_max_age,
@@ -42,8 +43,10 @@ class LoginRequest(BaseModel):
 def create_auth_router() -> APIRouter:
     router = APIRouter(tags=["auth"])
 
+    # These handlers are plain defs: they read and write auth.json and hash
+    # passwords, so FastAPI must run them in its thread pool, not on the loop.
     @router.post("/auth/login")
-    async def login(body: LoginRequest, request: Request):
+    def login(body: LoginRequest, request: Request):
         auth_config = load_auth()
 
         if auth_config.auth_mode == "local_trust":
@@ -74,8 +77,19 @@ def create_auth_router() -> APIRouter:
                 status_code=401,
             )
 
-        token = create_session(auth_config, user.username)
-        save_auth(auth_config)
+        # Verification took a while and held no lock, so re-read before adding
+        # the session. A password changed in the meantime invalidates this login.
+        with auth_write_lock():
+            auth_config = load_auth()
+            current = find_user(auth_config, body.username)
+            if current is None or current.password_hash != user.password_hash:
+                logger.warning("Login rejected: credentials changed during login for user '%s'", body.username)
+                return JSONResponse(
+                    {"error": "Invalid credentials"},
+                    status_code=401,
+                )
+            token = create_session(auth_config, current.username)
+            save_auth(auth_config)
 
         response = JSONResponse(
             {
@@ -98,7 +112,7 @@ def create_auth_router() -> APIRouter:
         return response
 
     @router.post("/auth/logout")
-    async def logout(request: Request):
+    def logout(request: Request):
         token = request.cookies.get("session_token")
         if token:
             revoke_session(token)
@@ -108,7 +122,7 @@ def create_auth_router() -> APIRouter:
         return response
 
     @router.get("/auth/me")
-    async def me(request: Request):
+    def me(request: Request):
         user = getattr(request.state, "user", None)
         auth_config = load_auth()
         if not user:

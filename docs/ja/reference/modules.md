@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: db1af8f99def432d274aa8cd10ce0930c4b6e704f526a092516b5d9025db6724 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: cce10dc2b054e53abe15d310e9c5c3aff2a9c7b7629fdad4971e6d52c1775f49 -->
 
 # モジュール一覧
 
@@ -50,7 +50,7 @@
 | `cli.commands.rag_repair_status` | 147 | Status reporting for persistent RAG repair state. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
-| `cli.commands.server` | 891 | — |
+| `cli.commands.server` | 903 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
@@ -175,7 +175,7 @@ Digital Anima のライフサイクルと実行時オブジェクト。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.auth` | 7 | — |
-| `core.auth.manager` | 192 | — |
+| `core.auth.manager` | 304 | — |
 | `core.auth.models` | 45 | — |
 
 ## `core.channels`
@@ -234,7 +234,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.enclave.egress.pipeline` | 96 | Egress pipeline: apply configured stages and fail closed on any error. |
 | `core.enclave.egress.stages` | 236 | Stage implementations for the egress pipeline. |
 | `core.enclave.gateway` | 521 | Gateway: the ingress point of an enclave instance. |
-| `core.enclave.gateway_server` | 216 | Lifecycle and Unix-socket wiring for the enclave gateway. |
+| `core.enclave.gateway_server` | 219 | Lifecycle and Unix-socket wiring for the enclave gateway. |
 | `core.enclave.guards` | 273 | Startup guards for enclave mode. |
 | `core.enclave.jobs` | 254 | Persistent query jobs for the enclave gateway. |
 | `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
@@ -429,7 +429,8 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.infra.execution_sdk_preflight` | 126 | — |
 | `core.infra.gpu` | 238 | — |
 | `core.infra.inference` | 127 | — |
-| `core.infra.logging_config` | 530 | Centralized logging configuration for AnimaWorks. |
+| `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
+| `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
 | `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
@@ -1096,11 +1097,12 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1518 | — |
+| `server.app` | 1543 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
 | `server.localhost` | 86 | — |
+| `server.loop_watchdog` | 102 | Report event loop stalls in the log, with the stack that caused them. |
 | `server.reload_manager` | 115 | — |
 | `server.room_manager` | 542 | Meeting room lifecycle, orchestration, and minutes generation. |
 | `server.stream_registry` | 489 | — |
@@ -1114,11 +1116,11 @@ LLM 利用量とコストの記録・集計。
 |---|---:|---|
 | `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
 | `server.gateways.discord_channel_sync` | 278 | — |
-| `server.gateways.discord_gateway` | 727 | — |
+| `server.gateways.discord_gateway` | 729 | — |
 | `server.gateways.github_gateway` | 534 | — |
-| `server.gateways.slack_channel_sync` | 505 | — |
+| `server.gateways.slack_channel_sync` | 506 | — |
 | `server.gateways.slack_interactive` | 239 | — |
-| `server.gateways.slack_socket` | 1146 | — |
+| `server.gateways.slack_socket` | 1151 | — |
 | `server.gateways.zoom_gateway` | 700 | — |
 
 ## `server.routes`
@@ -1132,7 +1134,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
-| `server.routes.auth` | 133 | — |
+| `server.routes.auth` | 147 | — |
 | `server.routes.channels` | 496 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
@@ -1156,13 +1158,13 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.sessions` | 734 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
-| `server.routes.system` | 1218 | — |
+| `server.routes.system` | 1224 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
-| `server.routes.users` | 280 | — |
-| `server.routes.voice` | 223 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.users` | 299 | — |
+| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
-| `server.routes.websocket_route` | 46 | — |
+| `server.routes.websocket_route` | 50 | — |
 
 ## `server.services`
 
@@ -1180,13 +1182,13 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server.supervisor` | 23 | Server-level supervision APIs for managing Anima processes. |
-| `server.supervisor._manager_protocols（非公開）` | 85 | Structural host protocols for the compositional mixins. |
+| `server.supervisor._manager_protocols（非公開）` | 86 | Structural host protocols for the compositional mixins. |
 | `server.supervisor._mgr_health（非公開）` | 470 | Health check mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_rag_repair（非公開）` | 268 | Supervised RAG repair mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_reconcile（非公開）` | 321 | Reconciliation mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_scheduler（非公開）` | 1282 | System scheduler mixin for ProcessSupervisor. |
+| `server.supervisor._mgr_rag_repair（非公開）` | 278 | Supervised RAG repair mixin for ProcessSupervisor. |
+| `server.supervisor._mgr_reconcile（非公開）` | 335 | Reconciliation mixin for ProcessSupervisor. |
+| `server.supervisor._mgr_scheduler（非公開）` | 1317 | System scheduler mixin for ProcessSupervisor. |
 | `server.supervisor.activity_schedule` | 100 | — |
 | `server.supervisor.auto_updater` | 198 | — |
-| `server.supervisor.manager` | 1276 | Process Supervisor - Manages lifecycle of Anima child processes. |
-| `server.supervisor.process_handle` | 768 | Process handle for managing child Anima processes. |
+| `server.supervisor.manager` | 1308 | Process Supervisor - Manages lifecycle of Anima child processes. |
+| `server.supervisor.process_handle` | 772 | Process handle for managing child Anima processes. |
 | `server.supervisor.restart_state` | 169 | Unified restart state machine for ProcessSupervisor. |

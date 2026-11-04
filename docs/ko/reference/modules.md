@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=ce41992707a63599d506963db42171cac0274f21d489466ca90ad8b17ace2cc0 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=aefbff1c2909a6984e35d83a092b53e9e889c02b2267ff8fd41e9701b0859b41 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -24,37 +24,37 @@
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
 | `cli.commands.anima_export_cmd` | 67 | — |
-| `cli.commands.anima_mgmt` | 1174 | Anima 프로세스 관리를 위한 CLI 명령. |
+| `cli.commands.anima_mgmt` | 1174 | CLI commands for anima process management. |
 | `cli.commands.board` | 144 | — |
 | `cli.commands.company_cmd` | 272 | — |
-| `cli.commands.config_cmd` | 238 | ``animaworks config``을 위한 CLI 핸들러와 대화형 마법사. |
+| `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
-| `cli.commands.enclave_cmd` | 323 | 엔클레이브 런타임을 위한 운영 명령. |
+| `cli.commands.enclave_cmd` | 323 | Operational commands for enclave runtimes. |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
-| `cli.commands.logs` | 209 | Anima 로그를 보는 CLI 명령. |
+| `cli.commands.logs` | 209 | CLI commands for viewing anima logs. |
 | `cli.commands.mcp_cmd` | 66 | — |
 | `cli.commands.memory_cmd` | 56 | — |
 | `cli.commands.messaging` | 86 | — |
 | `cli.commands.migrate_cmd` | 157 | — |
-| `cli.commands.models_cmd` | 304 | 모델 정보 및 관리를 위한 CLI 명령. |
+| `cli.commands.models_cmd` | 304 | CLI commands for model information and management. |
 | `cli.commands.optimize_assets` | 189 | — |
 | `cli.commands.profile` | 332 | — |
-| `cli.commands.rag_repair_status` | 147 | 영구 RAG 복구 상태 보고. |
+| `cli.commands.rag_repair_status` | 147 | Status reporting for persistent RAG repair state. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
-| `cli.commands.server` | 891 | — |
+| `cli.commands.server` | 903 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
-| `cli.commands.task_store_cmd` | 259 | 운영자 전용 코호트 범위 작업 마이그레이션 및 현재 상태 내보내기. |
+| `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
 
@@ -170,12 +170,12 @@ Digital Anima의 수명 주기와 런타임 객체.
 
 ## `core.auth`
 
-사용자 인증, 세션 및 인증 정보 관리.
+사용자 인증, 세션, 인증 정보 관리.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.auth` | 7 | — |
-| `core.auth.manager` | 192 | — |
+| `core.auth.manager` | 304 | — |
 | `core.auth.models` | 45 | — |
 
 ## `core.channels`
@@ -217,31 +217,31 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.enclave`
 
-격리된 엔클레이브 모드의 설정 모델과 시작 시 보안 가드.
+격리된 enclave 모드의 설정 모델과 시작 시 보안 가드.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
-| `core.enclave` | 54 | 전용 소켓에 바인딩되는 격리된 런타임 인스턴스인 엔클레이브 모드. |
-| `core.enclave.config` | 207 | 엔클레이브 모드의 설정 모델. |
-| `core.enclave.egress.audit` | 62 | 이그레스 파이프라인의 감사 로그. |
-| `core.enclave.egress.config` | 113 | 이그레스 파이프라인의 설정 모델. |
-| `core.enclave.egress.fs` | 38 | 엔클레이브 file/directory 권한을 적용하는 간단한 파일 시스템 도우미. |
-| `core.enclave.egress.masker.dispatch` | 40 | 내장 마스커의 프로필 디스패치. |
-| `core.enclave.egress.masker.facts` | 162 | 레코드 사실의 규칙 기반 마스킹. |
-| `core.enclave.egress.masker.log_pii` | 115 | log/audit PII 마스킹. |
-| `core.enclave.egress.masker.ner` | 97 | MeCab(fugashi + IPADIC)을 사용한 개체명 인식 마스킹. |
-| `core.enclave.egress.models` | 57 | 이그레스 파이프라인의 데이터 구조. |
-| `core.enclave.egress.pipeline` | 96 | 이그레스 파이프라인: 설정된 단계를 적용하고 오류가 발생하면 모두 차단합니다. |
-| `core.enclave.egress.stages` | 236 | 이그레스 파이프라인의 단계 구현. |
-| `core.enclave.gateway` | 521 | 게이트웨이: 엔클레이브 인스턴스의 인그레스 지점. |
-| `core.enclave.gateway_server` | 216 | 엔클레이브 게이트웨이의 수명 주기 및 Unix 소켓 연결. |
-| `core.enclave.guards` | 273 | 엔클레이브 모드의 시작 시 가드. |
-| `core.enclave.jobs` | 254 | 엔클레이브 게이트웨이의 영구 쿼리 작업. |
-| `core.enclave.laravel_crypt` | 115 | Laravel ``Crypt::encryptString`` 페이로드 복호화 도우미. |
-| `core.enclave.ops` | 78 | 엔클레이브 상태 확인 및 감사 요약을 위한 운영 도우미. |
-| `core.enclave.raw_store` | 150 | 엔클레이브 도구가 읽는 수정되지 않은 결과를 위한 비공개 저장소. |
-| `core.enclave.secrets` | 128 | 엔클레이브 자격 증명 저장소에서 비밀 정보 읽기. |
-| `core.enclave.ssm_tunnel` | 371 | 엔클레이브 SQL 소스를 위한 SSM Session Manager 포트 포워딩 터널. |
+| `core.enclave` | 54 | Enclave mode: an isolated runtime instance that bind to a dedicated socket. |
+| `core.enclave.config` | 207 | Configuration models for enclave mode. |
+| `core.enclave.egress.audit` | 62 | Audit logging for the egress pipeline. |
+| `core.enclave.egress.config` | 113 | Configuration model for the egress pipeline. |
+| `core.enclave.egress.fs` | 38 | Small filesystem helpers enforcing enclave file/directory permissions. |
+| `core.enclave.egress.masker.dispatch` | 40 | Profile dispatch for the built-in masker. |
+| `core.enclave.egress.masker.facts` | 162 | Rule-based masking of record facts. |
+| `core.enclave.egress.masker.log_pii` | 115 | Masking of log/audit PII. |
+| `core.enclave.egress.masker.ner` | 97 | Named-entity recognition masking using MeCab (fugashi + IPADIC). |
+| `core.enclave.egress.models` | 57 | Data structures for the egress pipeline. |
+| `core.enclave.egress.pipeline` | 96 | Egress pipeline: apply configured stages and fail closed on any error. |
+| `core.enclave.egress.stages` | 236 | Stage implementations for the egress pipeline. |
+| `core.enclave.gateway` | 521 | Gateway: the ingress point of an enclave instance. |
+| `core.enclave.gateway_server` | 219 | Lifecycle and Unix-socket wiring for the enclave gateway. |
+| `core.enclave.guards` | 273 | Startup guards for enclave mode. |
+| `core.enclave.jobs` | 254 | Persistent query jobs for the enclave gateway. |
+| `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
+| `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
+| `core.enclave.raw_store` | 150 | Private storage for unmodified results read by enclave tools. |
+| `core.enclave.secrets` | 128 | Read secrets from the enclave credentials store. |
+| `core.enclave.ssm_tunnel` | 371 | SSM Session Manager port-forward tunnels for enclave SQL sources. |
 
 ## `core.enclave.egress`
 
@@ -420,16 +420,17 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.infra`
 
-로그, 데이터베이스, 캐시 등의 기반 기능.
+로그, 데이터베이스, 캐시 등 기반 기능.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
 | `core.infra.execution_sdk_preflight` | 126 | — |
 | `core.infra.gpu` | 238 | — |
 | `core.infra.inference` | 127 | — |
-| `core.infra.logging_config` | 530 | AnimaWorks용 중앙 집중식 로깅 설정. |
+| `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
+| `core.infra.logging_config` | 542 | AnimaWorks용 중앙 집중식 로깅 설정. |
 | `core.infra.runtime_init` | 451 | 최초 실행 초기화: 템플릿을 런타임 데이터 디렉터리로 복사. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
@@ -1093,16 +1094,17 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1518 | — |
-| `server.enclave_delivery` | 327 | 완료된 enclave ask 작업을 수집해 호스트 받은 편지함으로 전달. |
+| `server.app` | 1543 | — |
+| `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
 | `server.localhost` | 86 | — |
+| `server.loop_watchdog` | 102 | Report event loop stalls in the log, with the stack that caused them. |
 | `server.reload_manager` | 115 | — |
-| `server.room_manager` | 542 | 회의실 수명 주기, 오케스트레이션 및 회의록 생성. |
+| `server.room_manager` | 542 | Meeting room lifecycle, orchestration, and minutes generation. |
 | `server.stream_registry` | 489 | — |
 | `server.websocket` | 165 | — |
 
@@ -1110,15 +1112,15 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
-| `server.gateways` | 1 | 서버가 실행하는 인바운드 chat/meeting 게이트웨이(Slack, Discord, Zoom, GitHub). |
+| `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
 | `server.gateways.discord_channel_sync` | 278 | — |
-| `server.gateways.discord_gateway` | 727 | — |
+| `server.gateways.discord_gateway` | 729 | — |
 | `server.gateways.github_gateway` | 534 | — |
-| `server.gateways.slack_channel_sync` | 505 | — |
+| `server.gateways.slack_channel_sync` | 506 | — |
 | `server.gateways.slack_interactive` | 239 | — |
-| `server.gateways.slack_socket` | 1146 | — |
+| `server.gateways.slack_socket` | 1151 | — |
 | `server.gateways.zoom_gateway` | 700 | — |
 
 ## `server.routes`
@@ -1132,7 +1134,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
-| `server.routes.auth` | 133 | — |
+| `server.routes.auth` | 147 | — |
 | `server.routes.channels` | 496 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
@@ -1156,13 +1158,13 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.sessions` | 734 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
-| `server.routes.system` | 1218 | — |
+| `server.routes.system` | 1224 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
-| `server.routes.users` | 280 | — |
-| `server.routes.voice` | 223 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.users` | 299 | — |
+| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
-| `server.routes.websocket_route` | 46 | — |
+| `server.routes.websocket_route` | 50 | — |
 
 ## `server.services`
 
@@ -1177,16 +1179,16 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
-| `server.supervisor` | 23 | Anima 프로세스를 관리하기 위한 서버 수준 감독 API. |
-| `server.supervisor._manager_protocols（非公開）` | 85 | 조합형 믹스인을 위한 구조적 호스트 프로토콜. |
-| `server.supervisor._mgr_health（非公開）` | 470 | ProcessSupervisor용 상태 확인 믹스인. |
-| `server.supervisor._mgr_rag_repair（非公開）` | 268 | ProcessSupervisor용 감독형 RAG 복구 믹스인. |
-| `server.supervisor._mgr_reconcile（非公開）` | 321 | ProcessSupervisor용 조정 믹스인. |
-| `server.supervisor._mgr_scheduler（非公開）` | 1282 | ProcessSupervisor용 시스템 스케줄러 믹스인. |
+| `server.supervisor` | 23 | Anima 프로세스 관리를 위한 서버 수준 감독 API. |
+| `server.supervisor._manager_protocols（非公開）` | 86 | 구성 믹스인을 위한 구조적 호스트 프로토콜. |
+| `server.supervisor._mgr_health（非公開）` | 470 | ProcessSupervisor용 헬스 체크 믹스인. |
+| `server.supervisor._mgr_rag_repair（非公開）` | 278 | ProcessSupervisor용 감독형 RAG 복구 믹스인. |
+| `server.supervisor._mgr_reconcile（非公開）` | 335 | ProcessSupervisor용 조정 믹스인. |
+| `server.supervisor._mgr_scheduler（非公開）` | 1317 | ProcessSupervisor용 시스템 스케줄러 믹스인. |
 | `server.supervisor.activity_schedule` | 100 | — |
 | `server.supervisor.auto_updater` | 198 | — |
-| `server.supervisor.manager` | 1276 | 프로세스 감독자 - Anima 자식 프로세스의 수명 주기를 관리합니다. |
-| `server.supervisor.process_handle` | 768 | 자식 Anima 프로세스를 관리하는 프로세스 핸들. |
+| `server.supervisor.manager` | 1308 | 프로세스 슈퍼바이저 - Anima 자식 프로세스의 수명 주기를 관리합니다. |
+| `server.supervisor.process_handle` | 772 | 자식 Anima 프로세스를 관리하기 위한 프로세스 핸들. |
 | `server.supervisor.restart_state` | 169 | ProcessSupervisor용 통합 재시작 상태 머신. |
