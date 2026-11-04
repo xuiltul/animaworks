@@ -123,6 +123,10 @@ def _load_embedding_model_on_device(resolved_name: str, device: str) -> Sentence
 
 def _reload_embedding_model_on_device(resolved_name: str, device: str) -> SentenceTransformer:
     with _embedding_lock:
+        # Callers that failed together must not each load a model: torch never
+        # returns freed arenas to the OS (see get_embedding_model).
+        if _embedding_model is not None and (_embedding_model_name, _embedding_model_device) == (resolved_name, device):
+            return _embedding_model
         return _load_embedding_model_on_device(resolved_name, device)
 
 
@@ -168,7 +172,7 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
     # sandboxed child) used to discard and reload the model on each flip —
     # torch never returns freed arenas to the OS, so RSS ratcheted up by
     # ~0.5GB per reload (2026-07-17 OOM incident). Device changes now only
-    # happen through the explicit CUDA-failure fallback below and in
+    # happen through the explicit GPU-failure fallback below and in
     # ``thread_safe_encode``.
     if _embedding_model is not None and _embedding_model_name == resolved_name:
         return _embedding_model
@@ -190,7 +194,7 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
         try:
             return _load_embedding_model_on_device(resolved_name, device)
         except Exception as exc:
-            if device == "cuda":
+            if device != "cpu":
                 record_gpu_failure("embedding", exc)
                 logger.warning("GPU embedding model load failed, falling back to CPU: %s", exc)
                 return _load_embedding_model_on_device(resolved_name, "cpu")
@@ -218,7 +222,8 @@ def thread_safe_encode(
     Bulk callers release the lock between configured model batches so
     waiting interactive callers can run first.
     """
-    from core.infra.gpu import is_cuda_failure, record_gpu_failure
+    from core.infra.gpu import is_gpu_failure, record_gpu_failure, release_mps_cache
+    from core.infra.inference import run_inference
 
     model = get_embedding_model()
     prefixed_texts = _prefix_texts_for_embedding(texts, purpose=purpose)
@@ -233,19 +238,25 @@ def thread_safe_encode(
             priority=priority,
         )
     except Exception as exc:
-        if not is_cuda_failure(exc):
+        if not is_gpu_failure(exc):
             raise
         logger.error("GPU failure detected - falling back to CPU embedding", exc_info=True)
         record_gpu_failure("embedding", exc)
+        failed_device = _model_device_type(model)
         cpu_model = _reload_embedding_model_on_device(_get_configured_model_name(), "cpu")
-        return _encode_with_priority(
-            cpu_model,
-            prefixed_texts,
-            convert_to_numpy=convert_to_numpy,
-            show_progress_bar=show_progress_bar,
-            batch_size=batch_size,
-            priority=priority,
-        )
+    # Out here the exception's traceback no longer holds the GPU model, so its
+    # memory can actually be released.
+    del model
+    if failed_device == "mps":
+        run_inference("embedding", failed_device, release_mps_cache)
+    return _encode_with_priority(
+        cpu_model,
+        prefixed_texts,
+        convert_to_numpy=convert_to_numpy,
+        show_progress_bar=show_progress_bar,
+        batch_size=batch_size,
+        priority=priority,
+    )
 
 
 def _encode_with_priority(

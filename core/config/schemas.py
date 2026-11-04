@@ -225,8 +225,8 @@ class RAGConfig(BaseModel):
 class GPUConfig(BaseModel):
     """GPU device preferences for local ML components."""
 
-    embedding_device: Literal["auto", "cuda", "cpu"] = "auto"
-    reranker_device: Literal["auto", "cuda", "cpu"] = "cpu"
+    embedding_device: Literal["auto", "cuda", "mps", "cpu"] = "auto"
+    reranker_device: Literal["auto", "cuda", "mps", "cpu"] = "cpu"
     embedding_batch_size: int = Field(default=32, ge=1)
     embedding_bulk_yield_batches: int = Field(
         default=5,

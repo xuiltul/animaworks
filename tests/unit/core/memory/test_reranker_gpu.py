@@ -28,7 +28,8 @@ def _reset_gpu_state():
     from core.infra.gpu import reset_gpu_status_for_testing
 
     reset_gpu_status_for_testing()
-    yield
+    with patch("core.infra.gpu._mps_available_safely", return_value=False):
+        yield
     reset_gpu_status_for_testing()
 
 

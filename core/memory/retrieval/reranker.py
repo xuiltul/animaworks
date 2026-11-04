@@ -90,7 +90,7 @@ class CrossEncoderReranker:
             )
             return True
         except Exception as exc:
-            if self._device == "cuda":
+            if self._device != "cpu":
                 from core.infra.gpu import record_gpu_failure
 
                 record_gpu_failure("reranker", exc)
@@ -113,13 +113,15 @@ class CrossEncoderReranker:
             return None
         from core.infra.inference import run_inference
 
+        scoring_device = self._device
         try:
             pairs = [[query, t] for t in texts]
             lock_started = time.perf_counter()
             with self._lock:
                 lock_wait = time.perf_counter() - lock_started
                 predict_started = time.perf_counter()
-                scores = run_inference("reranker", self._device, _predict, self._model, pairs)
+                scoring_device = self._device
+                scores = run_inference("reranker", scoring_device, _predict, self._model, pairs)
                 predict_elapsed = time.perf_counter() - predict_started
             result = [float(s) for s in scores]
             logger.info(
@@ -132,17 +134,24 @@ class CrossEncoderReranker:
             )
             return result
         except Exception as exc:
-            from core.infra.gpu import is_cuda_failure, record_component_device, record_gpu_failure
+            from core.infra.gpu import is_gpu_failure, record_component_device, record_gpu_failure, release_mps_cache
 
-            if self._device == "cuda" and is_cuda_failure(exc):
+            if scoring_device != "cpu" and is_gpu_failure(exc):
                 logger.error("GPU failure detected - falling back to CPU reranker", exc_info=True)
                 record_gpu_failure("reranker", exc)
                 try:
-                    self._device = "cpu"
-                    self._model = run_inference("reranker", "cpu", _construct_cross_encoder, self._model_name, "cpu")
-                    record_component_device("reranker", "cpu")
                     pairs = [[query, t] for t in texts]
                     with self._lock:
+                        # Another caller may have fallen back while this one waited.
+                        failed_device = self._device
+                        if failed_device != "cpu":
+                            self._device = "cpu"
+                            self._model = run_inference(
+                                "reranker", "cpu", _construct_cross_encoder, self._model_name, "cpu"
+                            )
+                            record_component_device("reranker", "cpu")
+                            if failed_device == "mps":
+                                run_inference("reranker", failed_device, release_mps_cache)
                         scores = run_inference("reranker", "cpu", _predict, self._model, pairs)
                     return [float(s) for s in scores]
                 except Exception:
