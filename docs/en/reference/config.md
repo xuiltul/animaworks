@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=5ee50afc31da7d7233603b590aa5b8482b71ed7319f9550a4a82cb49b8614f4d generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=2bceb82e46bd99c9be9680d66d2682b315501187ad1d2f428667edba281c8449 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Configuration Reference
 
@@ -281,6 +281,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `rag.embedding_document_prefix` | `str` | `"passage: "` | — |
 | `rag.embedding_max_seq_length` | `int` | `2048` | Cap on the embedding model's max sequence length (tokens). Long-context models like ruri-v3 default to 8192, which blows up GPU activation memory during bulk encode. 0 = use model default. |
 | `rag.use_gpu` | `bool` | `false` | — |
+| `rag.chroma_native_threads` | `int` | `4` | Upper limit on each of chroma's tokio and rayon thread pools, which otherwise take one thread per CPU in every process that opens a vector store. Takes effect when the process starts. 0 = chroma default. |
 | `rag.min_retrieval_score` | `float` | `0.3` | — |
 | `rag.skill_match_min_score` | `float` | `0.75` | — |
 | `rag.repair_enabled` | `bool` | `true` | — |
@@ -314,10 +315,12 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `gpu` | `GPUConfig` | `{GPUConfig}` | Configuration for GPU usage and device selection. |
-| `gpu.embedding_device` | `Literal['auto', 'cuda', 'cpu']` | `"auto"` | — |
-| `gpu.reranker_device` | `Literal['auto', 'cuda', 'cpu']` | `"cpu"` | — |
+| `gpu.embedding_device` | `Literal['auto', 'cuda', 'mps', 'cpu']` | `"auto"` | — |
+| `gpu.reranker_device` | `Literal['auto', 'cuda', 'mps', 'cpu']` | `"cpu"` | — |
 | `gpu.embedding_batch_size` | `int` | `32` | — |
 | `gpu.embedding_bulk_yield_batches` | `int` | `5` | Maximum consecutive embedding batches bulk work may yield to waiting interactive work. |
+| `gpu.torch_num_threads` | `int` | `4` | torch intra-op CPU threads for embedding and reranking. 0 = torch default (one per core). |
+| `gpu.torch_num_interop_threads` | `int` | `1` | torch inter-op CPU threads for embedding and reranking. 0 = torch default (one per core). |
 
 ### `memory`
 
