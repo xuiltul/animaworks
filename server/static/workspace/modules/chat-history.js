@@ -10,6 +10,7 @@ import {
   renderHistoryMessage, renderSessionDivider, bindToolCallHandlers,
   bindBubbleActionHandlers, bindHumanNotifyHandlers,
   renderLiveBubble, renderStreamingBubbleInner,
+  renderHistoryError, bindHistoryRetry,
 } from "../../shared/chat/render-utils.js";
 import { createScrollObserver } from "../../shared/chat/scroll-observer.js";
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
@@ -64,6 +65,9 @@ export function renderConvMessages() {
   if ((!hs || hs.sessions.length === 0) && threadMessages.length === 0) {
     if (hs && hs.loading) {
       dom.convMessages.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${t("common.loading")}</div>`;
+    } else if (hs && hs.loadFailed) {
+      dom.convMessages.innerHTML = renderHistoryError({ escapeHtml });
+      bindHistoryRetry(dom.convMessages, () => retryHistoryLoad());
     } else {
       dom.convMessages.innerHTML = `<div class="chat-empty">${t("chat.messages_empty")}</div>`;
     }
@@ -74,10 +78,14 @@ export function renderConvMessages() {
   let html = "";
 
   if (hs && hs.hasMore) {
-    if (hs.loading) {
-      html += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.loading_history")}</div>`;
+    if (hs.olderFailed) {
+      html += renderHistoryError({ escapeHtml }, { older: true });
+    } else {
+      if (hs.loading) {
+        html += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.loading_history")}</div>`;
+      }
+      html += '<div class="chat-load-sentinel"></div>';
     }
-    html += '<div class="chat-load-sentinel"></div>';
   }
 
   if (hs && hs.sessions.length > 0) {
@@ -106,6 +114,7 @@ export function renderConvMessages() {
   }
 
   dom.convMessages.innerHTML = html;
+  bindHistoryRetry(dom.convMessages, () => loadMoreHistory());
   bindToolCallHandlers(dom.convMessages);
   bindBubbleActionHandlers(dom.convMessages);
   bindHumanNotifyHandlers(dom.convMessages, {
@@ -123,13 +132,28 @@ export async function loadAndRenderConvMessages(animaName, { resumeStream }) {
   const mgr = ChatSessionManager.getInstance();
 
   mgr.setMessages(animaName, threadId, []);
+  // Start the load before rendering so the wait shows a spinner, not "no messages".
+  const loading = mgr.loadHistory(animaName, threadId, HISTORY_PAGE_SIZE);
   renderConvMessages();
 
-  await mgr.loadHistory(animaName, threadId, HISTORY_PAGE_SIZE);
+  await loading;
 
   renderConvMessages();
   setupScrollObserver();
   resumeStream(animaName);
+}
+
+async function retryHistoryLoad() {
+  const animaName = getState().conversationAnima;
+  const threadId = getState().activeThreadId || "default";
+  if (!animaName) return;
+
+  const loading = ChatSessionManager.getInstance().loadHistory(animaName, threadId, HISTORY_PAGE_SIZE);
+  renderConvMessages();
+  await loading;
+  if (getState().conversationAnima !== animaName || (getState().activeThreadId || "default") !== threadId) return;
+  renderConvMessages();
+  setupScrollObserver();
 }
 
 // ── Infinite Scroll ──────────────────────

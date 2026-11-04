@@ -14,8 +14,9 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from core.activity.conversation import _summarize_tool_call
+from core.activity.conversation import _parse_timestamp, _summarize_tool_call
 from core.activity.logger import ActivityLogger
+from core.anima.emotion_tag import extract_emotion
 from core.memory.conversation.memory import ConversationMemory
 from core.memory.conversation.shortterm import ShortTermMemory
 from core.memory.manager import MemoryManager
@@ -26,6 +27,13 @@ logger = logging.getLogger("animaworks.routes.sessions")
 
 _AWAITING_CACHE_LOCK = threading.RLock()
 _AWAITING_CACHE_BY_ROOT: dict[str, dict[str, Any]] = {}
+
+# A turn is written to the thread file and the activity log moments apart
+# (under 0.1s across the threads measured); matching also requires equal text.
+_FILE_TWIN_MAX_SKEW_SECONDS = 600
+_FILE_TWIN_TEXT_PROBE = 200
+# Empty activity windows to step over before answering with an empty feed page.
+_FEED_EMPTY_WINDOW_HOPS = 4
 
 
 class NotificationReplyRequest(BaseModel):
@@ -116,23 +124,34 @@ def _thread_file_conversation_view(anima_dir, thread_id: str) -> dict | None:
                     "is_error": bool(rec.get("is_error", False)),
                 }
             )
-        messages.append(
-            {
-                "ts": turn.get("timestamp", ""),
-                "role": role,
-                "content": turn.get("content", ""),
-                "from_person": "",
-                "to_person": "",
-                "source_key": "chat",
-                "tool_calls": tool_calls,
-            }
-        )
+        content = turn.get("content", "")
+        message = {
+            "ts": turn.get("timestamp", ""),
+            "role": role,
+            "content": content,
+            # The file does not name the speaker; "human" is what the chat UI
+            # treats as the current user. Empty would render as the Anima itself.
+            "from_person": "human" if role == "human" else "",
+            "to_person": "",
+            "source_key": "chat",
+            "tool_calls": tool_calls,
+        }
+        if role == "assistant" and isinstance(content, str):
+            clean_content, emotion = extract_emotion(content)
+            message["content"] = clean_content
+            message["emotion"] = emotion if clean_content != content else None
+        messages.append(message)
 
     if not messages:
         return None
 
     sessions = ActivityLogger._group_into_sessions(messages, 10)
-    return {"sessions": sessions, "has_more": False, "next_before": None}
+    view: dict[str, Any] = {"sessions": sessions, "has_more": False, "next_before": None}
+    # Compression removes older turns from the file; only this summary remains.
+    if data.get("compressed_summary"):
+        view["compressed_summary"] = data["compressed_summary"]
+        view["compressed_turn_count"] = data.get("compressed_turn_count", 0)
+    return view
 
 
 def _count_view_messages(view: dict) -> int:
@@ -148,6 +167,200 @@ def _summarize_view_tool_calls(view: dict) -> dict:
                 message["tool_calls"] = [_summarize_tool_call(call) for call in calls]
                 message["tool_calls_detail"] = "lazy"
     return view
+
+
+def _feed_epoch(value: Any) -> float | None:
+    if not value:
+        return None
+    try:
+        return _parse_timestamp(str(value)).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_same_turn_text(activity_text: Any, file_text: Any) -> bool:
+    """True when two records hold one turn's text.
+
+    The file truncates long turns and the activity view moves pre-tool remarks
+    out of the reply body, so one text can be a prefix or suffix of the other.
+    """
+    left, right = str(activity_text or "").strip(), str(file_text or "").strip()
+    if not left or not right:
+        return left == right
+    short, long = sorted((left, right), key=len)
+    return long.startswith(short[:_FILE_TWIN_TEXT_PROBE]) or long.endswith(short[-_FILE_TWIN_TEXT_PROBE:])
+
+
+def _file_twins(
+    activity_messages: list[dict[str, Any]],
+    file_turns: list[tuple[float, dict[str, Any]]],
+) -> dict[int, int]:
+    """Map each activity message (by identity) to the index of the file turn recording the same turn."""
+    twins: dict[int, int] = {}
+    taken: set[int] = set()
+    for message in activity_messages:
+        ts = _feed_epoch(message.get("ts"))
+        if ts is None or message.get("type") or message.get("role") not in ("human", "assistant"):
+            continue
+        best_index = None
+        best_skew = float(_FILE_TWIN_MAX_SKEW_SECONDS)
+        for index, (file_ts, file_message) in enumerate(file_turns):
+            skew = abs(file_ts - ts)
+            if (
+                index in taken
+                or skew > best_skew
+                or file_message.get("role") != message.get("role")
+                or not _is_same_turn_text(message.get("content"), file_message.get("content"))
+            ):
+                continue
+            best_index, best_skew = index, skew
+        if best_index is not None:
+            taken.add(best_index)
+            twins[id(message)] = best_index
+    return twins
+
+
+def _merge_thread_file_into_feed(
+    feed: dict[str, Any],
+    file_view: dict[str, Any],
+    *,
+    before: str | None,
+    page_size: int,
+) -> dict[str, Any]:
+    """Add turns the activity log does not hold to one feed page of a named thread.
+
+    Pages stay cut by time: this page owns the file turns between its lower
+    cursor and ``before``, so each turn is offered on exactly one page. A turn
+    recorded in both places shows the richer activity row; twins are looked up
+    in the whole file, so a pair split by a page boundary is still one message.
+    """
+    upper = _feed_epoch(before) if before else float("inf")
+    has_more = bool(feed.get("has_more") and feed.get("next_before"))
+    next_before = feed.get("next_before") if has_more else None
+    floor = _feed_epoch(next_before) if has_more else float("-inf")
+    if floor is None:
+        floor = float("-inf")
+
+    file_turns: list[tuple[float, dict[str, Any]]] = []
+    for session in file_view.get("sessions", []):
+        for message in session.get("messages", []):
+            # ConversationTurn always stamps a time; a turn without one has no page.
+            ts = _feed_epoch(message.get("ts"))
+            if ts is not None:
+                file_turns.append((ts, message))
+    file_turns.sort(key=lambda turn: turn[0])
+
+    items = feed.get("items") or []
+    twins = _file_twins([item["message"] for item in items if item.get("kind") == "message"], file_turns)
+
+    # (time, item, from file, oldest timestamp the row accounts for)
+    rows: list[tuple[float, dict[str, Any], bool, str]] = []
+    claimed: set[int] = set()
+    for item in items:
+        if item.get("kind") != "message":
+            start = str(item.get("from_ts") or "")
+            rows.append((_feed_epoch(start) or 0.0, item, False, start))
+            continue
+        ts_text = str(item["message"].get("ts") or "")
+        ts = _feed_epoch(ts_text) or 0.0
+        cursor = ts_text
+        twin_index = twins.get(id(item["message"]))
+        if twin_index is not None:
+            twin_ts, twin_message = file_turns[twin_index]
+            claimed.add(twin_index)
+            if twin_ts >= upper:
+                continue  # A newer page already showed this turn from the file.
+            if twin_ts < ts:
+                cursor = str(twin_message.get("ts"))
+            if twin_ts < floor:
+                floor = twin_ts
+                next_before = cursor
+        rows.append((ts, item, False, cursor))
+
+    for index, (ts, message) in enumerate(file_turns):
+        if index not in claimed and floor <= ts < upper:
+            rows.append((ts, {"kind": "message", "message": message}, True, str(message.get("ts"))))
+    rows.sort(key=lambda row: row[0])
+
+    # Hand a long run of file turns out page by page, cutting the rest off by
+    # time: the next request reads anything older than the cursor again.
+    file_rows = [row for row in rows if row[2]]
+    if len(file_rows) > page_size:
+        cut = file_rows[-page_size][0]
+        cut = min(_feed_epoch(row[3]) or cut for row in rows if row[0] >= cut)
+        kept = [row for row in rows if row[0] >= cut]
+        has_more, next_before = True, min(kept, key=lambda row: _feed_epoch(row[3]) or cut)[3]
+        straddling = [row for row in rows if row[0] < cut and (_feed_epoch(row[1].get("to_ts")) or 0.0) >= cut]
+        rows = straddling + kept
+
+    merged = [row[1] for row in rows]
+    if not has_more and file_view.get("compressed_summary"):
+        merged.insert(
+            0,
+            {
+                "kind": "message",
+                "message": {
+                    "ts": str(file_turns[0][1].get("ts")) if file_turns else "",
+                    "role": "system",
+                    "type": "thread_summary",
+                    "content": file_view["compressed_summary"],
+                    "compressed_turn_count": file_view.get("compressed_turn_count", 0),
+                    "from_person": "",
+                    "source_key": "chat",
+                    "tool_calls": [],
+                },
+            },
+        )
+    return {"items": merged, "has_more": has_more, "next_before": next_before if has_more else None}
+
+
+def _feed_with_thread_file(
+    activity: ActivityLogger,
+    anima_dir: Any,
+    thread_id: str,
+    *,
+    before: str | None,
+    min_user_items: int,
+    strict_thread: bool,
+) -> dict[str, Any]:
+    """Load one feed page; named threads also draw on their conversation file.
+
+    The activity log only reaches back so far and older threads were never
+    tagged in it, while the file is the thread's durable record.
+    """
+
+    def load(cursor: str | None) -> dict[str, Any]:
+        return activity.get_conversation_feed(
+            thread_id=thread_id,
+            before=cursor,
+            min_user_items=min_user_items,
+            strict_thread=strict_thread,
+        )
+
+    feed = load(before)
+    if thread_id in ("default", "inbox"):
+        return feed
+    file_view = _thread_file_conversation_view(anima_dir, thread_id)
+    if file_view is None:
+        return feed
+    _summarize_view_tool_calls(file_view)
+
+    upper = _feed_epoch(before) if before else float("inf")
+    file_times = [
+        ts
+        for session in file_view.get("sessions", [])
+        for message in session.get("messages", [])
+        if (ts := _feed_epoch(message.get("ts"))) is not None and ts < upper
+    ]
+    newest_file_turn = max(file_times, default=None)
+    for _ in range(_FEED_EMPTY_WINDOW_HOPS):
+        if feed.get("items") or not feed.get("has_more") or not feed.get("next_before"):
+            break
+        lower = _feed_epoch(feed["next_before"])
+        if newest_file_turn is None or lower is None or newest_file_turn >= lower:
+            break
+        feed = load(feed["next_before"])
+    return _merge_thread_file_into_feed(feed, file_view, before=before, page_size=min_user_items)
 
 
 def create_sessions_router() -> APIRouter:
@@ -354,8 +567,10 @@ def create_sessions_router() -> APIRouter:
 
         activity = ActivityLogger(anima_dir)
         return await asyncio.to_thread(
-            activity.get_conversation_feed,
-            thread_id=safe_thread_id,
+            _feed_with_thread_file,
+            activity,
+            anima_dir,
+            safe_thread_id,
             before=before,
             min_user_items=min_user_items,
             strict_thread=strict_thread,

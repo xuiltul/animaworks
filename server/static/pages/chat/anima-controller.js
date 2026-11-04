@@ -3,8 +3,10 @@ import {
   isTabOpen, refreshAnimaUnread,
   clearUnreadForActiveThread, loadDraft, saveDraft, chatInputMaxHeight,
   fetchChatUiState, scheduleSaveChatUiState, mergeThreadsFromSessions,
-  setThreadUnread, threadTimeValue, syncModelSelect,
+  setThreadUnread, threadTimeValue, syncModelSelect, CONSTANTS,
 } from "./ctx.js";
+import { hasHistoryContent } from "../../shared/chat/history-loader.js";
+import { resolveActiveThreadId } from "../../shared/chat/thread-logic.js";
 import { animaStatusLabel } from "../../shared/anima-status.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { companyColor } from "../../shared/avatar-utils.js";
@@ -335,9 +337,7 @@ export function createAnimaController(ctx) {
     if (!state.threads[name]) {
       state.threads[name] = [{ id: "default", label: t("thread.default_label"), unread: false }];
     }
-    if (!state.threads[name].some(th => th.id === state.selectedThreadId)) {
-      state.selectedThreadId = "default";
-    }
+    state.selectedThreadId = resolveActiveThreadId(state.threads[name], state.selectedThreadId);
     state.activeThreadByAnima[name] = state.selectedThreadId;
     if (!isTabOpen(ctx, name)) {
       state.animaTabs.push({ name, unreadStar: false });
@@ -364,36 +364,21 @@ export function createAnimaController(ctx) {
 
     const tid = state.selectedThreadId;
 
+    const mgr = state.manager;
+    // Start the load before rendering so the wait shows a spinner, not "no messages".
+    const convPromise = hasHistoryContent(mgr.getHistoryState(name, tid))
+      ? Promise.resolve(null)
+      : mgr.loadHistory(name, tid, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory);
     ctx.controllers.renderer.renderChat();
 
-    const mgr = state.manager;
-    const existingHs = mgr.getHistoryState(name, tid);
-    const needConv = !existingHs || existingHs.sessions.length === 0;
-    const convPromise = needConv
-      ? ctx.controllers.renderer.fetchConversationHistory(name, 50, null, tid).catch(() => null)
-      : Promise.resolve(null);
     const summaryPromise = api(`/api/animas/${encodeURIComponent(name)}/summary`).catch(() => null);
     void refreshSessions(name);
 
-    const [conv, summary] = await Promise.all([convPromise, summaryPromise]);
+    const [loadedHs, summary] = await Promise.all([convPromise, summaryPromise]);
 
     if (gen !== _selectGen) return;
 
-    if (conv && conv.sessions && conv.sessions.length > 0) {
-      const { createHistoryState, applyHistoryData } = await import("../../shared/chat/session-manager.js");
-      const hs = createHistoryState();
-      applyHistoryData(hs, conv);
-      hs.loaded = true;
-      mgr.setHistoryState(name, tid, hs);
-      resolveHistoryAvatars(conv.sessions);
-    } else if (needConv) {
-      const { createHistoryState } = await import("../../shared/chat/session-manager.js");
-      const hs = createHistoryState();
-      // A successful (empty) fetch is a confirmed empty history; a failed
-      // fetch (conv === null) must not look like one.
-      if (conv) hs.loaded = true;
-      mgr.setHistoryState(name, tid, hs);
-    }
+    if (loadedHs) resolveHistoryAvatars(loadedHs.sessions);
 
     if (!state.threads[name].some(th => th.id === state.selectedThreadId)) {
       state.selectedThreadId = "default";
@@ -499,7 +484,7 @@ export function createAnimaController(ctx) {
         normalized.unshift({ id: "default", label: t("thread.default_label"), unread: false });
       }
       state.threads[name] = normalized;
-      state.activeThreadByAnima[name] = persisted.active_thread_id || "default";
+      state.activeThreadByAnima[name] = resolveActiveThreadId(normalized, persisted.active_thread_id);
       refreshAnimaUnread(ctx, name);
     }
 
@@ -536,7 +521,7 @@ export function createAnimaController(ctx) {
         if (!isTabOpen(ctx, paneState.anima)) {
           state.animaTabs.push({ name: paneState.anima, unreadStar: false });
         }
-        state.activeThreadByAnima[paneState.anima] = paneState.threadId || "default";
+        state.activeThreadByAnima[paneState.anima] = resolveActiveThreadId(state.threads[paneState.anima], paneState.threadId);
         renderAnimaTabs();
         openOrSelectAnima(paneState.anima);
       } else if (state.animas.length > 0 && !state.selectedAnima) {

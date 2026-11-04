@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=aefbff1c2909a6984e35d83a092b53e9e889c02b2267ff8fd41e9701b0859b41 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=4152a8b8897ad42853767533e8f17eafea4c39a37aaabde25c65091190149765 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -111,11 +111,11 @@
 
 활동 로그의 기록, 재생, 타임라인 표시.
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.activity` | 24 | — |
 | `core.activity.audit` | 290 | — |
-| `core.activity.conversation` | 1414 | — |
+| `core.activity.conversation` | 1421 | — |
 | `core.activity.event_export` | 33 | — |
 | `core.activity.format` | 571 | — |
 | `core.activity.logger` | 584 | — |
@@ -1094,17 +1094,17 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 1행째 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server` | 7 | — |
 | `server.app` | 1543 | — |
-| `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
+| `server.enclave_delivery` | 327 | 완료된 enclave ask 작업을 수집하여 호스트 인박스로 전달합니다. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
 | `server.localhost` | 86 | — |
-| `server.loop_watchdog` | 102 | Report event loop stalls in the log, with the stack that caused them. |
+| `server.loop_watchdog` | 102 | 이벤트 루프 지연을 로그에 보고하며, 그 원인이 된 스택을 함께 기록합니다. |
 | `server.reload_manager` | 115 | — |
-| `server.room_manager` | 542 | Meeting room lifecycle, orchestration, and minutes generation. |
+| `server.room_manager` | 542 | 회의실 수명 주기, 오케스트레이션, 회의록 생성. |
 | `server.stream_registry` | 489 | — |
 | `server.websocket` | 165 | — |
 
@@ -1112,9 +1112,9 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 1행째 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
-| `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
+| `server.gateways` | 1 | 서버가 실행하는 인바운드 chat/meeting 게이트웨이 (Slack, Discord, Zoom, GitHub). |
 | `server.gateways.discord_channel_sync` | 278 | — |
 | `server.gateways.discord_gateway` | 729 | — |
 | `server.gateways.github_gateway` | 534 | — |
@@ -1127,7 +1127,7 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 63 | — |
 | `server.routes.animas` | 1271 | — |
@@ -1154,15 +1154,15 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
-| `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
-| `server.routes.sessions` | 734 | — |
+| `server.routes.room` | 443 | SSE 스트리밍을 지원하는 회의실 API 라우트. |
+| `server.routes.sessions` | 949 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1224 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
-| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용합니다. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |
 

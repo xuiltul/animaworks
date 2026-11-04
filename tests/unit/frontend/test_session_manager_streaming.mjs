@@ -40,7 +40,9 @@ let ChatSessionManager;
 
   const managerBody =
     `
-    import { createHistoryState, applyHistoryData, mergePolledHistory } from "${historyUrl}";
+    import {
+      createHistoryState, applyHistoryData, mergePolledHistory, hasHistoryContent, hasFeedConversation,
+    } from "${historyUrl}";
     const basePath = "";
   ` + stripImports(readFileSync(resolve(STATIC, "shared/chat/session-manager.js"), "utf8"));
 

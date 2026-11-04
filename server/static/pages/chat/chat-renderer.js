@@ -20,10 +20,12 @@ import {
   feedBackgroundUrl as _sharedFeedBackgroundUrl,
   bindLazyBackgroundGroups as _sharedBindLazyBackgroundGroups,
   renderFeedHiddenCount as _sharedRenderFeedHiddenCount,
+  renderHistoryError as _sharedRenderHistoryError,
+  bindHistoryRetry as _sharedBindHistoryRetry,
 } from "../../shared/chat/render-utils.js";
 import { createScrollObserver } from "../../shared/chat/scroll-observer.js";
 import { thinkRenderHooks } from "../../shared/chat/thinking-bubble.js";
-import { mergePolledHistory } from "../../shared/chat/history-loader.js";
+import { mergePolledHistory, hasFeedConversation } from "../../shared/chat/history-loader.js";
 import { initTextArtifactHandlers } from "../../shared/text-artifact.js";
 import { companyColor } from "../../shared/avatar-utils.js";
 import { createLogger } from "../../shared/logger.js";
@@ -324,7 +326,7 @@ export function createChatRenderer(ctx) {
   }
 
   function _scheduleOlderFeedPrefetch(name, threadId, historyState) {
-    if (!historyState?.isFeed || !historyState.hasMore || !historyState.nextBefore) return;
+    if (!historyState?.isFeed || !historyState.hasMore || !historyState.nextBefore || historyState.olderFailed) return;
     const key = JSON.stringify([name, threadId, historyState.nextBefore]);
     if (_prefetchScheduledKey === key) return;
     _prefetchScheduledKey = key;
@@ -340,6 +342,61 @@ export function createChatRenderer(ctx) {
     } else {
       window.setTimeout(prefetch, 250);
     }
+  }
+
+  // ── Busy Animas: bounded search for a conversation ──
+
+  // "running" while older pages load on their own, "done" once the bound is hit.
+  const _conversationAutoload = new Map();
+
+  function _autoloadKey(name, threadId) {
+    return JSON.stringify([name, threadId]);
+  }
+
+  /** Start the bounded search if it is due; true while it is running. */
+  function _ensureConversationAutoload(name, threadId, historyState) {
+    const key = _autoloadKey(name, threadId);
+    const status = _conversationAutoload.get(key);
+    if (status) return status === "running";
+    if (!historyState.hasMore || !historyState.nextBefore || historyState.olderFailed) return false;
+
+    _conversationAutoload.set(key, "running");
+    const isCurrent = () => state.selectedAnima === name && (state.selectedThreadId || "default") === threadId;
+    // Deferred because this runs in the middle of renderChat.
+    Promise.resolve()
+      .then(() => state.manager.loadUntilConversation(name, threadId, {
+        limit: CONSTANTS.HISTORY_PAGE_SIZE,
+        fetchHistory: state.fetchChatFeedHistory,
+        shouldContinue: isCurrent,
+        onProgress: () => { if (isCurrent()) renderChat(false, true); },
+      }))
+      .catch((error) => logger.warn("Conversation autoload failed", { anima: name, error: error?.message }))
+      .finally(() => {
+        // Leaving the thread cuts the search short: resume it on return.
+        if (isCurrent()) {
+          _conversationAutoload.set(key, "done");
+          renderChat(false, true);
+        } else {
+          _conversationAutoload.delete(key);
+        }
+      });
+    return true;
+  }
+
+  /** Shown when the bounded search ended without finding a conversation. */
+  function _renderNoConversationNote(historyState) {
+    const key = historyState.hasMore ? "chat.feed.no_recent_conversation" : "chat.feed.no_conversation";
+    const loadOlder = historyState.hasMore
+      ? `<button type="button" class="chat-history-retry" data-feed-load-older>${escapeHtml(t("chat.feed.load_older"))}</button>`
+      : "";
+    return `<div class="chat-feed-note"><span>${escapeHtml(t(key))}</span>${loadOlder}</div>`;
+  }
+
+  function _bindLoadOlderNote(container, name, threadId) {
+    container.querySelector("[data-feed-load-older]")?.addEventListener("click", () => {
+      _conversationAutoload.delete(_autoloadKey(name, threadId));
+      renderChat(false, true);
+    });
   }
 
   // ── Demo Suggested Prompt Cards ──
@@ -423,8 +480,26 @@ export function createChatRenderer(ctx) {
         messagesEl.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${t("common.loading")}</div>`;
         return;
       }
+      // A failed fetch says nothing about the history: it must not read as
+      // "no messages" or start the first-meeting greeting below. (A greeting
+      // that already arrived is real content and is shown further down.)
+      if (hs.loadFailed && !state.firstMeetingResponses.has(name)) {
+        messagesEl.innerHTML = _sharedRenderHistoryError({ escapeHtml });
+        _sharedBindHistoryRetry(messagesEl, () => retryHistoryLoad());
+        return;
+      }
       if (hs.isFeed && hs.hasMore) {
-        messagesEl.innerHTML = `<div class="chat-empty">${escapeHtml(t("chat.messages_empty"))}</div><div class="chat-load-sentinel"></div>`;
+        if (hs.olderFailed) {
+          messagesEl.innerHTML = _sharedRenderHistoryError({ escapeHtml }, { older: true });
+          _sharedBindHistoryRetry(messagesEl, () => loadOlderMessages());
+          return;
+        }
+        // Nothing here yet and older pages remain, so this is not "no messages".
+        const searching = _ensureConversationAutoload(name, tid, hs);
+        messagesEl.innerHTML = (searching
+          ? `<div class="chat-empty"><span class="tool-spinner"></span> ${t("chat.past_loading")}</div>`
+          : _renderNoConversationNote(hs)) + '<div class="chat-load-sentinel"></div>';
+        _bindLoadOlderNote(messagesEl, name, tid);
         _scheduleOlderFeedPrefetch(name, tid, hs);
         observeChatSentinel();
         return;
@@ -458,10 +533,20 @@ export function createChatRenderer(ctx) {
       return;
     }
 
+    // Only background work so far: keep looking a little, then say so plainly.
+    const noConversation = hs.isFeed && !isMeeting && !state.demoMode && history.length === 0 && !hasFeedConversation(hs);
+    const searching = noConversation && _ensureConversationAutoload(name, tid, hs);
+
     let topHtml = "";
-    if (hs.hasMore) {
-      if (hs.loading) topHtml += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.past_loading")}</div>`;
-      topHtml += '<div class="chat-load-sentinel"></div>';
+    if (hs.hasMore && hs.olderFailed) {
+      topHtml += _sharedRenderHistoryError({ escapeHtml }, { older: true });
+    } else {
+      if (hs.hasMore && (hs.loading || searching)) {
+        topHtml += `<div class="history-loading-more"><span class="tool-spinner"></span> ${t("chat.past_loading")}</div>`;
+      } else if (noConversation && !hs.loading) {
+        topHtml += _renderNoConversationNote(hs);
+      }
+      if (hs.hasMore) topHtml += '<div class="chat-load-sentinel"></div>';
     }
 
     const prevScrollHeight = messagesEl.scrollHeight;
@@ -577,6 +662,8 @@ export function createChatRenderer(ctx) {
       ? _sharedRenderFeedHiddenCount(hiddenActivityCount)
       : "";
     messagesEl.innerHTML = topHtml + sessionsHtml + liveHtml + hiddenActivityHtml;
+    _sharedBindHistoryRetry(messagesEl, () => loadOlderMessages());
+    _bindLoadOlderNote(messagesEl, name, tid);
     bindToolCallHandlers(messagesEl);
     _sharedBindCollapsibleSessionHandlers(messagesEl);
     _sharedBindLazyBackgroundGroups(messagesEl, {
@@ -668,6 +755,17 @@ export function createChatRenderer(ctx) {
       _loadingOlder = false;
       renderChat(false, true);
     }
+  }
+
+  async function retryHistoryLoad() {
+    const name = state.selectedAnima;
+    const tid = state.selectedThreadId || "default";
+    if (!name) return;
+    // Start the load before rendering so the retry shows the loading spinner.
+    const loading = state.manager.loadHistory(name, tid, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory);
+    renderChat();
+    await loading;
+    if (state.selectedAnima === name && (state.selectedThreadId || "default") === tid) renderChat();
   }
 
   // ── Conversation History API ──

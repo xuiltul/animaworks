@@ -388,6 +388,11 @@ class ConversationMixin:
         mirror_lookahead = 0
         files_scanned = 0
         scan_dates = [first_day - timedelta(days=offset) for offset in range((first_day - last_day).days + 1)]
+        # A named thread is a handful of rows in a busy log. Its rows must hold
+        # the quoted id (validate_thread_id allows no characters JSON escapes),
+        # so other lines are skipped unparsed and do not count towards the raw
+        # cap, which would otherwise end the scan before reaching older rows.
+        thread_marker = f'"{thread_id}"' if thread_id not in ("default", "inbox") else ""
 
         for day_index, target_day in enumerate(scan_dates):
             path = self._log_dir / f"{target_day.isoformat()}.jsonl"  # type: ignore[attr-defined]
@@ -407,6 +412,8 @@ class ConversationMixin:
                 except StopIteration:
                     file_exhausted = True
                     break
+                if thread_marker and thread_marker not in line:
+                    continue
                 raw_count += 1
                 try:
                     raw = json.loads(line)

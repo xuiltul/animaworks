@@ -67,26 +67,44 @@ export function restoreThread(threadList, threadId) {
     : th);
 }
 
+/**
+ * Which thread to open for a remembered selection. A selection can outlive its
+ * thread being closed or auto-archived (pane state lives in this browser, the
+ * archive flag on the server, and another pane or device may have set it), and
+ * an archived thread has no tab, so such a selection falls back to the default.
+ * @param {Array} [threadList]
+ * @param {string} [threadId]
+ * @returns {string}
+ */
+export function resolveActiveThreadId(threadList, threadId) {
+  if (!threadId || threadId === "default") return "default";
+  const thread = (threadList || []).find(th => th.id === threadId);
+  return thread && !thread.archived ? threadId : "default";
+}
+
 /** Threads idle longer than this are auto-archived (1 week). */
 export const THREAD_AUTO_ARCHIVE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Auto-archive threads whose last activity is older than *maxAgeMs*.
- * The default thread and the currently active thread are never archived.
- * Threads without a lastTs are left untouched (cannot judge staleness).
+ * The default thread and the currently active thread are never archived, nor is
+ * a thread another pane has open. Threads without a lastTs are left untouched
+ * (cannot judge staleness).
  * @param {Array} threadList
  * @param {object} [opts]
  * @param {string} [opts.activeThreadId]
+ * @param {Iterable<string>} [opts.openThreadIds] - Threads open in other panes
  * @param {number} [opts.maxAgeMs=THREAD_AUTO_ARCHIVE_MS]
  * @returns {{ list: Array, changed: boolean }}
  */
 export function autoArchiveStaleThreads(threadList, opts = {}) {
   const maxAgeMs = opts.maxAgeMs ?? THREAD_AUTO_ARCHIVE_MS;
   const activeThreadId = opts.activeThreadId || null;
+  const openThreadIds = new Set(opts.openThreadIds || []);
   const cutoff = Date.now() - maxAgeMs;
   let changed = false;
   const list = threadList.map(th => {
-    if (th.id === "default" || th.archived || th.id === activeThreadId) return th;
+    if (th.id === "default" || th.archived || th.id === activeThreadId || openThreadIds.has(th.id)) return th;
     const ts = threadTimeValue(th.lastTs || "");
     if (!ts || ts >= cutoff) return th;
     changed = true;
