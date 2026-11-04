@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=077b90c9c06f222c14828a701c83028a7e7c556d3432dadf51abaf58ec53cb8d generated=2026-11-02 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=6d68ab2a645e091f88c6dd39bcd56d704895522beb153e16553d2a845d804184 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -109,13 +109,13 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 
 ## `core.activity`
 
-Recording and playback of activity logs, and timeline display.
+Recording, replay, and timeline display of activity logs.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.activity` | 24 | — |
 | `core.activity.audit` | 290 | — |
-| `core.activity.conversation` | 1414 | — |
+| `core.activity.conversation` | 1421 | — |
 | `core.activity.event_export` | 33 | — |
 | `core.activity.format` | 571 | — |
 | `core.activity.logger` | 584 | — |
@@ -1152,7 +1152,7 @@ Voice input/output and voice dialogue.
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
 | `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
-| `server.routes.sessions` | 734 | — |
+| `server.routes.sessions` | 949 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1218 | — |

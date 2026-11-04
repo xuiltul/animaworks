@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=077b90c9c06f222c14828a701c83028a7e7c556d3432dadf51abaf58ec53cb8d generated=2026-11-02 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=6d68ab2a645e091f88c6dd39bcd56d704895522beb153e16553d2a845d804184 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -111,11 +111,11 @@
 
 활동 로그의 기록, 재생, 타임라인 표시.
 
-| 모듈 | 행 수 | 독스트링 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.activity` | 24 | — |
 | `core.activity.audit` | 290 | — |
-| `core.activity.conversation` | 1414 | — |
+| `core.activity.conversation` | 1421 | — |
 | `core.activity.event_export` | 33 | — |
 | `core.activity.format` | 571 | — |
 | `core.activity.logger` | 584 | — |
@@ -1124,7 +1124,7 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `server.routes` | 63 | — |
 | `server.routes.animas` | 1271 | — |
@@ -1152,14 +1152,14 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
 | `server.routes.room` | 443 | SSE 스트리밍을 사용하는 회의실 API 라우트. |
-| `server.routes.sessions` | 734 | — |
+| `server.routes.sessions` | 949 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1218 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 280 | — |
-| `server.routes.voice` | 223 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용합니다. |
+| `server.routes.voice` | 223 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용한다. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 46 | — |
 
