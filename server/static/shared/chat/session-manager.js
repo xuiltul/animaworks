@@ -7,6 +7,11 @@ import {
 } from "./history-loader.js";
 import { api } from "../../modules/api.js";
 
+// Older feed pages fetched without asking while the loaded ones hold no
+// conversation. A page can take seconds on a busy Anima's log, so both bounds matter.
+const CONVERSATION_AUTOLOAD_MAX_PAGES = 3;
+const CONVERSATION_AUTOLOAD_MAX_MS = 30000;
+
 // ── ChatSession ──────────────────────
 
 class ChatSession {
@@ -187,6 +192,42 @@ export class ChatSessionManager extends EventTarget {
     }
     hs.loading = false;
     this.#dispatch("history-loaded", { anima, thread });
+  }
+
+  /**
+   * Load older feed pages until a conversation message appears, within bounds.
+   * A busy Anima's newest page can be nothing but background work.
+   *
+   * @param {string} anima
+   * @param {string} [thread]
+   * @param {object} [options]
+   * @param {number} [options.limit]
+   * @param {function} [options.fetchHistory]
+   * @param {number} [options.maxPages]
+   * @param {number} [options.maxMs]
+   * @param {function} [options.shouldContinue] - Checked before each page
+   * @param {function} [options.onProgress] - Called as each page starts and ends
+   * @returns {Promise<number>} Pages loaded
+   */
+  async loadUntilConversation(anima, thread = "default", options = {}) {
+    const {
+      limit = 50, fetchHistory = null,
+      maxPages = CONVERSATION_AUTOLOAD_MAX_PAGES, maxMs = CONVERSATION_AUTOLOAD_MAX_MS,
+      shouldContinue = () => true, onProgress = null,
+    } = options;
+    const session = this.getSession(anima, thread);
+    const deadline = Date.now() + maxMs;
+    let pages = 0;
+    while (pages < maxPages && Date.now() < deadline && shouldContinue()) {
+      const hs = session.historyState;
+      if (!hs.isFeed || !hs.hasMore || !hs.nextBefore || hs.loading || hs.olderFailed || hasFeedConversation(hs)) break;
+      const loading = this.loadMoreHistory(anima, thread, limit, fetchHistory);
+      onProgress?.();
+      await loading;
+      pages += 1;
+      onProgress?.();
+    }
+    return pages;
   }
 
   prefetchMoreHistory(anima, thread = "default", limit = 50, fetchHistory = null) {

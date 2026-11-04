@@ -679,6 +679,12 @@ export function renderHistoryMessage(msg, opts) {
   const truncLen = opts.truncateLen || DEFAULT_TOOL_RESULT_TRUNCATE;
   const avatarMap = opts.avatarMap || null;
 
+  if (msg.type === "thread_summary") {
+    const label = t("chat.feed.compressed_summary", { count: msg.compressed_turn_count || 0 });
+    return `<details class="chat-thread-summary"><summary>${escapeHtml(label)}</summary>` +
+      `<div class="chat-thread-summary-body">${escapeHtml(msg.content || "").replace(/\n/g, "<br>")}</div></details>`;
+  }
+
   if (opts.lineChat && (msg.type === "human_notify" || msg.type === "human_reply" || msg.role !== "system")) {
     return _lineMessage(msg, opts);
   }

@@ -3574,6 +3574,36 @@ button.chat-file-card-open {
   cursor: default;
 }
 
+/* ── Feed With No Conversation ── */
+
+.chat-feed-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.8rem;
+}
+
+/* ── Compressed Thread Summary ── */
+
+.chat-thread-summary {
+  padding: 8px 12px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.8rem;
+}
+
+.chat-thread-summary summary {
+  text-align: center;
+  cursor: pointer;
+}
+
+.chat-thread-summary-body {
+  margin-top: 8px;
+}
+
 /* ── Thinking Block ──────────────────────── */
 
 .thinking-block {
