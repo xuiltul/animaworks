@@ -170,7 +170,10 @@ export function mergeThreadsFromSessions(ctx, animaName, sessionsData) {
   const activeThreadId = ctx.state.selectedAnima === animaName
     ? ctx.state.selectedThreadId
     : (ctx.state.activeThreadByAnima[animaName] || "default");
-  const { list, changed } = autoArchiveStaleThreads(merged, { activeThreadId });
+  const { list, changed } = autoArchiveStaleThreads(merged, {
+    activeThreadId,
+    openThreadIds: ctx.state.paneHost?.getOpenThreadIds?.(animaName),
+  });
   ctx.state.threads[animaName] = list;
   if (changed) scheduleSaveChatUiState(ctx);
 }

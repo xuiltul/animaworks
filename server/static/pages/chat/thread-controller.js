@@ -163,6 +163,8 @@ export function createThreadController(ctx) {
     renderThreadTabs();
     ctx.controllers.renderer.renderChat();
     scheduleSaveChatUiState(ctx);
+    // Pane state is what a reload reopens; left as is, it reopens the closed thread.
+    state.paneHost?.savePaneStates?.();
     void ctx.controllers.anima.refreshSessions(state.selectedAnima);
   }
 

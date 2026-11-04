@@ -287,7 +287,7 @@ export function createPaneHost(rootContainer) {
     ctx.state.rootContainer = rootContainer;
     ctx.state.paneId = id;
     ctx.state.paneIdx = panes.length;
-    ctx.state.paneHost = { splitPane, removePane, savePaneStates, getPaneState, renderRail };
+    ctx.state.paneHost = { splitPane, removePane, savePaneStates, getPaneState, renderRail, getOpenThreadIds };
 
     ctx.controllers.anima = createAnimaController(ctx);
     ctx.controllers.thread = createThreadController(ctx);
@@ -610,6 +610,12 @@ export function createPaneHost(rootContainer) {
   function getPaneState(idx) {
     if (!_savedPaneStates || idx < 0 || idx >= _savedPaneStates.length) return null;
     return _savedPaneStates[idx];
+  }
+
+  function getOpenThreadIds(animaName) {
+    return panes
+      .filter((pane) => pane.ctx.state.selectedAnima === animaName)
+      .map((pane) => pane.ctx.state.selectedThreadId || "default");
   }
 
   function _saveSplitterWidths(widths) {

@@ -6,6 +6,7 @@ import {
   setThreadUnread, threadTimeValue, syncModelSelect, CONSTANTS,
 } from "./ctx.js";
 import { hasHistoryContent } from "../../shared/chat/history-loader.js";
+import { resolveActiveThreadId } from "../../shared/chat/thread-logic.js";
 import { animaStatusLabel } from "../../shared/anima-status.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { companyColor } from "../../shared/avatar-utils.js";
@@ -336,9 +337,7 @@ export function createAnimaController(ctx) {
     if (!state.threads[name]) {
       state.threads[name] = [{ id: "default", label: t("thread.default_label"), unread: false }];
     }
-    if (!state.threads[name].some(th => th.id === state.selectedThreadId)) {
-      state.selectedThreadId = "default";
-    }
+    state.selectedThreadId = resolveActiveThreadId(state.threads[name], state.selectedThreadId);
     state.activeThreadByAnima[name] = state.selectedThreadId;
     if (!isTabOpen(ctx, name)) {
       state.animaTabs.push({ name, unreadStar: false });
@@ -485,7 +484,7 @@ export function createAnimaController(ctx) {
         normalized.unshift({ id: "default", label: t("thread.default_label"), unread: false });
       }
       state.threads[name] = normalized;
-      state.activeThreadByAnima[name] = persisted.active_thread_id || "default";
+      state.activeThreadByAnima[name] = resolveActiveThreadId(normalized, persisted.active_thread_id);
       refreshAnimaUnread(ctx, name);
     }
 
@@ -522,7 +521,7 @@ export function createAnimaController(ctx) {
         if (!isTabOpen(ctx, paneState.anima)) {
           state.animaTabs.push({ name: paneState.anima, unreadStar: false });
         }
-        state.activeThreadByAnima[paneState.anima] = paneState.threadId || "default";
+        state.activeThreadByAnima[paneState.anima] = resolveActiveThreadId(state.threads[paneState.anima], paneState.threadId);
         renderAnimaTabs();
         openOrSelectAnima(paneState.anima);
       } else if (state.animas.length > 0 && !state.selectedAnima) {
