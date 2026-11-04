@@ -98,7 +98,7 @@ def create_channels_router() -> APIRouter:
     # ── Channel endpoints ────────────────────────────────────
 
     @router.get("/channels")
-    async def list_channels(request: Request):
+    def list_channels(request: Request):
         """List all shared channels with metadata including ACL info."""
         shared_dir: Path = request.app.state.shared_dir
         channels_dir = shared_dir / "channels"
@@ -128,7 +128,7 @@ def create_channels_router() -> APIRouter:
         return channels
 
     @router.get("/channels/{name}")
-    async def get_channel_messages(
+    def get_channel_messages(
         request: Request,
         name: str,
         limit: int = 50,
@@ -298,7 +298,7 @@ def create_channels_router() -> APIRouter:
     # ── DM endpoints ─────────────────────────────────────────
 
     @router.get("/dm")
-    async def list_dm_pairs(request: Request):
+    def list_dm_pairs(request: Request):
         """List all DM conversation pairs with metadata.
 
         Primary source: per-Anima activity_log/ (message_sent/message_received).
@@ -394,7 +394,7 @@ def create_channels_router() -> APIRouter:
         return pairs
 
     @router.get("/dm/{pair}")
-    async def get_dm_history(
+    def get_dm_history(
         request: Request,
         pair: str,
         limit: int = 50,

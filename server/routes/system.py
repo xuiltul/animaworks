@@ -379,8 +379,8 @@ def create_system_router() -> APIRouter:
         supervisor = request.app.state.supervisor
         anima_names = request.app.state.anima_names
 
-        # Get all process statuses
-        process_statuses = supervisor.get_all_status()
+        # Get all process statuses (reads each Anima's sidecar and bootstrap state)
+        process_statuses = await asyncio.to_thread(supervisor.get_all_status)
 
         slack_socket_ok = getattr(request.app.state, "slack_socket_manager", None) is not None
         try:
@@ -550,7 +550,7 @@ def create_system_router() -> APIRouter:
     # ── Connections ─────────────────────────────────────────
 
     @router.get("/system/connections")
-    async def system_connections(request: Request):
+    def system_connections(request: Request):
         """Return WebSocket and process connection info."""
         ws_manager = request.app.state.ws_manager
         supervisor = request.app.state.supervisor
@@ -567,7 +567,7 @@ def create_system_router() -> APIRouter:
     # ── Scheduler ──────────────────────────────────────────
 
     @router.get("/system/scheduler")
-    async def system_scheduler(request: Request):
+    def system_scheduler(request: Request):
         """Return scheduler status and job information."""
         supervisor = request.app.state.supervisor
         animas_dir = request.app.state.animas_dir
@@ -600,7 +600,7 @@ def create_system_router() -> APIRouter:
     # ── Activity ───────────────────────────────────────────
 
     @router.get("/activity/running-tasks")
-    async def get_running_activity_tasks(
+    def get_running_activity_tasks(
         request: Request,
         anima: str | None = None,
     ):
@@ -619,7 +619,7 @@ def create_system_router() -> APIRouter:
         return {"animas": running, "total": total}
 
     @router.get("/activity/group")
-    async def get_activity_group(
+    def get_activity_group(
         request: Request,
         anima: str,
         id: str,
@@ -644,7 +644,7 @@ def create_system_router() -> APIRouter:
         return {"group": group}
 
     @router.get("/activity/recent")
-    async def get_recent_activity(
+    def get_recent_activity(
         request: Request,
         hours: int = 48,
         anima: str | None = None,
@@ -839,7 +839,7 @@ def create_system_router() -> APIRouter:
     # ── Frontend Log Viewer ─────────────────────────────────
 
     @router.get("/system/frontend-logs")
-    async def view_frontend_logs(
+    def view_frontend_logs(
         request: Request,
         date: str | None = None,
         level: str | None = None,

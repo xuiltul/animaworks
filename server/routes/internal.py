@@ -1166,7 +1166,7 @@ def create_internal_router() -> APIRouter:
         return {"ok": True}
 
     @internal.post("/internal/send-message")
-    async def internal_send_message(body: InternalSendMessageRequest, request: Request):
+    def internal_send_message(body: InternalSendMessageRequest, request: Request):
         """Persist a DM outside sandbox EROFS constraints.
 
         Sandboxed Messenger.send cannot write shared/inbox (write-access
@@ -1199,7 +1199,7 @@ def create_internal_router() -> APIRouter:
         return {"ok": True, "message_id": msg.id, "thread_id": msg.thread_id}
 
     @internal.post("/internal/post-channel")
-    async def internal_post_channel(body: InternalPostChannelRequest, request: Request):
+    def internal_post_channel(body: InternalPostChannelRequest, request: Request):
         """Append a channel post outside sandbox EROFS constraints."""
         denied = ensure_self(getattr(request.state, "internal_caller", None), body.from_anima, path=request.url.path)
         if denied is not None:
