@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -472,3 +472,311 @@ async def test_feed_and_background_routes_keep_history_api_shape_untouched(tmp_p
     assert bg.status_code == 200
     assert bg.json()["sessions"][0]["messages"][0]["content"] == "cron"
     assert set(history.json()) == {"sessions", "has_more", "next_before"}
+
+
+# ── Named threads: conversation-file fallback ──────────
+
+
+def _write_thread_file(anima_dir: Path, thread_id: str, turns: list[dict], **extra: object) -> None:
+    conv_dir = anima_dir / "state" / "conversations"
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    (conv_dir / f"{thread_id}.json").write_text(json.dumps({"turns": turns, **extra}), encoding="utf-8")
+
+
+def _turns(start: datetime, count: int) -> list[dict]:
+    return [
+        {
+            "role": "human" if index % 2 == 0 else "assistant",
+            "content": f"turn {index}",
+            "timestamp": (start + timedelta(minutes=index)).isoformat(),
+        }
+        for index in range(count)
+    ]
+
+
+def _activity_rows_for(turns: list[dict], thread_id: str, *, skew: float = 0.05) -> list[dict]:
+    rows = []
+    for turn in turns:
+        ts = (datetime.fromisoformat(turn["timestamp"]) + timedelta(seconds=skew)).isoformat()
+        if turn["role"] == "human":
+            rows.append(
+                _event(
+                    ts,
+                    "message_received",
+                    turn["content"],
+                    from_person="taka",
+                    channel="chat",
+                    meta={"from_type": "human", "thread_id": thread_id},
+                )
+            )
+        else:
+            rows.append(
+                _event(
+                    ts,
+                    "response_sent",
+                    turn["content"],
+                    to_person="taka",
+                    channel="chat",
+                    meta={"thread_id": thread_id},
+                )
+            )
+    return rows
+
+
+async def _read_all_pages(tmp_path: Path, thread_id: str, *, min_user_items: int = 10) -> list[dict]:
+    app = FastAPI()
+    app.state.animas_dir = tmp_path
+    app.include_router(create_sessions_router(), prefix="/api")
+    pages: list[dict] = []
+    before: str | None = None
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for _ in range(40):
+            params: dict[str, object] = {"thread_id": thread_id, "strict_thread": 1, "min_user_items": min_user_items}
+            if before:
+                params["before"] = before
+            response = await client.get("/api/animas/alice/conversation/feed", params=params)
+            assert response.status_code == 200
+            page = response.json()
+            pages.append(page)
+            if not page["has_more"]:
+                return pages
+            assert page["next_before"] != before, "the cursor must advance"
+            before = page["next_before"]
+    raise AssertionError("paging did not terminate")
+
+
+def _page_messages(pages: list[dict]) -> list[dict]:
+    """Messages in display order: older pages are prepended to newer ones."""
+    return [item["message"] for page in reversed(pages) for item in page["items"] if item["kind"] == "message"]
+
+
+async def test_feed_shows_thread_file_turns_when_activity_log_has_no_rows(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    turns = _turns(now_local().replace(microsecond=0) - timedelta(days=200), 20)
+    _write_thread_file(anima_dir, "e2628517", turns)
+
+    pages = await _read_all_pages(tmp_path, "e2628517")
+
+    assert len(pages) == 2
+    assert [len(page["items"]) for page in pages] == [10, 10]
+    assert [message["content"] for message in _page_messages(pages)] == [turn["content"] for turn in turns]
+
+
+@pytest.mark.parametrize("min_user_items", [1, 2, 3, 5, 10])
+@pytest.mark.parametrize("skew", [0.05, -0.05, 30.0])
+async def test_feed_shows_each_turn_once_when_activity_covers_part_of_the_thread(
+    tmp_path: Path, min_user_items: int, skew: float
+) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    turns = _turns(now_local().replace(microsecond=0) - timedelta(hours=2), 12)
+    _write_thread_file(anima_dir, "research", turns)
+    # Retention dropped the first half of the thread from the activity log.
+    _write_entries(anima_dir, _activity_rows_for(turns[6:], "research", skew=skew))
+
+    pages = await _read_all_pages(tmp_path, "research", min_user_items=min_user_items)
+
+    assert [message["content"] for message in _page_messages(pages)] == [turn["content"] for turn in turns]
+
+
+async def test_feed_prefers_the_activity_row_of_a_turn_recorded_twice(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    turns = _turns(now_local().replace(microsecond=0) - timedelta(hours=1), 2)
+    _write_thread_file(anima_dir, "research", turns)
+    rows = _activity_rows_for(turns, "research")
+    rows[1]["meta"]["files"] = [{"name": "a.txt", "path": "attachments/a.txt", "size": 1, "media_type": "text/plain"}]
+    _write_entries(anima_dir, rows)
+
+    messages = _page_messages(await _read_all_pages(tmp_path, "research"))
+
+    assert [message["ts"] for message in messages] == [row["ts"] for row in rows]
+    assert messages[1]["files"][0]["name"] == "a.txt"
+
+
+async def test_feed_matches_truncated_and_remark_trimmed_turns(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    start = now_local().replace(microsecond=0) - timedelta(hours=1)
+    long_text = "x" * 6000
+    turns = [
+        {"role": "human", "content": long_text[:5000] + "\n[truncated]", "timestamp": start.isoformat()},
+        {
+            "role": "assistant",
+            "content": "Checking...\nThe answer",
+            "timestamp": (start + timedelta(minutes=1)).isoformat(),
+        },
+    ]
+    _write_thread_file(anima_dir, "research", turns)
+    rows = _activity_rows_for(turns, "research")
+    rows[0]["content"] = long_text
+    rows[1]["meta"]["interim_texts"] = ["Checking..."]
+    _write_entries(anima_dir, rows)
+
+    messages = _page_messages(await _read_all_pages(tmp_path, "research"))
+
+    assert len(messages) == 2
+    assert messages[1]["content"] == "The answer"
+
+
+async def test_feed_keeps_file_turns_whose_row_was_lost_and_rows_with_no_file_turn(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    start = now_local().replace(microsecond=0) - timedelta(hours=1)
+    turns = _turns(start, 4)
+    _write_thread_file(anima_dir, "research", turns)
+    rows = _activity_rows_for([turns[0], turns[1], turns[3]], "research")
+    rows.append(
+        _event(
+            (start + timedelta(minutes=30)).isoformat(),
+            "voice_call",
+            "Call summary",
+            summary="Call summary",
+            channel="chat",
+            meta={"thread_id": "research", "duration_seconds": 5},
+        )
+    )
+    _write_entries(anima_dir, rows)
+
+    messages = _page_messages(await _read_all_pages(tmp_path, "research"))
+
+    assert [message["content"] for message in messages] == ["turn 0", "turn 1", "turn 2", "turn 3", "Call summary"]
+    assert messages[-1]["type"] == "voice_call"
+
+
+async def test_feed_file_turns_render_like_activity_messages(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    start = now_local().replace(microsecond=0) - timedelta(days=30)
+    _write_thread_file(
+        anima_dir,
+        "research",
+        [
+            {"role": "human", "content": "hello", "timestamp": start.isoformat()},
+            {
+                "role": "assistant",
+                "content": 'hi there\n<!-- emotion: {"emotion": "smile"} -->',
+                "timestamp": (start + timedelta(seconds=5)).isoformat(),
+                "tool_records": [
+                    {"tool_name": "Read", "tool_id": "t1", "input_summary": "a.md", "result_summary": "ok"},
+                ],
+            },
+            {"role": "system", "content": "internal marker", "timestamp": (start + timedelta(seconds=6)).isoformat()},
+        ],
+    )
+
+    human, assistant = _page_messages(await _read_all_pages(tmp_path, "research"))
+
+    assert human["from_person"] == "human", "an empty speaker renders as the Anima itself"
+    assert assistant["content"] == "hi there"
+    assert assistant["emotion"] == "smile"
+    assert assistant["tool_calls_detail"] == "lazy"
+    assert assistant["tool_calls"][0]["tool_name"] == "Read"
+
+
+async def test_feed_shows_the_compressed_summary_once_at_the_oldest_end(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    turns = _turns(now_local().replace(microsecond=0) - timedelta(days=30), 6)
+    _write_thread_file(anima_dir, "research", turns, compressed_summary="Earlier they agreed.", compressed_turn_count=8)
+
+    pages = await _read_all_pages(tmp_path, "research", min_user_items=4)
+    messages = _page_messages(pages)
+
+    summaries = [message for message in messages if message.get("type") == "thread_summary"]
+    assert len(pages) == 2
+    assert len(summaries) == 1
+    assert messages[0] is summaries[0]
+    assert summaries[0]["content"] == "Earlier they agreed."
+    assert summaries[0]["compressed_turn_count"] == 8
+    assert summaries[0]["role"] == "system"
+
+
+async def test_feed_steps_over_empty_activity_windows_to_reach_file_turns(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    now = now_local().replace(microsecond=0)
+    _write_entries(anima_dir, [_event((now - timedelta(days=40)).isoformat(), "cron_executed", "old cron")])
+    turns = _turns(now - timedelta(days=100), 2)
+    _write_thread_file(anima_dir, "research", turns)
+
+    pages = await _read_all_pages(tmp_path, "research")
+
+    assert [item["message"]["content"] for item in pages[0]["items"]] == ["turn 0", "turn 1"]
+    assert pages[0]["has_more"] is False
+
+
+async def test_feed_reports_more_when_empty_windows_outlast_the_hop_limit(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    now = now_local().replace(microsecond=0)
+    _write_entries(anima_dir, [_event((now - timedelta(days=200)).isoformat(), "cron_executed", "old cron")])
+    turns = _turns(now - timedelta(days=300), 2)
+    _write_thread_file(anima_dir, "research", turns)
+
+    pages = await _read_all_pages(tmp_path, "research")
+
+    assert pages[0]["items"] == []
+    assert pages[0]["has_more"] is True
+    assert [message["content"] for message in _page_messages(pages)] == ["turn 0", "turn 1"]
+
+
+async def test_feed_default_thread_does_not_read_conversation_files(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    _write_thread_file(anima_dir, "default", _turns(now_local().replace(microsecond=0) - timedelta(days=1), 2))
+    app = FastAPI()
+    app.state.animas_dir = tmp_path
+    app.include_router(create_sessions_router(), prefix="/api")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/animas/alice/conversation/feed")
+
+    assert response.json()["items"] == []
+
+
+async def test_feed_thread_without_a_file_is_the_plain_activity_feed(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True)
+    turns = _turns(now_local().replace(microsecond=0) - timedelta(hours=1), 2)
+    _write_entries(anima_dir, _activity_rows_for(turns, "research"))
+
+    messages = _page_messages(await _read_all_pages(tmp_path, "research"))
+
+    assert [message["content"] for message in messages] == ["turn 0", "turn 1"]
+
+
+def test_named_thread_scan_is_not_cut_off_by_unrelated_log_lines(tmp_path: Path) -> None:
+    anima_dir, activity = _test_activity(tmp_path)
+    now = now_local().replace(microsecond=0)
+    thread_rows = _activity_rows_for(_turns(now - timedelta(hours=3), 2), "research")
+    noise = [_event((now - timedelta(minutes=30 - index)).isoformat(), "cron_executed", "noise") for index in range(30)]
+    _write_entries(anima_dir, thread_rows + noise)
+
+    with patch("core.activity.conversation._FEED_MAX_RAW_ENTRIES", 5):
+        feed = activity.get_conversation_feed(thread_id="research", strict_thread=True, _schedule_prefetch=False)
+
+    assert [item["message"]["content"] for item in feed["items"]] == ["turn 0", "turn 1"]
+    assert feed["has_more"] is False
+
+
+def test_named_thread_scan_only_matches_its_own_rows(tmp_path: Path) -> None:
+    anima_dir, activity = _test_activity(tmp_path)
+    now = now_local().replace(microsecond=0)
+    turns = _turns(now - timedelta(hours=1), 2)
+    rows = _activity_rows_for(turns[:1], "research") + _activity_rows_for(turns[1:], "research-2")
+    # The id appearing only in a message body must not make a row part of the thread.
+    rows.append(
+        _event(
+            (now - timedelta(minutes=1)).isoformat(),
+            "message_received",
+            '"research"',
+            from_person="taka",
+            channel="chat",
+            meta={"from_type": "human", "thread_id": "other"},
+        )
+    )
+    _write_entries(anima_dir, rows)
+
+    feed = activity.get_conversation_feed(thread_id="research", strict_thread=True, _schedule_prefetch=False)
+
+    assert [item["message"]["content"] for item in feed["items"]] == ["turn 0"]
