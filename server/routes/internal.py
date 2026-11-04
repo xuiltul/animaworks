@@ -28,6 +28,19 @@ _native_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=4,
     thread_name_prefix="native-ops",
 )
+# Embed and rerank requests wait on these, never on _native_executor, so task
+# operations cannot queue behind inference.  Models run on the threads in
+# core.infra.inference; these only hold a request until its result arrives.
+# Bulk requests have their own pool because a free thread is what lets an
+# interactive request reach the priority logic in core.memory.rag.embedding.
+_interactive_inference_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=8,
+    thread_name_prefix="inference-interactive",
+)
+_bulk_inference_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix="inference-bulk",
+)
 
 
 def _resolve_workspace_path(raw_path: str) -> Path:
@@ -471,7 +484,7 @@ def create_internal_router() -> APIRouter:
 
         loop = asyncio.get_running_loop()
         embeddings = await loop.run_in_executor(
-            _native_executor,
+            _bulk_inference_executor if body.priority == "bulk" else _interactive_inference_executor,
             partial(thread_safe_encode, body.texts, purpose=body.purpose, priority=body.priority),
         )
         return {"embeddings": embeddings}
@@ -507,7 +520,7 @@ def create_internal_router() -> APIRouter:
         loop = asyncio.get_running_loop()
         score_started = perf_counter()
         scores = await loop.run_in_executor(
-            _native_executor,
+            _interactive_inference_executor,
             partial(reranker.score_sync, body.query, body.documents),
         )
         logger.info(
