@@ -21,7 +21,7 @@ from typing import Any
 import psutil
 
 from core.i18n import t
-from core.platform.env import ANIMAWORKS_ENV_PREFIX, env_items_with_prefix
+from core.platform.env import ANIMAWORKS_ENV_PREFIX, CHROMA_THREAD_ENV_VARS, env_items_with_prefix
 from core.platform.process import process_group_exists, signal_tree, snapshot_descendants, subprocess_session_kwargs
 from core.platform.subprocess_entries import SubprocessEntry, module_args
 from core.runtime.ipc_v2 import (
@@ -275,6 +275,10 @@ class TaskRunnerSupervisor:
         for name in tuple(env):
             if name.startswith(ANIMAWORKS_ENV_PREFIX) and name.endswith("_URL"):
                 env.pop(name)
+        # These bound this process's chroma.  Task runners reach the vector store
+        # over HTTP, and the tools they run should keep their own defaults.
+        for name in CHROMA_THREAD_ENV_VARS:
+            env.pop(name, None)
         env.update(url_env)
         env.update(
             {

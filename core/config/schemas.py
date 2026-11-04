@@ -169,6 +169,15 @@ class RAGConfig(BaseModel):
         ),
     )
     use_gpu: bool = False
+    chroma_native_threads: int = Field(
+        default=4,
+        ge=0,
+        description=(
+            "Upper limit on each of chroma's tokio and rayon thread pools, which otherwise "
+            "take one thread per CPU in every process that opens a vector store. "
+            "Takes effect when the process starts. 0 = chroma default."
+        ),
+    )
     min_retrieval_score: float = 0.3
     skill_match_min_score: float = 0.75
     repair_enabled: bool = True

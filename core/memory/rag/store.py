@@ -13,6 +13,7 @@ Provides persistent vector storage for memory embeddings with:
 """
 
 import logging
+import os
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -21,11 +22,34 @@ from pathlib import Path
 from typing import Any, cast
 
 from core.memory.rag.direct_access import _DirectAccessCapability, require_direct_chroma_allowed
+from core.platform.env import CHROMA_THREAD_ENV_VARS
 
 logger = logging.getLogger("animaworks.rag.store")
 _persistent_client_init_lock = threading.Lock()
+_DEFAULT_CHROMA_NATIVE_THREADS = 4
 _missing_collection_warned: set[str] = set()
 _missing_collection_warned_lock = threading.Lock()
+
+
+def _bound_chroma_native_threads() -> None:
+    """Limit the Rust thread pools inside chroma, which default to one thread per CPU.
+
+    Each client starts a tokio runtime when it is created, and the first write
+    starts a process-wide rayon pool.  Both read these variables when they
+    start, and rayon starts long after the client, so the values stay set for
+    the life of the process.  Values already in the environment are kept.
+    """
+    try:
+        from core.config import load_config
+
+        limit = int(load_config().rag.chroma_native_threads)
+    except Exception:
+        limit = _DEFAULT_CHROMA_NATIVE_THREADS
+    if limit <= 0:
+        return
+    value = str(min(limit, os.cpu_count() or limit))
+    for name in CHROMA_THREAD_ENV_VARS:
+        os.environ.setdefault(name, value)
 
 
 def _is_missing_collection_error(error: BaseException | str) -> bool:
@@ -245,6 +269,7 @@ class ChromaVectorStore(VectorStore):
         prepare_chroma_sqlite_for_startup(persist_dir, anima_name=anima_name)
         logger.debug("Initializing ChromaDB at %s", persist_dir)
         with _persistent_client_init_lock:
+            _bound_chroma_native_threads()
             self.client = chromadb.PersistentClient(path=str(persist_dir))
         self.persist_dir = persist_dir
         self.anima_name = anima_name

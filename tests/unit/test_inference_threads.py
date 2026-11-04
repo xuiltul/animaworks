@@ -1,4 +1,4 @@
-"""Tests for the dedicated torch threads."""
+"""Tests for the dedicated torch threads and the bounded chroma pools."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.config.schemas import AnimaWorksConfig, GPUConfig
+from core.config.schemas import AnimaWorksConfig, GPUConfig, RAGConfig
 from core.infra.inference import configure_torch_threads, reset_inference_for_testing, run_inference
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -152,6 +152,56 @@ class TestConfigureTorchThreads:
         sys.modules["torch"].set_num_threads.side_effect = ValueError("broken")
         assert run_inference("embedding", "cpu", lambda: "still works") == "still works"
         assert run_inference("embedding", "cpu", lambda: "again") == "again"
+
+
+class TestChromaNativeThreads:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("TOKIO_WORKER_THREADS", raising=False)
+        monkeypatch.delenv("RAYON_NUM_THREADS", raising=False)
+
+    def _bound(self, limit: int) -> None:
+        from core.memory.rag.store import _bound_chroma_native_threads
+
+        config = AnimaWorksConfig(rag=RAGConfig(chroma_native_threads=limit))
+        with patch("core.config.load_config", return_value=config), patch("os.cpu_count", return_value=32):
+            _bound_chroma_native_threads()
+
+    def test_sets_both_pools_with_the_default_limit(self) -> None:
+        self._bound(RAGConfig().chroma_native_threads)
+        assert os.environ["TOKIO_WORKER_THREADS"] == "4"
+        assert os.environ["RAYON_NUM_THREADS"] == "4"
+
+    def test_never_raises_above_the_cpu_count(self) -> None:
+        self._bound(64)
+        assert os.environ["TOKIO_WORKER_THREADS"] == "32"
+
+    def test_zero_keeps_chroma_defaults(self) -> None:
+        self._bound(0)
+        assert "TOKIO_WORKER_THREADS" not in os.environ
+        assert "RAYON_NUM_THREADS" not in os.environ
+
+    def test_operator_values_win(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("TOKIO_WORKER_THREADS", "9")
+        self._bound(4)
+        assert os.environ["TOKIO_WORKER_THREADS"] == "9"
+        assert os.environ["RAYON_NUM_THREADS"] == "4"
+
+    def test_task_runners_do_not_inherit_the_limits(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.runtime.task_runner_supervisor import TaskRunnerSupervisor
+
+        monkeypatch.setenv("TOKIO_WORKER_THREADS", "4")
+        monkeypatch.setenv("RAYON_NUM_THREADS", "4")
+        shared = tmp_path / "shared"
+        supervisor = TaskRunnerSupervisor.__new__(TaskRunnerSupervisor)
+        supervisor.shared_dir = shared
+        supervisor.anima_name = "rin"
+        supervisor.anima_dir = tmp_path / "rin"
+        supervisor.socket_path = tmp_path / "sock"
+        supervisor.root_epoch = "epoch"
+        env = supervisor._build_child_environment({}, attempt=1, display_lane="chat")
+        assert "TOKIO_WORKER_THREADS" not in env
+        assert "RAYON_NUM_THREADS" not in env
 
 
 def test_http_clients_never_import_torch(tmp_path: Path) -> None:
