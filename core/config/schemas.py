@@ -233,6 +233,16 @@ class GPUConfig(BaseModel):
         ge=1,
         description="Maximum consecutive embedding batches bulk work may yield to waiting interactive work.",
     )
+    torch_num_threads: int = Field(
+        default=4,
+        ge=0,
+        description="torch intra-op CPU threads for embedding and reranking. 0 = torch default (one per core).",
+    )
+    torch_num_interop_threads: int = Field(
+        default=1,
+        ge=0,
+        description="torch inter-op CPU threads for embedding and reranking. 0 = torch default (one per core).",
+    )
 
 
 class FactEdgeTypeConfig(BaseModel):
