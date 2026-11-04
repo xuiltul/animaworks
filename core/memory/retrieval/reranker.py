@@ -108,7 +108,7 @@ class CrossEncoderReranker:
             with self._lock:
                 lock_wait = time.perf_counter() - lock_started
                 predict_started = time.perf_counter()
-                scores = self._model.predict(pairs)
+                scores = self._model.predict(pairs, show_progress_bar=False)
                 predict_elapsed = time.perf_counter() - predict_started
             result = [float(s) for s in scores]
             logger.info(
@@ -134,7 +134,7 @@ class CrossEncoderReranker:
                     record_component_device("reranker", "cpu")
                     pairs = [[query, t] for t in texts]
                     with self._lock:
-                        scores = self._model.predict(pairs)
+                        scores = self._model.predict(pairs, show_progress_bar=False)
                     return [float(s) for s in scores]
                 except Exception:
                     logger.warning("Cross-encoder CPU fallback scoring failed", exc_info=True)

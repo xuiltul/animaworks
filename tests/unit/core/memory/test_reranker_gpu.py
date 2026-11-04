@@ -48,6 +48,20 @@ def test_reranker_passes_resolved_device_to_cross_encoder(
     mock_sentence_transformers_cross_encoder.assert_called_once_with("test-reranker", device="cpu")
 
 
+def test_reranker_scoring_hides_the_progress_bar(mock_sentence_transformers_cross_encoder) -> None:
+    model = MagicMock()
+    model.predict.return_value = [0.5]
+    mock_sentence_transformers_cross_encoder.return_value = model
+    config = AnimaWorksConfig(gpu=GPUConfig(reranker_device="cpu"))
+
+    with patch("core.config.load_config", return_value=config):
+        from core.memory.retrieval.reranker import CrossEncoderReranker
+
+        assert CrossEncoderReranker("test-reranker").score_sync("query", ["doc"]) == [0.5]
+
+    model.predict.assert_called_once_with([["query", "doc"]], show_progress_bar=False)
+
+
 def test_reranker_cuda_inference_failure_falls_back_to_cpu_and_records_status(
     mock_sentence_transformers_cross_encoder,
 ) -> None:
