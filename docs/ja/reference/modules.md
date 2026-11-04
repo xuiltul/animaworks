@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 6c4bac8158b018147d95528b152e8b3ce52565e24864ed79ccb11b825236a879 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: db1af8f99def432d274aa8cd10ce0930c4b6e704f526a092516b5d9025db6724 -->
 
 # モジュール一覧
 
@@ -212,7 +212,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1565 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -427,7 +427,8 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
 | `core.infra.execution_sdk_preflight` | 126 | — |
-| `core.infra.gpu` | 173 | — |
+| `core.infra.gpu` | 238 | — |
+| `core.infra.inference` | 127 | — |
 | `core.infra.logging_config` | 530 | Centralized logging configuration for AnimaWorks. |
 | `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
@@ -608,7 +609,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.rag.cli_access` | 228 | CLI access to phase3 vector stores through the active owner or server. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
-| `core.memory.rag.embedding` | 393 | — |
+| `core.memory.rag.embedding` | 432 | — |
 | `core.memory.rag.endpoints` | 79 | — |
 | `core.memory.rag.episode_time` | 46 | — |
 | `core.memory.rag.exclusion` | 38 | — |
@@ -625,7 +626,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.rag.shared_check_registry` | 140 | — |
 | `core.memory.rag.shared_meta` | 162 | — |
 | `core.memory.rag.sqlite_health` | 359 | — |
-| `core.memory.rag.store` | 783 | — |
+| `core.memory.rag.store` | 808 | — |
 | `core.memory.rag.vector_client` | 497 | — |
 | `core.memory.rag.vector_ops` | 88 | Conversion between vector API requests and the MemoryService wire format. |
 | `core.memory.rag.vector_registry` | 160 | — |
@@ -636,7 +637,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.retrieval.pipeline` | 92 | — |
 | `core.memory.retrieval.query_expansion` | 496 | — |
 | `core.memory.retrieval.rag_search` | 1149 | — |
-| `core.memory.retrieval.reranker` | 262 | — |
+| `core.memory.retrieval.reranker` | 280 | — |
 | `core.memory.retrieval.rrf` | 107 | — |
 | `core.memory.retrieval.search_metadata` | 108 | — |
 | `core.memory.retrieval.time_expr` | 230 | — |
@@ -808,7 +809,7 @@ Twilio 電話チャネルの音声合成、通話状態、Webhook 管理。
 | `core.platform.claude_code` | 194 | — |
 | `core.platform.codex` | 245 | — |
 | `core.platform.cursor` | 60 | — |
-| `core.platform.env` | 91 | — |
+| `core.platform.env` | 93 | — |
 | `core.platform.fd_limits` | 60 | — |
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
@@ -858,7 +859,7 @@ anima メインの実行時コンポーネント、プロセス間通信、タ�
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 449 | Streaming IPC message handler. |
 | `core.runtime.task_runner` | 1056 | Disposable task runner entry point. |
-| `core.runtime.task_runner_supervisor` | 1446 | Anima-main-side lifecycle manager for disposable task runner processes. |
+| `core.runtime.task_runner_supervisor` | 1450 | Anima-main-side lifecycle manager for disposable task runner processes. |
 | `core.runtime.transport` | 240 | Transport helpers for IPC server/client communication. |
 
 ## `core.skills`
@@ -1145,7 +1146,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1549 | — |
+| `server.routes.internal` | 1562 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
