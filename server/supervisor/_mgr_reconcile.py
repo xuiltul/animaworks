@@ -51,33 +51,17 @@ class ReconcileMixin:
         """Scan animas_dir and sync desired state with actual process state."""
         if self._shutdown:
             return
-        self._check_config_freshness()
+        await asyncio.to_thread(self._check_config_freshness)
 
-        if not self.animas_dir.exists():
+        scan = await asyncio.to_thread(self._scan_desired_state)
+        if scan is None:
             if self._restart_ctl is not None:
                 for name in self._restart_ctl.names():
                     self._restart_ctl.forget(name)
             return
+        on_disk, on_disk_incomplete, restart_flagged = scan
 
         running = set(self.processes.keys())
-
-        # Build desired state from disk
-        on_disk: dict[str, bool] = {}  # name -> enabled
-        # Anima dirs that have IDENTITY.md but no status.json.
-        # These are either legacy animas or factory-in-progress.
-        # They must NOT be auto-started but must NOT be killed if running.
-        on_disk_incomplete: set[str] = set()
-        for anima_dir in sorted(self.animas_dir.iterdir()):
-            if not anima_dir.is_dir():
-                continue
-            if not (anima_dir / IDENTITY_FILE).exists():
-                continue
-            # status.json is created as the final step of anima_factory.
-            # Its absence means creation may still be in progress.
-            if not (anima_dir / "status.json").exists():
-                on_disk_incomplete.add(anima_dir.name)
-                continue
-            on_disk[anima_dir.name] = self.read_anima_enabled(anima_dir)
 
         # Drop restart state for animas that are disabled or have been removed
         # from disk, including those with no process to enter the stop loops.
@@ -112,13 +96,10 @@ class ReconcileMixin:
 
         # restart_requested フラグチェック
         rag_repairs_in_progress: set[str] = getattr(self, "_rag_repairs_in_progress", set())
-        for name in list(on_disk.keys()):
+        for name in restart_flagged:
             anima_dir = self.animas_dir / name
             from core.anima.settings_store import update_status
-            from core.platform.status_store import read_status
 
-            if not read_status(anima_dir).get("restart_requested"):
-                continue
             if name in rag_repairs_in_progress:
                 logger.info("Reconciliation: deferring restart for %s (RAG repair in progress)", name)
                 continue
@@ -130,7 +111,7 @@ class ReconcileMixin:
                 restart_requested = bool(status.pop("restart_requested", None))
 
             try:
-                update_status(anima_dir, clear_restart_request)
+                await asyncio.to_thread(update_status, anima_dir, clear_restart_request)
             except (json.JSONDecodeError, OSError, ValueError):
                 logger.debug("Failed to clear restart_requested for %s", name, exc_info=True)
                 continue
@@ -250,6 +231,39 @@ class ReconcileMixin:
                         "Reconciliation: failed to stop %s",
                         name,
                     )
+
+    def _scan_desired_state(self: _ReconcileMixinHost) -> tuple[dict[str, bool], set[str], list[str]] | None:
+        """Read desired Anima state from disk. Blocking: call off the loop.
+
+        Returns ``None`` when the animas directory is missing. Otherwise returns
+        name -> enabled, the incomplete Anima names, and the names whose status
+        asks for a restart.
+        """
+        from core.platform.status_store import read_status
+
+        if not self.animas_dir.exists():
+            return None
+
+        on_disk: dict[str, bool] = {}  # name -> enabled
+        # Anima dirs that have IDENTITY.md but no status.json.
+        # These are either legacy animas or factory-in-progress.
+        # They must NOT be auto-started but must NOT be killed if running.
+        on_disk_incomplete: set[str] = set()
+        restart_flagged: list[str] = []
+        for anima_dir in sorted(self.animas_dir.iterdir()):
+            if not anima_dir.is_dir():
+                continue
+            if not (anima_dir / IDENTITY_FILE).exists():
+                continue
+            # status.json is created as the final step of anima_factory.
+            # Its absence means creation may still be in progress.
+            if not (anima_dir / "status.json").exists():
+                on_disk_incomplete.add(anima_dir.name)
+                continue
+            on_disk[anima_dir.name] = self.read_anima_enabled(anima_dir)
+            if read_status(anima_dir).get("restart_requested"):
+                restart_flagged.append(anima_dir.name)
+        return on_disk, on_disk_incomplete, restart_flagged
 
     async def _reconcile_assets(self: _ReconcileMixinHost) -> None:
         """Explicitly generate missing assets for animas when requested."""

@@ -108,6 +108,33 @@ def _write_marker(marker_path: Path, ts: datetime | None = None) -> None:
     marker_path.write_text(ts.isoformat())
 
 
+async def _mark_job_done(data_dir: Path, marker_name: str) -> None:
+    """Record a job's completion time without touching the disk on the loop."""
+
+    def _write() -> None:
+        _write_marker(_marker_dir(data_dir) / marker_name)
+
+    await asyncio.to_thread(_write)
+
+
+def _project_archives_with_episodes(anima_name: str, anima_dir: Path) -> list[str]:
+    """Return project archives that hold episodes. Blocking: call off the loop."""
+    from core.memory.maintenance.consolidation import list_project_archives
+
+    projects: list[str] = []
+    for project in list_project_archives(anima_dir):
+        episodes_dir = anima_dir / "episodes" / "projects" / project
+        if not any(episodes_dir.glob("*.md")):
+            logger.info(
+                "Project consolidation skipped for %s/%s: no episodes",
+                anima_name,
+                project,
+            )
+            continue
+        projects.append(project)
+    return projects
+
+
 class SchedulerMixin:
     """System-level cron scheduler for memory consolidation and log rotation."""
 
@@ -411,19 +438,7 @@ class SchedulerMixin:
         timeout_s: float,
     ) -> None:
         """Run consolidation once for each non-empty project archive."""
-        from core.memory.maintenance.consolidation import list_project_archives
-
-        projects: list[str] = []
-        for project in list_project_archives(anima_dir):
-            episodes_dir = anima_dir / "episodes" / "projects" / project
-            if not any(episodes_dir.glob("*.md")):
-                logger.info(
-                    "Project consolidation skipped for %s/%s: no episodes",
-                    anima_name,
-                    project,
-                )
-                continue
-            projects.append(project)
+        projects = await asyncio.to_thread(_project_archives_with_episodes, anima_name, anima_dir)
         if not projects:
             return
 
@@ -510,7 +525,7 @@ class SchedulerMixin:
             )
             max_input_bytes = getattr(consolidation_cfg, "episode_summary_max_input_bytes", max_input_bytes)
 
-        targets = self._iter_consolidation_targets()
+        targets = await asyncio.to_thread(self._iter_consolidation_targets)
         concurrency = _resolve_consolidation_concurrency(consolidation_cfg, defaults.max_concurrent_animas)
         # Reuse one set for all workers; a getattr fallback inside each worker
         # would otherwise create a different set when the host lacks the field.
@@ -522,11 +537,43 @@ class SchedulerMixin:
             concurrency,
         )
 
+        def evaluate_gate(anima_name: str, anima_dir: Path):  # noqa: ANN202 - gate type is internal
+            from core.config.helper_models import resolve_helper_model
+
+            return evaluate_daily_consolidation_gate(
+                anima_dir,
+                anima_name,
+                threshold=min_entries,
+                hours=24,
+                backfill_days=backfill_days,
+                max_backfill_days=max_backfill_days,
+                model=resolve_helper_model("episode_summary", anima_dir).model,
+                max_input_bytes=max_input_bytes,
+                compaction_settings=ActivityCompactionSettings.from_config(consolidation_cfg, defaults),
+                exclude_noop_cron=getattr(
+                    consolidation_cfg,
+                    "episode_summary_exclude_noop_cron",
+                    defaults.episode_summary_exclude_noop_cron,
+                ),
+            )
+
+        # The disk checks run off the loop but one Anima at a time, in name
+        # order, as they did when they ran on the loop. Only the IPC runs
+        # concurrently. asyncio.Lock is FIFO, which keeps the start order.
+        admission = asyncio.Lock()
+
         async def run_one(anima_name: str, anima_dir: Path) -> _ConsolidationOutcome:
-            inactive = should_skip_inactive_consolidation(anima_dir, anima_name, consolidation_cfg)
-            handle = self.processes.get(anima_name)
+            async with admission:
+                inactive = await asyncio.to_thread(
+                    should_skip_inactive_consolidation, anima_dir, anima_name, consolidation_cfg
+                )
+                handle = self.processes.get(anima_name)
+                running = handle is not None and handle.state == ProcessState.RUNNING
+                gate = None
+                if running and not inactive:
+                    gate = await asyncio.to_thread(evaluate_gate, anima_name, anima_dir)
             if inactive:
-                if handle and handle.state == ProcessState.RUNNING:
+                if running:
                     await self._run_project_archive_consolidations(
                         handle,
                         anima_name,
@@ -538,32 +585,13 @@ class SchedulerMixin:
                         ),
                     )
                 return "skipped"
-            if not handle or handle.state != ProcessState.RUNNING:
+            if not running:
                 logger.info(
                     "Daily consolidation skipped for %s: process not running",
                     anima_name,
                 )
                 return "skipped"
 
-            from core.config.helper_models import resolve_helper_model
-
-            episode_summary_model = resolve_helper_model("episode_summary", anima_dir).model
-            gate = evaluate_daily_consolidation_gate(
-                anima_dir,
-                anima_name,
-                threshold=min_entries,
-                hours=24,
-                backfill_days=backfill_days,
-                max_backfill_days=max_backfill_days,
-                model=episode_summary_model,
-                max_input_bytes=max_input_bytes,
-                compaction_settings=ActivityCompactionSettings.from_config(consolidation_cfg, defaults),
-                exclude_noop_cron=getattr(
-                    consolidation_cfg,
-                    "episode_summary_exclude_noop_cron",
-                    defaults.episode_summary_exclude_noop_cron,
-                ),
-            )
             if not gate.should_run:
                 logger.info(
                     "Daily consolidation skipped for %s: activity=%d episodes=%d threshold=%d backfill_days=%d",
@@ -690,7 +718,7 @@ class SchedulerMixin:
             limit=concurrency,
             label="Daily consolidation",
         )
-        _write_marker(_marker_dir(self._get_data_dir()) / "last_daily_consolidation")
+        await _mark_job_done(self._get_data_dir(), "last_daily_consolidation")
         logger.info(
             "System-wide daily consolidation finished targets=%d ran=%d skipped=%d timed_out=%d failed=%d elapsed_s=%.0f",
             len(targets),
@@ -720,7 +748,7 @@ class SchedulerMixin:
 
         defaults = ConsolidationConfig()
 
-        targets = self._iter_consolidation_targets()
+        targets = await asyncio.to_thread(self._iter_consolidation_targets)
         concurrency = _resolve_consolidation_concurrency(consolidation_cfg, defaults.max_concurrent_animas)
         # See the daily worker: every concurrent mutation must address this same set.
         consolidating: set[str] = getattr(self, "_consolidating", set())
@@ -731,8 +759,14 @@ class SchedulerMixin:
             concurrency,
         )
 
+        # See the daily run: disk checks one at a time in name order, IPC concurrent.
+        admission = asyncio.Lock()
+
         async def run_one(anima_name: str, anima_dir: Path) -> _ConsolidationOutcome:
-            inactive = should_skip_inactive_consolidation(anima_dir, anima_name, consolidation_cfg)
+            async with admission:
+                inactive = await asyncio.to_thread(
+                    should_skip_inactive_consolidation, anima_dir, anima_name, consolidation_cfg
+                )
             handle = self.processes.get(anima_name)
             if inactive:
                 if handle and handle.state == ProcessState.RUNNING:
@@ -856,7 +890,7 @@ class SchedulerMixin:
             limit=concurrency,
             label="Weekly integration",
         )
-        _write_marker(_marker_dir(self._get_data_dir()) / "last_weekly_integration")
+        await _mark_job_done(self._get_data_dir(), "last_weekly_integration")
         logger.info(
             "System-wide weekly integration finished targets=%d ran=%d skipped=%d timed_out=%d failed=%d elapsed_s=%.0f",
             len(targets),
@@ -905,7 +939,7 @@ class SchedulerMixin:
             from core.memory.rag.index_signature import index_signature_error
 
             try:
-                meta = json.loads(global_meta_path.read_text(encoding="utf-8"))
+                meta = json.loads(await asyncio.to_thread(global_meta_path.read_text, encoding="utf-8"))
                 signature_error = index_signature_error(meta, current_model, current_e5_prefix)
             except (json.JSONDecodeError, OSError):
                 signature_error = t("rag.signature_unreadable")
@@ -927,7 +961,7 @@ class SchedulerMixin:
         if cs_dir.is_dir():
             shared_sources.append(("common_skills", cs_dir, "SKILL.md", "shared_common_skills_hash"))
 
-        for anima_name, anima_dir in self._iter_consolidation_targets():
+        for anima_name, anima_dir in await asyncio.to_thread(self._iter_consolidation_targets):
             try:
                 from core.memory.rag.repair import is_repair_locked
 
@@ -1002,8 +1036,8 @@ class SchedulerMixin:
                 for label, src_dir, glob, meta_key in shared_sources:
                     if not src_dir.is_dir():
                         continue
-                    current_hash = _compute_dir_hash(src_dir, glob)
-                    stored_hash = read_shared_hash(anima_dir, meta_key)
+                    current_hash = await asyncio.to_thread(_compute_dir_hash, src_dir, glob)
+                    stored_hash = await asyncio.to_thread(read_shared_hash, anima_dir, meta_key)
                     shared_collection = f"shared_{label}"
                     force = False
                     if current_hash == stored_hash:
@@ -1035,7 +1069,7 @@ class SchedulerMixin:
                     )
                     total_chunks += result.chunks_indexed
                     if result.files_failed == 0:
-                        write_shared_hash(anima_dir, meta_key, current_hash)
+                        await asyncio.to_thread(write_shared_hash, anima_dir, meta_key, current_hash)
 
                 logger.info("Daily indexing for %s complete", anima_name)
 
@@ -1058,7 +1092,7 @@ class SchedulerMixin:
         except Exception:
             logger.debug("Failed to broadcast rag_indexing event", exc_info=True)
 
-        _write_marker(_marker_dir(self._get_data_dir()) / "last_daily_indexing")
+        await _mark_job_done(self._get_data_dir(), "last_daily_indexing")
 
     async def _run_activity_log_rotation(self: _SchedulerMixinHost) -> None:
         """Run activity log rotation for all animas."""
@@ -1093,7 +1127,8 @@ class SchedulerMixin:
         try:
             from core.activity.logger import ActivityLogger
 
-            results = ActivityLogger.rotate_all(
+            results = await asyncio.to_thread(
+                ActivityLogger.rotate_all,
                 self.animas_dir,
                 mode=mode,
                 max_size_mb=max_size_mb,
@@ -1197,7 +1232,7 @@ class SchedulerMixin:
             logger.exception("Housekeeping failed")
 
         if mark_complete:
-            _write_marker(_marker_dir(self._get_data_dir()) / "last_housekeeping")
+            await _mark_job_done(self._get_data_dir(), "last_housekeeping")
 
     async def _run_dm_log_rotation(self: _SchedulerMixinHost) -> None:
         """Archive old dm_log entries beyond 7 days."""

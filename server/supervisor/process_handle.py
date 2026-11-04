@@ -159,23 +159,7 @@ class ProcessHandle:
             # Redirect stderr to a log file for post-mortem debugging;
             # stdout is discarded because the child writes its own log files.
             if self.log_dir:
-                stderr_dir = self.log_dir / "animas" / self.anima_name
-                stderr_dir.mkdir(parents=True, exist_ok=True)
-                stderr_path = stderr_dir / "stderr.log"
-                # Rotate if exceeds 5 MB (keep one backup)
-                if stderr_path.exists():
-                    try:
-                        if stderr_path.stat().st_size > 5 * 1024 * 1024:
-                            backup = stderr_dir / "stderr.log.1"
-                            if backup.exists():
-                                backup.unlink()
-                            stderr_path.rename(backup)
-                            logger.info(
-                                "Rotated stderr.log for %s (>5MB)",
-                                self.anima_name,
-                            )
-                    except OSError:
-                        logger.debug("stderr.log rotation failed", exc_info=True)
+                stderr_path = await asyncio.to_thread(self._prepare_stderr_log)
 
             self._stderr_file = (
                 await asyncio.to_thread(open, stderr_path, "a") if stderr_path else None  # noqa: SIM115
@@ -222,6 +206,27 @@ class ProcessHandle:
             self.state = ProcessState.FAILED
             await self._cleanup()
             raise
+
+    def _prepare_stderr_log(self) -> Path:
+        """Create the stderr log directory and rotate the log. Blocking: call off the loop."""
+        stderr_dir = self.log_dir / "animas" / self.anima_name
+        stderr_dir.mkdir(parents=True, exist_ok=True)
+        stderr_path = stderr_dir / "stderr.log"
+        # Rotate if exceeds 5 MB (keep one backup)
+        if stderr_path.exists():
+            try:
+                if stderr_path.stat().st_size > 5 * 1024 * 1024:
+                    backup = stderr_dir / "stderr.log.1"
+                    if backup.exists():
+                        backup.unlink()
+                    stderr_path.rename(backup)
+                    logger.info(
+                        "Rotated stderr.log for %s (>5MB)",
+                        self.anima_name,
+                    )
+            except OSError:
+                logger.debug("stderr.log rotation failed", exc_info=True)
+        return stderr_path
 
     async def _wait_for_socket(self, timeout: float) -> None:  # noqa: ASYNC109 -- timeout bounds awaited work and is part of this async API
         """Wait for socket file to be created."""
@@ -751,9 +756,8 @@ class ProcessHandle:
                 logger.debug("Failed to close stderr file", exc_info=True)
             self._stderr_file = None
 
-        if self.socket_path.exists():
-            self.socket_path.unlink()
-            logger.debug("Socket file removed: %s", self.socket_path)
+        await asyncio.to_thread(self.socket_path.unlink, missing_ok=True)
+        logger.debug("Socket file removed: %s", self.socket_path)
 
     def is_alive(self) -> bool:
         """Check if process is alive."""
