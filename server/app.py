@@ -37,6 +37,7 @@ from core.i18n import t
 from core.infra import startup_progress
 from core.platform.tasks import spawn
 from server.localhost import _is_safe_localhost_request
+from server.loop_watchdog import LoopLagWatchdog
 from server.routes import create_router
 from server.routes.setup import create_setup_router
 from server.stream_registry import StreamRegistry
@@ -956,6 +957,9 @@ def _enclave_usage_summary(anima_dir: Path, days: int) -> dict[str, object]:
 async def lifespan(app: FastAPI):
     from core.tasks.board.tasks import ensure_task_store_schema
 
+    loop_watchdog = LoopLagWatchdog()
+    loop_watchdog.start()
+
     ensure_task_store_schema(Path(app.state.shared_dir) / "taskboard.sqlite3")
     app.state.activate_runtime = lambda: _activate_runtime_services(app)
     if app.state.setup_complete:
@@ -1059,6 +1063,7 @@ async def lifespan(app: FastAPI):
             logger.exception("Failed to remove operator token file")
         if hasattr(app.state, "msg_log_scheduler"):
             app.state.msg_log_scheduler.shutdown(wait=False)
+    loop_watchdog.stop()
     logger.info("Server stopped")
 
 
