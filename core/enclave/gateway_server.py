@@ -149,6 +149,9 @@ def _build_server(app: Any, config: EnclaveConfig) -> uvicorn.Server:
         http=PeerCredHttpProtocol,
         ws=None,
         log_level="warning",
+        # The server already configured logging. A log_config here would re-run
+        # dictConfig and put uvicorn's blocking stream handlers back.
+        log_config=None,
         timeout_keep_alive=max(5, min(config.request_timeout_s, 30)),
     )
     return uvicorn.Server(server_config)

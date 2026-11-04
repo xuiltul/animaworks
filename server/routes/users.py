@@ -15,13 +15,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core.auth.manager import (
+    auth_write_lock,
     create_session,
     find_user,
     get_all_users,
     get_session_cookie_max_age,
     hash_password,
     load_auth,
-    revoke_all_sessions,
     save_auth,
     verify_password,
 )
@@ -49,8 +49,10 @@ class ChangePasswordRequest(BaseModel):
 def create_users_router() -> APIRouter:
     router = APIRouter(tags=["users"])
 
+    # These handlers are plain defs: they read and write auth.json and hash
+    # passwords, so FastAPI must run them in its thread pool, not on the loop.
     @router.get("/users")
-    async def list_users(request: Request):
+    def list_users(request: Request):
         """List all users (without password hashes)."""
         auth_config = load_auth()
         users = get_all_users(auth_config)
@@ -66,7 +68,7 @@ def create_users_router() -> APIRouter:
         ]
 
     @router.post("/users")
-    async def add_user(body: AddUserRequest, request: Request):
+    def add_user(body: AddUserRequest, request: Request):
         """Add a new user (owner only)."""
         # Check caller is owner
         caller = getattr(request.state, "user", None)
@@ -97,10 +99,8 @@ def create_users_router() -> APIRouter:
                 status_code=400,
             )
 
-        auth_config = load_auth()
-
         # Check username doesn't already exist
-        if find_user(auth_config, body.username):
+        if find_user(load_auth(), body.username):
             return JSONResponse(
                 {"error": f"User '{body.username}' already exists"},
                 status_code=409,
@@ -127,13 +127,22 @@ def create_users_router() -> APIRouter:
             password_hash=hash_password(body.password),
             role=body.role,
         )
-        auth_config.users.append(new_user)
 
-        # Switch to multi_user mode if currently in password mode
-        if auth_config.auth_mode == "password":
-            auth_config.auth_mode = "multi_user"
+        with auth_write_lock():
+            auth_config = load_auth()
+            # Hashing took a while and held no lock, so check for a duplicate again.
+            if find_user(auth_config, body.username):
+                return JSONResponse(
+                    {"error": f"User '{body.username}' already exists"},
+                    status_code=409,
+                )
+            auth_config.users.append(new_user)
 
-        save_auth(auth_config)
+            # Switch to multi_user mode if currently in password mode
+            if auth_config.auth_mode == "password":
+                auth_config.auth_mode = "multi_user"
+
+            save_auth(auth_config)
 
         # Create user profile directory
         from core.paths import get_shared_dir
@@ -156,7 +165,7 @@ def create_users_router() -> APIRouter:
         }
 
     @router.delete("/users/{username}")
-    async def delete_user(username: str, request: Request):
+    def delete_user(username: str, request: Request):
         """Delete a user (owner only, cannot delete self)."""
         caller = getattr(request.state, "user", None)
         if not caller or caller.role != "owner":
@@ -171,33 +180,34 @@ def create_users_router() -> APIRouter:
                 status_code=400,
             )
 
-        auth_config = load_auth()
-        user = find_user(auth_config, username)
-        if not user:
-            return JSONResponse(
-                {"error": f"User '{username}' not found"},
-                status_code=404,
-            )
+        with auth_write_lock():
+            auth_config = load_auth()
+            user = find_user(auth_config, username)
+            if not user:
+                return JSONResponse(
+                    {"error": f"User '{username}' not found"},
+                    status_code=404,
+                )
 
-        # Cannot delete owner
-        if auth_config.owner and auth_config.owner.username == username:
-            return JSONResponse(
-                {"error": "Cannot delete the owner account"},
-                status_code=400,
-            )
+            # Cannot delete owner
+            if auth_config.owner and auth_config.owner.username == username:
+                return JSONResponse(
+                    {"error": "Cannot delete the owner account"},
+                    status_code=400,
+                )
 
-        # Remove user from list
-        auth_config.users = [u for u in auth_config.users if u.username != username]
+            # Remove user from list
+            auth_config.users = [u for u in auth_config.users if u.username != username]
 
-        # Revoke all sessions for deleted user
-        auth_config.sessions = {t: s for t, s in auth_config.sessions.items() if s.username != username}
+            # Revoke all sessions for deleted user
+            auth_config.sessions = {t: s for t, s in auth_config.sessions.items() if s.username != username}
 
-        save_auth(auth_config)
+            save_auth(auth_config)
         logger.info("Deleted user '%s'", username)
         return {"status": "ok", "deleted": username}
 
     @router.put("/users/me/password")
-    async def change_password(body: ChangePasswordRequest, request: Request):
+    def change_password(body: ChangePasswordRequest, request: Request):
         """Change (or initially set) the current user's password."""
         caller = getattr(request.state, "user", None)
         auth_config = load_auth()
@@ -234,32 +244,41 @@ def create_users_router() -> APIRouter:
                 status_code=400,
             )
 
-        # Update password
-        user = find_user(auth_config, caller.username)
-        if not user:
-            return JSONResponse(
-                {"error": "User not found"},
-                status_code=404,
-            )
+        new_hash = hash_password(body.new_password)
+        verified_hash = caller.password_hash
 
-        user.password_hash = hash_password(body.new_password)
-
-        # Upgrade auth mode when password is set in local_trust mode
-        need_session = False
-        if auth_config.auth_mode == "local_trust":
-            auth_config.auth_mode = "password"
-            need_session = True
-
-        save_auth(auth_config)
-
-        # Revoke all existing sessions for this user
-        revoke_all_sessions(caller.username)
-
-        # Create session so user stays logged in after mode upgrade or password change
-        if need_session:
+        # The new password and the revocation of this user's sessions are one
+        # write, so old sessions cannot outlive the old password even while the
+        # disk stalls that write.
+        token = None
+        with auth_write_lock():
             auth_config = load_auth()
-            token = create_session(auth_config, user.username)
+            user = find_user(auth_config, caller.username)
+            if not user:
+                return JSONResponse(
+                    {"error": "User not found"},
+                    status_code=404,
+                )
+            # Verification and hashing held no lock. The current password check
+            # is void if the stored password changed in the meantime.
+            if user.password_hash != verified_hash:
+                return JSONResponse(
+                    {"error": "Current password is incorrect"},
+                    status_code=401,
+                )
+
+            user.password_hash = new_hash
+            auth_config.sessions = {t: s for t, s in auth_config.sessions.items() if s.username != caller.username}
+
+            # Upgrade auth mode when password is set in local_trust mode, and
+            # create a session so the user stays logged in after the upgrade.
+            if auth_config.auth_mode == "local_trust":
+                auth_config.auth_mode = "password"
+                token = create_session(auth_config, user.username)
+
             save_auth(auth_config)
+
+        if token is not None:
             response = JSONResponse({"status": "ok"})
             is_https = request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https"
             response.set_cookie(

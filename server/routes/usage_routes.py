@@ -817,7 +817,7 @@ def create_usage_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/usage")
-    async def get_usage(skip_cache: bool = False) -> dict[str, Any]:
+    def get_usage(skip_cache: bool = False) -> dict[str, Any]:
         """Return combined Claude + OpenAI + nanoGPT usage data."""
         payload = {
             "claude": _fetch_claude_usage(skip_cache=skip_cache),

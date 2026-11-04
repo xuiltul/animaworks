@@ -677,7 +677,8 @@ class DiscordGatewayManager:
 
         # Board routing (always, regardless of target)
         if not is_dm:
-            _route_to_board(
+            await asyncio.to_thread(
+                _route_to_board,
                 channel_id,
                 cleaned_text,
                 author_display,
@@ -703,7 +704,8 @@ class DiscordGatewayManager:
                     return
 
                 messenger = Messenger(get_shared_dir(), target_anima)
-                messenger.receive_external(
+                await asyncio.to_thread(
+                    messenger.receive_external,
                     content=full_content,
                     source="discord",
                     source_message_id=msg_id,

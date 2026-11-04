@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any, Protocol
 
 from core.memory.rag.repair import state as repair_state
 from core.platform.tasks import spawn
 
 logger = logging.getLogger(__name__)
+
+
+def _list_anima_dir_names(animas_dir: Path) -> list[str]:
+    """List Anima directory names, sorted. Blocking: call off the loop."""
+    if not animas_dir.exists():
+        return []
+    return sorted(path.name for path in animas_dir.iterdir() if path.is_dir())
 
 
 class _RAGRepairHost(Protocol):
@@ -54,20 +62,18 @@ class RAGRepairMixin:
 
         in_progress: set[str] = getattr(self, "_rag_repairs_in_progress", set())
         max_concurrent = self._rag_repair_max_concurrent()
-        for anima_dir in sorted(self.animas_dir.iterdir() if self.animas_dir.exists() else []):
-            if not anima_dir.is_dir():
-                continue
+        for anima_name in await asyncio.to_thread(_list_anima_dir_names, self.animas_dir):
             # Staging rebuilds are CPU/IO-heavy, so cap concurrent repair work.
             if len(in_progress) >= max_concurrent:
                 break
-            anima_name = anima_dir.name
             if anima_name in in_progress or anima_name in self._restarting:
                 continue
             process = self.processes.get(anima_name)
             if process is None or not process.is_alive():
                 continue
-            state = self._read_rag_repair_state(anima_name)
-            if state.get("status") == "requested":
+            state = await asyncio.to_thread(self._read_rag_repair_state, anima_name)
+            # The await above can let a concurrent repair start for this Anima.
+            if state.get("status") == "requested" and anima_name not in in_progress:
                 in_progress.add(anima_name)
                 self._rag_repairs_in_progress = in_progress
                 spawn(
@@ -101,7 +107,8 @@ class RAGRepairMixin:
     ) -> None:
         """Fence RAG access while repairing without stopping the anima process."""
         repair_succeeded = False
-        self._write_rag_repair_state(
+        await asyncio.to_thread(
+            self._write_rag_repair_state,
             anima_name,
             {
                 "status": "repairing",
@@ -143,11 +150,12 @@ class RAGRepairMixin:
                 },
             )
         finally:
-            current = self._read_rag_repair_state(anima_name)
+            current = await asyncio.to_thread(self._read_rag_repair_state, anima_name)
             status = "healthy" if repair_succeeded else str(current.get("status") or "failed")
             if status in repair_state.ACTIVE_REPAIR_STATUSES:
                 status = "failed"
-            self._write_rag_repair_state(
+            await asyncio.to_thread(
+                self._write_rag_repair_state,
                 anima_name,
                 {
                     "status": status,
@@ -170,7 +178,8 @@ class RAGRepairMixin:
         *,
         stage: str = "repair_process",
     ) -> dict[str, object]:
-        self._write_rag_repair_state(
+        await asyncio.to_thread(
+            self._write_rag_repair_state,
             anima_name,
             {
                 "status": "repairing",
@@ -199,7 +208,8 @@ class RAGRepairMixin:
         result: dict[str, object],
     ) -> None:
         error = str(result["error"])
-        self._write_rag_repair_state(
+        await asyncio.to_thread(
+            self._write_rag_repair_state,
             anima_name,
             {
                 "status": "failed",
