@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=d718f4c530611339f79cbf90d4abd080b3986c1e2e7136db56357bd61e94d97a generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=4152a8b8897ad42853767533e8f17eafea4c39a37aaabde25c65091190149765 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -192,9 +192,9 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Application configuration schemas, loading, validation, and migration.
+Schema, loading, validation, and migration of application configuration.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
@@ -212,7 +212,7 @@ Application configuration schemas, loading, validation, and migration.
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1546 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1565 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -420,14 +420,15 @@ Translation catalog and language selection.
 
 ## `core.infra`
 
-Infrastructure features such as logs, databases, and caches.
+Foundation features such as logging, databases, and caching.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
 | `core.infra.execution_sdk_preflight` | 126 | — |
-| `core.infra.gpu` | 173 | — |
+| `core.infra.gpu` | 238 | — |
+| `core.infra.inference` | 127 | — |
 | `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
 | `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
 | `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
@@ -548,19 +549,19 @@ Model Context Protocol servers and clients.
 
 ## `core.memory`
 
-Storage, search, and organization of conversation and episodic memory.
+Storage, search, and organization of conversation and episode memory.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
 | `core.memory.config_reader` | 31 | — |
 | `core.memory.conversation.compression` | 322 | Compression logic for conversation memory. |
 | `core.memory.conversation.finalize` | 493 | Session finalization for conversation memory. |
-| `core.memory.conversation.memory` | 349 | Conversation memory (conversation memory / working memory) management. |
+| `core.memory.conversation.memory` | 349 | Conversation memory (会話記憶 / ワーキングメモリ) management. |
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
-| `core.memory.conversation.shortterm` | 313 | Short-term memory (short-term memory) management. |
+| `core.memory.conversation.shortterm` | 313 | Short-term memory (短期記憶) management. |
 | `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
@@ -609,7 +610,7 @@ Storage, search, and organization of conversation and episodic memory.
 | `core.memory.rag.cli_access` | 228 | CLI access to phase3 vector stores through the active owner or server. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
-| `core.memory.rag.embedding` | 393 | — |
+| `core.memory.rag.embedding` | 432 | — |
 | `core.memory.rag.endpoints` | 79 | — |
 | `core.memory.rag.episode_time` | 46 | — |
 | `core.memory.rag.exclusion` | 38 | — |
@@ -626,7 +627,7 @@ Storage, search, and organization of conversation and episodic memory.
 | `core.memory.rag.shared_check_registry` | 140 | — |
 | `core.memory.rag.shared_meta` | 162 | — |
 | `core.memory.rag.sqlite_health` | 359 | — |
-| `core.memory.rag.store` | 783 | — |
+| `core.memory.rag.store` | 808 | — |
 | `core.memory.rag.vector_client` | 497 | — |
 | `core.memory.rag.vector_ops` | 88 | Conversion between vector API requests and the MemoryService wire format. |
 | `core.memory.rag.vector_registry` | 160 | — |
@@ -637,7 +638,7 @@ Storage, search, and organization of conversation and episodic memory.
 | `core.memory.retrieval.pipeline` | 92 | — |
 | `core.memory.retrieval.query_expansion` | 496 | — |
 | `core.memory.retrieval.rag_search` | 1149 | — |
-| `core.memory.retrieval.reranker` | 262 | — |
+| `core.memory.retrieval.reranker` | 280 | — |
 | `core.memory.retrieval.rrf` | 107 | — |
 | `core.memory.retrieval.search_metadata` | 108 | — |
 | `core.memory.retrieval.time_expr` | 230 | — |
@@ -799,9 +800,9 @@ Speech synthesis, call status, and Webhook management for the Twilio phone chann
 
 ## `core.platform`
 
-An integration layer that abstracts differences between execution engines and operating systems.
+Integration layer that absorbs differences across execution engines and OSes.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.platform` | 4 | — |
 | `core.platform.agy` | 32 | — |
@@ -809,7 +810,7 @@ An integration layer that abstracts differences between execution engines and op
 | `core.platform.claude_code` | 194 | — |
 | `core.platform.codex` | 245 | — |
 | `core.platform.cursor` | 60 | — |
-| `core.platform.env` | 91 | — |
+| `core.platform.env` | 93 | — |
 | `core.platform.fd_limits` | 60 | — |
 | `core.platform.gemini` | 42 | — |
 | `core.platform.grok` | 40 | — |
@@ -840,7 +841,7 @@ System prompt and context construction.
 
 ## `core.runtime`
 
-Anima main runtime components, interprocess communication, and task execution.
+Anima main runtime components, inter-process communication, task execution.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -859,7 +860,7 @@ Anima main runtime components, interprocess communication, and task execution.
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 449 | Streaming IPC message handler. |
 | `core.runtime.task_runner` | 1056 | Disposable task runner entry point. |
-| `core.runtime.task_runner_supervisor` | 1446 | Anima-main-side lifecycle manager for disposable task runner processes. |
+| `core.runtime.task_runner_supervisor` | 1450 | Anima-main-side lifecycle manager for disposable task runner processes. |
 | `core.runtime.transport` | 240 | Transport helpers for IPC server/client communication. |
 
 ## `core.skills`
@@ -1147,7 +1148,7 @@ Voice input/output and voice dialogue.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1549 | — |
+| `server.routes.internal` | 1562 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
