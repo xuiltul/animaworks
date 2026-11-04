@@ -76,7 +76,7 @@ def create_animas_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/animas")
-    async def list_animas(request: Request):
+    def list_animas(request: Request):
         supervisor = request.app.state.supervisor
         animas_dir = request.app.state.animas_dir
         anima_names = request.app.state.anima_names
@@ -164,7 +164,7 @@ def create_animas_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=f"Anima not found: {name}")
 
         # Get process status
-        proc_status = supervisor.get_process_status(name)
+        proc_status = await asyncio.to_thread(supervisor.get_process_status, name)
 
         # Read memory files from disk — parallelised via thread pool
         from core.memory.manager import MemoryManager
@@ -193,7 +193,7 @@ def create_animas_router() -> APIRouter:
         }
 
     @router.get("/animas/{name}/summary")
-    async def get_anima_summary(name: str, request: Request):
+    def get_anima_summary(name: str, request: Request):
         """Return only the small set of Anima fields needed by chat selection."""
         _validate_anima_name(name)
         if not name or name in {".", ".."}:
@@ -1131,7 +1131,7 @@ def create_animas_router() -> APIRouter:
     # ── Org Chart ─────────────────────────────────────────
 
     @router.get("/org/chart")
-    async def get_org_chart(
+    def get_org_chart(
         request: Request,
         include_disabled: bool = False,
         format: str = "json",

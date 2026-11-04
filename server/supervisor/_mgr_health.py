@@ -331,7 +331,7 @@ class HealthMixin:
                 handle.state = ProcessState.RESTARTING
 
             # Disabled before any retry logic: clean stop, no state pollution.
-            if not self.read_anima_enabled(self.animas_dir / anima_name):
+            if not await asyncio.to_thread(self.read_anima_enabled, self.animas_dir / anima_name):
                 logger.info("Skip restart: anima disabled: %s", anima_name)
                 if anima_name in self.processes:
                     await self.stop_anima(anima_name)
@@ -375,7 +375,7 @@ class HealthMixin:
                         and self._restart_ctl.get(anima_name) is not worker_record
                     ):
                         return
-                    if not self.read_anima_enabled(self.animas_dir / anima_name):
+                    if not await asyncio.to_thread(self.read_anima_enabled, self.animas_dir / anima_name):
                         logger.info("Restart worker: anima disabled: %s", anima_name)
                         if anima_name in self.processes:
                             await self.stop_anima(anima_name)
@@ -389,7 +389,7 @@ class HealthMixin:
                     return
 
                 # Recheck after the final wait before touching the process.
-                if not self.read_anima_enabled(self.animas_dir / anima_name):
+                if not await asyncio.to_thread(self.read_anima_enabled, self.animas_dir / anima_name):
                     logger.info("Restart worker: anima disabled: %s", anima_name)
                     if anima_name in self.processes:
                         await self.stop_anima(anima_name)

@@ -23,6 +23,7 @@ The ``board_mapping`` (channel_id -> board_name) is persisted in
 config.json for message routing.
 """
 
+import asyncio
 import logging
 import re
 from datetime import UTC, datetime
@@ -377,11 +378,11 @@ class SlackChannelSync:
             slack_channel_names.add(ch_name)
 
             board_name = ch_name
-            if _ensure_board(shared_dir, board_name, ch_name):
+            if await asyncio.to_thread(_ensure_board, shared_dir, board_name, ch_name):
                 new_boards += 1
 
             self.board_mapping[ch_id] = board_name
-            _clear_board_slack_deleted(shared_dir, board_name)
+            await asyncio.to_thread(_clear_board_slack_deleted, shared_dir, board_name)
             if is_private:
                 private_channel_names.append(ch_name)
             else:
@@ -395,15 +396,15 @@ class SlackChannelSync:
                 continue
             board_file = shared_dir / "channels" / f"{board_name}.jsonl"
             if board_file.exists():
-                _mark_board_slack_deleted(shared_dir, board_name)
+                await asyncio.to_thread(_mark_board_slack_deleted, shared_dir, board_name)
 
         # ── Phase 2: Reverse sync (AnimaWorks boards -> Slack channels) ──
-        local_boards = _list_local_boards(shared_dir)
+        local_boards = await asyncio.to_thread(_list_local_boards, shared_dir)
         for board_name in local_boards:
             if board_name in slack_channel_names:
                 continue  # Already exists in Slack
 
-            meta = load_channel_meta(shared_dir, board_name)
+            meta = await asyncio.to_thread(load_channel_meta, shared_dir, board_name)
             if meta is not None and meta.slack_sync_disabled:
                 logger.info(
                     "Skipping reverse sync for board '%s' (Slack-deleted tombstone)",
@@ -465,7 +466,7 @@ class SlackChannelSync:
                     )
 
         # Persist mapping to config
-        self._update_config_mapping()
+        await asyncio.to_thread(self._update_config_mapping)
 
         if private_channel_names:
             logger.info(

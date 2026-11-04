@@ -15,7 +15,7 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from core.auth.manager import load_auth, validate_session
+from core.auth.manager import load_auth, run_auth_call, validate_session
 from core.config import load_config
 from core.config.models import VoiceConfig
 from core.voice.session import VoiceSession  # noqa: F401 -- compatibility seam used by route tests
@@ -112,14 +112,18 @@ def create_voice_router() -> APIRouter:
             return
 
         # Auth check (same pattern as websocket_route.py)
-        auth_config = load_auth()
-        if auth_config.auth_mode != "local_trust":
-            if not (auth_config.trust_localhost and _is_safe_localhost_request(ws)):
-                token = ws.cookies.get("session_token")
-                session = validate_session(token) if token else None
-                if not session:
-                    await ws.close(code=4001, reason="Unauthorized")
-                    return
+        try:
+            auth_config = await run_auth_call(load_auth)
+            if auth_config.auth_mode != "local_trust":
+                if not (auth_config.trust_localhost and _is_safe_localhost_request(ws)):
+                    token = ws.cookies.get("session_token")
+                    session = await run_auth_call(validate_session, token) if token else None
+                    if not session:
+                        await ws.close(code=4001, reason="Unauthorized")
+                        return
+        except TimeoutError:
+            await ws.close(code=1013, reason="Try again later")
+            return
 
         supervisor = ws.app.state.supervisor
         animas_dir: Path = ws.app.state.animas_dir

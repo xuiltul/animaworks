@@ -36,6 +36,7 @@ class _ReconcileMixinHost(Protocol):
     _bootstrapping: Any
     _broadcast_event: Any
     _check_config_freshness: Any
+    _scan_desired_state: Any
     _ensure_restart_worker: Any
     _flush_task_notices: Any
     _last_config_hash: Any

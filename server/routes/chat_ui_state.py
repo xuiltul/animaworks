@@ -58,7 +58,7 @@ def create_chat_ui_state_router() -> APIRouter:
     router = APIRouter(tags=["chat-ui-state"])
 
     @router.get("/chat/ui-state")
-    async def get_chat_ui_state(request: Request):
+    def get_chat_ui_state(request: Request):
         """Get persisted dashboard chat UI state for current user."""
         username = _resolve_username(request)
         state_path = _state_path_for_user(username)
@@ -79,7 +79,7 @@ def create_chat_ui_state_router() -> APIRouter:
         return {"state": merged}
 
     @router.put("/chat/ui-state")
-    async def put_chat_ui_state(body: ChatUiStateUpdateRequest, request: Request):
+    def put_chat_ui_state(body: ChatUiStateUpdateRequest, request: Request):
         """Persist dashboard chat UI state for current user."""
         username = _resolve_username(request)
         state_path = _state_path_for_user(username)

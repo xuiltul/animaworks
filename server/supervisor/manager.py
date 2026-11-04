@@ -81,6 +81,43 @@ class ReconciliationConfig:
     interval_sec: float = 30.0  # Scan interval
 
 
+# ── Event file drain ───────────────────────────────────────────────
+
+
+def _read_event_files(events_base: Path) -> tuple[list[tuple[Path, dict[str, Any]]], list[Path]]:
+    """Read pending event files, in order per Anima. Blocking: call off the loop.
+
+    Returns the parsed events, and the files that cannot be parsed and should
+    be discarded so that they are not retried forever.
+    """
+    events: list[tuple[Path, dict[str, Any]]] = []
+    unreadable: list[Path] = []
+    if not events_base.exists():
+        return events, unreadable
+    for anima_dir in events_base.iterdir():
+        if not anima_dir.is_dir():
+            continue
+        for event_file in sorted(anima_dir.glob("*.json")):
+            try:
+                data = json.loads(event_file.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    raise ValueError("event file does not hold a JSON object")
+                events.append((event_file, data))
+            except (OSError, ValueError) as e:  # JSONDecodeError is a ValueError
+                logger.warning("Failed to process event file %s: %s", event_file, e)
+                unreadable.append(event_file)
+    return events, unreadable
+
+
+def _remove_event_files(paths: list[Path]) -> None:
+    """Remove handled event files. Blocking: call off the loop."""
+    for path in paths:
+        try:
+            path.unlink()
+        except OSError:
+            logger.debug("Failed to remove event file %s", path, exc_info=True)
+
+
 # ── Process Supervisor ─────────────────────────────────────────────
 
 
@@ -1142,27 +1179,22 @@ class ProcessSupervisor(HealthMixin, RAGRepairMixin, ReconcileMixin, SchedulerMi
             await asyncio.sleep(1.0)
 
     async def _poll_anima_events(self) -> None:
-        """Read and broadcast event files from non-root child processes."""
-        events_base = self.run_dir / "events"
-        if not events_base.exists():
-            return
+        """Read and broadcast event files from non-root child processes.
 
-        for anima_dir in events_base.iterdir():
-            if not anima_dir.is_dir():
-                continue
-            for event_file in sorted(anima_dir.glob("*.json")):
-                try:
-                    data = json.loads(event_file.read_text(encoding="utf-8"))
-                    event_type = data.get("event", "")
-                    event_data = data.get("data", {})
-                    await self._broadcast_event(event_type, event_data)
-                    event_file.unlink()
-                except (json.JSONDecodeError, OSError) as e:
-                    logger.warning("Failed to process event file %s: %s", event_file, e)
-                    try:
-                        event_file.unlink()
-                    except OSError:
-                        logger.debug("Failed to remove corrupted event file %s", event_file, exc_info=True)
+        Runs every second, so all disk access stays off the event loop. A file
+        is removed only after its event was broadcast. The caller awaits this
+        method, so a slow removal delays the next poll and cannot send an event
+        twice.
+        """
+        events, unreadable = await asyncio.to_thread(_read_event_files, self.run_dir / "events")
+        delivered = list(unreadable)
+        try:
+            for event_file, data in events:
+                await self._broadcast_event(data.get("event", ""), data.get("data", {}))
+                delivered.append(event_file)
+        finally:
+            if delivered:
+                await asyncio.to_thread(_remove_event_files, delivered)
 
     # ── Status ───────────────────────────────────────────────────
 
