@@ -20,6 +20,8 @@ import {
   feedBackgroundUrl as _sharedFeedBackgroundUrl,
   bindLazyBackgroundGroups as _sharedBindLazyBackgroundGroups,
   renderFeedHiddenCount as _sharedRenderFeedHiddenCount,
+  renderHistoryError as _sharedRenderHistoryError,
+  bindHistoryRetry as _sharedBindHistoryRetry,
 } from "../../shared/chat/render-utils.js";
 import { createScrollObserver } from "../../shared/chat/scroll-observer.js";
 import { thinkRenderHooks } from "../../shared/chat/thinking-bubble.js";
@@ -324,7 +326,7 @@ export function createChatRenderer(ctx) {
   }
 
   function _scheduleOlderFeedPrefetch(name, threadId, historyState) {
-    if (!historyState?.isFeed || !historyState.hasMore || !historyState.nextBefore) return;
+    if (!historyState?.isFeed || !historyState.hasMore || !historyState.nextBefore || historyState.olderFailed) return;
     const key = JSON.stringify([name, threadId, historyState.nextBefore]);
     if (_prefetchScheduledKey === key) return;
     _prefetchScheduledKey = key;
@@ -421,6 +423,14 @@ export function createChatRenderer(ctx) {
     if (!hasTimelineHistory && history.length === 0) {
       if (hs.loading) {
         messagesEl.innerHTML = `<div class="chat-empty"><span class="tool-spinner"></span> ${t("common.loading")}</div>`;
+        return;
+      }
+      // A failed fetch says nothing about the history: it must not read as
+      // "no messages" or start the first-meeting greeting below. (A greeting
+      // that already arrived is real content and is shown further down.)
+      if (hs.loadFailed && !state.firstMeetingResponses.has(name)) {
+        messagesEl.innerHTML = _sharedRenderHistoryError({ escapeHtml });
+        _sharedBindHistoryRetry(messagesEl, () => retryHistoryLoad());
         return;
       }
       if (hs.isFeed && hs.hasMore) {
@@ -577,6 +587,7 @@ export function createChatRenderer(ctx) {
       ? _sharedRenderFeedHiddenCount(hiddenActivityCount)
       : "";
     messagesEl.innerHTML = topHtml + sessionsHtml + liveHtml + hiddenActivityHtml;
+    _sharedBindHistoryRetry(messagesEl, () => loadOlderMessages());
     bindToolCallHandlers(messagesEl);
     _sharedBindCollapsibleSessionHandlers(messagesEl);
     _sharedBindLazyBackgroundGroups(messagesEl, {
@@ -668,6 +679,17 @@ export function createChatRenderer(ctx) {
       _loadingOlder = false;
       renderChat(false, true);
     }
+  }
+
+  async function retryHistoryLoad() {
+    const name = state.selectedAnima;
+    const tid = state.selectedThreadId || "default";
+    if (!name) return;
+    // Start the load before rendering so the retry shows the loading spinner.
+    const loading = state.manager.loadHistory(name, tid, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory);
+    renderChat();
+    await loading;
+    if (state.selectedAnima === name && (state.selectedThreadId || "default") === tid) renderChat();
   }
 
   // ── Conversation History API ──

@@ -3,8 +3,9 @@ import {
   isTabOpen, refreshAnimaUnread,
   clearUnreadForActiveThread, loadDraft, saveDraft, chatInputMaxHeight,
   fetchChatUiState, scheduleSaveChatUiState, mergeThreadsFromSessions,
-  setThreadUnread, threadTimeValue, syncModelSelect,
+  setThreadUnread, threadTimeValue, syncModelSelect, CONSTANTS,
 } from "./ctx.js";
+import { hasHistoryContent } from "../../shared/chat/history-loader.js";
 import { animaStatusLabel } from "../../shared/anima-status.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { companyColor } from "../../shared/avatar-utils.js";
@@ -364,36 +365,21 @@ export function createAnimaController(ctx) {
 
     const tid = state.selectedThreadId;
 
+    const mgr = state.manager;
+    // Start the load before rendering so the wait shows a spinner, not "no messages".
+    const convPromise = hasHistoryContent(mgr.getHistoryState(name, tid))
+      ? Promise.resolve(null)
+      : mgr.loadHistory(name, tid, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory);
     ctx.controllers.renderer.renderChat();
 
-    const mgr = state.manager;
-    const existingHs = mgr.getHistoryState(name, tid);
-    const needConv = !existingHs || existingHs.sessions.length === 0;
-    const convPromise = needConv
-      ? ctx.controllers.renderer.fetchConversationHistory(name, 50, null, tid).catch(() => null)
-      : Promise.resolve(null);
     const summaryPromise = api(`/api/animas/${encodeURIComponent(name)}/summary`).catch(() => null);
     void refreshSessions(name);
 
-    const [conv, summary] = await Promise.all([convPromise, summaryPromise]);
+    const [loadedHs, summary] = await Promise.all([convPromise, summaryPromise]);
 
     if (gen !== _selectGen) return;
 
-    if (conv && conv.sessions && conv.sessions.length > 0) {
-      const { createHistoryState, applyHistoryData } = await import("../../shared/chat/session-manager.js");
-      const hs = createHistoryState();
-      applyHistoryData(hs, conv);
-      hs.loaded = true;
-      mgr.setHistoryState(name, tid, hs);
-      resolveHistoryAvatars(conv.sessions);
-    } else if (needConv) {
-      const { createHistoryState } = await import("../../shared/chat/session-manager.js");
-      const hs = createHistoryState();
-      // A successful (empty) fetch is a confirmed empty history; a failed
-      // fetch (conv === null) must not look like one.
-      if (conv) hs.loaded = true;
-      mgr.setHistoryState(name, tid, hs);
-    }
+    if (loadedHs) resolveHistoryAvatars(loadedHs.sessions);
 
     if (!state.threads[name].some(th => th.id === state.selectedThreadId)) {
       state.selectedThreadId = "default";

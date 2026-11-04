@@ -120,11 +120,13 @@ export function createThreadController(ctx) {
     const mgr = state.manager;
     const hs = mgr.getHistoryState(name, threadId);
     const needLoad = !hs || (hs.isFeed ? (hs.feedItems || []).length === 0 : hs.sessions.length === 0);
+    // Start the load before rendering so the wait shows a spinner, not "no messages".
+    const loading = needLoad
+      ? mgr.loadHistory(name, threadId, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory)
+      : null;
     ctx.controllers.renderer.renderChat();
 
-    if (needLoad) {
-      await mgr.loadHistory(name, threadId, CONSTANTS.HISTORY_PAGE_SIZE, state.fetchChatFeedHistory);
-    }
+    if (loading) await loading;
     ctx.controllers.renderer.renderChat();
     scheduleSaveChatUiState(ctx);
     state.paneHost?.savePaneStates?.();

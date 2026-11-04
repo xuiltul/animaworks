@@ -3,10 +3,36 @@
 
 /**
  * Create a fresh history state object for a single thread.
- * @returns {{ sessions: Array, hasMore: boolean, nextBefore: string|null, loading: boolean }}
+ *
+ * `loaded` means a fetch succeeded, so an empty state is a confirmed empty
+ * history. `loadFailed` means the last full load failed with nothing to show;
+ * `olderFailed` means the last older page failed while the rest stays on screen.
+ * @returns {{ sessions: Array, feedItems: Array, isFeed: boolean, hasMore: boolean, nextBefore: string|null, loading: boolean, loaded: boolean, loadFailed: boolean, olderFailed: boolean }}
  */
 export function createHistoryState() {
-  return { sessions: [], feedItems: [], isFeed: false, hasMore: false, nextBefore: null, loading: false };
+  return {
+    sessions: [], feedItems: [], isFeed: false, hasMore: false, nextBefore: null,
+    loading: false, loaded: false, loadFailed: false, olderFailed: false,
+  };
+}
+
+/**
+ * Whether a history state holds anything to show (feed background groups count).
+ * @param {object} hs
+ * @returns {boolean}
+ */
+export function hasHistoryContent(hs) {
+  return hs?.isFeed ? (hs.feedItems || []).length > 0 : (hs?.sessions || []).length > 0;
+}
+
+/**
+ * Whether the loaded feed pages hold a conversation message, rather than only
+ * background work or a thread's compressed summary.
+ * @param {object} hs
+ * @returns {boolean}
+ */
+export function hasFeedConversation(hs) {
+  return (hs?.feedItems || []).some(item => item?.kind === "message" && item.message?.type !== "thread_summary");
 }
 
 function _feedItemTs(item, isEnd = false) {
@@ -98,11 +124,28 @@ function _sessionsEqual(a, b) {
   return true;
 }
 
+/**
+ * Paging position after a poll of the newest page. Older pages that held no
+ * items leave no trace but their cursor, so a cursor already past the poll's stays.
+ */
+function _polledPaging(prev, pollData) {
+  const pollCursor = pollData.next_before || null;
+  if (prev?.isFeed && prev.nextBefore && pollCursor && prev.nextBefore < pollCursor) {
+    return { hasMore: prev.hasMore, nextBefore: prev.nextBefore };
+  }
+  return { hasMore: Boolean(pollData.has_more), nextBefore: pollCursor };
+}
+
 export function mergePolledHistory(prev, pollData) {
   if (pollData && Array.isArray(pollData.items)) {
     if (prev?.loading) return { changed: false, merged: prev };
     const previousItems = prev?.isFeed ? (prev.feedItems || []) : [];
     if (previousItems.length === 0) {
+      // A poll is a successful fetch: it settles a pending or failed load. An
+      // empty newest page once the load has settled adds nothing.
+      if (pollData.items.length === 0 && prev?.isFeed && prev.loaded && !prev.loadFailed) {
+        return { changed: false, merged: prev };
+      }
       return {
         changed: true,
         merged: {
@@ -110,8 +153,8 @@ export function mergePolledHistory(prev, pollData) {
           feedItems: pollData.items,
           sessions: _feedSessions(pollData.items),
           isFeed: true,
-          hasMore: Boolean(pollData.has_more),
-          nextBefore: pollData.next_before || null,
+          ..._polledPaging(prev, pollData),
+          loaded: true,
         },
       };
     }
@@ -136,11 +179,10 @@ export function mergePolledHistory(prev, pollData) {
       feedItems,
       sessions: _feedSessions(feedItems),
       isFeed: true,
+      loaded: true,
+      loadFailed: false,
     };
-    if (olderItems.length === 0) {
-      merged.hasMore = Boolean(pollData.has_more);
-      merged.nextBefore = pollData.next_before || null;
-    }
+    if (olderItems.length === 0) Object.assign(merged, _polledPaging(prev, pollData));
     return { changed: true, merged };
   }
 

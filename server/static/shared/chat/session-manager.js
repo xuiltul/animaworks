@@ -2,7 +2,9 @@
 // Unified session manager for all chat consumers (Chat Page, Workspace, Legacy).
 // Singleton EventTarget; manages anima:thread → ChatSession map.
 
-import { createHistoryState, applyHistoryData, mergePolledHistory } from "./history-loader.js";
+import {
+  createHistoryState, applyHistoryData, mergePolledHistory, hasHistoryContent, hasFeedConversation,
+} from "./history-loader.js";
 import { api } from "../../modules/api.js";
 
 // ── ChatSession ──────────────────────
@@ -137,6 +139,7 @@ export class ChatSessionManager extends EventTarget {
 
   async loadHistory(anima, thread = "default", limit = 50, fetchHistory = null) {
     const session = this.getSession(anima, thread);
+    const previous = session.historyState;
     session._prefetchedHistory = null;
     session.historyState = { ...createHistoryState(), loading: true };
     this.#dispatch("history-loading", { anima, thread });
@@ -145,12 +148,15 @@ export class ChatSessionManager extends EventTarget {
       const data = await (fetchHistory || this.#config.fetchHistory)(anima, limit, null, thread);
       session.historyState = createHistoryState();
       applyHistoryData(session.historyState, data);
+      // Only a successful fetch can tell "no history" from "not fetched yet".
+      session.historyState.loaded = true;
     } catch {
-      session.historyState = createHistoryState();
+      // A failed fetch says nothing about the history: keep what was already
+      // on screen, and otherwise report the failure instead of looking empty.
+      session.historyState = hasHistoryContent(previous)
+        ? { ...previous, loading: false }
+        : { ...createHistoryState(), loadFailed: true };
     }
-    // Marks that at least one full load finished, so callers can tell
-    // "no history" apart from "history not fetched yet".
-    session.historyState.loaded = true;
     this.#dispatch("history-loaded", { anima, thread });
     return session.historyState;
   }
@@ -161,6 +167,7 @@ export class ChatSessionManager extends EventTarget {
     if (!hs || !hs.hasMore || hs.loading) return;
 
     hs.loading = true;
+    hs.olderFailed = false;
     this.#dispatch("history-loading", { anima, thread });
 
     try {
@@ -175,7 +182,8 @@ export class ChatSessionManager extends EventTarget {
       applyHistoryData(hs, data, { prepend: true });
     } catch {
       session._prefetchedHistory = null;
-      hs.hasMore = false;
+      // hasMore stays true: the older pages still exist and can be retried.
+      hs.olderFailed = true;
     }
     hs.loading = false;
     this.#dispatch("history-loaded", { anima, thread });
