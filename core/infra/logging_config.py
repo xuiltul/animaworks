@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -256,16 +257,27 @@ class _AnimaDailyFileHandler(logging.FileHandler):
 # ── Shared Processors ──────────────────────────────────────────
 
 
-def _build_shared_processors() -> list:
+def _build_shared_processors(timestamper: object | None = None) -> list:
     """Build the shared processor chain used by both structlog and stdlib."""
     return [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
+        timestamper or structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
+
+
+def _timestamp_from_record(logger: object, name: str, event_dict: dict) -> dict:
+    """Stamp a stdlib record with its creation time, not its formatting time.
+
+    The pre-chain runs inside the formatter, which may be well after the log
+    call when records are delivered through the non-blocking queue.
+    """
+    created = event_dict["_record"].created
+    event_dict["timestamp"] = datetime.fromtimestamp(created, UTC).isoformat().replace("+00:00", "Z")
+    return event_dict
 
 
 def _build_processor_formatter(
@@ -348,7 +360,7 @@ def setup_logging(
 
     # foreign_pre_chain: processes stdlib LogRecords through structlog pipeline
     # so that contextvars (request_id etc.) and timestamps are merged in.
-    foreign_pre_chain = list(shared_processors)
+    foreign_pre_chain = _build_shared_processors(timestamper=_timestamp_from_record)
 
     # Console handler: human-readable colored output
     console = logging.StreamHandler()

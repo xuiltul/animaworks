@@ -508,8 +508,12 @@ def _start_foreground(args: argparse.Namespace) -> None:
     set_process_role("root")
     _pin_native_threads()
 
-    import uvicorn
+    import logging.config
 
+    import uvicorn
+    import uvicorn.config
+
+    from core.infra.log_queue import flush_on_signal, start_log_queue, stop_log_queue
     from core.infra.runtime_init import ensure_runtime_dir
     from core.paths import get_animas_dir, get_shared_dir
     from core.platform.fd_limits import raise_fd_soft_limit
@@ -569,6 +573,12 @@ def _start_foreground(args: argparse.Namespace) -> None:
     else:
         print(f"Dashboard starting at http://{display_host}:{args.port}/")
 
+    # From here on a stalled disk must not stall the event loop: install
+    # uvicorn's stock logging ourselves (log_config=None below stops it being
+    # reinstalled), then move every handler and both streams behind the queue.
+    logging.config.dictConfig(uvicorn.config.LOGGING_CONFIG)
+    start_log_queue()
+    flush_on_signal()
     try:
         app = create_app(get_animas_dir(), get_shared_dir())
         app.state.listen_port = args.port
@@ -577,11 +587,13 @@ def _start_foreground(args: argparse.Namespace) -> None:
             host=args.host,
             port=args.port,
             log_level="info",
+            log_config=None,
             timeout_keep_alive=65,
             ws_ping_interval=25,
             ws_ping_timeout=5,
         )
     finally:
+        stop_log_queue()
         _remove_pid_file()
 
 
