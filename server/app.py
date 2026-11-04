@@ -31,7 +31,7 @@ from starlette.responses import JSONResponse as StarletteJSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from core.anima.workspace_files import IDENTITY_FILE
-from core.auth.manager import find_user, load_auth, validate_session
+from core.auth.manager import find_user, load_auth, run_auth_call, validate_session
 from core.config import load_config
 from core.i18n import t
 from core.infra import startup_progress
@@ -71,6 +71,10 @@ _AUTH_WHITELIST_PREFIXES = (
     "/health",
 )
 
+# Served without looking at auth state at all, so that a health probe never
+# depends on the disk. They expose nothing and are public in every auth mode.
+_HEALTH_PATHS = frozenset({"/api/system/health", "/health"})
+
 # Paths to exclude from request logging (noisy health checks, etc.)
 _NOISY_PATHS = frozenset(
     {
@@ -79,6 +83,16 @@ _NOISY_PATHS = frozenset(
         "/ws",
     }
 )
+
+
+def _auth_unavailable_response() -> JSONResponse:
+    """Refuse a request whose auth state could not be read in time."""
+    logger.warning("Auth check timed out; refusing request")
+    return JSONResponse(
+        {"error": "Authentication temporarily unavailable"},
+        status_code=503,
+        headers={"Retry-After": "5"},
+    )
 
 
 def _get_app_version() -> str:
@@ -1256,11 +1270,14 @@ def create_app(
         path = request.url.path
 
         # Skip during setup
-        if not request.app.state.setup_complete:
+        if not request.app.state.setup_complete or path in _HEALTH_PATHS:
             return await call_next(request)
 
-        # Load auth config
-        auth_config = load_auth()
+        # Load auth config off the loop; if the disk does not answer, fail closed
+        try:
+            auth_config = await run_auth_call(load_auth)
+        except TimeoutError:
+            return _auth_unavailable_response()
 
         # Skip if local_trust mode
         if auth_config.auth_mode == "local_trust":
@@ -1298,7 +1315,10 @@ def create_app(
 
         # Validate session token from cookie
         token = request.cookies.get("session_token")
-        session = validate_session(token) if token else None
+        try:
+            session = await run_auth_call(validate_session, token) if token else None
+        except TimeoutError:
+            return _auth_unavailable_response()
         if not session:
             return JSONResponse(
                 {"error": "Unauthorized"},
