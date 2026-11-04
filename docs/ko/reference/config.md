@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=5ee50afc31da7d7233603b590aa5b8482b71ed7319f9550a4a82cb49b8614f4d generated=2026-11-01 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=2bceb82e46bd99c9be9680d66d2682b315501187ad1d2f428667edba281c8449 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 설정 참조
 
@@ -273,14 +273,15 @@
 
 | 키 | 유형 | 기본값 | 설명 |
 |---|---|---|---|
-| `rag` | `RAGConfig` | `{RAGConfig}` | 검색 증강 생성 및 기억 검색 설정. |
+| `rag` | `RAGConfig` | `{RAGConfig}` | 검색 확장 생성과 기억 검색 설정. |
 | `rag.enabled` | `bool` | `true` | — |
 | `rag.embedding_model` | `str` | `"intfloat/multilingual-e5-small"` | — |
-| `rag.embedding_e5_prefix_enabled` | `bool` | `false` | 활성화하면 쿼리 임베딩 앞에 embedding_query_prefix를, 인덱싱된 문서 임베딩 앞에 embedding_document_prefix를 추가합니다. E5 계열 절제 실험을 위해 마련된 기능이며, 문서 접두사 변경 사항을 적용하려면 다시 인덱싱해야 합니다. |
+| `rag.embedding_e5_prefix_enabled` | `bool` | `false` | When enabled, prefix query embeddings with embedding_query_prefix and indexed document embeddings with embedding_document_prefix. This is intended for E5-family ablations and requires re-indexing for document-prefix changes to take effect. |
 | `rag.embedding_query_prefix` | `str` | `"query: "` | — |
 | `rag.embedding_document_prefix` | `str` | `"passage: "` | — |
-| `rag.embedding_max_seq_length` | `int` | `2048` | 임베딩 모델의 최대 시퀀스 길이(토큰) 제한입니다. ruri-v3와 같은 긴 컨텍스트 모델의 기본값은 8192이며, 대량 인코딩 중 GPU 활성화 메모리 사용량이 급증합니다. 0 = 모델 기본값 사용. |
+| `rag.embedding_max_seq_length` | `int` | `2048` | 임베딩 모델의 최대 시퀀스 길이(토큰) 상한. ruri-v3 같은 장문맥 모델은 기본값이 8192라서 대량 인코딩 시 GPU 활성화 메모리가 폭증한다. 0 = 모델 기본값 사용. |
 | `rag.use_gpu` | `bool` | `false` | — |
+| `rag.chroma_native_threads` | `int` | `4` | chroma의 tokio 및 rayon 스레드 풀 각각의 상한. 기본적으로는 벡터 스토어를 여는 모든 프로세스에서 CPU당 하나의 스레드를 사용한다. 프로세스 시작 시 적용된다. 0 = chroma 기본값. |
 | `rag.min_retrieval_score` | `float` | `0.3` | — |
 | `rag.skill_match_min_score` | `float` | `0.75` | — |
 | `rag.repair_enabled` | `bool` | `true` | — |
@@ -301,23 +302,25 @@
 | `rag.confidence_threshold` | `float` | `0.35` | — |
 | `rag.rrf_confidence_threshold` | `float` | `0.02` | — |
 | `rag.facts_extraction_enabled` | `bool` | `true` | — |
-| `rag.fact_extraction_timeout_seconds` | `int` | `120` | 기존 원자 사실 추출에 사용하는 LLM 호출의 기본 시간 제한(초)입니다. Anima별 status.json extraction_timeout 값이 이 값을 재정의합니다. |
-| `rag.fact_extraction_max_tokens` | `int` | `8192` | 기존 원자 사실 추출 LLM 호출의 최대 출력 토큰 수입니다. |
-| `rag.facts_extraction_single_call` | `bool` | `true` | 지원되는 경우 단일 LLM 호출로 기존 원자 사실과 해당 엔터티를 추출합니다. |
-| `rag.facts_reconcile_enabled` | `bool` | `true` | 추가하기 전에 기존 원자 사실 조정을 활성화합니다. 실패하면 ADD로 대체합니다. |
-| `rag.facts_reconcile_similarity_threshold` | `float` | `0.82` | 엄격한 LLM duplicate/contradiction/complement 라벨링을 적용하기 위한 사실 벡터 유사도 최소값입니다. |
-| `rag.facts_reconcile_top_k` | `int` | `5` | 기존 사실 조정 중 고려할 유사한 활성 사실의 최대 수입니다. |
+| `rag.fact_extraction_timeout_seconds` | `int` | `120` | 레거시 원자 사실 추출에 사용되는 LLM 호출의 기본 타임아웃(초). Anima별 status.json extraction_timeout이 이 값을 덮어쓴다. |
+| `rag.fact_extraction_max_tokens` | `int` | `8192` | 레거시 원자 사실 추출 LLM 호출의 최대 출력 토큰 수. |
+| `rag.facts_extraction_single_call` | `bool` | `true` | 지원되는 경우 레거시 원자 사실과 그 엔티티를 한 번의 LLM 호출로 추출한다. |
+| `rag.facts_reconcile_enabled` | `bool` | `true` | 추가 전에 레거시 원자 사실 조정을 활성화한다. 실패 시 ADD로 폴백한다. |
+| `rag.facts_reconcile_similarity_threshold` | `float` | `0.82` | 엄격한 LLM duplicate/contradiction/complement 라벨링 전 최소 사실 벡터 유사도. |
+| `rag.facts_reconcile_top_k` | `int` | `5` | 레거시 사실 조정 중 고려되는 유사한 활성 사실의 최대 수. |
 | `rag.entity_registry_enabled` | `bool` | `true` | — |
 
 ### `gpu`
 
 | 키 | 유형 | 기본값 | 설명 |
 |---|---|---|---|
-| `gpu` | `GPUConfig` | `{GPUConfig}` | GPU 사용 및 장치 선택 설정. |
-| `gpu.embedding_device` | `Literal['auto', 'cuda', 'cpu']` | `"auto"` | — |
-| `gpu.reranker_device` | `Literal['auto', 'cuda', 'cpu']` | `"cpu"` | — |
+| `gpu` | `GPUConfig` | `{GPUConfig}` | GPU 사용과 디바이스 선택 설정. |
+| `gpu.embedding_device` | `Literal['auto', 'cuda', 'mps', 'cpu']` | `"auto"` | — |
+| `gpu.reranker_device` | `Literal['auto', 'cuda', 'mps', 'cpu']` | `"cpu"` | — |
 | `gpu.embedding_batch_size` | `int` | `32` | — |
-| `gpu.embedding_bulk_yield_batches` | `int` | `5` | 대량 작업이 대기 중인 대화형 작업에 양보할 수 있는 임베딩 배치의 연속 처리 최대 횟수입니다. |
+| `gpu.embedding_bulk_yield_batches` | `int` | `5` | 대량 작업이 대기 중인 대화형 작업에 양보할 수 있는 최대 연속 임베딩 배치 수. |
+| `gpu.torch_num_threads` | `int` | `4` | 임베딩 및 리랭킹용 torch intra-op CPU 스레드 수. 0 = torch 기본값(코어당 하나). |
+| `gpu.torch_num_interop_threads` | `int` | `1` | 임베딩 및 리랭킹용 torch inter-op CPU 스레드 수. 0 = torch 기본값(코어당 하나). |
 
 ### `memory`
 

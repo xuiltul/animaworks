@@ -14,6 +14,8 @@ DATA_DIR_ENV = "ANIMAWORKS_DATA_DIR"
 SERVER_URL_ENV = "ANIMAWORKS_SERVER_URL"
 ANIMAWORKS_ENV_PREFIX = "ANIMAWORKS_"
 DEFAULT_SERVER_URL = "http://localhost:18500"
+# Read by the tokio and rayon thread pools inside chroma's Rust bindings.
+CHROMA_THREAD_ENV_VARS = ("TOKIO_WORKER_THREADS", "RAYON_NUM_THREADS")
 
 
 def get_env(name: str, default: str | None = None) -> str | None:

@@ -85,18 +85,25 @@ def _get_bulk_yield_batches() -> int:
         return 5
 
 
+def _construct_embedding_model(resolved_name: str, cache_dir: str, device: str) -> SentenceTransformer:
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer(resolved_name, cache_folder=cache_dir, device=device)
+
+
 def _load_embedding_model_on_device(resolved_name: str, device: str) -> SentenceTransformer:
     global _embedding_model, _embedding_model_device, _embedding_model_name
 
-    from sentence_transformers import SentenceTransformer
-
     from core.infra.gpu import record_component_device
+    from core.infra.inference import run_inference
     from core.paths import get_data_dir
 
     cache_dir = get_data_dir() / "models"
     cache_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Loading embedding model (singleton): %s on %s", resolved_name, device)
-    _embedding_model = SentenceTransformer(resolved_name, cache_folder=str(cache_dir), device=device)
+    _embedding_model = run_inference(
+        "embedding", device, _construct_embedding_model, resolved_name, str(cache_dir), device
+    )
     try:
         from core.config import load_config
 
@@ -116,7 +123,28 @@ def _load_embedding_model_on_device(resolved_name: str, device: str) -> Sentence
 
 def _reload_embedding_model_on_device(resolved_name: str, device: str) -> SentenceTransformer:
     with _embedding_lock:
+        # Callers that failed together must not each load a model: torch never
+        # returns freed arenas to the OS (see get_embedding_model).
+        if _embedding_model is not None and (_embedding_model_name, _embedding_model_device) == (resolved_name, device):
+            return _embedding_model
         return _load_embedding_model_on_device(resolved_name, device)
+
+
+def _model_device_type(model: SentenceTransformer) -> str:
+    """Return the device a model's weights are on, which picks its inference thread.
+
+    This asks the model rather than module state: a caller can still hold the
+    MPS model after another thread has fallen back to CPU, and that model must
+    stay on the MPS thread.
+    """
+    device_type = getattr(getattr(model, "device", None), "type", None)
+    return device_type if isinstance(device_type, str) else "cpu"
+
+
+def _encode_on_inference_thread(model: SentenceTransformer, texts: list[str], **kwargs) -> object:
+    from core.infra.inference import run_inference
+
+    return run_inference("embedding", _model_device_type(model), model.encode, texts, **kwargs)
 
 
 def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
@@ -144,7 +172,7 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
     # sandboxed child) used to discard and reload the model on each flip —
     # torch never returns freed arenas to the OS, so RSS ratcheted up by
     # ~0.5GB per reload (2026-07-17 OOM incident). Device changes now only
-    # happen through the explicit CUDA-failure fallback below and in
+    # happen through the explicit GPU-failure fallback below and in
     # ``thread_safe_encode``.
     if _embedding_model is not None and _embedding_model_name == resolved_name:
         return _embedding_model
@@ -166,7 +194,7 @@ def get_embedding_model(model_name: str | None = None) -> SentenceTransformer:
         try:
             return _load_embedding_model_on_device(resolved_name, device)
         except Exception as exc:
-            if device == "cuda":
+            if device != "cpu":
                 record_gpu_failure("embedding", exc)
                 logger.warning("GPU embedding model load failed, falling back to CPU: %s", exc)
                 return _load_embedding_model_on_device(resolved_name, "cpu")
@@ -194,7 +222,8 @@ def thread_safe_encode(
     Bulk callers release the lock between configured model batches so
     waiting interactive callers can run first.
     """
-    from core.infra.gpu import is_cuda_failure, record_gpu_failure
+    from core.infra.gpu import is_gpu_failure, record_gpu_failure, release_mps_cache
+    from core.infra.inference import run_inference
 
     model = get_embedding_model()
     prefixed_texts = _prefix_texts_for_embedding(texts, purpose=purpose)
@@ -209,19 +238,25 @@ def thread_safe_encode(
             priority=priority,
         )
     except Exception as exc:
-        if not is_cuda_failure(exc):
+        if not is_gpu_failure(exc):
             raise
         logger.error("GPU failure detected - falling back to CPU embedding", exc_info=True)
         record_gpu_failure("embedding", exc)
+        failed_device = _model_device_type(model)
         cpu_model = _reload_embedding_model_on_device(_get_configured_model_name(), "cpu")
-        return _encode_with_priority(
-            cpu_model,
-            prefixed_texts,
-            convert_to_numpy=convert_to_numpy,
-            show_progress_bar=show_progress_bar,
-            batch_size=batch_size,
-            priority=priority,
-        )
+    # Out here the exception's traceback no longer holds the GPU model, so its
+    # memory can actually be released.
+    del model
+    if failed_device == "mps":
+        run_inference("embedding", failed_device, release_mps_cache)
+    return _encode_with_priority(
+        cpu_model,
+        prefixed_texts,
+        convert_to_numpy=convert_to_numpy,
+        show_progress_bar=show_progress_bar,
+        batch_size=batch_size,
+        priority=priority,
+    )
 
 
 def _encode_with_priority(
@@ -235,7 +270,8 @@ def _encode_with_priority(
 ) -> list[list[float]]:
     if priority == "interactive":
         with _interactive_native_slot():
-            embeddings = model.encode(
+            embeddings = _encode_on_inference_thread(
+                model,
                 texts,
                 convert_to_numpy=convert_to_numpy,
                 show_progress_bar=show_progress_bar,
@@ -248,7 +284,8 @@ def _encode_with_priority(
         _wait_for_bulk_turn()
         batch = texts[start : start + batch_size]
         with _embedding_encode_lock:
-            embeddings = model.encode(
+            embeddings = _encode_on_inference_thread(
+                model,
                 batch,
                 convert_to_numpy=convert_to_numpy,
                 show_progress_bar=show_progress_bar,
@@ -389,5 +426,7 @@ def _reset_for_testing() -> None:
         _bulk_yield_count = 0
         _priority_condition.notify_all()
     from core.infra.gpu import reset_gpu_status_for_testing
+    from core.infra.inference import reset_inference_for_testing
 
     reset_gpu_status_for_testing()
+    reset_inference_for_testing()
