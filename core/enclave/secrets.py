@@ -126,3 +126,25 @@ def aws_keys_from_secret(name: object) -> dict[str, str]:
         for key in ("aws_access_key_id", "aws_secret_access_key", "aws_session_token")
         if payload.get(key)
     }
+
+
+# Credential ``keys`` entries that name a secret in the enclave store.
+CREDENTIAL_SECRET_KEYS: tuple[str, ...] = ("aws_secret", "oauth_token_secret")
+
+
+def claude_oauth_env_from_secret(name: object) -> dict[str, str]:
+    """Return ``{"CLAUDE_CODE_OAUTH_TOKEN": token}`` from the secret *name* (``{}`` when unset or unreadable).
+
+    The secret holds a Claude subscription token made with ``claude setup-token``.
+    An isolated OS user has no login keychain, so this is how its Claude Code
+    child processes use the subscription; LLM credentials point at the secret
+    with ``keys.oauth_token_secret``.
+    """
+    if not isinstance(name, str) or not name:
+        return {}
+    try:
+        token = read_enclave_secret(name)
+    except Exception:  # noqa: BLE001 - never surface secret contents
+        logger.warning("Could not read the Claude subscription token for an LLM credential")
+        return {}
+    return {"CLAUDE_CODE_OAUTH_TOKEN": token} if token else {}

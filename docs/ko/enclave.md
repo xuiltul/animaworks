@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=96c1898a3bf00764d240d786b57cffb1800dd64e45ae15f8cfc9451a102d6da0 generated=2026-11-01 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=e98f08c53bafe4f052088e7668d14e915598e527ed043d805848d903ffe0d438 generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 > 확인한 커밋: f448d7b0
 
@@ -138,6 +138,61 @@ macOS 업데이트로 소켓 디렉터리가 사라질 수 있다. 상위 디렉
 외부 통신은 `scripts/enclave/egress_firewall.py --backend pf`로 제한한다. 규칙은 pf의 앵커 `com.apple/250.AnimaworksEnclave`에 불러오며, 기본 `/etc/pf.conf`에서 평가되므로 `pf.conf`은 수정하지 않는다. macOS에서는 pf가 `lo0`을 평가 대상에서 제외(skip)하는 경우가 있어, 그대로 두면 격리 측에서 본체의 API 같은 loopback 서비스에 접속할 수 있다. `--apply`는 적용할 때마다 `lo0`의 skip을 해제한다. pf의 `user` 지정은 TCP와 UDP에만 적용된다. 스크립트는 본체 측과 격리 측 어느 쪽 사용자도 수정할 수 없는 root 소유 위치에 복사해 사용한다.
 
 launchd에는 unit 간 의존 관계가 없으므로, 격리 측 config의 `enclave.egress_probe`에 차단되어야 할 대상(`HOST:PORT` 목록)을 지정한다. 시작 시 실행되는 가드는 각 대상에 TCP 접속을 시도하고, 접속에 성공하면 시작을 거부한다. 외부 대상 외에도 본체 측 API 같은 loopback 대상을 포함하면 loopback 제한이 해제된 경우도 감지할 수 있다. 제한이 불러와지기 전에 시작하더라도 제한이 없으면 작동하지 않는다. Linux에서도 같은 설정을 사용할 수 있다.
+
+## 한 대에 여러 개의 격리 인스턴스를 두기
+
+신뢰 경계마다 격리 인스턴스를 하나씩 둔다. 다루는 데이터나 대화 상대가 다른 격리 인스턴스를 같은 macOS에 추가할 때는 OS 사용자·그룹·데이터 디렉터리·소켓 디렉터리·포트·LaunchDaemon·pf 앵커를 인스턴스마다 분리한다. 같은 OS 사용자로 동작하는 anima끼리는 서로의 파일을 셸에서 읽을 수 있기 때문이다.
+
+`scripts/enclave/render_instance.py`는 JSON 사양 파일 하나에서 이것들을 한꺼번에 출력한다. 사양 예시는 `templates/_shared/enclave/instance.example.json`에 있다. 필수 항목은 `name`·`user`·`uid`·`group`·`gid`·`host_user`·`port`이며, 레이블·경로·로그 위치는 `name`에서 결정된다.
+
+```bash
+python3 scripts/enclave/render_instance.py --spec example.json --out build/example
+```
+
+출력 대상에는 다음 파일이 생성된다.
+
+| 파일 | 내용 |
+|---|---|
+| `com.animaworks.enclave.<name>.plist` | 격리 인스턴스의 LaunchDaemon |
+| `com.animaworks.enclave.<name>-egress.plist` | 외부 통신 제한을 시작 시와 매시간 적용하는 root의 LaunchDaemon(`--name <name>` 포함) |
+| `com.animaworks.enclave.<name>-boot-prep.plist`·`boot-prep.sh` | 시작 시 소켓 디렉터리를 다시 만들고 이전 시작에서 남은 `server.pid`을 삭제하는 root의 LaunchDaemon과 스크립트 |
+| `install.sh` | root로 단계별로 실행하는 설치 절차 |
+| `enclave-config.json` | 격리 측 `config.json`에 넣는 `enclave` 설정 |
+| `host-config.json` | 본체 측 `config.json`에 넣는 `enclaves` 설정 |
+
+`install.sh`는 다음 순서로 root에서 실행한다. 어느 단계든 다시 해도 된다.
+
+1. `sh install.sh prepare`: 그룹·사용자·디렉터리를 만들고 본체 측 사용자를 그룹에 넣는다. uid와 gid는 macOS의 시스템 데몬도 200〜400 번호를 많이 사용하므로, 다른 이름으로 사용 중인 번호라면 중단된다.
+2. `sh install.sh code <bundle>`: git bundle에서 격리 사용자의 권한으로 코드를 꺼내고 가상 환경을 만들며 임베딩 모델을 가져온다. 인터넷이 필요하므로 외부 통신 제한을 읽어 들이기 전에 수행한다.
+3. 격리 사용자의 권한으로 `animaworks init`을 실행하고 `enclave-config.json`의 내용을 `config.json`에 넣는다. `auth.json`을 password 모드·`trust_localhost: false`로 하고 anima를 만들며 비밀을 `secrets_dir`에 둔다.
+4. `sh install.sh daemons`: 시작 전처리와 외부 통신 제한을 읽어 들인다.
+5. `sh install.sh start`: 격리 인스턴스를 시작한다.
+6. 본체 측 `config.json`에 `host-config.json`의 내용을 넣고 본체를 재시작한다. 본체의 프로세스는 재시작할 때까지 새 그룹에 들어가지 않는다.
+
+외부 통신 제한은 `--name`을 붙이면 인스턴스별 앵커 `com.apple/250.AnimaworksEnclave-<name>`(nftables에서는 표 `aw_enclave_egress_<name>`)에 읽어 들여진다. `--name`을 붙이지 않은 기존 인스턴스는 지금까지의 앵커 그대로 동작한다. 두 번째 인스턴스를 `--name` 없이 적용하면 첫 번째 규칙을 대체해 버린다. `--region`을 생략하면 AWS의 목적지를 열 수 없다.
+
+`--check`는 출력하는 대신 설치된 LaunchDaemon과 시작 전처리 스크립트를 사양과 비교한다. 사양 파일에 `label`·`base_dir`·`socket_name`·`boot_prep_script`을 쓰고 `egress_anchor_name`를 비우면, 이 스크립트보다 앞서 수동으로 넣은 인스턴스도 표로 나타낼 수 있다.
+
+```bash
+python3 scripts/enclave/render_instance.py --spec existing.json --check
+```
+
+### Claude 구독 사용하기
+
+격리 사용자에게는 로그인용 키체인이 없으므로 Claude Code의 로그인은 그대로는 사용할 수 없다. `claude setup-token`로 만든 장기 토큰을 `secrets_dir`에 `0600` 파일로 두고, 인증 정보의 `keys.oauth_token_secret`에 그 파일 이름을 적는다. Mode S와 단발 LLM 호출은 Max 플랜일 때 그 토큰을 `CLAUDE_CODE_OAUTH_TOKEN`로 Claude Code에 전달한다. 단발 호출은 `anthropic`이라는 이름의 인증 정보를 읽으므로 이 이름으로 한다.
+
+```json
+{
+  "credentials": {
+    "anthropic": {
+      "type": "claude_code_login",
+      "keys": {"oauth_token_secret": "claude-oauth-token"}
+    }
+  }
+}
+```
+
+외부 통신 제한에서는 `--allow-hosts api.anthropic.com:443`을 허용한다. `animaworks enclave doctor`은 인증 정보가 이름으로 가리키는 비밀(`oauth_token_secret`·`aws_secret`)이 배치되어 있는지 확인한다.
 
 ## 본체 측 연결 설정
 

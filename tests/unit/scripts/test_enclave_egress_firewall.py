@@ -96,3 +96,61 @@ def test_pf_apply_stops_skipping_loopback(firewall, monkeypatch: pytest.MonkeyPa
     assert calls[0][0] == ["pfctl", "-q", "-a", firewall.PF_ANCHOR, "-f", "-"]
     assert (["pfctl", "-q", "-O", "-f", "-"], "set skip on stf0\n") in calls
     assert not any(args == ["pfctl", "-q", "-e"] for args, _ in calls)
+
+
+def test_unnamed_instance_keeps_the_single_instance_targets(firewall) -> None:
+    # An existing single enclave must stay in the table / anchor it already uses.
+    assert firewall.instance_targets(None) == (firewall.TABLE, firewall.PF_ANCHOR)
+
+
+def test_named_instances_get_their_own_targets(firewall) -> None:
+    first = firewall.instance_targets("saas-data")
+    second = firewall.instance_targets("isms")
+    assert first == ("aw_enclave_egress_saas_data", "com.apple/250.AnimaworksEnclave-saas-data")
+    assert second == ("aw_enclave_egress_isms", "com.apple/250.AnimaworksEnclave-isms")
+    # Every target differs, so applying one enclave's rules cannot replace another's.
+    assert len({*first, *second, *firewall.instance_targets(None)}) == 6
+
+
+@pytest.mark.parametrize("name", ["ISMS", "-isms", "is/ms", "is ms", "a" * 33])
+def test_instance_names_that_could_escape_the_anchor_are_rejected(firewall, name: str) -> None:
+    with pytest.raises(ValueError):
+        firewall.instance_targets(name)
+
+
+def test_nft_ruleset_uses_the_given_table(firewall) -> None:
+    ruleset = firewall.build_ruleset(993, "ap-northeast-1", [18620], table="aw_enclave_egress_isms")
+    assert ruleset.startswith("table inet aw_enclave_egress_isms {")
+
+
+def test_without_a_region_no_aws_range_is_opened(firewall, monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_fetch(region):
+        raise AssertionError("AWS ranges must not be fetched without a region")
+
+    monkeypatch.setattr(firewall, "_aws_ranges", no_fetch)
+    endpoints = [("192.0.2.30", 443)]
+    pf = firewall.build_pf_ruleset(298, None, [18620], endpoints)
+    assert "aw_enclave_aws" not in pf
+    assert "pass out quick proto tcp from any to 192.0.2.30 port 443 user 298" in pf
+    assert pf.rstrip().splitlines()[-1] == "block return out quick proto { tcp, udp } from any to any user 298"
+    nft = firewall.build_ruleset(298, None, [18620], endpoints)
+    assert "aws_v4" not in nft and "aws_v6" not in nft
+    assert "ip daddr 192.0.2.30 tcp dport 443 accept" in nft
+    assert nft.rstrip().splitlines()[-3].strip() == "reject"
+
+
+def test_pf_apply_loads_into_the_given_anchor(firewall, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    class _Done:
+        stdout = "Status: Enabled\n"
+
+    def fake_run(args, input=None, **kwargs):
+        calls.append(args)
+        return _Done()
+
+    monkeypatch.setattr(firewall.subprocess, "run", fake_run)
+    firewall._pf_apply(
+        "block return out quick proto { tcp, udp } from any to any user 298\n", "com.apple/250.AnimaworksEnclave-isms"
+    )
+    assert calls[0] == ["pfctl", "-q", "-a", "com.apple/250.AnimaworksEnclave-isms", "-f", "-"]

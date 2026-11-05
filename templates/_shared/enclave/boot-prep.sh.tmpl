@@ -1,0 +1,28 @@
+#!/bin/sh
+# Boot-time preparation for the AnimaWorks enclave "{{name}}" ({{label}}).
+# Rendered by scripts/enclave/render_instance.py; run as root at boot by
+# {{boot_prep_label}}.
+#   1. A macOS update can remove {{run_dir}}, and {{user}} cannot recreate
+#      it: the parent stays root-owned 0750 on purpose, so the enclave user
+#      cannot replace entries in it.
+#   2. server.pid from before a reboot can name a pid that another process
+#      reused, and `animaworks start` then refuses to start ("Server is
+#      already running", exit 3) on every attempt.
+# launchd has no ordering between daemons.  If the enclave starts first it
+# fails once and KeepAlive restarts it after ThrottleInterval (30s).
+set -u
+BASE={{base_dir}}
+/usr/bin/install -d -o root -g {{group}} -m 0750 "$BASE"
+/usr/bin/install -d -o {{user}} -g {{group}} -m 0750 "$BASE/run"
+
+# The stale-PID check runs as {{user}}, so a symlink planted in the enclave
+# user's home cannot make root delete anything outside that user's reach.
+/usr/bin/sudo -u {{user}} /bin/sh -c '
+f={{data_dir}}/server.pid
+[ -e "$f" ] || [ -L "$f" ] || exit 0
+pid=$(/usr/bin/head -c 32 "$f" 2>/dev/null | /usr/bin/tr -cd 0-9)
+if [ -n "$pid" ] && /bin/ps -o user=,command= -p "$pid" 2>/dev/null | /usr/bin/grep -q "^{{user}} .*animaworks start"; then
+  exit 0
+fi
+/bin/rm -f "$f" && echo "$(/bin/date +%Y-%m-%dT%H:%M:%S%z) removed stale $f (pid=${pid:-none})"
+'

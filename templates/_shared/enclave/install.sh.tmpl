@@ -1,0 +1,95 @@
+#!/bin/sh
+# Install the AnimaWorks enclave "{{name}}" on macOS.
+# Rendered by scripts/enclave/render_instance.py.  Run as root from the
+# directory it wrote, one step at a time and in this order:
+#
+#   sh install.sh prepare          create the group, the user and the directories
+#   sh install.sh code <bundle>    clone the code as {{user}} from a git bundle,
+#                                  build the virtualenv and fetch the embedding
+#                                  model (needs the internet, so run it before
+#                                  `daemons` loads the egress rules)
+#   (as {{user}}: write {{data_dir}}/config.json and auth.json,
+#    create the animas and put secrets in {{secrets_dir}})
+#   sh install.sh daemons          install and load the boot-prep and egress daemons
+#   sh install.sh start            install and load the instance daemon
+#
+# Every step can be run again.  {{host_user}} joins {{group}} in `prepare`; restart
+# the host's AnimaWorks afterwards so its process picks up the new group.
+set -eu
+HERE=$(cd "$(dirname "$0")" && pwd)
+cd /
+
+as_user() {
+  /usr/bin/sudo -u {{user}} -H /usr/bin/env HOME={{home}} UV_CACHE_DIR={{home}}/.cache/uv "$@"
+}
+
+load_daemon() {
+  /usr/bin/install -m 0644 -o root -g wheel "$HERE/$1.plist" /Library/LaunchDaemons/
+  /bin/launchctl bootout system/"$1" 2>/dev/null || true
+  /bin/launchctl bootstrap system /Library/LaunchDaemons/"$1".plist
+}
+
+fail() {
+  echo "install.sh: $*" >&2
+  exit 1
+}
+
+prepare_step() {
+  # macOS system daemons use many ids in the role-account range: never reuse one.
+  if /usr/bin/dscl . -read /Groups/{{group}} >/dev/null 2>&1; then
+    [ "$(/usr/bin/dscl . -read /Groups/{{group}} PrimaryGroupID | /usr/bin/awk '{print $2}')" = {{gid}} ] \
+      || fail "group {{group}} exists with a gid other than {{gid}}"
+  else
+    /usr/bin/dscl . -search /Groups PrimaryGroupID {{gid}} | /usr/bin/grep -q . \
+      && fail "gid {{gid}} is already used by another group"
+    /usr/sbin/dseditgroup -o create -i {{gid}} {{group}}
+  fi
+  if /usr/bin/id -u {{user}} >/dev/null 2>&1; then
+    [ "$(/usr/bin/id -u {{user}})" = {{uid}} ] || fail "user {{user}} exists with a uid other than {{uid}}"
+  else
+    /usr/bin/dscl . -search /Users UniqueID {{uid}} | /usr/bin/grep -q . \
+      && fail "uid {{uid}} is already used by another user"
+    /usr/sbin/sysadminctl -addUser {{user}} -UID {{uid}} -GID {{gid}} -shell /usr/bin/false -home {{home}} -roleAccount
+  fi
+  /usr/sbin/dseditgroup -o edit -a {{host_user}} -t user {{group}}
+  /usr/bin/install -d -o {{user}} -g {{group}} -m 0700 {{home}} {{data_dir}} {{data_dir}}/logs {{secrets_dir}}
+  /usr/bin/install -d -o root -g {{group}} -m 0750 {{base_dir}}
+  /usr/bin/install -d -o {{user}} -g {{group}} -m 0750 {{run_dir}}
+}
+
+code_step() {
+  bundle=${1:?usage: install.sh code <path-to-git-bundle>}
+  /usr/bin/install -m 0600 -o {{user}} -g {{group}} "$bundle" {{home}}/animaworks.bundle
+  if [ ! -d {{code_dir}}/.git ]; then
+    as_user /usr/bin/git clone -q {{home}}/animaworks.bundle {{code_dir}}
+  fi
+  as_user {{uv}} sync --directory {{code_dir}} --frozen --all-extras --no-dev
+  # Mode A animas find animaworks-tool on PATH, which has no virtualenv in it.
+  as_user /bin/mkdir -p {{home}}/.local/bin
+  as_user /bin/ln -sf {{code_dir}}/.venv/bin/animaworks-tool {{home}}/.local/bin/animaworks-tool
+  # The instance runs with HF_HUB_OFFLINE=1, so the model must be cached now.
+  as_user /usr/bin/env ANIMAWORKS_DATA_DIR={{data_dir}} {{code_dir}}/.venv/bin/python -c \
+    'from core.memory.rag.embedding import get_embedding_model; get_embedding_model()'
+}
+
+daemons_step() {
+  /usr/bin/install -m 0755 -o root -g wheel "$HERE/boot-prep.sh" {{boot_prep_script}}
+  # Shared by every enclave on this host; an enclave without --name keeps its rules.
+  /usr/bin/install -m 0755 -o root -g wheel "$HERE/egress_firewall.py" {{egress_script}}
+  load_daemon {{boot_prep_label}}
+  load_daemon {{egress_label}}
+}
+
+start_step() {
+  load_daemon {{label}}
+}
+
+step=${1:-}
+[ $# -gt 0 ] && shift
+case "$step" in
+  prepare) prepare_step ;;
+  code) code_step "$@" ;;
+  daemons) daemons_step ;;
+  start) start_step ;;
+  *) echo "usage: sh install.sh prepare|code <bundle>|daemons|start" >&2; exit 2 ;;
+esac

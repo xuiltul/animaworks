@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=4152a8b8897ad42853767533e8f17eafea4c39a37aaabde25c65091190149765 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=8c7baf6741d5a0c56e76949bc1e8e5f2bbbf75c568282f1b44129e68d1888289 generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -24,7 +24,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
@@ -34,7 +34,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.company_cmd` | 272 | — |
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
-| `cli.commands.enclave_cmd` | 323 | Operational commands for enclave runtimes. |
+| `cli.commands.enclave_cmd` | 345 | Operational commands for enclave runtimes. |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -217,9 +217,9 @@ Schema, loading, validation, and migration of application configuration.
 
 ## `core.enclave`
 
-Configuration models for isolated enclave mode and startup security guards.
+Configuration models and startup security guards for isolated enclave mode.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.enclave` | 54 | Enclave mode: an isolated runtime instance that bind to a dedicated socket. |
 | `core.enclave.config` | 207 | Configuration models for enclave mode. |
@@ -240,7 +240,7 @@ Configuration models for isolated enclave mode and startup security guards.
 | `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
 | `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
 | `core.enclave.raw_store` | 150 | Private storage for unmodified results read by enclave tools. |
-| `core.enclave.secrets` | 128 | Read secrets from the enclave credentials store. |
+| `core.enclave.secrets` | 150 | Read secrets from the enclave credentials store. |
 | `core.enclave.ssm_tunnel` | 371 | SSM Session Manager port-forward tunnels for enclave SQL sources. |
 
 ## `core.enclave.egress`
@@ -261,9 +261,9 @@ Configuration models for isolated enclave mode and startup security guards.
 
 ## `core.execution`
 
-Tool execution, command execution, and safety controls.
+Tool execution, command execution, safety controls.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
@@ -276,7 +276,7 @@ Tool execution, command execution, and safety controls.
 | `core.execution.engines.agy.executor` | 795 | — |
 | `core.execution.engines.claude._sdk_hooks（非公開）` | 654 | — |
 | `core.execution.engines.claude._sdk_interrupt（非公開）` | 112 | — |
-| `core.execution.engines.claude._sdk_options（非公開）` | 567 | — |
+| `core.execution.engines.claude._sdk_options（非公開）` | 573 | — |
 | `core.execution.engines.claude._sdk_patch（非公開）` | 261 | — |
 | `core.execution.engines.claude._sdk_security（非公開）` | 314 | — |
 | `core.execution.engines.claude._sdk_session（非公開）` | 586 | — |
@@ -519,16 +519,16 @@ Lifecycle for Anima startup, shutdown, and initialization.
 
 ## `core.llm`
 
-Shared features for LLM error classification, rate control, and retries.
+Common functionality for LLM error classification, rate control, and retry.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.llm` | 1 | LLM-related core utilities. |
 | `core.llm.guard.backoff` | 42 | Backoff timing helpers for coordinated LLM retry. |
 | `core.llm.guard.error_classifier` | 805 | Centralized LLM API error classification for coordinated recovery. |
 | `core.llm.guard.rate_guard` | 341 | Cross-process LLM rate guard (fleet-wide circuit breaker). |
 | `core.llm.helper_completion` | 145 | — |
-| `core.llm.oneshot` | 943 | Shared LLM helper utilities for memory-management modules. |
+| `core.llm.oneshot` | 947 | Shared LLM helper utilities for memory-management modules. |
 
 ## `core.llm.guard`
 

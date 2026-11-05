@@ -1,0 +1,25 @@
+{
+  "name": "example",
+  "user": "_awexample",
+  "uid": 330,
+  "group": "animaworks-example",
+  "gid": 330,
+  "host_user": "host-service-user",
+  "host_uid": 501,
+  "port": 18630,
+  "entry_anima": "entry-anima",
+  "allowed_animas": ["host-assistant"],
+  "llm_credentials": ["anthropic"],
+  "environment": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  },
+  "egress": {
+    "region": "",
+    "loopback_ports": "18630",
+    "allow_endpoints": ["192.0.2.10:4100"],
+    "allow_hosts": ["llm.example.com:443"]
+  },
+  "egress_stages": [
+    {"type": "masker", "profile": "default"}
+  ]
+}

@@ -390,6 +390,10 @@ def _build_sdk_env() -> dict[str, str]:
         # max: サブスクリプションログインを使う。ANTHROPIC_API_KEYは「空でも設定されている」と
         # CLIがログインより優先して invalid key になるため、キー自体を渡さない（2026-07-03）。
         env.pop("ANTHROPIC_API_KEY", None)
+        # 隔離ユーザーにはログイン用のキーチェーンが無いので、setup-token のトークンを渡す。
+        from core.enclave.secrets import claude_oauth_env_from_secret
+
+        env.update(claude_oauth_env_from_secret(extra.get("oauth_token_secret")))
 
     if cred and cred.base_url:
         env["ANTHROPIC_BASE_URL"] = cred.base_url

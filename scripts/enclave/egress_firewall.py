@@ -13,9 +13,10 @@ The enclave user may only reach:
   TCP only.  Names are resolved when the rules are applied, so re-run often
   (e.g. hourly) for endpoints whose addresses move;
 * AWS addresses of one region (the published ``AMAZON`` ranges), TCP 443
-  only.  Service endpoints share these ranges with EC2, so this cannot tell
-  an AWS API from a host someone runs on EC2 in that region; it closes the
-  LAN, the host's other local services and the rest of the internet.
+  only, when ``--region`` is given.  Service endpoints share these ranges
+  with EC2, so this cannot tell an AWS API from a host someone runs on EC2 in
+  that region; it closes the LAN, the host's other local services and the
+  rest of the internet.  Leave ``--region`` out when the enclave needs no AWS.
 
 Only packets owned by that uid enter the restricting chain; packets without a
 socket (FIN/ACK of closed sockets of other users) pass untouched.  Everything
@@ -28,8 +29,14 @@ services (e.g. the main AnimaWorks API) and the LAN.  Run as root::
 Without ``--apply`` the ruleset is printed.  ``--remove`` deletes the table.
 Re-run periodically (e.g. weekly) to refresh the AWS ranges.
 
+Several enclaves on one host each need their own rules: pass ``--name`` (the
+instance name) so the rules go into a table / anchor of their own.  Without
+it the single-instance names below are used, and applying the rules of a
+second enclave would replace those of the first.
+
 On macOS pass ``--backend pf``.  The rules are loaded into the sub-anchor
-``com.apple/250.AnimaworksEnclave``, which the stock ``/etc/pf.conf``
+``com.apple/250.AnimaworksEnclave`` (``com.apple/250.AnimaworksEnclave-<name>``
+with ``--name``), which the stock ``/etc/pf.conf``
 evaluates through its ``anchor "com.apple/*"`` line, so ``pf.conf`` is left
 untouched; ``--apply`` also enables pf if it is off and stops pf from
 skipping lo0 (otherwise loopback would bypass the rules).  pf matches ``user``
@@ -42,6 +49,7 @@ import argparse
 import ipaddress
 import json
 import pwd
+import re
 import socket
 import subprocess
 import sys
@@ -50,6 +58,20 @@ import urllib.request
 AWS_RANGES_URL = "https://ip-ranges.amazonaws.com/ip-ranges.json"
 TABLE = "aw_enclave_egress"
 PF_ANCHOR = "com.apple/250.AnimaworksEnclave"
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+
+
+def instance_targets(name: str | None) -> tuple[str, str]:
+    """Return the ``(nft table, pf anchor)`` that hold one enclave's rules.
+
+    ``None`` keeps the single-instance names so an existing installation is
+    left where it is.
+    """
+    if not name:
+        return TABLE, PF_ANCHOR
+    if not _NAME_RE.match(name):
+        raise ValueError("instance name must match [a-z0-9][a-z0-9_-]{0,31}")
+    return f"{TABLE}_{name.replace('-', '_')}", f"{PF_ANCHOR}-{name}"
 
 
 def _aws_ranges(region: str) -> tuple[list[str], list[str]]:
@@ -80,20 +102,29 @@ def _parse_ports(value: str) -> list[int]:
     return ports
 
 
-def build_ruleset(
-    uid: int,
-    region: str,
-    loopback_ports: list[int],
-    endpoints: list[tuple[str, int]] | None = None,
-) -> str:
+def _region_ranges(region: str | None) -> tuple[list[str], list[str]]:
+    """Return the AWS ranges of *region*, or no ranges when no region is given."""
+    if not region:
+        return [], []
     v4, v6 = _aws_ranges(region)
     if not v4:
         raise SystemExit(f"no AWS ranges found for region {region}")
+    return v4, v6
+
+
+def build_ruleset(
+    uid: int,
+    region: str | None,
+    loopback_ports: list[int],
+    endpoints: list[tuple[str, int]] | None = None,
+    *,
+    table: str = TABLE,
+) -> str:
+    v4, v6 = _region_ranges(region)
     ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
-    lines = [
-        f"table inet {TABLE} {{",
-        "  set aws_v4 { type ipv4_addr; flags interval; elements = { " + ", ".join(v4) + " } }",
-    ]
+    lines = [f"table inet {table} {{"]
+    if v4:
+        lines.append("  set aws_v4 { type ipv4_addr; flags interval; elements = { " + ", ".join(v4) + " } }")
     if v6:
         lines.append("  set aws_v6 { type ipv6_addr; flags interval; elements = { " + ", ".join(v6) + " } }")
     lines += [
@@ -108,8 +139,9 @@ def build_ruleset(
         "    ct state established,related accept",
         f"    oif lo meta l4proto {{ tcp, udp }} th dport {{ {ports} }} accept",
         f"    oif lo meta l4proto {{ tcp, udp }} th sport {{ {ports} }} accept",
-        "    ip daddr @aws_v4 tcp dport 443 accept",
     ]
+    if v4:
+        lines.append("    ip daddr @aws_v4 tcp dport 443 accept")
     for host, port in endpoints or []:
         family = "ip6" if ipaddress.ip_address(host).version == 6 else "ip"
         lines.append(f"    {family} daddr {host} tcp dport {port} accept")
@@ -126,16 +158,17 @@ def build_ruleset(
 
 def build_pf_ruleset(
     uid: int,
-    region: str,
+    region: str | None,
     loopback_ports: list[int],
     endpoints: list[tuple[str, int]] | None = None,
 ) -> str:
-    v4, v6 = _aws_ranges(region)
-    if not v4:
-        raise SystemExit(f"no AWS ranges found for region {region}")
+    v4, v6 = _region_ranges(region)
     ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
-    lines = [
-        "table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }",
+    lines = []
+    if v4:
+        # Tables are local to the anchor, so each enclave's anchor has its own.
+        lines.append("table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }")
+    lines += [
         # Only sockets owned by the enclave uid match ``user``, so other
         # users' traffic never reaches the final block rule.
         # Loopback packets leave and re-enter on lo0, so a state created on
@@ -143,16 +176,17 @@ def build_pf_ruleset(
         # packet instead.
         f"pass out quick on lo0 proto {{ tcp, udp }} from any to any port {{ {ports} }} user {uid} no state",
         f"pass out quick on lo0 proto {{ tcp, udp }} from any port {{ {ports} }} to any user {uid} no state",
-        f"pass out quick proto tcp from any to <aw_enclave_aws> port 443 user {uid}",
     ]
+    if v4:
+        lines.append(f"pass out quick proto tcp from any to <aw_enclave_aws> port 443 user {uid}")
     for host, port in endpoints or []:
         lines.append(f"pass out quick proto tcp from any to {host} port {port} user {uid}")
     lines.append(f"block return out quick proto {{ tcp, udp }} from any to any user {uid}")
     return "\n".join(lines) + "\n"
 
 
-def _pf_apply(ruleset: str) -> None:
-    subprocess.run(["pfctl", "-q", "-a", PF_ANCHOR, "-f", "-"], input=ruleset, text=True, check=True)
+def _pf_apply(ruleset: str, anchor: str = PF_ANCHOR) -> None:
+    subprocess.run(["pfctl", "-q", "-a", anchor, "-f", "-"], input=ruleset, text=True, check=True)
     # macOS can mark lo0 as skipped, which exempts loopback from every rule
     # and lets the enclave reach the host's local services.  Loading only the
     # options with an unused interface clears that flag; re-checked on every
@@ -203,7 +237,12 @@ def _parse_endpoints(raw: str) -> list[tuple[str, int]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--user", required=True)
-    parser.add_argument("--region", required=True)
+    parser.add_argument(
+        "--name",
+        default="",
+        help="enclave instance name; gives this enclave its own nft table / pf anchor (needed for a second enclave)",
+    )
+    parser.add_argument("--region", default="", help="AWS region whose ranges may be reached on 443 (omit for none)")
     parser.add_argument(
         "--loopback-ports", default="", help="comma-separated loopback TCP ports or LOW-HIGH ranges to allow"
     )
@@ -221,27 +260,34 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--remove", action="store_true")
     args = parser.parse_args()
+    try:
+        table, anchor = instance_targets(args.name or None)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if args.remove:
         if args.backend == "pf":
-            subprocess.run(["pfctl", "-q", "-a", PF_ANCHOR, "-F", "all"], check=False)
+            subprocess.run(["pfctl", "-q", "-a", anchor, "-F", "all"], check=False)
         else:
-            subprocess.run(["nft", "delete", "table", "inet", TABLE], check=False)
+            subprocess.run(["nft", "delete", "table", "inet", table], check=False)
         return 0
 
     uid = pwd.getpwnam(args.user).pw_uid
     ports = _parse_ports(args.loopback_ports)
     endpoints = _parse_endpoints(args.allow_endpoints) + _resolve_hosts(args.allow_hosts)
-    builder = build_pf_ruleset if args.backend == "pf" else build_ruleset
-    ruleset = builder(uid, args.region, ports, endpoints)
+    region = args.region or None
+    if args.backend == "pf":
+        ruleset = build_pf_ruleset(uid, region, ports, endpoints)
+    else:
+        ruleset = build_ruleset(uid, region, ports, endpoints, table=table)
     if not args.apply:
         sys.stdout.write(ruleset)
         return 0
     if args.backend == "pf":
-        _pf_apply(ruleset)
+        _pf_apply(ruleset, anchor)
         return 0
     # Replace atomically: declare, flush, then load in one transaction.
-    _nft(["-f", "-"], f"table inet {TABLE}\ndelete table inet {TABLE}\n{ruleset}")
+    _nft(["-f", "-"], f"table inet {table}\ndelete table inet {table}\n{ruleset}")
     return 0
 
 

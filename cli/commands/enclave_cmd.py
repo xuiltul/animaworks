@@ -160,6 +160,27 @@ def _aws_source_checks(config: Any) -> list[dict[str, str]]:
     return rows
 
 
+def _credential_secret_checks(config: Any) -> list[dict[str, str]]:
+    """Check that every LLM credential secret the config names is provisioned."""
+    from core.enclave.secrets import CREDENTIAL_SECRET_KEYS, secret_exists
+
+    rows: list[dict[str, str]] = []
+    for name, credential in sorted((getattr(config, "credentials", None) or {}).items()):
+        keys = getattr(credential, "keys", None) or {}
+        for key in CREDENTIAL_SECRET_KEYS:
+            secret_name = keys.get(key)
+            if not secret_name:
+                continue
+            scope = f"credentials.{name}"
+            if secret_exists(secret_name):
+                rows.append(_check_row(scope, key, "ok", "secret is available"))
+            else:
+                rows.append(_check_row(scope, key, "fail", "secret is not available"))
+    if not rows:
+        return [_check_row("enclave", "credential_secrets", "skip", "no credential names an enclave secret")]
+    return rows
+
+
 def _sql_source_checks(config: Any) -> list[dict[str, str]]:
     """Check secrets, plugin path, and dependencies for each SQL source."""
     from core.enclave.secrets import secret_exists
@@ -247,6 +268,7 @@ def _check_local_enclave(config: Any, data_dir: Path) -> list[dict[str, str]]:
             f"cannot import: {', '.join(missing)}" if missing else "fugashi and ipadic import successfully",
         )
     )
+    rows.extend(_credential_secret_checks(config))
     rows.extend(_sql_source_checks(config))
     rows.extend(_aws_source_checks(config))
     return rows

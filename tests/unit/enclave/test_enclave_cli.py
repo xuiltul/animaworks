@@ -203,3 +203,31 @@ def test_doctor_reports_aws_source_secret_and_dependencies(monkeypatch: pytest.M
     assert all(row["status"] == "fail" for row in rows)
     assert any("aws_secret" in row["detail"] for row in rows)
     assert any("boto3" in row["detail"] for row in rows)
+
+
+def test_doctor_reports_credential_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = SimpleNamespace(
+        credentials={
+            "anthropic": SimpleNamespace(keys={"oauth_token_secret": "claude-oauth-token"}),
+            "bedrock-pii": SimpleNamespace(keys={"aws_secret": "aws-x", "aws_region_name": "ap-northeast-1"}),
+            "plain": SimpleNamespace(keys={}),
+        }
+    )
+    monkeypatch.setattr("core.enclave.secrets.secret_exists", lambda name: name == "claude-oauth-token")
+
+    rows = enclave_cmd._credential_secret_checks(config)
+
+    by_scope = {(row["scope"], row["check"]): row["status"] for row in rows}
+    assert by_scope == {
+        ("credentials.anthropic", "oauth_token_secret"): "ok",
+        ("credentials.bedrock-pii", "aws_secret"): "fail",
+    }
+    assert all("claude-oauth-token" not in row["detail"] for row in rows)
+
+
+def test_doctor_skips_credential_secrets_when_none_are_named() -> None:
+    config = SimpleNamespace(credentials={"anthropic": SimpleNamespace(keys={})})
+
+    rows = enclave_cmd._credential_secret_checks(config)
+
+    assert [row["status"] for row in rows] == ["skip"]

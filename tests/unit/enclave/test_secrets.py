@@ -147,3 +147,56 @@ def test_aws_keys_from_secret_feeds_bedrock_litellm_kwargs(tmp_path, monkeypatch
     assert kwargs["aws_access_key_id"] == "AKIA_X"
     assert kwargs["aws_secret_access_key"] == "sec_x"
     assert kwargs["aws_region_name"] == "ap-northeast-1"
+
+
+def test_claude_oauth_env_from_secret_returns_the_token_env() -> None:
+    from unittest.mock import patch
+
+    from core.enclave.secrets import claude_oauth_env_from_secret
+
+    with patch("core.enclave.secrets.read_enclave_secret", return_value="tok-123") as read_secret:
+        assert claude_oauth_env_from_secret("claude-oauth-token") == {"CLAUDE_CODE_OAUTH_TOKEN": "tok-123"}
+    read_secret.assert_called_once_with("claude-oauth-token")
+
+
+@pytest.mark.parametrize("name", [None, "", 123])
+def test_claude_oauth_env_from_secret_ignores_unset_names(name: object) -> None:
+    from core.enclave.secrets import claude_oauth_env_from_secret
+
+    assert claude_oauth_env_from_secret(name) == {}
+
+
+def test_claude_oauth_env_from_secret_hides_read_errors(caplog: pytest.LogCaptureFixture) -> None:
+    from unittest.mock import patch
+
+    from core.enclave.secrets import claude_oauth_env_from_secret
+
+    with patch(
+        "core.enclave.secrets.read_enclave_secret", side_effect=EnclaveSecretError("enclave secret is not available")
+    ):
+        assert claude_oauth_env_from_secret("claude-oauth-token") == {}
+    assert "claude-oauth-token" not in caplog.text
+
+
+def test_oneshot_sdk_env_passes_the_subscription_token() -> None:
+    from unittest.mock import patch
+
+    from core.config.schemas import CredentialConfig
+    from core.llm import oneshot
+
+    class _Defaults:
+        mode_s_auth = "max"
+
+    class _Cfg:
+        anima_defaults = _Defaults()
+        credentials = {
+            "anthropic": CredentialConfig(type="claude_code_login", keys={"oauth_token_secret": "claude-oauth-token"})
+        }
+
+    with (
+        patch("core.config.load_config", return_value=_Cfg()),
+        patch("core.enclave.secrets.read_enclave_secret", return_value="tok-123"),
+    ):
+        env = oneshot._build_sdk_env()
+    assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "tok-123"
+    assert "ANTHROPIC_API_KEY" not in env

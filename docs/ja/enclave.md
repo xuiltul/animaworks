@@ -136,6 +136,61 @@ macOS の更新でソケットのディレクトリが消えることがある�
 
 launchd には unit 間の依存がないため、隔離側 config の `enclave.egress_probe` に遮断されるべき宛先（`HOST:PORT` のリスト）を指定する。起動時ガードは各宛先へ TCP 接続を試し、つながった場合は起動を拒否する。外部の宛先に加えて、本体側の API など loopback 上の宛先も入れておくと、loopback の制限が外れていることも検出できる。制限が読み込まれる前に起動しても、制限なしでは動かない。Linux でも同じ設定を使える。
 
+## 1台に複数の隔離インスタンスを置く
+
+信頼の境界ごとに隔離インスタンスを1つ置く。扱うデータや話し相手が違う隔離インスタンスを同じ macOS に足すときは、OS ユーザー・グループ・データディレクトリ・ソケットのディレクトリ・ポート・LaunchDaemon・pf のアンカーをインスタンスごとに分ける。同じ OS ユーザーで動く anima どうしは、互いのファイルをシェルから読めるためである。
+
+`scripts/enclave/render_instance.py` は、JSON の仕様ファイル1つからこれらをまとめて書き出す。仕様の例は `templates/_shared/enclave/instance.example.json` にある。必須の項目は `name`・`user`・`uid`・`group`・`gid`・`host_user`・`port` で、ラベル・パス・ログの場所は `name` から決まる。
+
+```bash
+python3 scripts/enclave/render_instance.py --spec example.json --out build/example
+```
+
+出力先には次のファイルができる。
+
+| ファイル | 内容 |
+|---|---|
+| `com.animaworks.enclave.<name>.plist` | 隔離インスタンスの LaunchDaemon |
+| `com.animaworks.enclave.<name>-egress.plist` | 外向き通信の制限を起動時と毎時に適用する root の LaunchDaemon（`--name <name>` 付き） |
+| `com.animaworks.enclave.<name>-boot-prep.plist`・`boot-prep.sh` | 起動時にソケットのディレクトリを作り直し、前回の起動から残った `server.pid` を消す root の LaunchDaemon とスクリプト |
+| `install.sh` | root で段階ごとに実行するインストール手順 |
+| `enclave-config.json` | 隔離側 `config.json` に入れる `enclave` の設定 |
+| `host-config.json` | 本体側 `config.json` に入れる `enclaves` の設定 |
+
+`install.sh` は次の順に root で実行する。どの段階も、やり直してよい。
+
+1. `sh install.sh prepare`：グループ・ユーザー・ディレクトリを作り、本体側のユーザーをグループに入れる。uid と gid は、macOS のシステムデーモンも 200〜400 の番号を多く使うため、別の名前で使われている番号なら止まる。
+2. `sh install.sh code <bundle>`：git bundle から隔離ユーザーの権限でコードを取り出し、仮想環境を作り、埋め込みモデルを取得する。インターネットが要るので、外向き通信の制限を読み込む前に行う。
+3. 隔離ユーザーの権限で `animaworks init` を実行し、`enclave-config.json` の内容を `config.json` に入れる。`auth.json` を password モード・`trust_localhost: false` にし、anima を作り、秘密を `secrets_dir` に置く。
+4. `sh install.sh daemons`：起動前処理と外向き通信の制限を読み込む。
+5. `sh install.sh start`：隔離インスタンスを起動する。
+6. 本体側の `config.json` に `host-config.json` の内容を入れ、本体を再起動する。本体のプロセスは再起動するまで新しいグループに入らない。
+
+外向き通信の制限は、`--name` を付けるとインスタンスごとのアンカー `com.apple/250.AnimaworksEnclave-<name>`（nftables では表 `aw_enclave_egress_<name>`）に読み込まれる。`--name` を付けない既存のインスタンスは、これまでのアンカーのまま動く。2つ目のインスタンスを `--name` なしで適用すると、1つ目の規則を置き換えてしまう。`--region` を省くと AWS の宛先を開けない。
+
+`--check` は書き出す代わりに、インストール済みの LaunchDaemon と起動前処理のスクリプトを仕様と比べる。仕様ファイルに `label`・`base_dir`・`socket_name`・`boot_prep_script` を書き、`egress_anchor_name` を空にすると、このスクリプトより前に手で入れたインスタンスも表せる。
+
+```bash
+python3 scripts/enclave/render_instance.py --spec existing.json --check
+```
+
+### Claude のサブスクリプションを使う
+
+隔離ユーザーにはログイン用のキーチェーンがないため、Claude Code のログインはそのままでは使えない。`claude setup-token` で作った長期トークンを `secrets_dir` に `0600` のファイルで置き、認証情報の `keys.oauth_token_secret` にそのファイル名を書く。Mode S と単発の LLM 呼び出しは、Max プランのときにそのトークンを `CLAUDE_CODE_OAUTH_TOKEN` として Claude Code に渡す。単発の呼び出しは `anthropic` という名前の認証情報を読むため、この名前にする。
+
+```json
+{
+  "credentials": {
+    "anthropic": {
+      "type": "claude_code_login",
+      "keys": {"oauth_token_secret": "claude-oauth-token"}
+    }
+  }
+}
+```
+
+外向き通信の制限では `--allow-hosts api.anthropic.com:443` を許可する。`animaworks enclave doctor` は、認証情報が名前で指す秘密（`oauth_token_secret`・`aws_secret`）が置かれているかを確認する。
+
 ## 本体側の接続設定
 
 本体側の `config.json` に接続先を登録する。`allowed_animas` は `enclave_ask` を呼べる本体側 anima の allow-list である。空のリストは誰も許可しない。

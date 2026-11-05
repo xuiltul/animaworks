@@ -168,7 +168,10 @@ class SDKOptionsMixin:
         * ``"vertex"`` — credential ``keys`` contain ``vertex_project`` →
           ``CLAUDE_CODE_USE_VERTEX=1`` plus GCP env vars.
         * ``"max"`` / ``None`` (default) — subscription auth →
-          ``ANTHROPIC_API_KEY=""`` (Max plan).
+          ``ANTHROPIC_API_KEY=""`` (Max plan).  When the credential's
+          ``keys.oauth_token_secret`` names an enclave secret, its token is
+          passed as ``CLAUDE_CODE_OAUTH_TOKEN`` (an isolated OS user has no
+          login keychain).
         """
         from core.execution.session.session_context import current_runtime_session
         from core.paths import PROJECT_DIR
@@ -253,6 +256,9 @@ class SDKOptionsMixin:
             logger.info("Mode S auth: Vertex AI (mode_s_auth=vertex)")
         else:
             env["ANTHROPIC_API_KEY"] = ""
+            from core.enclave.secrets import claude_oauth_env_from_secret
+
+            env.update(claude_oauth_env_from_secret(extra.get("oauth_token_secret")))
             logger.info("Mode S auth: Max plan (mode_s_auth=%s)", auth)
 
         if self._model_config.api_base_url:

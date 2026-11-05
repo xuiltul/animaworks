@@ -167,6 +167,36 @@ class TestAgentSDKExecutor:
             env = executor._build_env()
             assert env["ANTHROPIC_API_KEY"] == ""
 
+    def test_build_env_max_plan_reads_subscription_token_secret(self, anima_dir):
+        """keys.oauth_token_secret → CLAUDE_CODE_OAUTH_TOKEN from the enclave secrets store."""
+        config = ModelConfig(
+            model="claude-opus-5-5",
+            api_key=None,
+            mode_s_auth="max",
+            extra_keys={"oauth_token_secret": "claude-oauth-token"},
+        )
+        with (
+            patch_agent_sdk(),
+            patch("core.enclave.secrets.read_enclave_secret", return_value="tok-123") as read_secret,
+        ):
+            from core.execution.engines.claude.executor import AgentSDKExecutor
+
+            executor = AgentSDKExecutor(model_config=config, anima_dir=anima_dir)
+            env = executor._build_env()
+            read_secret.assert_called_once_with("claude-oauth-token")
+            assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "tok-123"
+            assert env["ANTHROPIC_API_KEY"] == ""
+
+    def test_build_env_max_plan_without_token_secret_uses_login(self, anima_dir):
+        """No oauth_token_secret → the CLI's own login, no token env."""
+        config = ModelConfig(model="claude-opus-5-5", api_key=None, mode_s_auth="max")
+        with patch_agent_sdk():
+            from core.execution.engines.claude.executor import AgentSDKExecutor
+
+            executor = AgentSDKExecutor(model_config=config, anima_dir=anima_dir)
+            env = executor._build_env()
+            assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+
     def test_build_env_bedrock(self, anima_dir):
         """mode_s_auth=bedrock → Bedrock mode."""
         config = ModelConfig(
