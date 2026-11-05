@@ -49,8 +49,19 @@ prepare_step() {
   else
     /usr/bin/dscl . -search /Users UniqueID {{uid}} | /usr/bin/grep -q . \
       && fail "uid {{uid}} is already used by another user"
-    /usr/sbin/sysadminctl -addUser {{user}} -UID {{uid}} -GID {{gid}} -shell /usr/bin/false -home {{home}} -roleAccount
+    # No -roleAccount: it only takes uids 450-499.  sysadminctl exits 0 even
+    # when it refuses, so check the result.
+    /usr/sbin/sysadminctl -addUser {{user}} -UID {{uid}} -GID {{gid}} -shell /usr/bin/false -home {{home}}
+    [ "$(/usr/bin/id -u {{user}} 2>/dev/null)" = {{uid}} ] || fail "could not create user {{user}} with uid {{uid}}"
   fi
+  # sysadminctl makes a visible user with a password, and macOS then counts it
+  # in "staff", which can read the host user's home (drwxr-x--- host:staff).
+  /usr/bin/dscl . -create /Users/{{user}} IsHidden 1
+  /usr/bin/dscl . -create /Users/{{user}} Password '*'
+  /usr/bin/dscacheutil -flushcache
+  /usr/bin/dsmemberutil flushcache
+  /usr/bin/dsmemberutil checkmembership -U {{user}} -G staff | /usr/bin/grep -q "is a member" \
+    && fail "{{user}} is still in staff"
   /usr/sbin/dseditgroup -o edit -a {{host_user}} -t user {{group}}
   /usr/bin/install -d -o {{user}} -g {{group}} -m 0700 {{home}} {{data_dir}} {{data_dir}}/logs {{secrets_dir}}
   /usr/bin/install -d -o root -g {{group}} -m 0750 {{base_dir}}

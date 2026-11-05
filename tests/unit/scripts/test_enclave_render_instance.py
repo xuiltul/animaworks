@@ -140,6 +140,12 @@ def test_install_refuses_ids_owned_by_someone_else(render) -> None:
     text = render.render(render.load_instance(_spec()))["install.sh"].decode()
     assert 'fail "uid 320 is already used by another user"' in text
     assert 'fail "gid 320 is already used by another group"' in text
+    assert 'fail "could not create user _awalpha with uid 320"' in text
+    # A visible user with a password counts as "staff", which can read the host user's home.
+    adduser = next(line for line in text.splitlines() if "sysadminctl -addUser" in line)
+    assert "-roleAccount" not in adduser  # it only takes uids 450-499
+    assert "dscl . -create /Users/_awalpha IsHidden 1" in text
+    assert 'fail "_awalpha is still in staff"' in text
     for step in ("prepare)", "code)", "daemons)", "start)"):
         assert step in text
 
