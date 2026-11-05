@@ -159,8 +159,8 @@ python3 scripts/enclave/render_instance.py --spec example.json --out build/examp
 
 `install.sh` は次の順に root で実行する。どの段階も、やり直してよい。
 
-1. `sh install.sh prepare`：グループ・ユーザー・ディレクトリを作り、本体側のユーザーをグループに入れる。uid と gid は、macOS のシステムデーモンも 200〜400 の番号を多く使うため、別の名前で使われている番号なら止まる。
-2. `sh install.sh code <bundle>`：git bundle から隔離ユーザーの権限でコードを取り出し、仮想環境を作り、埋め込みモデルを取得する。インターネットが要るので、外向き通信の制限を読み込む前に行う。
+1. `sh install.sh prepare`：グループ・ユーザー・ディレクトリを作り、本体側のユーザーをグループに入れる。uid と gid は、macOS のシステムデーモンも 200〜400 の番号を多く使うため、別の名前で使われている番号なら止まる。`sysadminctl` で作ったユーザーは、ログイン画面に出てパスワードを持つため、macOS が `staff` グループの一員として扱う。`staff` は本体側ユーザーのホーム（`drwxr-x---`）を読めるので、隔離ユーザーを隠しユーザーにしてパスワードを無効にし、`staff` に入っていないことを確かめる。
+2. `sh install.sh code <bundle> [uv.lock]`：git bundle から隔離ユーザーの権限でコードを取り出し、仮想環境を作り、埋め込みモデルを取得する。`uv.lock` は git で管理していないので、本体と同じ版の依存にするには本体の `uv.lock` を渡す。インターネットが要るので、外向き通信の制限を読み込む前に行う。
 3. 隔離ユーザーの権限で `animaworks init` を実行し、`enclave-config.json` の内容を `config.json` に入れる。`auth.json` を password モード・`trust_localhost: false` にし、anima を作り、秘密を `secrets_dir` に置く。
 4. `sh install.sh daemons`：起動前処理と外向き通信の制限を読み込む。
 5. `sh install.sh start`：隔離インスタンスを起動する。

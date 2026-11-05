@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/enclave.md -->
-<!-- i18n: source-sha256=e98f08c53bafe4f052088e7668d14e915598e527ed043d805848d903ffe0d438 generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=5701cf72575d7e423814012d8d82a280e5945f54619937c7e9ba7776790cfade generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 > 확인한 커밋: f448d7b0
 
@@ -143,7 +143,7 @@ launchd에는 unit 간 의존 관계가 없으므로, 격리 측 config의 `encl
 
 신뢰 경계마다 격리 인스턴스를 하나씩 둔다. 다루는 데이터나 대화 상대가 다른 격리 인스턴스를 같은 macOS에 추가할 때는 OS 사용자·그룹·데이터 디렉터리·소켓 디렉터리·포트·LaunchDaemon·pf 앵커를 인스턴스마다 분리한다. 같은 OS 사용자로 동작하는 anima끼리는 서로의 파일을 셸에서 읽을 수 있기 때문이다.
 
-`scripts/enclave/render_instance.py`는 JSON 사양 파일 하나에서 이것들을 한꺼번에 출력한다. 사양 예시는 `templates/_shared/enclave/instance.example.json`에 있다. 필수 항목은 `name`·`user`·`uid`·`group`·`gid`·`host_user`·`port`이며, 레이블·경로·로그 위치는 `name`에서 결정된다.
+`scripts/enclave/render_instance.py`는 JSON 사양 파일 하나에서 이것들을 한꺼번에 출력한다. 사양 예시는 `templates/_shared/enclave/instance.example.json`에 있다. 필수 항목은 `name`·`user`·`uid`·`group`·`gid`·`host_user`·`port`이며, 레이블·경로·로그 위치는 `name`에서 정해진다.
 
 ```bash
 python3 scripts/enclave/render_instance.py --spec example.json --out build/example
@@ -154,24 +154,24 @@ python3 scripts/enclave/render_instance.py --spec example.json --out build/examp
 | 파일 | 내용 |
 |---|---|
 | `com.animaworks.enclave.<name>.plist` | 격리 인스턴스의 LaunchDaemon |
-| `com.animaworks.enclave.<name>-egress.plist` | 외부 통신 제한을 시작 시와 매시간 적용하는 root의 LaunchDaemon(`--name <name>` 포함) |
-| `com.animaworks.enclave.<name>-boot-prep.plist`·`boot-prep.sh` | 시작 시 소켓 디렉터리를 다시 만들고 이전 시작에서 남은 `server.pid`을 삭제하는 root의 LaunchDaemon과 스크립트 |
+| `com.animaworks.enclave.<name>-egress.plist` | 외부 통신 제한을 시작 시와 매시 적용하는 root의 LaunchDaemon(`--name <name>` 포함) |
+| `com.animaworks.enclave.<name>-boot-prep.plist`·`boot-prep.sh` | 시작 시 소켓 디렉터리를 다시 만들고, 이전 시작에서 남은 `server.pid`을 삭제하는 root의 LaunchDaemon과 스크립트 |
 | `install.sh` | root로 단계별로 실행하는 설치 절차 |
 | `enclave-config.json` | 격리 측 `config.json`에 넣는 `enclave` 설정 |
 | `host-config.json` | 본체 측 `config.json`에 넣는 `enclaves` 설정 |
 
 `install.sh`는 다음 순서로 root에서 실행한다. 어느 단계든 다시 해도 된다.
 
-1. `sh install.sh prepare`: 그룹·사용자·디렉터리를 만들고 본체 측 사용자를 그룹에 넣는다. uid와 gid는 macOS의 시스템 데몬도 200〜400 번호를 많이 사용하므로, 다른 이름으로 사용 중인 번호라면 중단된다.
-2. `sh install.sh code <bundle>`: git bundle에서 격리 사용자의 권한으로 코드를 꺼내고 가상 환경을 만들며 임베딩 모델을 가져온다. 인터넷이 필요하므로 외부 통신 제한을 읽어 들이기 전에 수행한다.
-3. 격리 사용자의 권한으로 `animaworks init`을 실행하고 `enclave-config.json`의 내용을 `config.json`에 넣는다. `auth.json`을 password 모드·`trust_localhost: false`로 하고 anima를 만들며 비밀을 `secrets_dir`에 둔다.
-4. `sh install.sh daemons`: 시작 전처리와 외부 통신 제한을 읽어 들인다.
+1. `sh install.sh prepare`: 그룹·사용자·디렉터리를 만들고, 본체 측 사용자를 그룹에 넣는다. uid와 gid는 macOS의 시스템 데몬도 200〜400 번호를 많이 사용하므로, 다른 이름으로 사용 중인 번호라면 중단된다. `sysadminctl`로 만든 사용자는 로그인 화면에 나타나고 비밀번호를 가지므로, macOS가 `staff` 그룹의 일원으로 취급한다. `staff`는 본체 측 사용자의 홈(`drwxr-x---`)을 읽을 수 있으므로, 격리 사용자를 숨김 사용자로 만들어 비밀번호를 무효화하고, `staff`에 들어 있지 않은 것을 확인한다.
+2. `sh install.sh code <bundle> [uv.lock]`: git bundle에서 격리 사용자의 권한으로 코드를 꺼내고, 가상 환경을 만들고, 임베딩 모델을 가져온다. `uv.lock`은 git으로 관리하지 않으므로, 본체와 같은 버전의 의존성으로 맞추려면 본체의 `uv.lock`를 넘긴다. 인터넷이 필요하므로, 외부 통신 제한을 읽어 들이기 전에 수행한다.
+3. 격리 사용자의 권한으로 `animaworks init`를 실행하고, `enclave-config.json`의 내용을 `config.json`에 넣는다. `auth.json`을 password 모드·`trust_localhost: false`로 하고, anima를 만들고, 비밀을 `secrets_dir`에 둔다.
+4. `sh install.sh daemons`: 시작 전 처리와 외부 통신 제한을 읽어 들인다.
 5. `sh install.sh start`: 격리 인스턴스를 시작한다.
-6. 본체 측 `config.json`에 `host-config.json`의 내용을 넣고 본체를 재시작한다. 본체의 프로세스는 재시작할 때까지 새 그룹에 들어가지 않는다.
+6. 본체 측 `config.json`에 `host-config.json`의 내용을 넣고, 본체를 재시작한다. 본체의 프로세스는 재시작할 때까지 새 그룹에 들어가지 않는다.
 
-외부 통신 제한은 `--name`을 붙이면 인스턴스별 앵커 `com.apple/250.AnimaworksEnclave-<name>`(nftables에서는 표 `aw_enclave_egress_<name>`)에 읽어 들여진다. `--name`을 붙이지 않은 기존 인스턴스는 지금까지의 앵커 그대로 동작한다. 두 번째 인스턴스를 `--name` 없이 적용하면 첫 번째 규칙을 대체해 버린다. `--region`을 생략하면 AWS의 목적지를 열 수 없다.
+외부 통신 제한은 `--name`를 붙이면 인스턴스별 앵커 `com.apple/250.AnimaworksEnclave-<name>`(nftables에서는 표 `aw_enclave_egress_<name>`)에 읽어 들여진다. `--name`를 붙이지 않은 기존 인스턴스는 지금까지의 앵커 그대로 동작한다. 두 번째 인스턴스를 `--name` 없이 적용하면 첫 번째 규칙을 대체해 버린다. `--region`을 생략하면 AWS의 목적지를 열 수 없다.
 
-`--check`는 출력하는 대신 설치된 LaunchDaemon과 시작 전처리 스크립트를 사양과 비교한다. 사양 파일에 `label`·`base_dir`·`socket_name`·`boot_prep_script`을 쓰고 `egress_anchor_name`를 비우면, 이 스크립트보다 앞서 수동으로 넣은 인스턴스도 표로 나타낼 수 있다.
+`--check`은 출력하는 대신, 설치된 LaunchDaemon과 시작 전 처리 스크립트를 사양과 비교한다. 사양 파일에 `label`·`base_dir`·`socket_name`·`boot_prep_script`를 쓰고, `egress_anchor_name`을 비우면, 이 스크립트보다 앞서 수동으로 넣은 인스턴스도 표로 나타낼 수 있다.
 
 ```bash
 python3 scripts/enclave/render_instance.py --spec existing.json --check

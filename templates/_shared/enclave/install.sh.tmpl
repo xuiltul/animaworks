@@ -4,7 +4,8 @@
 # directory it wrote, one step at a time and in this order:
 #
 #   sh install.sh prepare          create the group, the user and the directories
-#   sh install.sh code <bundle>    clone the code as {{user}} from a git bundle,
+#   sh install.sh code <bundle> [uv.lock]
+#                                  clone the code as {{user}} from a git bundle,
 #                                  build the virtualenv and fetch the embedding
 #                                  model (needs the internet, so run it before
 #                                  `daemons` loads the egress rules)
@@ -69,12 +70,19 @@ prepare_step() {
 }
 
 code_step() {
-  bundle=${1:?usage: install.sh code <path-to-git-bundle>}
+  bundle=${1:?usage: install.sh code <path-to-git-bundle> [uv.lock]}
+  lock=${2:-}
   /usr/bin/install -m 0600 -o {{user}} -g {{group}} "$bundle" {{home}}/animaworks.bundle
   if [ ! -d {{code_dir}}/.git ]; then
-    as_user /usr/bin/git clone -q {{home}}/animaworks.bundle {{code_dir}}
+    as_user /usr/bin/git -c advice.detachedHead=false clone -q {{home}}/animaworks.bundle {{code_dir}}
   fi
-  as_user {{uv}} sync --directory {{code_dir}} --frozen --all-extras --no-dev
+  # uv.lock is not in git: pass the host's to get the same versions it runs.
+  if [ -n "$lock" ]; then
+    /usr/bin/install -m 0644 -o {{user}} -g {{group}} "$lock" {{code_dir}}/uv.lock
+  fi
+  frozen=
+  [ -f {{code_dir}}/uv.lock ] && frozen=--frozen
+  as_user {{uv}} sync --directory {{code_dir}} $frozen --all-extras --no-dev
   # Mode A animas find animaworks-tool on PATH, which has no virtualenv in it.
   as_user /bin/mkdir -p {{home}}/.local/bin
   as_user /bin/ln -sf {{code_dir}}/.venv/bin/animaworks-tool {{home}}/.local/bin/animaworks-tool
