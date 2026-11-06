@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: ddb34eb0f4ccdbd7c4ddad4ee47c77b3b540b853150c30df1fa9c825b28f9834 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 2c1bc1124b49b23e8282323bfb29f1d4a0573de05237d6f05474200a380531ba -->
 
 # モジュール一覧
 
@@ -431,7 +431,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.infra.inference` | 127 | — |
 | `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
 | `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
-| `core.infra.runtime_init` | 445 | First-launch initialization: copy templates to runtime data directory. |
+| `core.infra.runtime_init` | 447 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 

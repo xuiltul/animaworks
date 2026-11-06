@@ -66,3 +66,17 @@ def test_auto_migrations_run_only_where_settings_are_writable(
     assert ensure_runtime_dir() == data_dir
 
     assert calls == ([data_dir] if expect_migrations else [])
+
+
+def test_default_channels_are_created_but_archived_ones_stay_archived(tmp_path: Path) -> None:
+    from core.infra.runtime_init import _ensure_runtime_only_dirs
+
+    data_dir = tmp_path / "runtime"
+    channels_dir = data_dir / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "general.meta.json").write_text(json.dumps({"closed": True}), encoding="utf-8")
+
+    _ensure_runtime_only_dirs(data_dir)
+
+    assert not (channels_dir / "general.jsonl").exists()
+    assert (channels_dir / "ops.jsonl").is_file()

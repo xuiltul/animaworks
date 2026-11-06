@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=4d6653cb1eff61ac0a28393b229c36f1b5f94bf49ce487154ff8d154b7b87e54 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=eb56db21815d79a4ad7df5aebf730c79c301d8fcc7740de907ada8deed04db2b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -420,7 +420,7 @@ Translation catalog and language selection.
 
 ## `core.infra`
 
-Core infrastructure features such as logs, databases, and caches.
+Infrastructure functions such as logs, databases, and caches.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -431,7 +431,7 @@ Core infrastructure features such as logs, databases, and caches.
 | `core.infra.inference` | 127 | — |
 | `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
 | `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
-| `core.infra.runtime_init` | 445 | First-launch initialization: copy templates to runtime data directory. |
+| `core.infra.runtime_init` | 447 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 
