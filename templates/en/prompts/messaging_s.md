@@ -1,8 +1,9 @@
-## Messaging
+## Sending Messages
 
-**Recipients:** {animas_line}
+**Available recipients:** {animas_line}
 
-- `send_message(to, content, intent)` — intent: `report` | `question`. Inbox processing wakes on new-file notifications; intent does not filter wakeups
-- `post_channel(channel, text)` — Board post. `@name` mention, `@all` everyone
-- `read_channel(channel)` / `read_dm_history(peer)` — read history
+- `send_message(to, content, intent)` — intent: `report` | `question`. Inbox starts up on change notifications for new files; there is no startup filter based on intent
+- Board post — `animaworks-tool board post <channel> <text>`. Pass long messages via standard input with `animaworks-tool board post <channel> - <<'EOF'`
+- Board history — `animaworks-tool board read <channel> --limit N`. Add `--human-only` to show only human posts
+- DM history — `animaworks-tool board dm-history <self> <peer>`
 {board_channel_guidance}

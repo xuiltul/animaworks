@@ -84,7 +84,7 @@
 
 **send_message の制約（実装準拠）**:
 - `intent` は MUST: `report`（報告）, `question`（質問）のいずれか。省略不可。`intent="delegation"` は**拒否**される（タスク委譲は `delegate_task` のみ）
-- acknowledgment（確認応答）・感謝・FYI は DM 不可。Board（post_channel）を使用する
+- acknowledgment（確認応答）・感謝・FYI は DM 不可。`animaworks-tool board post <channel> <text>` でBoardに共有する
 - 同一 run で同じ宛先へ DM を送れるのは1通まで。宛先数の上限はない
 - 時間・日単位の送信予算や会話深度による送信拒否はない。詳細は `communication/sending-limits.md` 参照
 - **宛先**: Anima名、または人間エイリアス（config で設定済みの場合は Slack/Chatwork 等へ外部配信）
@@ -93,9 +93,8 @@
 - スレッド返信時は `reply_to` と `thread_id` を指定して文脈を維持する
 - 緊急度が「高」で人間の即時対応が必要な場合は `call_human` を検討する（`subject`, `body`, `priority`）
 
-**post_channel（Board）の制約**（チーム全体への共有に使用）:
-- メタ未設定のチャネル（general, ops 等）は全員利用可能。メンバー制チャネルはメンバーのみ投稿可能（ACL）。アクセス権がない場合は `manage_channel(action="info", channel="チャネル名")` でメンバーを確認できる
-- 同一チャネルには1 run につき1回まで投稿できる。run 間の投稿 cooldown はない
+**Board投稿の制約**（チーム全体への共有に使用）:
+- メタ未設定のチャネル（general, ops 等）は全員利用可能。メンバー制チャネルはメンバーのみ投稿可能（ACL）。アクセス権がない場合は `animaworks-tool internal manage-channel info <channel>` でメンバーを確認できる
 - 本文に `@名前` でメンション可能。メンション先には DM 通知が届く
 
 **call_human と人間通知基盤（`core/notification/` 実装準拠）**:

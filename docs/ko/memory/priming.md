@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/memory/priming.md -->
-<!-- i18n: source-sha256=0081dfa1257d883fc97eee25f5116efbb8b51b9c5d27c1879fdc6512ae266bd3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d5a04a5c993d7ed7bc3ff3758c23f89175249339ec84279d9c33e9ffd1b807f8 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > 확인된 커밋: 193a5e72
 
@@ -7,22 +7,22 @@
 
 자동 회상은 입력을 받은 실행 경로에서 관련된 기억의 단서를 획득하여 LLM의 컨텍스트에 추가하는 처리이다. 구성은 `core/memory/priming/engine.py`의 `PrimingEngine`, 기본 프로필은 `core/config/schemas.py`의 `PrimingConfig`에서 정의된다.
 
-## 프로필과 채널
+## 프로필 및 채널
 
 `PrimingConfig.profile`의 기본값은 `compact`이다. Anima별 `status.json`에 `priming_profile`을 `compact` 또는 `full`로 지정하면 해당 Anima의 설정을 덮어쓸 수 있다. 채널의 개요는 다음과 같다.
 
-| 채널 | 획득하는 것 | `compact` | `full` |
+| 채널 | 가져오는 항목 | `compact` | `full` |
 |---|---|---:|---:|
 | A | 발신자 프로필 | ○ | ○ |
-| B | 활동 로그의 최근 움직임 | — | ○ |
-| C0 | 상주 후보·중요 지식의 포인터 | ○ | ○ |
-| C | 관련 지식의 검색 | 조건부 | ○ |
+| B | 활동 로그와 공유 채널의 최근 동향 | 백그라운드 트리거에서 조건부 | ○ |
+| C0 | 상주 후보·중요 지식 포인터 | ○ | ○ |
+| C | 관련 지식 검색 | 조건부 | ○ |
 | E | 미완료 작업 | ○ | ○ |
 | F | 과거 에피소드 | — | ○ |
-| G | 독립 채널이 아님. 에피소드 검색에 수반되는 그래프 유래 후보 | — | ○ (F의 검색 내) |
-| 보조 | 최근 전송 내용, 인간에게 미전송 알림 | ○ | ○ |
+| G | 독립 채널이 아님. 에피소드 검색에 수반되는 그래프 유래 후보 | — | ○ (F 검색 내) |
+| 보조 | 최근 전송 내용, 사람에게 전송되지 않은 알림 | ○ | ○ |
 
-`compact`에서는 채널 A·E·C0와 보조 정보를 병렬로 수집한다. C의 검색을 수행하는 경우는 `channel`가 `chat` 또는 `task`, 혹은 `intent`가 `question`, `request`, `delegation`인 경우이다. 최근 활동을 읽는 B, 에피소드를 검색하는 F, 그 검색 내에서 활용될 수 있는 G에 해당하는 그래프 후보는 `compact`의 획득 대상이 아니다. G는 독립된 Priming 채널이 아니다.
+`compact`에서는 채널 A·E·C0와 보조 정보를 병렬로 수집한다. C 검색은 `channel`가 `chat` 또는 `task`이거나, `intent`가 `question`, `request`, `delegation`인 경우에 수행한다. B는 `heartbeat`·`inbox`·`cron`의 백그라운드 트리거에서 `compact_background_recall_enabled`가 활성화되어 있고 최근 활동의 건수·토큰 상한이 양수인 경우 가져온다. F도 백그라운드 트리거에서 쿼리가 있고 에피소드의 건수·토큰 상한이 양수인 경우 가져온다. G는 독립적인 Priming 채널이 아니라 F 검색 내에서 활용될 수 있다.
 
 ## C0와 `always_prime`
 

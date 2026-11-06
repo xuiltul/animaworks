@@ -33,6 +33,16 @@ class TestMessagingTemplates:
         assert "{animas_line}" in content
         assert "{board_channel_guidance}" in content
 
+    def test_messaging_templates_use_board_cli(self):
+        content = "\n".join(
+            (_JA_PROMPTS / name).read_text(encoding="utf-8")
+            for name in ("messaging_s.md", "messaging.md", "heartbeat_default_checklist.md")
+        )
+        assert "animaworks-tool board post" in content
+        assert "animaworks-tool board read" in content
+        assert "post_channel" not in content
+        assert "read_channel" not in content
+
     def test_messaging_a_template_exists(self):
         """Standard messaging template (for A mode) must still exist."""
         path = _JA_PROMPTS / "messaging.md"

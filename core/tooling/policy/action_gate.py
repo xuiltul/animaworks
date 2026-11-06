@@ -45,6 +45,7 @@ _CLI_ACTION_MAP: dict[tuple[str, str], str] = {
     ("chatwork", "upload"): "chatwork_send",
     ("slack", "send"): "slack_send",
     ("discord", "send"): "discord_send",
+    ("board", "post"): "post_channel",
 }
 
 

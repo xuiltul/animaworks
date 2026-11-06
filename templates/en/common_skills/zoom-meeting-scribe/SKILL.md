@@ -89,15 +89,17 @@ call_human(
 - call_human does not require waiting (fire-and-resume). Once you have sent the approval request, you may end this turn. The human's decision will arrive later as a new inbox message
 - **If reject / comment is returned**: revise the report to reflect the feedback and request approval again via call_human
 
-### 5. After Approval — Post
+### 5. After approval — Post
 
-Once approval arrives, post the report via `post_channel` to the **Board channel specified in the operational instructions (e.g., injection)**:
+Once approval arrives, post the report using `animaworks-tool board post <channel> <text>` to the **Board channel specified in the operational instructions (e.g., injection)**:
 
 ```
-post_channel(channel="{指定されたBoard名}", content="{承認済みレポート}")
+animaworks-tool board post {指定されたBoard名} - <<'EOF'
+{承認済みレポート}
+EOF
 ```
 
-If no target Board is specified, do not post; instead, inform your supervisor (or a human if you have none) that you have an approved report ready and ask for direction.
+If no destination Board is specified, do not post. Tell your supervisor (or a human, if there is no supervisor) that you have the approved report and ask for instructions.
 
 ## Prohibited Actions
 

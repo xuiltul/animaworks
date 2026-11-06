@@ -123,12 +123,12 @@ Heartbeat / Cron / 团队设计 / 记忆 / 成本优化的要点汇总在一页�
 | 文件 | 概要 |
 |---------|------|
 | `messaging-guide.md` | 消息收发指南（send_message 的参数、线程管理、回复方针） |
-| `board-guide.md` | Board（共享频道）指南（post_channel / read_channel 的使用区分、投稿规则） |
-| `instruction-patterns.md` | 指令发出方式模式集（明确指令的写法、委派模式、进度确认） |
-| `reporting-guide.md` | 报告・升级的方法（报告时机、格式、紧急 vs 定期） |
-| `message-quality-protocol.md` | 消息质量协议（委派 4 项・完成报告 3 项・升级 4 项的必填检查） |
-| `sending-limits.md` | Inbox 的文件 wake・消息聚合・run 内重复防止・循环避免 |
-| `call-human-guide.md` | 通知人类指南（call_human 的使用方法、接收回复、通知频道配置） |
+| `board-guide.md` | Board（共享频道）指南（通过 CLI 读取和发布的方法、发布规则） |
+| `instruction-patterns.md` | 发布指令的模式集（如何编写明确的指令、委派模式、进度确认） |
+| `reporting-guide.md` | 报告与升级处理的方法（报告时机、格式、紧急 vs 定期） |
+| `message-quality-protocol.md` | 消息质量协议（委派 4 项、完成报告 3 项、升级处理 4 项的必查清单） |
+| `sending-limits.md` | Inbox 文件唤醒、消息汇总、run 内防重复、避免循环 |
+| `call-human-guide.md` | 通知人类指南（call_human 的用法、接收回复、通知频道配置） |
 | `slack-bot-token-guide.md` | → 已移至 `reference/communication/slack-bot-token-guide.md`。Slack 机器人令牌配置指南 |
 
 ### operations/ — 运用・任务管理
@@ -181,51 +181,51 @@ Heartbeat / Cron / 团队设计 / 记忆 / 成本优化的要点汇总在一页�
 
 | 关键词 | 参照位置 |
 |-----------|--------|
-| 基础、入门、整体概览、精要、入门方法、概要 | `anatomy/essentials.md` |
-| 消息、send_message、发送、回复、线程、inbox | `reference/communication/messaging-guide.md` |
-| Board、频道、post_channel、read_channel | `communication/board-guide.md` |
-| DM历史、read_dm_history、过往对话 | `communication/board-guide.md` |
-| 指令、委派、任务请求、委托 | `reference/communication/instruction-patterns.md` |
-| 报告、日报、摘要、完成报告、升级 | `reference/communication/reporting-guide.md` |
-| 质量协议、必填项、验证依据、完成条件、委派检查 | `communication/message-quality-protocol.md` |
-| Inbox wake、消息聚合、防止重复发送、回复“了解”、对话循环 | `communication/sending-limits.md` |
-| call_human、人类通知、联系人类、通知频道 | `communication/call-human-guide.md` |
-| Slack、机器人令牌、SLACK_BOT_TOKEN、not_in_channel | `reference/communication/slack-bot-token-guide.md` |
-| 组织、supervisor、上司、部下、同事 | `reference/organization/structure.md` |
-| 角色、责任、speciality、专业 | `reference/organization/roles.md` |
-| 层级、通信路径、org_dashboard、ping_subordinate | `organization/hierarchy-rules.md` |
-| delegate_task、任务委派、task_tracker | `organization/hierarchy-rules.md`、`reference/operations/task-management.md` |
-| 任务、current_state、pending、进度、优先级 | `reference/operations/task-management.md` |
-| 任务队列、submit_tasks、update_task、TaskExec、animaworks-tool task list | `reference/operations/task-management.md` |
-| 任务板、仪表盘、面向人类 | `operations/task-board-guide.md` |
-| 配置、config、status.json、SSoT、reload | `reference/operations/project-setup.md` |
-| 心跳、heartbeat、定期检查 | `reference/operations/heartbeat-cron-guide.md` |
-| cron、调度、定时任务 | `reference/operations/heartbeat-cron-guide.md` |
-| 工具、animaworks-tool、MCP、skill | `reference/operations/tool-usage-overview.md` |
-| 执行模式、S-mode、C-mode、D-mode、G-mode、A-mode、B-mode | `reference/operations/tool-usage-overview.md` |
-| 后台、submit、长时间工具 | `operations/background-tasks.md` |
-| 工作区、workspace、工作目录、working_directory | `operations/workspace-guide.md` |
-| scratch、worktree、临时文件、缓存、ANIMAWORKS_SCRATCH_DIR | `operations/scratch-and-worktrees.md` |
-| 模型、models.json、credential、set-model、上下文窗口 | `reference/operations/model-guide.md` |
-| background_model、后台模型、成本优化 | `reference/operations/model-guide.md` |
-| Mode S、认证、API直接、Bedrock、Vertex AI、Max plan | `reference/operations/mode-s-auth-guide.md` |
-| 语音、voice、STT、TTS、VOICEVOX、ElevenLabs | `reference/operations/voice-chat-guide.md` |
-| WebSocket、/ws/voice, barge-in、VAD、PTT | `reference/operations/voice-chat-guide.md` |
-| Anima、自己、构成、设计、生命周期 | `anatomy/what-is-anima.md` |
-| IDENTITY.md、SOUL.md、AGENTS.md、人格、档案、行动准则、不变、可变 | `reference/anatomy/anima-anatomy.md` |
-| permissions.json、bootstrap、HEARTBEAT.md、cron.md | `reference/anatomy/anima-anatomy.md` |
-| 记忆、memory、episodes、knowledge、procedures | `reference/anatomy/memory-system.md` |
-| Priming、RAG、Consolidation、Forgetting、遗忘 | `reference/anatomy/memory-system.md` |
-| consolidation、2-phase、multipass、错误追踪 | `reference/anatomy/memory-system.md` |
-| search_memory、write_memory_file、记忆搜索 | `reference/anatomy/memory-system.md` |
-| skills、技能搜索、common_skills、search_memory scope="skills" | `reference/anatomy/memory-system.md`、`reference/operations/tool-usage-overview.md` |
-| activity_log、BM25、RRF、最近日志搜索 | `reference/anatomy/memory-system.md`、`reference/troubleshooting/common-issues.md` |
-| 提示词注入、trust、untrusted、边界标签 | `security/prompt-injection-awareness.md` |
-| 错误、问题、无法运行、权限、阻止命令 | `reference/troubleshooting/common-issues.md` |
-| 流程图、判断、犹豫、紧急、安全 | `reference/troubleshooting/escalation-flowchart.md` |
-| Gmail、token.json、OAuth、pickle | `reference/troubleshooting/gmail-credential-setup.md` |
-| 层级、tiered、T1、T2、T3、T4 | `reference/troubleshooting/common-issues.md` |
-| 用例、应用示例、能做什么 | `reference/usecases/usecase-overview.md` |
+| 基础, 入门, 全貌, essentials, 入门方法, 概要 | `anatomy/essentials.md` |
+| 消息, send_message, 发送, 回复, 线程, inbox | `reference/communication/messaging-guide.md` |
+| Board, 频道, `animaworks-tool board read`, `animaworks-tool board post` | `communication/board-guide.md` |
+| DM 历史, `animaworks-tool board dm-history`, 过往对话 | `communication/board-guide.md` |
+| 指令, 委派, 任务请求, delegation | `reference/communication/instruction-patterns.md` |
+| 报告, 每日报告, 摘要, 完成报告, 升级处理 | `reference/communication/reporting-guide.md` |
+| 质量协议, 必查项目, 验证依据, 完成条件, 委派检查 | `communication/message-quality-protocol.md` |
+| Inbox wake, 消息汇总, 防止重复发送, 回复“收到”, 对话循环 | `communication/sending-limits.md` |
+| call_human, 人类通知, 联系人类, 通知频道 | `communication/call-human-guide.md` |
+| Slack, 机器人令牌, SLACK_BOT_TOKEN, not_in_channel | `reference/communication/slack-bot-token-guide.md` |
+| 组织, supervisor, 上司, 部下, 同事 | `reference/organization/structure.md` |
+| 角色, 责任, speciality, 专业 | `reference/organization/roles.md` |
+| 层级, 通信路径, org_dashboard, ping_subordinate | `organization/hierarchy-rules.md` |
+| delegate_task, 任务委派, task_tracker | `organization/hierarchy-rules.md`, `reference/operations/task-management.md` |
+| 任务, current_state, pending, 进度, 优先级 | `reference/operations/task-management.md` |
+| 任务队列, submit_tasks, update_task, TaskExec, animaworks-tool task list | `reference/operations/task-management.md` |
+| 任务看板, 仪表板, 面向人类 | `operations/task-board-guide.md` |
+| 配置, config, status.json, SSoT, reload | `reference/operations/project-setup.md` |
+| 心跳, heartbeat, 定期检查 | `reference/operations/heartbeat-cron-guide.md` |
+| cron, 日程安排, 定时任务 | `reference/operations/heartbeat-cron-guide.md` |
+| 工具, animaworks-tool, MCP, skill | `reference/operations/tool-usage-overview.md` |
+| 执行模式, S-mode, C-mode, D-mode, G-mode, A-mode, B-mode | `reference/operations/tool-usage-overview.md` |
+| 后台, submit, 长时间运行的工具 | `operations/background-tasks.md` |
+| 工作区, workspace, 工作目录, working_directory | `operations/workspace-guide.md` |
+| scratch, worktree, 临时文件, 缓存, ANIMAWORKS_SCRATCH_DIR | `operations/scratch-and-worktrees.md` |
+| 模型, models.json, credential, set-model, 上下文窗口 | `reference/operations/model-guide.md` |
+| background_model, 后台模型, 成本优化 | `reference/operations/model-guide.md` |
+| Mode S, 认证, 直接调用 API, Bedrock, Vertex AI, Max plan | `reference/operations/mode-s-auth-guide.md` |
+| 音频, voice, STT, TTS, VOICEVOX, ElevenLabs | `reference/operations/voice-chat-guide.md` |
+| WebSocket, /ws/voice, barge-in, VAD, PTT | `reference/operations/voice-chat-guide.md` |
+| Anima, 自己, 构成, 设计, 生命周期 | `anatomy/what-is-anima.md` |
+| IDENTITY.md, SOUL.md, AGENTS.md, 人格, 个人资料, 行为准则, 不变, 可变 | `reference/anatomy/anima-anatomy.md` |
+| permissions.json, bootstrap, HEARTBEAT.md, cron.md | `reference/anatomy/anima-anatomy.md` |
+| 记忆, memory, episodes, knowledge, procedures | `reference/anatomy/memory-system.md` |
+| Priming, RAG, Consolidation, Forgetting, 遗忘 | `reference/anatomy/memory-system.md` |
+| consolidation, 2-phase, multipass, 错误追踪 | `reference/anatomy/memory-system.md` |
+| search_memory, write_memory_file, 记忆搜索 | `reference/anatomy/memory-system.md` |
+| skills, 技能搜索, common_skills, search_memory scope="skills" | `reference/anatomy/memory-system.md`, `reference/operations/tool-usage-overview.md` |
+| activity_log, BM25, RRF, 最近日志搜索 | `reference/anatomy/memory-system.md`, `reference/troubleshooting/common-issues.md` |
+| 提示词注入, trust, untrusted, 边界标签 | `security/prompt-injection-awareness.md` |
+| 错误, 问题, 无法运行, 权限, 屏蔽的命令 | `reference/troubleshooting/common-issues.md` |
+| 流程图, 判断, 犹豫, 紧急, 安全 | `reference/troubleshooting/escalation-flowchart.md` |
+| Gmail, token.json, OAuth, pickle | `reference/troubleshooting/gmail-credential-setup.md` |
+| 层级, tiered, T1, T2, T3, T4 | `reference/troubleshooting/common-issues.md` |
+| 用例, 应用示例, 能做什么 | `reference/usecases/usecase-overview.md` |
 
 ---
 

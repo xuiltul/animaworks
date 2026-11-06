@@ -43,6 +43,7 @@ LAYER_RULES: tuple[tuple[str, int], ...] = (
     ("core.mcp", 5),
     ("core.execution.session.session_types", 2),
     ("core.execution.session.session_context", 2),
+    ("core.execution.session.board_reply", 2),  # Board reply channel set; imports only core.platform.
     ("core.activity", 2),  # Planned package; no current modules expected.
     ("core.trust", 2),  # Planned package; no current modules expected.
     ("core.text", 2),  # Planned package; no current modules expected.

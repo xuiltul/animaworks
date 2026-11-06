@@ -51,11 +51,12 @@ def test_send_message_preserves_constraints() -> None:
 
 
 def test_send_message_keeps_related_tool_guidance() -> None:
-    """send_message points to post_channel / delegate_task for other cases."""
+    """send_message points to the Board CLI / delegate_task for other cases."""
     ja = _desc("ja", "send_message")
     en = _desc("en", "send_message")
-    assert "delegate_task" in ja and "post_channel" in ja
-    assert "delegate_task" in en and "post_channel" in en
+    assert "delegate_task" in ja and "animaworks-tool board post" in ja
+    # English template generation is handled separately from the ja source.
+    assert "delegate_task" in en and "animaworks-tool board post" in en
 
 
 def test_delegate_task_preserves_self_contained_constraint() -> None:

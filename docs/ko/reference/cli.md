@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=d381aa269e104fc13b7413556212b1ae09c5385a36a4e4c9da2af55d9140c099 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=36d5b678ab5628ceb7c6a2a48f724df76728fd4fd7c66d4bf1718cfada6fe976 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -249,15 +249,14 @@ heartbeat/cron 모델 설정
 
 ## `board post`
 
-채널에 게시
+채널에 게시합니다. 형식: board post <channel> [<text> | -]. 본문을 생략하거나 '-'를 지정하면 표준 입력에서 읽습니다. 이전 형식: board post <from> <channel> <text>。
 
-`usage: animaworks board post [-h] from_anima channel text`
+`usage: animaworks board post [-h] [--as NAME] ARG [ARG ...]`
 
-| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
-| from_anima | 위치 인자 | — | — | 보내는 애니마 이름 |
-| channel | 위치 인자 | — | — | 채널 이름 |
-| text | 위치 인자 | — | — | 메시지 내용 |
+| post_args | 위치 인수 | — | — | <channel> [<text> \| -] 또는 이전 형식 <from> <channel> <text> |
+| --as | 옵션 | — | — | 게시자 이름(호스트에서 게시) |
 
 ## `board read`
 

@@ -75,55 +75,54 @@
 
 ### Step 5: 执行升级
 
-报告消息中 MUST 包含以下要素:
+报告消息 MUST 包含以下要素：
 
-1. **状况**: 发生了什么
-2. **原因**: 认为是什么原因（不明则写“原因调查中”）
-3. **尝试**: 自己尝试了什么
-4. **请求**: 希望上司做什么（判断、授予权限、居中协调 等）
+1. **情况**：发生了什么
+2. **原因**：认为可能是什么原因（如果不清楚，则写“正在调查原因”）
+3. **尝试**：自己尝试过什么
+4. **请求**：希望上司做什么（判断、授予权限、协调等）
 
-**send_message 的约束（实现依据）**:
-- `intent` 是 MUST: `report`（报告）、`question`（提问）之一。不可省略。`intent="delegation"` 会被**拒绝**（任务委派仅限 `delegate_task`）
-- acknowledgment（确认应答）・感谢・FYI 不可用 DM。使用 Board（post_channel）
-- 同一 run 中向同一收件人只能发送1封 DM。收件人数量无上限
-- 没有按时间・按天计算的发送预算或基于对话深度的发送拒绝。详情参照 `communication/sending-limits.md`
-- **收件人**: Anima名，或人类别名（若已在 config 中配置，则通过 Slack/Chatwork 等外部投递）
-- **聊天中**: 对人类的回复直接以文本进行。`send_message` 仅用于发往其他Anima（或经由已配置别名的外部）
-- **联系人类**（别名未配置等 `send_message` 无法送达的收件人）: 若为顶层 Anima 且已配置通知，则使用 `call_human`（见下文）
-- 线程回复时指定 `reply_to` 和 `thread_id` 以维持上下文
-- 紧急程度为“高”且需要人类立即处理时，考虑 `call_human`（`subject`, `body`, `priority`）
+**send_message 的限制（符合实现）**：
+- `intent` MUST 为 `report`（报告）或 `question`（提问）。不可省略。`intent="delegation"` 会被**拒绝**（任务委派仅可使用 `delegate_task`）
+- acknowledgment（确认回复）、感谢和 FYI 不可通过 DM 发送。请通过 `animaworks-tool board post <channel> <text>` 分享到 Board
+- 同一 run 中，只能向同一收件人发送 1 条 DM。收件人数不限
+- 不会因按小时或按天计算的发送额度，或对话深度而拒绝发送。详情请参阅 `communication/sending-limits.md`
+- **收件人**：Anima 名称或人员别名（如果已在 config 中配置，则会向 Slack/Chatwork 等外部发送）
+- **聊天期间**：直接以文本回复人类用户。`send_message` 仅用于发送给其他 Anima（或通过已配置的别名发送到外部）
+- **联系人员**（例如未设置别名，导致 `send_message` 无法送达的收件人）：如果是顶层 Anima 且已配置通知，请使用 `call_human`（见下文）
+- 回复线程时，指定 `reply_to` 和 `thread_id` 以保留上下文
+- 紧急程度为“高”且需要人员立即处理时，请考虑使用 `call_human`（`subject`、`body`、`priority`）
 
-**post_channel（Board）的约束**（用于向整个团队共享）:
-- 未设置元数据的频道（general, ops 等）所有人可用。成员制频道仅成员可投稿（ACL）。若无访问权限，可通过 `manage_channel(action="info", channel="チャネル名")` 确认成员
-- 同一频道每个 run 只能投稿1次。run 之间没有投稿 cooldown
-- 正文中可用 `@名前` 提及。被提及者会收到 DM 通知
+**Board 帖子的限制**（用于向整个团队分享）：
+- 未设置元数据的频道（general、ops 等）所有人都可以使用。成员制频道仅允许成员发帖（ACL）。如果没有访问权限，可通过 `animaworks-tool internal manage-channel info <channel>` 查看成员
+- 正文中可以使用 `@名前` 提及用户。被提及者会收到 DM 通知
 
-**call_human 与人类通知基础设施（`core/notification/` 实现依据）**:
+**call_human 与人员通知基础设施（符合 `core/notification/` 实现）**：
 
-- **工具启用条件**: `config.json` 的 `human_notification.enabled` 为 true，且 `HumanNotifier.from_config` **实际构建了1个以上的发送频道**（`channels[]` 中仅 `enabled: true` 且已注册的 `type` 为对象。`enabled: false` 跳过，未注册的 `type` 记录警告日志后跳过）
-- **仅限顶层（supervisor 门控）**: 若 `config.animas` 中**有该 Anima 名的条目**，且 `supervisor` 非 null，则 `HumanNotifier` 不被授予，`call_human` 不可用（部下通过 `send_message` 向上司升级）。**未在 `animas` 中注册的 Anima 不经过此门控**，因此理论上仅凭通知频道就可能获得 `call_human`。运维中安全做法是在 `animas` 中显式列出所有 Anima，仅让 `supervisor: null` 拥有人类通知
-- **发送方式**: 向 `HumanNotifier.notify` 有效的各频道**并行发送**（`asyncio.gather(..., return_exceptions=True)`）。每个频道返回成功字符串或包含 `ERROR` 的失败字符串，**异常在一个频道被吞掉，其他继续**
-- **支持的频道类型**（`human_notification.channels[].type`）: `slack`, `chatwork`, `line`, `telegram`, `ntfy`（对应 `core/notification/channels/*.py` 的 `@register_channel`）。可并行定义多个频道
-- **参数**: `subject`, `body` 为必填。`priority` 为可选。枚举为 `low` / `normal` / `high` / `urgent`（省略时 `normal`）。**`PRIORITY_LEVELS` 之外的字符串在 `HumanNotifier.notify` 内被规范化为 `normal`**
-- **优先级的呈现方式**:
-  - **Slack / Chatwork / LINE / Telegram**: `high` / `urgent` 时在开头加上 **`[HIGH]` / `[URGENT]`**（`priority.upper()`）。`low` / `normal` 时不加
-  - **ntfy**: 在 HTTP 头 `Priority` 中设置 `low=2`, `normal=3`, `high=4`, `urgent=5`。正文为请求体（最大约4096字符），`Title` 头中为标题＋必要时 `(from Anima名)`
-- **Slack**（`channels/slack.py`）:
-  - **Bot Token + `channel`**（`chat.postMessage`）或 **Incoming Webhook**。正文由 `md_to_slack_mrkdwn` 针对 Slack 格式化
-  - **Bot 且存在 `anima_name` 时**: 由于向 API 的 `username` 传入 Anima 名，**正文侧不加 `(from Anima名)`**（Webhook 模式下在正文中加 `(from Anima名)`）。若配置与资源齐备，也可加 `icon_url`
-  - **线程回复路由**（`reply_routing.py`）: 仅当以 Bot 投稿、且 `anima_name` 非空、且 API 响应中有 `ts` 时，保存到 `notification_map.json`。路径为 `{data_dir}/run/notification_map.json`（通常为 `~/.animaworks/run/`）。条目**自创建起最长7天**后丢弃。Webhook 无法获取 `ts`，无法映射
-  - 路由时尽可能通过 Slack API 获取线程摘要，失败时回退到已保存通知文的摘要。发往 Inbox 的外部消息为 `intent="question"`
-- **Chatwork**: `room_id` 仅允许**数字**。正文经 `md_to_chatwork` 转换后为 `[info][title]…[/title]…[/info]` 格式
-- **LINE**: Push API。文本截断至最大 5000 字符
-- **Telegram**: `parse_mode=HTML`。标题为 `<b>…</b>`，整体调整至 4096 字符以内（转义后截断）
-- **凭据**: 基础 `NotificationChannel._resolve_credential_with_vault` 按 **配置键的 env → `{キー}__{anima_name}`（vault/shared）→ 原始键**的顺序。Slack Bot 在此基础上还有 `get_credential("slack", "notification", …)` 的回退（参照各 `channels/*.py`）
-- **聊天 UI**: 流式响应中发送 **`notification_sent`** 事件（经由 `core/anima/messaging.py`。与外部频道是不同路径）
-- **记录**: `call_human` 执行时，在统一活动日志中记录 **`human_notify`**（`via` 在实现上固定为 `configured_channels`）。同时也会留下 `tool_result`。Priming 的“Pending Human Notifications”汇总**过去24小时・最多10件**的 `human_notify`（`core/memory/priming/outbound.py`）
-- **其他 HumanNotifier 用途**: 存在后台工具完成等由框架通过**同一 `HumanNotifier`** 向人类发送的路径（`call_human` 工具以外。仅限顶层 Anima 这一点相同）
-- **Mode S（CLI）**: `animaworks-tool call_human "件名" "本文" [--priority …]` 中也可发送同系统的通知
+- **工具的启用条件**：`config.json` 的 `human_notification.enabled` 为 true，且 `HumanNotifier.from_config` 确实成功构建了至少一个发送频道（仅适用于 `channels[]` 中 `enabled: true` 且已注册的 `type`。`enabled: false` 会被跳过；未注册的 `type` 会记录警告日志后跳过）
+- **仅限顶层（supervisor 门控）**：当 `config.animas` 中存在该 Anima 名称对应的条目，且 `supervisor` 非 null 时，不会授予 `HumanNotifier`，也无法使用 `call_human`（部下应通过 `send_message` 向上司升级）。**未登记在 `animas` 中的 Anima 不受此门控限制**，因此理论上可能仅凭通知频道就获得 `call_human`。为确保安全，运维时应将所有 Anima 明确列入 `animas`，并确保只有 `supervisor: null` 具有人员通知功能
+- **发送方式**：向每个已启用的 `HumanNotifier.notify` **并行发送**（`asyncio.gather(..., return_exceptions=True)`）。每个频道都会返回成功文本，或包含 `ERROR` 的失败文本；**某个频道发生异常时会被捕获并忽略，其他频道继续处理**
+- **支持的频道类型**（`human_notification.channels[].type`）：`slack`、`chatwork`、`line`、`telegram`、`ntfy`（对应 `core/notification/channels/*.py` 的 `@register_channel`）。可以并行定义多个频道
+- **参数**：`subject`、`body` 为必填项。`priority` 为可选项。枚举值为 `low` / `normal` / `high` / `urgent`（省略时为 `normal`）。**`PRIORITY_LEVELS` 之外的字符串会在 `HumanNotifier.notify` 内规范化为 `normal`**
+- **优先级的显示方式**：
+  - **Slack / Chatwork / LINE / Telegram**：当为 `high` / `urgent` 时，会在开头添加 **`[HIGH]` / `[URGENT]`**（`priority.upper()`）。`low` / `normal` 时不添加
+  - **ntfy**：在 HTTP 标头 `Priority` 中设置 `low=2`、`normal=3`、`high=4`、`urgent=5`。正文位于请求体中（最多约 4096 个字符）；在 `Title` 标头中设置主题，并在需要时设置 `(from Anima名)`
+- **Slack**（`channels/slack.py`）：
+  - **Bot Token + `channel`**（`chat.postMessage`）或 **Incoming Webhook**。正文会通过 `md_to_slack_mrkdwn` 格式化为适用于 Slack 的内容
+  - **使用 Bot 且存在 `anima_name` 时**：由于会将 Anima 名称传给 API 的 `username`，因此**正文中不会添加 `(from Anima名)`**（Webhook 模式下会在正文中添加 `(from Anima名)`）。配置和资源齐全时，也可以添加 `icon_url`
+  - **线程回复路由**（`reply_routing.py`）：仅当使用 Bot 发帖、`anima_name` 不为空，且 API 响应中包含 `ts` 时，才会保存到 `notification_map.json`。路径为 `{data_dir}/run/notification_map.json`（通常为 `~/.animaworks/run/`）。条目会在**创建后最多 7 天**被丢弃。Webhook 无法获取 `ts`，因此无法建立映射
+  - 路由时，如果可能，会通过 Slack API 获取线程摘要；失败时则使用已保存通知文本的摘要作为后备。发往 Inbox 的外部消息为 `intent="question"`
+- **Chatwork**：`room_id` 仅允许使用**数字**。正文会转换为 `md_to_chatwork`，并采用 `[info][title]…[/title]…[/info]` 格式
+- **LINE**：Push API。文本会截断至最多 5000 个字符
+- **Telegram**：`parse_mode=HTML`。主题为 `<b>…</b>`，并会调整为总长不超过 4096 个字符（转义后截断）
+- **凭据**：基础 `NotificationChannel._resolve_credential_with_vault` 的获取顺序为**配置键对应的 env → `{キー}__{anima_name}`（vault/shared）→ 裸键）**。Slack Bot 还会回退到 `get_credential("slack", "notification", …)`（参阅各 `channels/*.py`）
+- **聊天 UI**：流式响应中会发送 **`notification_sent`** 事件（通过 `core/anima/messaging.py`；与外部频道走不同路径）
+- **记录**：执行 `call_human` 时，会在统一活动日志中记录 **`human_notify`**（`via` 在实现中固定为 `configured_channels`）。同时也会保留 `tool_result`。Priming 中的“Pending Human Notifications”会汇总**过去 24 小时内最多 10 条** `human_notify`（`core/memory/priming/outbound.py`）
+- **HumanNotifier 的其他用途**：后台工具完成等情况下，框架也会通过**同一 `HumanNotifier`** 向人员发送消息（不使用 `call_human` 工具；同样仅限顶层 Anima）
+- **Mode S（CLI）**：通过 `animaworks-tool call_human "件名" "本文" [--priority …]` 也可以发送同类通知
 
-**call_human 的参数（摘要）**:
-- `subject`, `body` 为必填。`priority` 为可选（`low` / `normal` / `high` / `urgent`，默认 `normal`。非法值按 `normal` 处理）
+**call_human 参数（摘要）**：
+- `subject`、`body` 为必填项。`priority` 为可选项（`low` / `normal` / `high` / `urgent`，默认值为 `normal`。无效值按 `normal` 处理）
 
 ---
 

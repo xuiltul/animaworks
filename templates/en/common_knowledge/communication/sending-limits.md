@@ -2,13 +2,12 @@
 
 This document summarizes the operations for message delivery, Inbox startup, and avoiding conversation loops. The previous send budget, depth rejection, Inbox cooldown / cascade / intent filters have been removed.
 
-## Remaining Rules for Sending
+## Rules that remain in effect when sending
 
-- The intent of `send_message` is `report` or `question`. Use `delegate_task` for task delegation.
-- Only one DM to the same recipient per run. This is a guard to avoid duplicate sends; there is no limit on the number of recipients.
-- Only one `post_channel` to the same Board channel per run. You can post to the same channel again in a different run.
-- There is no hourly or daily send budget, and no send rejection based on conversation depth between pairs.
-- Conversation depth between internal Anima instances may be logged for diagnostic purposes. This is observation only; it does not discard message content or reject sending.
+- The intent for `send_message` is `report` or `question`. Use `delegate_task` for task delegation.
+- Only one DM to the same recipient per run. This guard prevents duplicate sends; there is no limit on the number of recipients.
+- There are no send budgets per hour or per day, and no send refusals based on conversation depth between pairs.
+- Conversation depth between internal Anima may be logged for diagnostic purposes. This is for observation only; it does not discard message contents or refuse to send.
 
 ## Responses to Acknowledgments, Thanks, and Praise
 

@@ -11,6 +11,7 @@ from core.anima.inbox import _board_mention_suppression_channels
 from core.messaging.messenger import InboxItem
 from core.schemas import Message
 from core.tooling.handler import ToolHandler, suppress_board_fanout_channels
+from core.tooling.handler_base import BOARD_REPLY_CHANNELS_ENV
 
 
 def _item(content: str, *, meta: dict[str, object] | None = None, msg_type: str = "board_mention") -> InboxItem:
@@ -96,3 +97,40 @@ def test_only_triggering_channel_suppresses_mentions(
 
     assert team_suppression is True
     assert general_suppression is False
+
+
+def test_subprocess_suppression_comes_from_environment(
+    handler: ToolHandler,
+    post_api: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Board CLI runs in a Bash subprocess and only sees the exported set."""
+    monkeypatch.setenv(BOARD_REPLY_CHANNELS_ENV, "team-x,ops")
+
+    handler._handle_post_channel({"channel": "team-x", "text": "@bob reply"})
+    team_suppression = post_api.call_args.kwargs["suppress_mentions"]
+    handler._handle_post_channel({"channel": "general", "text": "@bob update"})
+    general_suppression = post_api.call_args.kwargs["suppress_mentions"]
+
+    assert team_suppression is True
+    assert general_suppression is False
+
+
+def test_engine_environment_exports_the_suppressed_channels(tmp_path: Path) -> None:
+    from core.execution.session.session_context import RuntimeSessionContext
+    from core.execution.workspace_env import build_workspace_env
+
+    anima_dir = tmp_path / "animas" / "alice"
+    anima_dir.mkdir(parents=True)
+    ctx = RuntimeSessionContext.create(session_type="inbox", thread_id="default", trigger="inbox")
+
+    assert build_workspace_env(anima_dir)[BOARD_REPLY_CHANNELS_ENV] == ""
+    token = suppress_board_fanout_channels.set(frozenset({"team-x", "ops"}))
+    try:
+        workspace_value = build_workspace_env(anima_dir)[BOARD_REPLY_CHANNELS_ENV]
+        session_value = ctx.to_env()[BOARD_REPLY_CHANNELS_ENV]
+    finally:
+        suppress_board_fanout_channels.reset(token)
+
+    assert workspace_value == "ops,team-x"
+    assert session_value == "ops,team-x"

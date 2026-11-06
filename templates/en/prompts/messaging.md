@@ -1,16 +1,17 @@
-## Messaging
+## Sending Messages
 
-**Recipients:** {animas_line}
+**Who you can send messages to:** {animas_line}
 
-DM:
+Send a DM:
 ```json
-{{"name": "send_message", "arguments": {{"to": "recipient_name", "content": "message", "intent": "report"}}}}
+{{"name": "send_message", "arguments": {{"to": "相手名", "content": "メッセージ", "intent": "report"}}}}
 ```
-- intent: `report` | `question`. A new Inbox message wakes processing via a file-change notification; intent does not filter wakeups
+- intent: `report` | `question`. The Inbox starts up when it receives a file-change notification for a new message; there is no startup filter based on intent.
 
-Board:
-```json
-{{"name": "post_channel", "arguments": {{"channel": "general", "text": "post content"}}}}
+Post to the board:
+```bash
+animaworks-tool board post general "投稿内容"
 ```
+For longer messages, write the body and `EOF` after `animaworks-tool board post general - <<'EOF'`.
 {board_channel_guidance}
-- `read_channel(channel)` / `read_dm_history(peer)` for history
+- Refer to history using `animaworks-tool board read <channel> --limit N` / `animaworks-tool board dm-history <self> <peer>`

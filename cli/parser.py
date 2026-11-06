@@ -211,10 +211,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_board_read.set_defaults(func=_lazy_board_read)
 
     # board post
-    p_board_post = board_sub.add_parser("post", help="Post to channel")
-    p_board_post.add_argument("from_anima", help="Sender anima name")
-    p_board_post.add_argument("channel", help="Channel name")
-    p_board_post.add_argument("text", help="Message text")
+    p_board_post = board_sub.add_parser(
+        "post",
+        help=t("cli.board_post_parser_help"),
+        description=t("cli.board_post_parser_description"),
+    )
+    p_board_post.add_argument(
+        "post_args",
+        nargs="+",
+        metavar="ARG",
+        help=t("cli.board_post_parser_args_help"),
+    )
+    p_board_post.add_argument("--as", dest="as_name", default=None, metavar="NAME", help=t("cli.board_post_as_help"))
     p_board_post.set_defaults(func=_lazy_board_post)
 
     # board dm-history

@@ -167,6 +167,43 @@ def test_read_only_scopes_are_rejected_without_writing(writer: _WriteHandler, pa
 
     assert json.loads(result)["error_type"] == "PermissionDenied"
     assert not (writer._anima_dir / path).exists()
+
+
+def test_shared_channel_memory_read_redirects_to_board_cli(
+    writer: _WriteHandler,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    channel_file = data_dir / "shared" / "channels" / "general.jsonl"
+    channel_file.parent.mkdir(parents=True)
+    channel_file.touch()
+    monkeypatch.setattr("core.paths.get_data_dir", lambda: data_dir)
+
+    result = json.loads(writer._handle_read_memory_file({"path": str(channel_file)}))
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "PermissionDenied"
+    assert "animaworks-tool board read general" in result["message"]
+
+
+def test_shared_channel_memory_write_redirects_to_board_cli(
+    writer: _WriteHandler,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    channel_file = data_dir / "shared" / "channels" / "general.jsonl"
+    channel_file.parent.mkdir(parents=True)
+    channel_file.touch()
+    monkeypatch.setattr("core.paths.get_data_dir", lambda: data_dir)
+
+    result = json.loads(writer._handle_write_memory_file({"path": str(channel_file), "content": "do not write"}))
+
+    assert result["status"] == "error"
+    assert result["error_type"] == "PermissionDenied"
+    assert "animaworks-tool board post general -" in result["message"]
+    assert not hasattr(writer, "posted_channel_args")
     writer._memory._get_indexer.assert_not_called()
 
 

@@ -73,57 +73,58 @@
 - 상급자에게 보고 MUST인 조건: 업무 판단 필요, 다른 부서가 관여, 긴급도가 높음
 - 다른 부서의 Anima에게는 직접 연락하지 않는다 (MUST: 상급자 경유)
 
-### 5단계: 에스컬레이션 실행하기
+### Step 5: 에스컬레이션 실행
 
-보고 메시지에는 다음 요소를 MUST로 포함해야 한다:
+보고 메시지에는 다음 요소를 반드시 포함해야 한다:
 
-1. **상황**: 무엇이 발생하고 있는가
-2. **원인**: 무엇이 원인으로 추정되는가 (불명확하면 「원인 조사 중」)
-3. **시도**: 스스로 무엇을 시도했는가
-4. **요청**: 상급자에게 무엇을 해주길 바라는가 (판단, 권한 부여, 중재 등)
+1. **상황**: 무슨 일이 일어나고 있는지
+2. **원인**: 무엇이 원인으로 보이는지(불명확하면 “원인 조사 중”)
+3. **시도**: 직접 무엇을 시도했는지
+4. **요청**: 상급자에게 무엇을 해주길 바라는지(판단, 권한 부여, 중재 등)
 
-**send_message의 제약 (구현 기준)**:
-- `intent`는 MUST: `report`(보고), `question`(질문) 중 하나. 생략 불가. `intent="delegation"`는 **거부**됨 (작업 위임은 `delegate_task`만 가능)
-- acknowledgment(확인 응답)・감사・FYI는 DM 불가. Board(post_channel) 사용
-- 동일 run에서 같은 수신자에게 DM을 보낼 수 있는 것은 1통까지. 수신자 수의 상한은 없음
-- 시간・일 단위의 전송 예산이나 대화 깊이에 따른 전송 거부는 없음. 상세는 `communication/sending-limits.md` 참조
-- **수신자**: Anima 이름, 또는 인간 별칭 (config에서 설정된 경우 Slack/Chatwork 등으로 외부 배송)
-- **채팅 중**: 인간 사용자에 대한 응답은 직접 텍스트로 수행. `send_message`는 다른 Anima 수신자(또는 설정된 별칭 경유 외부)에게만 사용
-- **인간에게 연락** (별칭 미설정 등 `send_message`로 도달하지 않는 수신자): 톱레벨 Anima이고 알림 설정이 있는 경우 `call_human` 사용 (아래)
-- 스레드 답변 시에는 `reply_to`와 `thread_id`을 지정하여 맥락 유지
-- 긴급도가 「높음」이고 인간의 즉시 대응이 필요한 경우 `call_human` 검토 (`subject`, `body`, `priority`)
+**send_message 제약 사항(구현 기준)**:
+- `intent`은 MUST: `report`(보고), `question`(질문) 중 하나여야 한다. 생략 불가. `intent="delegation"`은 **거부**된다(작업 위임은 `delegate_task`만 가능)
+- 확인 응답·감사 인사·FYI는 DM으로 보낼 수 없다. `animaworks-tool board post <channel> <text>`로 Board에 공유한다
+- 동일한 run에서 같은 수신자에게 DM을 보낼 수 있는 횟수는 1회다. 수신자 수에는 제한이 없다
+- 시간 또는 일 단위의 전송 예산이나 대화 깊이에 따른 전송 거부는 없다. 자세한 내용은 `communication/sending-limits.md` 참조
+- **수신자**: Anima 이름 또는 인간 별칭(config에서 설정된 경우 Slack/Chatwork 등으로 외부 전송)
+- **채팅 중**: 인간 사용자에게는 직접 텍스트로 답변한다. `send_message`은 다른 Anima를 수신자로 지정할 때(또는 설정된 별칭을 통한 외부 전송)에만 사용한다
+- **인간에게 연락**(별칭이 설정되지 않은 경우 등 `send_message`로 연락할 수 없는 수신자): 최상위 Anima이고 알림 설정이 있으면 `call_human`를 사용한다(아래 참조)
+- 스레드에 답글을 달 때는 `reply_to`과 `thread_id`을 지정해 문맥을 유지한다
+- 긴급도가 “높음”이고 인간의 즉각적인 대응이 필요하면 `call_human`를 고려한다(`subject`, `body`, `priority`)
 
-**post_channel(Board)의 제약** (팀 전체 공유에 사용):
-- 메타 미설정 채널(general, ops 등)은 전원 이용 가능. 멤버제 채널은 멤버만 게시 가능(ACL). 액세스 권한이 없는 경우 `manage_channel(action="info", channel="チャネル名")`로 멤버 확인 가능
-- 동일 채널에는 1 run당 1회만 게시 가능. run 간 게시 cooldown은 없음
-- 본문에 `@名前`로 멘션 가능. 멘션 대상에는 DM 알림이 도착
+**Board 게시 제약 사항**(팀 전체에 공유할 때 사용):
+- 메타데이터가 설정되지 않은 채널(general, ops 등)은 누구나 사용할 수 있다. 멤버 전용 채널은 멤버만 게시할 수 있다(ACL). 액세스 권한이 없으면 `animaworks-tool internal manage-channel info <channel>`으로 멤버를 확인할 수 있다
+- 본문에서 `@名前`으로 멘션할 수 있다. 멘션된 사람에게는 DM 알림이 전달된다
 
-**call_human과 인간 알림 기반 (`core/notification/` 구현 기준)**:
+**call_human 및 인간 알림 기반 시스템(`core/notification/` 구현 기준)**:
 
-- **도구의 유효 조건**: `config.json`의 `human_notification.enabled`가 true이고, 또한 `HumanNotifier.from_config`가 **실제로 1건 이상의 전송 채널**을 구축할 수 있었던 것 (`channels[]` 중 `enabled: true`이고 등록된 `type`만 대상. `enabled: false`는 스킵, 미등록 `type`는 경고 로그 후 스킵)
-- **톱레벨 한정 (supervisor 게이트)**: `config.animas`에 **그 Anima 이름의 엔트리가 있고**, 또한 `supervisor`가 비 null일 때, `HumanNotifier`는 부여되지 않고 `call_human`는 사용 불가 (부하는 상급자에게 `send_message`로 에스컬레이션). **`animas`에 미등록 Anima는 이 게이트를 통과하지 않으므로**, 이론상으로는 알림 채널만으로 `call_human`가 붙을 가능성이 있음. 운영에서는 모든 Anima를 `animas`에 명시하고, `supervisor: null`만이 인간 알림을 가지도록 하면 안전
-- **전송 방식**: `HumanNotifier.notify`가 유효한 각 채널로 **병렬 전송** (`asyncio.gather(..., return_exceptions=True)`). 채널마다 성공 문자열 또는 `ERROR`을 포함한 실패 문자열이 반환되고, **예외는 1채널에서 삼켜지고 나머지는 계속 진행**
-- **대응 채널 종류** (`human_notification.channels[].type`): `slack`, `chatwork`, `line`, `telegram`, `ntfy` (`core/notification/channels/*.py`의 `@register_channel`에 대응). 복수 채널을 병렬 정의 가능
-- **파라미터**: `subject`, `body`는 필수. `priority`는 임의. 열거는 `low` / `normal` / `high` / `urgent` (생략 시 `normal`). **`PRIORITY_LEVELS` 외의 문자열은 `HumanNotifier.notify` 내에서 `normal`로 정규화**
-- **우선도의 표시 방식**:
-  - **Slack / Chatwork / LINE / Telegram**: `high` / `urgent`일 때 선두에 **`[HIGH]` / `[URGENT]`** (`priority.upper()`). `low` / `normal`에서는 부여하지 않음
-  - **ntfy**: HTTP 헤더 `Priority`에 `low=2`, `normal=3`, `high=4`, `urgent=5`을 설정. 본문은 요청 바디(최대 약 4096자), `Title` 헤더에 제목＋필요 시 `(from Anima名)`
-- **Slack** (`channels/slack.py`):
-  - **Bot Token + `channel`** (`chat.postMessage`) 또는 **Incoming Webhook**. 본문은 `md_to_slack_mrkdwn`로 Slack용으로 정형화
-  - **Bot이고 `anima_name`가 있는 경우**: API의 `username`에 Anima 이름을 전달하므로, **본문 쪽의 `(from Anima名)`는 붙이지 않음** (Webhook 모드에서는 본문에 `(from Anima名)` 부여). 설정과 에셋이 갖춰지면 `icon_url`도 부여 가능
-  - **스레드 답변 라우팅** (`reply_routing.py`): Bot으로 게시하고, 또한 `anima_name`가 비어 있지 않고, API 응답에 `ts`가 있을 때만 `notification_map.json`에 저장. 경로는 `{data_dir}/run/notification_map.json` (보통은 `~/.animaworks/run/`). 엔트리는 **작성 후 최대 7일**로 폐기. Webhook은 `ts`를 얻을 수 없어 매핑 불가
-  - 라우팅 시 가능하면 Slack API로 스레드 요약을 취득하고, 실패 시 저장된 알림 문장의 요약으로 폴백. Inbox로의 외부 메시지는 `intent="question"`
-- **Chatwork**: `room_id`는 **숫자만** 허용. 본문은 `md_to_chatwork` 변환 후 `[info][title]…[/title]…[/info]` 형식
-- **LINE**: Push API. 텍스트는 최대 5000자로 잘라냄
-- **Telegram**: `parse_mode=HTML`. 제목은 `<b>…</b>`, 전체 4096자 이내로 조정 (이스케이프 후 잘라냄)
-- **크레덴셜**: 기저 `NotificationChannel._resolve_credential_with_vault`는 **설정 키의 env → `{キー}__{anima_name}` (vault/shared）→ 원시 키**의 순서. Slack Bot은 이에 더해 `get_credential("slack", "notification", …)`의 폴백 있음 (각 `channels/*.py` 참조)
-- **채팅 UI**: 스트리밍 응답으로 **`notification_sent`** 이벤트가 전송됨 (`core/anima/messaging.py` 경유. 외부 채널과는 별도 경로)
-- **기록**: `call_human` 실행 시, 통일 활동 로그에 **`human_notify`** (`via`는 구현상 고정으로 `configured_channels`). 함께 `tool_result`도 남음. Priming의 「Pending Human Notifications」는 **과거 24시간・최대 10건**의 `human_notify`를 집약 (`core/memory/priming/outbound.py`)
-- **기타 HumanNotifier 이용**: 백그라운드 도구 완료 등, **동일한 `HumanNotifier`**로 프레임워크가 인간에게 보내는 경로가 있음 (`call_human` 도구 이외. 톱레벨 Anima에 한정되는 점은 동일)
-- **Mode S (CLI)**: `animaworks-tool call_human "件名" "本文" [--priority …]`에서도 같은 계열의 알림을 보낼 수 있음
+- **도구 활성화 조건**: `config.json`의 `human_notification.enabled`이 true이고, `HumanNotifier.from_config`이 **실제로 하나 이상의 전송 채널**을 구성할 수 있어야 한다(`channels[]` 중 `enabled: true`이며 등록된 `type`만 대상. `enabled: false`은 건너뛰고, 등록되지 않은 `type`은 경고 로그를 남긴 뒤 건너뜀)
+- **최상위 전용(supervisor 게이트)**: `config.animas`에 **해당 Anima 이름의 항목이 있고**, `supervisor`이 null이 아니면 `HumanNotifier`은 부여되지 않아 `call_human`을 사용할 수 없다(부하는 상급자에게 `send_message`로 에스컬레이션). **`animas`에 등록되지 않은 Anima는 이 게이트를 통과하지 않으므로**, 이론상 알림 채널만으로 `call_human`이 부여될 수 있다. 운영 시에는 모든 Anima를 `animas`에 명시하고, `supervisor: null`만 인간 알림을 갖도록 하는 것이 안전하다
+- **전송 방식**: `HumanNotifier.notify`이 활성화된 각 채널로 **병렬 전송**한다(`asyncio.gather(..., return_exceptions=True)`). 채널별로 성공 문자열 또는 `ERROR`을 포함한 실패 문자열이 반환되며, **예외는 해당 채널에서 처리되고 다른 채널은 계속 진행**
+- **지원 채널 유형**(`human_notification.channels[].type`): `slack`, `chatwork`, `line`, `telegram`, `ntfy`(`core/notification/channels/*.py`의 `@register_channel` 지원). 여러 채널을 병렬로 정의할 수 있다
+- **매개변수**: `subject`, `body`은 필수다. `priority`은 선택 사항이다. 값은 `low` / `normal` / `high` / `urgent` 중 하나(생략 시 `normal`). **`PRIORITY_LEVELS` 이외의 문자열은 `HumanNotifier.notify` 내에서 `normal`로 정규화된다**
+- **우선순위 표시 방식**:
+  - **Slack / Chatwork / LINE / Telegram**: `high` / `urgent`이면 앞에 **`[HIGH]` / `[URGENT]`**을 붙인다(`priority.upper()`). `low` / `normal`에서는 붙이지 않는다
+  - **ntfy**: HTTP 헤더 `Priority`에 `low=2`, `normal=3`, `high=4`, `urgent=5`를 설정한다. 본문은 요청 본문(최대 약 4096자)으로 보내고, `Title` 헤더에는 제목과 필요한 경우 `(from Anima名)`을 설정한다
+- **Slack**(`channels/slack.py`):
+  - **Bot Token + `channel`**(`chat.postMessage`) 또는 **Incoming Webhook**을 사용한다. 본문은 `md_to_slack_mrkdwn`에 따라 Slack용으로 형식이 지정된다
+  - **Bot을 사용하고 `anima_name`이 있는 경우**: API의 `username`에 Anima 이름을 전달하므로 **본문에는 `(from Anima名)`을 붙이지 않는다**(Webhook 모드에서는 본문에 `(from Anima名)`을 붙임). 설정과 에셋이 갖춰지면 `icon_url`도 붙일 수 있다
+  - **스레드 답글 라우팅**(`reply_routing.py`): Bot으로 게시하고 `anima_name`이 비어 있지 않으며 API 응답에 `ts`이 있을 때만 `notification_map.json`에 저장한다. 경로는 `{data_dir}/run/notification_map.json`(보통 `~/.animaworks/run/`)이다. 항목은 **생성 후 최대 7일**이 지나면 삭제된다. Webhook에서는 `ts`을 가져올 수 없어 매핑할 수 없다
+  - 라우팅할 때는 가능한 경우 Slack API에서 스레드 요약을 가져오고, 실패하면 저장된 알림 메시지의 요약으로 대체한다. Inbox로 들어오는 외부 메시지는 `intent="question"`
+- **Chatwork**: `room_id`에는 **숫자만** 허용된다. 본문은 `md_to_chatwork` 변환 후 `[info][title]…[/title]…[/info]` 형식으로 전송된다
+- **LINE**: Push API를 사용한다. 텍스트는 최대 5000자로 잘라낸다
+- **Telegram**: `parse_mode=HTML`. 제목은 `<b>…</b>`으로 설정하고, 이스케이프 후 잘라내 전체 길이를 4096자 이내로 조정한다
+- **자격 증명**: 기본 `NotificationChannel._resolve_credential_with_vault`은 설정 키의 env → `{キー}__{anima_name}`(vault/shared）→ 원래 키) 순으로 조회한다. Slack Bot은 여기에 더해 `get_credential("slack", "notification", …)`으로 대체 조회할 수 있다(각 `channels/*.py` 참조)
+- **채팅 UI**: 스트리밍 응답에서 **`notification_sent`** 이벤트를 전송한다(`core/anima/messaging.py` 경유. 외부 채널과는 별도 경로)
+- **기록**: `call_human` 실행 시 통합 활동 로그에 **`human_notify`**을 기록한다(`via`은 구현상 `configured_channels`으로 고정). `tool_result`도 함께 남는다. Priming의 “Pending Human Notifications”에는 최근 24시간 동안의 `human_notify`을 최대 10건까지 모아 보여준다(`core/memory/priming/outbound.py`)
+- **HumanNotifier의 기타 사용처**: 백그라운드 도구 완료 등, 프레임워크가 **동일한 `HumanNotifier`**을 통해 인간에게 전송하는 경로가 있다(`call_human` 도구 이외. 최상위 Anima로 제한되는 점은 동일)
+- **Mode S(CLI)**: `animaworks-tool call_human "件名" "本文" [--priority …]`에서도 같은 방식의 알림을 전송할 수 있다
 
-**call_human의 파라미터 (요약)**:
-- `subject`, `body`는 필수. `priority`는 임의 (`low` / `normal` / `high` / `urgent`, 기본값 `normal`. 부정 값은 `normal` 취급)
+**call_human 매개변수(요약)**:
+- `subject`, `body`은 필수다. `priority`은 선택 사항이다(`low` / `normal` / `high` / `urgent` 중 하나, 기본값 `normal`. 유효하지 않은 값은 `normal`으로 처리)
+
+---
 
 ## 에스컬레이션 메시지 템플릿
 

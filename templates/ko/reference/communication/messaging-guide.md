@@ -7,15 +7,15 @@
 
 메시지 전송에는 `send_message` 도구를 사용한다(권장).
 
-### 파라미터 목록
+### 매개변수 목록
 
-| 파라미터 | 타입 | 필수 | 설명 |
+| 매개변수 | 형식 | 필수 | 설명 |
 |-----------|------|------|------|
-| `to` | string | MUST | 수신처. 해결 규칙은 아래 「수신처 `to`의 해결」 참조. Anima 이름·`config.json`의 인간 별칭·`slack:USERID` / `chatwork:ROOMID`·Slack 사용자 ID 단독(`U` + 영숫자 8자 이상) 사용 가능 |
+| `to` | string | MUST | 수신 대상. 해결 규칙은 아래 「수신 대상 `to` 해결」을 참조. Anima 이름, `config.json`의 사람 별칭, `slack:USERID` / `chatwork:ROOMID`, Slack 사용자 ID 단독(`U` + 영숫자 8자 이상)을 사용할 수 있음 |
 | `content` | string | MUST | 메시지 본문 |
-| `intent` | string | MUST | 메시지 의도. 허용 값: `report`(진행 상황·결과 보고), `question`(질문·답변이 필요한 문의)만. 작업 위임에는 `delegate_task` 도구를 사용할 것. acknowledgment·감사·FYI는 Board(post_channel)를 사용할 것 |
+| `intent` | string | MUST | 메시지의 의도. 허용값: `report`(진행 상황·결과 보고), `question`(질문·답변이 필요한 문의)만 해당. 작업 위임에는 `delegate_task` 도구를 사용할 것. acknowledgment·감사·FYI는 `animaworks-tool board post <channel> <text>`로 Board에 공유할 것 |
 | `reply_to` | string | MAY | 답장 대상 메시지의 ID(예: `20260215_093000_123456`) |
-| `thread_id` | string | MAY | 스레드 ID. 기존 스레드에 참여하는 경우 지정 |
+| `thread_id` | string | MAY | 스레드 ID. 기존 스레드에 참여할 때 지정 |
 
 ### DM의 run 내 규칙
 
@@ -88,25 +88,25 @@ send_message(
 send_message(to="user", content="対応完了しました。", intent="report")
 ```
 
-### intent의 용도 구분
+### intent 구분
 
 | intent | 용도 | 예 |
 |--------|------|-----|
 | `report` | 진행 상황·결과 보고 | 작업 완료 보고, 상급자에게 상황 보고 |
-| `question` | 답변이 필요한 질문 | 불명확한 점 확인, 판단을 구하는 문의 |
+| `question` | 답변이 필요한 질문 | 불명확한 점 확인, 판단을 요청하는 문의 |
 
-**주의**: 「알겠습니다」「감사합니다」 등의 acknowledgment·감사·FYI는 DM으로 보낼 수 없다. Board(post_channel)를 사용할 것.
+**주의**: 「알겠습니다」, 「감사합니다」와 같은 acknowledgment·감사·FYI는 DM으로 보낼 수 없다. `animaworks-tool board post <channel> <text>`로 Board에 공유할 것.
 
-### Board와 DM의 용도 구분
+### Board와 DM 구분
 
 | 용도 | 사용 도구 | 예 |
 |------|-----------|-----|
 | 진행 상황 보고·결과 보고 | send_message (intent=report) | 상급자에게 작업 완료 보고 |
-| 작업 위임 | delegate_task | 직속 부하에게 하나의 영속 작업을 위임. 진행 상황은 task_tracker로 확인 |
+| 작업 위임 | delegate_task | 직속 부하에게 하나의 지속 작업을 위임. 진행 상황은 task_tracker에서 확인 |
 | 질문·문의 | send_message (intent=question) | 불명확한 점 확인 |
-| 이해·감사·FYI | post_channel(Board) | 「알겠습니다」「공유했습니다」 |
-| 팀 전체에 공유 | post_channel(Board) | 관계자에게 일괄 공지 |
-| 동일 수신처로 2번째 | post_channel(Board) | 추가 정보 공유 |
+| 확인·감사·FYI | `animaworks-tool board post <channel> <text>` | 「알겠습니다」, 「공유했습니다」 |
+| 팀 전체에 공유 | `animaworks-tool board post <channel> <text>` | 관계자에게 일괄 공지 |
+| 동일 수신 대상에게 두 번째 메시지 | `animaworks-tool board post <channel> <text>` | 추가 정보 공유 |
 
 ## 스레드 관리
 
@@ -289,19 +289,19 @@ Slack 메시지가 Inbox에 기록되면 파일 변경 알림으로 Inbox 처리
 
 ## 자주 있는 실패와 대책
 
-### intent 지정 실수
+### intent 지정 오류
 
-**증상**: `Error: DMのintentは 'report', 'question' のみ許可されています` 이라고 표시됨
+**증상**: `Error: DMのintentは 'report', 'question' のみ許可されています`로 표시됨
 
-**원인**: `intent` 을 생략했거나, acknowledgment·감사·FYI를 DM으로 보내려 했음
+**원인**: `intent`을 생략했거나 acknowledgment·감사·FYI를 DM으로 보내려고 함
 
-**대책**: DM에서는 반드시 `intent` 에 `report` 또는 `question` 를 지정한다. 작업 위임에는 `delegate_task` 를 사용한다. 이해·감사·FYI는 Board(post_channel)를 사용한다
+**대책**: DM에서는 반드시 `intent`에 `report` 또는 `question`를 지정할 것. 작업 위임에는 `delegate_task`를 사용할 것. 확인·감사·FYI에는 `animaworks-tool board post <channel> <text>`을 사용할 것
 
 **증상**: `intent='delegation' は廃止されました` 등으로 표시됨
 
-**원인**: 기존의 `send_message(..., intent="delegation")` 를 사용하고 있음
+**원인**: 기존 `send_message(..., intent="delegation")`을 사용하고 있음
 
-**대책**: 작업 위임은 **`delegate_task`** 만 사용한다. `send_message` 의 `intent` 는 `report` / `question` 만
+**대책**: 작업 위임에는 **`delegate_task`**만 사용할 것. `send_message`의 `intent`은 `report` / `question`만 해당
 
 ### 수신처 이름 오류
 
@@ -332,13 +332,13 @@ Slack 메시지가 Inbox에 기록되면 파일 변경 알림으로 Inbox 처리
 
 **대책**: 결론을 맨 앞에 두고, 상세는 파일로 분리한다. 메시지 본문은 요약+파일 참조 형식으로 한다
 
-### 동일 수신처로 2회째 전송
+### 동일 수신 대상에게 두 번째 전송
 
-**증상**: `Error: このrunで既に {to} にメッセージを送信済みです` 이라고 표시됨
+**증상**: `Error: このrunで既に {to} にメッセージを送信済みです`로 표시됨
 
-**원인**: 1회의 run에서 동일 수신처에 2회 이상 send_message를 호출함
+**원인**: 한 번의 run에서 동일 수신 대상에게 send_message를 두 번 이상 호출함
 
-**대책**: 추가 연락은 Board(post_channel)를 사용한다. 또는 다음 run(하트비트 등)에서 전송한다
+**대책**: 추가 연락에는 `animaworks-tool board post <channel> <text>`을 사용할 것. 또는 다음 run(하트비트 등)에서 전송할 것
 
 ### 답장을 잊음
 
@@ -348,10 +348,10 @@ Slack 메시지가 Inbox에 기록되면 파일 변경 알림으로 Inbox 처리
 
 ## 전송 규칙
 
-- `send_message` 의 intent는 `report` 또는 `question`. 작업 위임에는 `delegate_task` 를 사용한다.
-- 동일 run에서 같은 수신처로의 DM은 1통까지. 수신처 수의 상한은 없다.
-- 동일 run에서 같은 Board 채널에 게시할 수 있는 것은 1회까지. run을 넘는 cooldown이나 DM / Board 공통의 전송 예산은 없다.
-- 페어별 대화 깊이에 따른 전송 거부는 없다. 내부 Anima 간의 깊이는 진단 목적으로 로그에 기록될 수 있지만, 전송 본문은 폐기되지 않는다.
+- `send_message`의 intent는 `report` 또는 `question`이다. 작업 위임에는 `delegate_task`을 사용할 것.
+- 동일 run에서 같은 수신 대상에게 보내는 DM은 1건까지다. 수신 대상 수에는 제한이 없다.
+- Board 게시물의 cooldown이나 DM / Board 공통 전송 예산은 없다.
+- 쌍별 대화 깊이에 따른 전송 거부는 없다. 내부 Anima 간의 깊이는 진단 목적으로 로그에 기록될 수 있지만, 전송 본문은 폐기되지 않는다.
 
 ## 답장 방침
 

@@ -196,9 +196,8 @@ class TestBoardMentionFanout:
         assert "[board_reply:channel=dev,from=test-anima]" in content
         # Check original text is included
         assert original_text in content
-        # Check reply instructions with post_channel guidance
-        assert "post_channel" in content
-        assert 'channel="dev"' in content
+        # Check reply instructions point to the Board CLI
+        assert "animaworks-tool board post dev -" in content
 
     def test_fanout_dm_type_is_board_mention(
         self,

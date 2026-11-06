@@ -5,22 +5,22 @@
 向上司报告是组织运作的生命线。
 通过以适当的时机和形式进行报告，支持问题的早期发现与快速决策。
 
-## 工具的使用区分
+## 工具的使用场景
 
-报告使用 `send_message` 工具。请遵守以下约束。
+报告请使用 `send_message` 工具。请遵守以下限制。
 
 | 工具 | 用途 | 备注 |
 |--------|------|------|
-| `send_message` | 向上司、同事进行一对一报告、提问 | 报告、进度、请求判断用 `intent="report"`，提问用 `intent="question"`。Anima 名、别名、`slack:`/`chatwork:` 等（参见下文） |
-| `post_channel` | 向整个团队发布通知（Board） | acknowledgments、感谢、FYI 使用 Board。同一频道 1 run 1 次。run 之间没有 cooldown |
+| `send_message` | 向上司或同事进行一对一报告或提问 | 报告、进度汇报和请求判断使用 `intent="report"`，提问使用 `intent="question"`。Anima 名称、别名、`slack:`/`chatwork:` 等（见下文） |
+| `animaworks-tool board post <channel> <text>` | 向整个团队发布通知（Board） | 致谢、感谢和 FYI 请使用 Board |
 | `call_human` | 向人类发送紧急通知 | 服务停止、安全事件等 |
 
-**send_message 的约束**：
-- `intent` 为必填，值**只能是 `report` 或 `question`**（报告、进度用 `report`，提问用 `question`）。**`delegation` 不能在 `send_message` 中使用**（工具会拒绝）。任务委派使用 `delegate_task`
-- 同一 run 中向同一收件人发送的 DM 最多 1 条。收件人数量没有上限
-- 追加联络使用 Board（post_channel）
-- **收件人**参见下文「收件人的解析」（Anima 名、人类别名、直接指定 `slack:` / `chatwork:` 等）
-- **注**：在聊天会话中，不能向人类使用 send_message。请直接用文本回复
+**send_message 的限制**：
+- `intent` 为必填项，值只能是 **`report` 或 `question`**（报告、进度汇报使用 `report`，提问使用 `question`）。**`delegation` 不能用于 `send_message`**（工具会拒绝）。委派任务请使用 `delegate_task`
+- 同一 run 中，发往同一收件人的 DM 最多只能发送 1 条。收件人数没有上限
+- 其他联系请使用 `animaworks-tool board post <channel> <text>`
+- **收件人** 请参阅下文的“收件人解析”（例如 Anima 名称、人类别名、直接指定 `slack:` / `chatwork:` 等）
+- **注意**：在聊天会话期间，不能使用 send_message 联系人类。请直接以文本回复。
 
 ### 收件人的解析与外部投递（`core/messaging/outbound.py`）
 

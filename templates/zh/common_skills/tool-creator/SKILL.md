@@ -269,13 +269,13 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 }
 ```
 
-## 向仓库添加核心工具时
+## 在仓库中添加核心工具时
 
-1. 添加 `core/integrations/{name}.py`（以 `_` 开头的不是扫描对象）。
-2. `TOOL_MODULES` 通过 `discover_core_tools()` 自动注册。不需要 `core/integrations/__init__.py` 的手动列表。
-3. MCP 的精选允许列表为 `core/tooling/surface.py` 的 `MCP_TOOL_NAMES`。`resolve_tool_surface` 在 MCP 使用模式（S / C / D / G / X）下根据触发器和角色进行筛选。例：`search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`。**Slack / Gmail / `web_search` 等外部服务类核心工具不会出现在 MCP 中** — 通常走 **`use_tool` / Bash（`animaworks-tool`）/ 技能** 路径。
-4. 在 `tests/` 中添加测试。若自动生成schema或参考文档，也需确认 `scripts/generate_reference.py` 的对象。
-5. 破坏性操作需考虑 `gated: True` 和 permissions 侧的说明更新。
+1. 添加 `core/integrations/{name}.py`（以 `_` 开头的内容不在扫描范围内）。
+2. `TOOL_MODULES` 会通过 `discover_core_tools()` 自动注册。无需维护 `core/integrations/__init__.py` 手动列表。
+3. MCP 的精选允许列表位于 `core/tooling/surface.py` 的 `MCP_TOOL_NAMES`。`resolve_tool_surface` 会根据 MCP 使用模式（S / C / D / G / X），按触发条件和角色进行筛选。示例：`search_memory`、`read_memory_file`、`write_memory_file`、`archive_memory_file`、`send_message`、`call_human`、`delegate_task`、`submit_tasks`、`update_task`、`create_skill`。Board 的读取和发布通过 Bash（`animaworks-tool board read/post`）进行。**Slack / Gmail / `web_search` 等外部服务类核心工具不会出现在 MCP 中**——通常通过 **`use_tool` / Bash（`animaworks-tool`）/ 技能** 路径使用。
+4. 将测试添加到 `tests/`。如果会自动生成架构或参考文档，也请检查 `scripts/generate_reference.py` 中的相关内容。
+5. 对于破坏性操作，请考虑更新 `gated: True` 和 permissions 一侧的说明。
 
 ## 验证检查清单
 
