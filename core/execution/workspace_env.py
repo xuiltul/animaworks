@@ -52,7 +52,7 @@ def resolve_scratch_dir(anima_dir: Path) -> Path:
 
 def build_workspace_env(anima_dir: Path) -> dict[str, str]:
     """Build environment overrides for scratch and shared package caches."""
-    from core.tooling.handler_base import board_reply_channels_env
+    from core.execution.session.board_reply import board_reply_channels_env
 
     env = {"ANIMAWORKS_SCRATCH_DIR": str(resolve_scratch_dir(anima_dir))}
     env.update(board_reply_channels_env())

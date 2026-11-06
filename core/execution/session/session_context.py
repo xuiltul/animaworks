@@ -74,8 +74,8 @@ class RuntimeSessionContext:
     def to_env(self) -> dict[str, str]:
         import json
 
+        from core.execution.session.board_reply import board_reply_channels_env
         from core.tasks.board.tasks import current_attempt_identity
-        from core.tooling.handler_base import board_reply_channels_env
 
         identity = current_attempt_identity()
         return {

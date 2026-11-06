@@ -20,41 +20,20 @@ from core.config.file_access_policy import (
     evaluate_protected_write,
 )
 from core.exceptions import MemoryWriteError, ToolExecutionError  # noqa: F401
+from core.execution.session.board_reply import (  # noqa: F401
+    BOARD_REPLY_CHANNELS_ENV,
+    board_reply_channels,
+    board_reply_channels_env,
+    suppress_board_fanout_channels,
+)
 from core.i18n import t
 from core.time_utils import now_iso  # noqa: F401
 
 logger = logging.getLogger("animaworks.tool_handler")
 
-# ── Board fanout suppression (context-scoped for background tasks) ──
-# Only posts to the channels that triggered an inbox board_mention reply are
-# suppressed.  Keeping the set (rather than a boolean) leaves every other
-# channel's mention delivery intact.
-suppress_board_fanout_channels: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
-    "suppress_board_fanout_channels",
-    default=frozenset(),
-)
-
+# ── Board fanout suppression (see core.execution.session.board_reply) ──
 # Backward-compatible alias for callers that imported the previous name.
 suppress_board_fanout = suppress_board_fanout_channels
-
-# Tool subprocesses (the Board CLI run from Bash, MCP servers) cannot see the
-# context variable, so engines export the same set through this variable.
-BOARD_REPLY_CHANNELS_ENV = "ANIMAWORKS_BOARD_REPLY_CHANNELS"
-
-
-def board_reply_channels_env() -> dict[str, str]:
-    """Return the environment entry that carries the suppressed channels."""
-    return {BOARD_REPLY_CHANNELS_ENV: ",".join(sorted(suppress_board_fanout_channels.get()))}
-
-
-def board_reply_channels() -> frozenset[str]:
-    """Return the channels whose posts must not fan out mentions in this run."""
-    from core.platform.env import get_env
-
-    channels = set(suppress_board_fanout_channels.get())
-    raw = get_env(BOARD_REPLY_CHANNELS_ENV, "") or ""
-    channels.update(part.strip() for part in raw.split(",") if part.strip())
-    return frozenset(channels)
 
 
 # ── Active session type (context-scoped for concurrent HB+conversation) ──
