@@ -547,6 +547,7 @@ class ExternalMessagingChannelConfig(BaseModel):
 
     enabled: bool = False
     mode: str = "socket"  # "socket" | "webhook"
+    channel_discovery: bool = False  # run Slack channel auto-discovery (SlackChannelSync); Slack only
     anima_mapping: dict[str, str] = {}  # channel_id → anima_name ("" = ignore this channel)
     default_anima: str = ""  # fallback anima for unmapped channels
     app_id_mapping: dict[str, str] = {}  # api_app_id → anima_name (per-Anima webhook routing)

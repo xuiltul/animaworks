@@ -196,6 +196,15 @@ def _ensure_board(shared_dir: Path, board_name: str, slack_channel_name: str) ->
     if board_file.exists():
         return False
 
+    meta = load_channel_meta(shared_dir, board_name)
+    if meta is not None and meta.closed:
+        logger.debug(
+            "Skipping Slack channel #%s because board name '%s' is archived",
+            slack_channel_name,
+            board_name,
+        )
+        return False
+
     # Create empty board file
     board_file.touch()
 

@@ -658,6 +658,9 @@ class CommsToolsMixin:
 
         if action == "create":
             channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            meta = load_channel_meta(shared_dir, channel)
+            if meta is not None and meta.closed:
+                return t("handler.channel_archived_name_reserved", channel=channel)
             if channel_file.exists():
                 return t("handler.channel_already_exists", channel=channel)
             members = args.get("members", [])
@@ -742,58 +745,62 @@ class CommsToolsMixin:
 
         elif action == "archive":
             channel_file = shared_dir / "channels" / f"{channel}.jsonl"
-            meta = load_channel_meta(shared_dir, channel)
-            if not channel_file.exists() and meta is None:
-                return t("handler.channel_not_found", channel=channel)
-            company_error = self._channel_company_boundary_error(channel)
-            if company_error is not None:
-                return company_error
-            if meta is not None and meta.members and self._anima_name not in meta.members:
-                return t("handler.channel_acl_not_member", channel=channel)
-            if meta is not None and meta.closed and not channel_file.exists():
-                return _json.dumps(
-                    {
-                        "action": "archive",
-                        "channel": channel,
-                        "archived": False,
-                        "already_archived": True,
-                        "closed": True,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+            from core.platform.locks import locked_path
 
-            def _close_channel(current: ChannelMeta | None) -> ChannelMeta:
-                if current is None:
-                    from core.org.company import get_company
-
-                    return ChannelMeta(
-                        members=[],
-                        created_by=self._anima_name,
-                        created_at=now_iso(),
-                        closed=True,
-                        company=get_company(self._anima_name, animas_dir=self._anima_dir.parent) or "",
-                    )
-                current.closed = True
-                return current
-
+            lock_path = channel_file.with_name(f"{channel_file.name}.lock")
             try:
-                closed_meta = update_channel_meta(shared_dir, channel, _close_channel, create_if_missing=True)
-                if closed_meta is None:
-                    return _error_result("ArchiveFailed", f"Could not write channel tombstone for #{channel}")
+                with locked_path(lock_path, exclusive=True, thread_lock=True):
+                    meta = load_channel_meta(shared_dir, channel)
+                    if not channel_file.exists() and meta is None:
+                        return t("handler.channel_not_found", channel=channel)
+                    company_error = self._channel_company_boundary_error(channel)
+                    if company_error is not None:
+                        return company_error
+                    if meta is not None and meta.members and self._anima_name not in meta.members:
+                        return t("handler.channel_acl_not_member", channel=channel)
+                    if meta is not None and meta.closed and not channel_file.exists():
+                        return _json.dumps(
+                            {
+                                "action": "archive",
+                                "channel": channel,
+                                "archived": False,
+                                "already_archived": True,
+                                "closed": True,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
 
-                archived_path = None
-                if channel_file.exists():
-                    archive_dir = shared_dir / "channels" / "archive"
-                    archive_dir.mkdir(parents=True, exist_ok=True)
-                    archived_path = archive_dir / channel_file.name
-                    if archived_path.exists():
-                        stem, suffix = channel_file.stem, channel_file.suffix
-                        counter = 1
-                        while archived_path.exists():
-                            archived_path = archive_dir / f"{stem}_{counter}{suffix}"
-                            counter += 1
-                    channel_file.rename(archived_path)
+                    def _close_channel(current: ChannelMeta | None) -> ChannelMeta:
+                        if current is None:
+                            from core.org.company import get_company
+
+                            return ChannelMeta(
+                                members=[],
+                                created_by=self._anima_name,
+                                created_at=now_iso(),
+                                closed=True,
+                                company=get_company(self._anima_name, animas_dir=self._anima_dir.parent) or "",
+                            )
+                        current.closed = True
+                        return current
+
+                    closed_meta = update_channel_meta(shared_dir, channel, _close_channel, create_if_missing=True)
+                    if closed_meta is None:
+                        return _error_result("ArchiveFailed", f"Could not write channel tombstone for #{channel}")
+
+                    archived_path = None
+                    if channel_file.exists():
+                        archive_dir = shared_dir / "channels" / "archive"
+                        archive_dir.mkdir(parents=True, exist_ok=True)
+                        archived_path = archive_dir / channel_file.name
+                        if archived_path.exists():
+                            stem, suffix = channel_file.stem, channel_file.suffix
+                            counter = 1
+                            while archived_path.exists():
+                                archived_path = archive_dir / f"{stem}_{counter}{suffix}"
+                                counter += 1
+                        channel_file.rename(archived_path)
             except OSError as exc:
                 logger.warning("manage_channel archive failed: #%s: %s", channel, exc)
                 return _error_result("ArchiveFailed", f"Failed to archive channel #{channel}: {exc}")

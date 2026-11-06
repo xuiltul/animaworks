@@ -202,6 +202,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Error: チャネル #{channel} は既に存在します",
         "en": "Error: Channel #{channel} already exists",
     },
+    "handler.channel_archived_name_reserved": {
+        "ja": "Error: #{channel} はアーカイブ済みの名前です。別の名前を使ってください。",
+        "en": "Error: The archived name #{channel} is reserved. Use a different name.",
+    },
     "handler.channel_created": {
         "ja": "チャネル #{channel} を作成しました（メンバー: {members}）",
         "en": "Channel #{channel} created (members: {members})",
