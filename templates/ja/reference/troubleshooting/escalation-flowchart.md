@@ -95,7 +95,6 @@
 
 **Board投稿の制約**（チーム全体への共有に使用）:
 - メタ未設定のチャネル（general, ops 等）は全員利用可能。メンバー制チャネルはメンバーのみ投稿可能（ACL）。アクセス権がない場合は `animaworks-tool internal manage-channel info <channel>` でメンバーを確認できる
-- 同一チャネルには1 run につき1回まで投稿できる。run 間の投稿 cooldown はない
 - 本文に `@名前` でメンション可能。メンション先には DM 通知が届く
 
 **call_human と人間通知基盤（`core/notification/` 実装準拠）**:

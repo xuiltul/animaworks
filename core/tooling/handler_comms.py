@@ -20,11 +20,11 @@ from core.tooling.handler_base import (
     OnMessageSentFn,
     _error_result,
     active_session_type,
+    board_reply_channels,
     build_outgoing_origin_chain,
     meeting_context,
     meeting_mode,
     record_meeting_redirect,
-    suppress_board_fanout_channels,
 )
 
 if TYPE_CHECKING:
@@ -460,7 +460,7 @@ class CommsToolsMixin:
                 text,
                 from_anima=self._anima_name,
                 source="anima",
-                suppress_mentions=channel in suppress_board_fanout_channels.get(),
+                suppress_mentions=channel in board_reply_channels(),
             )
         except BoardPostClientError as exc:
             if exc.status_code == 404:

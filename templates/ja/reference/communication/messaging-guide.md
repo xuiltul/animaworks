@@ -350,7 +350,7 @@ Slack メッセージが Inbox に書き込まれると、ファイル変更通�
 
 - `send_message` の intent は `report` または `question`。タスク委譲には `delegate_task` を使う。
 - 同一 run で同じ宛先への DM は 1 通まで。宛先数の上限はない。
-- 同一 run で同じ Board チャネルへ投稿できるのは 1 回まで。run をまたぐ cooldown や DM / Board 共通の送信予算はない。
+- Board 投稿の cooldown や、DM / Board 共通の送信予算はない。
 - ペアごとの会話深度による送信拒否はない。内部 Anima 間の深度は診断目的でログに記録されることがあるが、送信本文は破棄されない。
 
 ## 返信の方針

@@ -37,6 +37,26 @@ suppress_board_fanout_channels: contextvars.ContextVar[frozenset[str]] = context
 # Backward-compatible alias for callers that imported the previous name.
 suppress_board_fanout = suppress_board_fanout_channels
 
+# Tool subprocesses (the Board CLI run from Bash, MCP servers) cannot see the
+# context variable, so engines export the same set through this variable.
+BOARD_REPLY_CHANNELS_ENV = "ANIMAWORKS_BOARD_REPLY_CHANNELS"
+
+
+def board_reply_channels_env() -> dict[str, str]:
+    """Return the environment entry that carries the suppressed channels."""
+    return {BOARD_REPLY_CHANNELS_ENV: ",".join(sorted(suppress_board_fanout_channels.get()))}
+
+
+def board_reply_channels() -> frozenset[str]:
+    """Return the channels whose posts must not fan out mentions in this run."""
+    from core.platform.env import get_env
+
+    channels = set(suppress_board_fanout_channels.get())
+    raw = get_env(BOARD_REPLY_CHANNELS_ENV, "") or ""
+    channels.update(part.strip() for part in raw.split(",") if part.strip())
+    return frozenset(channels)
+
+
 # ── Active session type (context-scoped for concurrent HB+conversation) ──
 active_session_type: contextvars.ContextVar[str] = contextvars.ContextVar(
     "active_session_type",

@@ -376,7 +376,6 @@ send_message(
 
 - `RecipientResolutionError`、外部チャネルの `DeliveryFailed`、権限・会社境界エラーなど、実際の配送エラーが返る
 - `send_message` で同一 run 内に同じ宛先へ2通目を送ろうとすると拒否される（重複防止）。宛先数の上限はない
-- `animaworks-tool board post <channel> <text>` で同じ run 内に同じチャネルへ2回目を投稿しようとすると拒否される。run 間の投稿 cooldown はない
 - 時間・日単位の送信予算や会話深度による送信拒否はない。内部 Anima 間の深度は診断ログに記録される場合がある
 
 ### 対処手順

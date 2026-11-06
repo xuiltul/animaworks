@@ -75,9 +75,11 @@ class RuntimeSessionContext:
         import json
 
         from core.tasks.board.tasks import current_attempt_identity
+        from core.tooling.handler_base import board_reply_channels_env
 
         identity = current_attempt_identity()
         return {
+            **board_reply_channels_env(),
             "ANIMAWORKS_REQUEST_ID": self.request_id,
             "ANIMAWORKS_SESSION_TYPE": self.session_type,
             "ANIMAWORKS_THREAD_ID": self.thread_id,

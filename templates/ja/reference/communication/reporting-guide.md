@@ -12,7 +12,7 @@
 | ツール | 用途 | 備考 |
 |--------|------|------|
 | `send_message` | 上司・同僚への1対1報告・質問 | 報告・進捗・判断依頼は `intent="report"`、質問は `intent="question"`。Anima 名・エイリアス・`slack:`/`chatwork:` 等（下記参照） |
-| `animaworks-tool board post <channel> <text>` | チーム全体へのお知らせ（Board） | acknowledgments・感謝・FYI は Board を使用。同一チャネル1 run 1回。run 間の cooldown はない |
+| `animaworks-tool board post <channel> <text>` | チーム全体へのお知らせ（Board） | acknowledgments・感謝・FYI は Board を使用 |
 | `call_human` | 人間への緊急通知 | サービス停止・セキュリティインシデント等 |
 
 **send_message の制約**:
