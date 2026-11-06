@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=8c7baf6741d5a0c56e76949bc1e8e5f2bbbf75c568282f1b44129e68d1888289 generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=e57c923a28041a370ea56e5ebebcdedae1d658a54fb768d00dca1308a0798ceb generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -392,7 +392,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 426 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 434 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
@@ -549,19 +549,19 @@ Model Context Protocol servers and clients.
 
 ## `core.memory`
 
-Storage, search, and organization of conversation and episode memory.
+Storage, search, and organization of conversational and episodic memory.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
 | `core.memory.config_reader` | 31 | — |
 | `core.memory.conversation.compression` | 322 | Compression logic for conversation memory. |
 | `core.memory.conversation.finalize` | 493 | Session finalization for conversation memory. |
-| `core.memory.conversation.memory` | 349 | Conversation memory (会話記憶 / ワーキングメモリ) management. |
+| `core.memory.conversation.memory` | 349 | Conversation memory (conversation memory / working memory) management. |
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
-| `core.memory.conversation.shortterm` | 313 | Short-term memory (短期記憶) management. |
+| `core.memory.conversation.shortterm` | 313 | Short-term memory (short-term memory) management. |
 | `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
@@ -594,7 +594,7 @@ Storage, search, and organization of conversation and episode memory.
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 534 | — |
+| `core.memory.priming.channel_b` | 539 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -713,16 +713,17 @@ Storage, search, and organization of conversation and episode memory.
 
 ## `core.messaging`
 
-Message delivery between Anima and external parties.
+Message delivery between animas and to external parties.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board_fanout` | 95 | — |
+| `core.messaging.board_fanout` | 96 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.meeting_room_store` | 130 | — |
-| `core.messaging.messenger` | 1082 | — |
+| `core.messaging.mentions` | 32 | — |
+| `core.messaging.messenger` | 1098 | — |
 | `core.messaging.outbound` | 408 | — |
 | `core.messaging.outbound_auto` | 377 | — |
 | `core.messaging.recipient_status` | 79 | — |
@@ -988,16 +989,16 @@ Text token estimation and truncation to fit within budget.
 
 Tool schemas, permissions, and execution infrastructure.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.tooling` | 1 | Tooling package; import specific modules to avoid eager handler loading. |
-| `core.tooling._handler_protocols（非公開）` | 233 | Structural host protocols for the compositional mixins. |
+| `core.tooling._handler_protocols（非公開）` | 234 | Structural host protocols for the compositional mixins. |
 | `core.tooling.codex_command_hook` | 31 | Core command-policy decision for Codex's PreToolUse hook. |
 | `core.tooling.dispatch` | 256 | — |
-| `core.tooling.handler` | 912 | — |
+| `core.tooling.handler` | 917 | — |
 | `core.tooling.handler_base` | 335 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
-| `core.tooling.handler_comms` | 1027 | — |
+| `core.tooling.handler_comms` | 1036 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
@@ -1127,7 +1128,7 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `server.routes` | 63 | — |
 | `server.routes.animas` | 1271 | — |
@@ -1135,7 +1136,7 @@ Voice input/output and voice dialogue.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 496 | — |
+| `server.routes.channels` | 498 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1148,7 +1149,7 @@ Voice input/output and voice dialogue.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1562 | — |
+| `server.routes.internal` | 1580 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |

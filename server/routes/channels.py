@@ -243,6 +243,8 @@ def create_channels_router() -> APIRouter:
                 status_code=403,
                 content={"detail": f"Access denied to channel '{name}'"},
             )
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"detail": str(exc)})
 
         # Broadcast WebSocket event
         event_data = {

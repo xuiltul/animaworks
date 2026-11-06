@@ -7,7 +7,6 @@ from __future__ import annotations
 """Shared @mention fan-out for Board posts."""
 
 import logging
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,14 +33,16 @@ def fanout_board_mentions(
     mention syntax, running-process check, channel ACL, company boundary, and
     delivery behavior cannot drift between entry points.
     """
-    mentions = re.findall(r"@(\w+)", text)
-    if not mentions:
-        return
-
     from core.paths import get_data_dir
 
     sockets_dir = get_data_dir() / "run" / "sockets"
     running = {path.stem for path in sockets_dir.glob("*.sock")} if sockets_dir.exists() else set()
+    from core.messaging.mentions import extract_mentions
+
+    mentions = extract_mentions(text, running)
+    if not mentions:
+        return
+
     if "all" in mentions:
         targets = running - {from_anima}
     else:

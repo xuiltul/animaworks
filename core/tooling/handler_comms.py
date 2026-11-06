@@ -440,6 +440,7 @@ class CommsToolsMixin:
     # ── Channel tool handlers ────────────────────────────────
 
     def _handle_post_channel(self: _CommsToolsHost, args: dict[str, Any]) -> str:
+        self._last_post_channel_succeeded = False
         if not self._messenger:
             return "Error: messenger not configured"
         channel = args.get("channel", "")
@@ -480,7 +481,10 @@ class CommsToolsMixin:
             return t("handler.channel_not_found", channel=channel)
         except ChannelAccessDeniedError:
             return t("handler.channel_acl_denied", channel=channel)
+        except ValueError as exc:
+            return _error_result("InvalidArguments", str(exc))
 
+        self._last_post_channel_succeeded = True
         self._posted_channels.setdefault(session_type, set()).add(channel)
         logger.info("post_channel channel=%s anima=%s", channel, self._anima_name)
 
@@ -537,6 +541,11 @@ class CommsToolsMixin:
         HTTP call.  The ~1 s blocking is acceptable because we are
         already off the main event loop.
         """
+        from core.platform.env import get_env
+
+        if get_env("ANIMAWORKS_DISABLE_EXTERNAL_SYNC") == "1":
+            return
+
         try:
             import asyncio
 

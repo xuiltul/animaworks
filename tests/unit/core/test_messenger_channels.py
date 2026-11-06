@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -134,6 +135,18 @@ class TestPostChannel:
         assert entry["text"] == "format check"
         assert entry["source"] == "anima"
 
+    def test_unknown_poster_raises_instead_of_silently_returning(self, shared_dir, messenger, monkeypatch):
+        _ensure_channel(shared_dir, "general")
+        monkeypatch.setattr(
+            "core.config.models.load_config",
+            lambda: SimpleNamespace(animas={"alice": object()}),
+        )
+
+        with pytest.raises(ValueError):
+            messenger.post_channel("general", "hello", from_name="unknown")
+
+        assert (shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8") == ""
+
 
 # ── read_channel ─────────────────────────────────────────
 
@@ -209,6 +222,22 @@ class TestReadChannelMentions:
         messenger.post_channel("general", "Hey @bob check this")
         result = messenger.read_channel_mentions("general", name="bob")
         assert len(result) == 1
+
+    def test_full_name_case_punctuation_and_suffix(self, shared_dir, messenger):
+        _ensure_channel(shared_dir, "general")
+        messenger.post_channel("general", "Review @TEAM-LEAD。")
+        messenger.post_channel("general", "Similar but unknown @team-leader")
+        messenger.post_channel("general", "Please check @alice、")
+        messenger.post_channel("general", "Please check @alice2")
+        messenger.post_channel("general", "Please check @bob-")
+
+        team_lead_mentions = messenger.read_channel_mentions("general", name="team-lead")
+        alice_mentions = messenger.read_channel_mentions("general", name="alice")
+        bob_mentions = messenger.read_channel_mentions("general", name="bob")
+
+        assert [entry["text"] for entry in team_lead_mentions] == ["Review @TEAM-LEAD。"]
+        assert [entry["text"] for entry in alice_mentions] == ["Please check @alice、"]
+        assert [entry["text"] for entry in bob_mentions] == ["Please check @bob-"]
 
     def test_limit(self, shared_dir, messenger):
         _ensure_channel(shared_dir, "general")
@@ -322,6 +351,24 @@ class TestReceiveExternalChannelMirroring:
         assert entry["source"] == "human"
         assert entry["from"] == "owner"  # Human identity, not anima name
         assert "@all" in entry["text"]
+
+    def test_unknown_human_name_does_not_abort_external_message(self, shared_dir, messenger, monkeypatch):
+        _ensure_channel(shared_dir, "general")
+        monkeypatch.setattr(
+            "core.config.models.load_config",
+            lambda: SimpleNamespace(animas={"alice": object()}),
+        )
+
+        message = messenger.receive_external(
+            "@all announcement",
+            source="human",
+            external_user_id="external-user",
+        )
+
+        assert message is not None
+        assert messenger.receive()
+        channel_file = shared_dir / "channels" / "general.jsonl"
+        assert channel_file.read_text(encoding="utf-8") == ""
 
     def test_human_without_at_all_no_mirror(self, shared_dir, messenger):
         messenger.receive_external(

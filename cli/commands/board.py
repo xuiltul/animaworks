@@ -81,7 +81,7 @@ def cmd_board_post(args: argparse.Namespace) -> None:
     messenger = Messenger(get_shared_dir(), args.from_anima)
     try:
         messenger.post_channel(args.channel, args.text)
-    except ChannelNotFoundError as exc:
+    except (ChannelNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     except ChannelAccessDeniedError as exc:

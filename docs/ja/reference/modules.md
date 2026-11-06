@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 59d586519d19d29a4e98bd58fe5c153f9b15c9613c648b1f9c78dd064596100b -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 4d27ac124fa16cbfceac43a2077999874cfdab2dff4f2b2b16f4975c1ff4b7ac -->
 
 # モジュール一覧
 
@@ -392,7 +392,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 426 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 434 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
@@ -594,7 +594,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 534 | — |
+| `core.memory.priming.channel_b` | 539 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -718,11 +718,12 @@ anima 間および外部とのメッセージ配送。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board_fanout` | 95 | — |
+| `core.messaging.board_fanout` | 96 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.meeting_room_store` | 130 | — |
-| `core.messaging.messenger` | 1082 | — |
+| `core.messaging.mentions` | 32 | — |
+| `core.messaging.messenger` | 1098 | — |
 | `core.messaging.outbound` | 408 | — |
 | `core.messaging.outbound_auto` | 377 | — |
 | `core.messaging.recipient_status` | 79 | — |
@@ -991,13 +992,13 @@ anima メインの実行時コンポーネント、プロセス間通信、タ�
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.tooling` | 1 | Tooling package; import specific modules to avoid eager handler loading. |
-| `core.tooling._handler_protocols（非公開）` | 233 | Structural host protocols for the compositional mixins. |
+| `core.tooling._handler_protocols（非公開）` | 234 | Structural host protocols for the compositional mixins. |
 | `core.tooling.codex_command_hook` | 31 | Core command-policy decision for Codex's PreToolUse hook. |
 | `core.tooling.dispatch` | 256 | — |
-| `core.tooling.handler` | 912 | — |
+| `core.tooling.handler` | 917 | — |
 | `core.tooling.handler_base` | 335 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
-| `core.tooling.handler_comms` | 1027 | — |
+| `core.tooling.handler_comms` | 1036 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
@@ -1135,7 +1136,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 496 | — |
+| `server.routes.channels` | 498 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1148,7 +1149,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1562 | — |
+| `server.routes.internal` | 1580 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
