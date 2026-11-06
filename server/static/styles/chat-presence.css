@@ -213,9 +213,8 @@ body[data-theme="dark"] {
 }
 .chat-rail-tool.on { border-style: solid; background: rgba(255, 255, 255, .12); }
 
-/* The pane header's own split / meeting buttons move to the rail on wide screens. */
+/* The pane header's own split button moves to the rail on wide screens. */
 @media (min-width: 561px) {
-  .chat-anima-tabs-header .meeting-mode-toggle,
   .chat-anima-tabs-header .chat-split-pane-btn { display: none !important; }
 }
 
@@ -286,9 +285,8 @@ body[data-theme="dark"] {
   .chat-anima-tabs-header .chat-close-pane-btn { width: 30px; height: 30px; }
   .chat-anima-tabs-header > .chat-pane-head-tools,
   .chat-anima-tabs-header > .chat-header-actions { flex: none; }
-  .meeting-participant-panel { grid-column: 1; grid-row: 2; }
-  .chat-messages-area { grid-column: 1; grid-row: 3; }
-  [data-chat-id="chatPageForm"] { grid-column: 1; grid-row: 4; }
+  .chat-messages-area { grid-column: 1; grid-row: 2; }
+  [data-chat-id="chatPageForm"] { grid-column: 1; grid-row: 3; }
 }
 
 .chat-anima-tabs-header { align-items: center; min-width: 0; }

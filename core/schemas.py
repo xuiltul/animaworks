@@ -211,7 +211,6 @@ class CycleResult(BaseModel):
     # independent replay guard. Streaming may start work before records exist.
     fallback_safe: bool = True
     images: list[dict[str, str]] = Field(default_factory=list)
-    meeting_redirects: list[dict[str, str]] = Field(default_factory=list)
     cron_skill_rejections: list[dict[str, str]] = Field(default_factory=list)
     cron_skill_warnings: list[dict[str, str]] = Field(default_factory=list)
     error_category: str | None = None

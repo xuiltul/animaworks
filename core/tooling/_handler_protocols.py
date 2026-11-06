@@ -29,7 +29,6 @@ class _CommsToolsHost(Protocol):
     _persist_replied_to: Any
     _posted_channels: Any
     _replied_to: Any
-    _resolve_meeting_participant: Any
     _session_origin: Any
     _session_origin_chain: Any
     posted_channels_for: Any

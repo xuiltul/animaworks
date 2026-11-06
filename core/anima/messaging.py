@@ -484,65 +484,6 @@ def _chat_cycle_isolated(
     )
 
 
-def _build_meeting_context(
-    *,
-    thread_id: str,
-    room_id: str,
-    participants: list[str] | None,
-) -> dict[str, Any]:
-    if not room_id and thread_id.startswith("meeting-"):
-        room_id = thread_id.removeprefix("meeting-")
-    try:
-        from core.paths import get_shared_dir
-
-        meetings_dir = str(get_shared_dir() / "meetings")
-    except Exception:
-        meetings_dir = ""
-    return {
-        "room_id": room_id,
-        "meetings_dir": meetings_dir,
-        "participants": [str(p) for p in (participants or []) if str(p)],
-        "redirects": [],
-    }
-
-
-def _collect_meeting_redirects() -> list[dict[str, str]]:
-    from core.tooling.handler_base import meeting_context
-
-    ctx = meeting_context.get()
-    if not isinstance(ctx, dict):
-        return []
-    room_id = str(ctx.get("room_id") or "")
-    raw_redirects = ctx.get("redirects", [])
-    if not isinstance(raw_redirects, list):
-        return []
-    redirects: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
-    for item in raw_redirects:
-        if not isinstance(item, dict):
-            continue
-        to_name = str(item.get("to") or "")
-        content = str(item.get("content") or "")
-        if not to_name or not content:
-            continue
-        key = (to_name.lower(), content.strip(), str(item.get("from") or "").lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        redirects.append(
-            {
-                "room_id": str(item.get("room_id") or room_id),
-                "redirect_id": str(item.get("redirect_id") or ""),
-                "from": str(item.get("from") or ""),
-                "to": to_name,
-                "content": content,
-                "intent": str(item.get("intent") or ""),
-                "ts": str(item.get("ts") or ""),
-            }
-        )
-    return redirects
-
-
 class MessagingMixin:
     """Mixin: human chat processing, bootstrap, and greeting."""
 
@@ -808,8 +749,6 @@ class MessagingMixin:
         thread_id: str = "default",
         include_cycle_result: bool = False,
         source: str = "",
-        meeting_room_id: str = "",
-        meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
         model: str | None = None,
         display_message: str | None = None,
@@ -830,8 +769,6 @@ class MessagingMixin:
             intent=intent,
             thread_id=thread_id,
             source=source,
-            meeting_room_id=meeting_room_id,
-            meeting_participants=meeting_participants,
             voice_mode=voice_mode,
             model=model,
             _sync_compat=True,
@@ -857,8 +794,6 @@ class MessagingMixin:
         intent: str = "",
         thread_id: str = "default",
         source: str = "",
-        meeting_room_id: str = "",
-        meeting_participants: list[str] | None = None,
         voice_mode: bool = False,
         model: str | None = None,
         display_message: str | None = None,
@@ -933,20 +868,6 @@ class MessagingMixin:
                 self._task_slots[_conv_key] = f"Responding to {from_person}"
                 bootstrap_before = self.needs_bootstrap
                 _session_token = self.agent._tool_handler.set_active_session_type("chat")
-                _meeting_token = None
-                _meeting_context_token = None
-                if source == "meeting":
-                    from core.tooling.handler_base import meeting_context, meeting_mode
-
-                    _meeting_token = meeting_mode.set(True)
-                    _meeting_context_token = meeting_context.set(
-                        _build_meeting_context(
-                            thread_id=thread_id,
-                            room_id=meeting_room_id,
-                            participants=meeting_participants,
-                        )
-                    )
-
                 # Human-facing chat must use the per-Anima status.json model,
                 # independent of any background/helper model in flight.
                 primary_model_config = _resolve_voice_model_config(
@@ -1098,9 +1019,6 @@ class MessagingMixin:
                             raw_cycle_result = chunk.get("cycle_result", {})
                             cycle_result = raw_cycle_result if isinstance(raw_cycle_result, dict) else {}
                             chunk["cycle_result"] = cycle_result
-                            meeting_redirects = _collect_meeting_redirects()
-                            if meeting_redirects:
-                                cycle_result["meeting_redirects"] = meeting_redirects
                             guard_ok, guard_meta = _chat_cycle_isolated(
                                 cycle_result,
                                 expected_trigger=f"message:{from_person}",
@@ -1131,10 +1049,6 @@ class MessagingMixin:
                                 self.anima_dir,
                             )
                             cycle_result["summary"] = summary
-                            if meeting_redirects:
-                                for redirect in meeting_redirects:
-                                    yield {"type": "meeting_redirect", **redirect}
-
                             response_artifacts = extract_image_artifacts_from_tool_records(
                                 cycle_result.get("tool_call_records", [])
                             )
@@ -1286,14 +1200,6 @@ class MessagingMixin:
                         await _persist_conversation(conv_memory)
                     # Close journal (no-op if already finalized)
                     await asyncio.to_thread(journal.close)
-                    if _meeting_context_token is not None:
-                        from core.tooling.handler_base import meeting_context
-
-                        meeting_context.reset(_meeting_context_token)
-                    if _meeting_token is not None:
-                        from core.tooling.handler_base import meeting_mode
-
-                        meeting_mode.reset(_meeting_token)
                     try:
                         active_session_type.reset(_session_token)
                     except ValueError:

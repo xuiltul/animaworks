@@ -4,7 +4,6 @@ import {
   scheduleSaveChatUiState, CONSTANTS,
 } from "./ctx.js";
 import { TextAnimator, stripThinkTags } from "../../shared/chat/render-utils.js";
-import { streamMeetingChat } from "../../shared/chat-stream.js";
 import { clearReplyTarget, getReplyTarget, needsNotificationApi, quoteReplyMessage } from "../../shared/chat/reply-target.js";
 import {
   ensureThink, restoreThink, thinkOnText, thinkToolStart, thinkToolDetail, thinkToolEnd,
@@ -121,21 +120,16 @@ export function createStreamingController(ctx) {
     const attachmentManager = state.imageInputManager;
     const hasAttachments = Boolean((attachmentManager?.getImageCount() || 0) + (attachmentManager?.getFileCount() || 0));
     const filesProcessing = attachmentManager?.isProcessingFiles() || false;
-    const meetingActive = ctx.controllers.meeting?.isActive?.();
     const name = state.selectedAnima;
     const tid = state.selectedThreadId;
     const streamCtx = name ? mgr.getStreamingContext(name) : null;
     const isChatStreaming = streamCtx && streamCtx.thread === tid;
     const pendingQueue = name ? mgr.getPendingQueue(name, tid) : [];
-    const isMeetingStreaming = state.meetingStreaming === true;
 
     if (!sendBtn) return;
 
     sendBtn.classList.remove("stop", "interrupt");
-    if (meetingActive) {
-      setSendButtonIcon(sendBtn, "send");
-      sendBtn.disabled = filesProcessing || (!hasInput && !hasAttachments) || isMeetingStreaming;
-    } else if (!isChatStreaming) {
+    if (!isChatStreaming) {
       setSendButtonIcon(sendBtn, "send");
       sendBtn.disabled = filesProcessing || !name || (!hasInput && !hasAttachments && pendingQueue.length === 0);
     } else if (hasInput || hasAttachments) {
@@ -261,7 +255,6 @@ export function createStreamingController(ctx) {
     const hasImages = state.imageInputManager && state.imageInputManager.getImageCount() > 0;
     const hasFiles = state.imageInputManager && state.imageInputManager.getFileCount() > 0;
     if (state.imageInputManager?.isProcessingFiles()) return;
-    const meetingActive = ctx.controllers.meeting?.isActive?.();
     const name = state.selectedAnima;
     const tid = state.selectedThreadId;
     const streamCtx = name ? mgr.getStreamingContext(name) : null;
@@ -271,22 +264,6 @@ export function createStreamingController(ctx) {
     if (activeReplyTarget && (msg || hasImages || hasFiles)) {
       clearReplyTarget(state);
       ctx.controllers.events?.clearReplyTarget();
-    }
-
-    if (meetingActive && hasFiles) {
-      state.imageInputManager?.setAttachmentError("chat.attach.meeting_unsupported");
-      return;
-    }
-
-    if (meetingActive && (msg || hasImages)) {
-      sendMeetingChat(msg, {
-        images: state.imageInputManager?.getPendingImages() || [],
-        displayImages: state.imageInputManager?.getDisplayImages() || [],
-      });
-      input.value = "";
-      input.style.height = "auto";
-      state.imageInputManager?.clearImages();
-      return;
     }
 
     if (!isChatStreaming) {
@@ -364,15 +341,6 @@ export function createStreamingController(ctx) {
   }
 
   async function sendChat(message, overrideImages = null) {
-    if (ctx.controllers.meeting?.isActive?.()) {
-      if (overrideImages?.files?.length || state.imageInputManager?.getFileCount()) {
-        state.imageInputManager?.setAttachmentError("chat.attach.meeting_unsupported");
-        return;
-      }
-      sendMeetingChat(message, overrideImages);
-      return;
-    }
-
     const name = overrideImages?.targetAnima || state.selectedAnima;
     const images = overrideImages?.images || state.imageInputManager?.getPendingImages() || [];
     const displayImages = overrideImages?.displayImages || state.imageInputManager?.getDisplayImages() || [];
@@ -743,169 +711,6 @@ export function createStreamingController(ctx) {
 
     if (!success && error && error.name !== "AbortError") {
       logger.error("Chat stream error", { anima: name, error: error.message, name: error.name });
-    }
-  }
-
-  async function sendMeetingChat(message, overrideImages = null) {
-    const room = ctx.controllers.meeting?.getRoom?.();
-    if (!room?.room_id || (!message?.trim() && !(overrideImages?.images?.length))) return;
-    if (state.meetingStreaming) {
-      logger.warn("Blocked: meeting is already streaming");
-      return;
-    }
-
-    const images = overrideImages?.images || state.imageInputManager?.getPendingImages() || [];
-    const displayImages = overrideImages?.displayImages || state.imageInputManager?.getDisplayImages() || [];
-    const roomId = room.room_id;
-    const user = localStorage.getItem("animaworks_user") || "human";
-
-    mgr.addMessage("meeting", roomId, {
-      role: "user",
-      text: message || "",
-      images: displayImages,
-      timestamp: new Date().toISOString(),
-    });
-
-    state.meetingStreaming = true;
-    const abortController = new AbortController();
-
-    const input = $("chatPageInput");
-    if (input && !overrideImages) state.imageInputManager?.clearImages();
-    ctx.controllers.renderer?.reattach?.();
-
-    let currentStreamingMsg = null;
-    let _meetingTextAnimator = null;
-    const isVisible = () => Boolean(state.meetingMode && state.meetingRoom?.room_id === roomId);
-    const renderBubble = (msg, zone = "all") => {
-      if (isVisible()) ctx.controllers.renderer?.renderStreamingBubble?.(msg, zone);
-    };
-    const renderFull = () => {
-      if (isVisible()) ctx.controllers.renderer?.renderChat?.(!ctx.controllers.renderer?.isUserDetached?.());
-    };
-    let _rafPending = false;
-    let _rafZone = "all";
-    const _scheduleRender = (msg, zone = "text") => {
-      if (!_rafPending) _rafZone = zone;
-      else if (_rafZone !== zone) _rafZone = "all";
-      if (_rafPending) return;
-      _rafPending = true;
-      requestAnimationFrame(() => {
-        _rafPending = false;
-        const z = _rafZone;
-        _rafZone = "all";
-        renderBubble(msg, z);
-      });
-    };
-
-    try {
-      const body = JSON.stringify({
-        message: message || "",
-        from_person: user,
-        ...(images.length ? { images } : {}),
-      });
-
-      await streamMeetingChat(roomId, body, abortController.signal, {
-        onSpeakerStart: ({ speaker, role: speakerRole }) => {
-          currentStreamingMsg = {
-            role: "assistant",
-            speaker,
-            speakerRole: speakerRole || "participant",
-            from_person: speaker,
-            text: "",
-            streaming: true,
-            timestamp: new Date().toISOString(),
-            streamId: `meeting-${roomId}-${speaker}-${Date.now()}`,
-          };
-          mgr.getSession("meeting", roomId).messages.push(currentStreamingMsg);
-          renderFull();
-        },
-        onTextDelta: (text) => {
-          if (!currentStreamingMsg?.streaming) return;
-          currentStreamingMsg.text += text;
-          if (!_meetingTextAnimator) {
-            _meetingTextAnimator = new TextAnimator({
-              onUpdate: (displayText) => {
-                if (!currentStreamingMsg) return;
-                currentStreamingMsg._displayText = displayText;
-                _scheduleRender(currentStreamingMsg, "text");
-              },
-            });
-            _meetingTextAnimator.start();
-          }
-          _meetingTextAnimator.push(text);
-        },
-        onSpeakerEnd: () => {
-          if (_meetingTextAnimator) {
-            _meetingTextAnimator.flush();
-            _meetingTextAnimator.stop();
-            _meetingTextAnimator = null;
-          }
-          if (currentStreamingMsg) {
-            delete currentStreamingMsg._displayText;
-            currentStreamingMsg.streaming = false;
-            renderFull();
-          }
-          currentStreamingMsg = null;
-        },
-        onMeetingRedirect: ({ from, to, content }) => {
-          if (_meetingTextAnimator) {
-            _meetingTextAnimator.flush();
-            _meetingTextAnimator.stop();
-            _meetingTextAnimator = null;
-          }
-          if (currentStreamingMsg) {
-            delete currentStreamingMsg._displayText;
-            currentStreamingMsg.streaming = false;
-            currentStreamingMsg = null;
-          }
-          mgr.getSession("meeting", roomId).messages.push({
-            role: "assistant",
-            speaker: from || "",
-            speakerRole: from === room.chair ? "chair" : "participant",
-            from_person: from || "",
-            text: `@${to || ""} ${content || ""}`.trim(),
-            timestamp: new Date().toISOString(),
-          });
-          renderFull();
-        },
-        onDone: () => {
-          if (_meetingTextAnimator) {
-            _meetingTextAnimator.flush();
-            _meetingTextAnimator = null;
-          }
-          if (currentStreamingMsg) {
-            delete currentStreamingMsg._displayText;
-            currentStreamingMsg.streaming = false;
-          }
-          renderFull();
-        },
-        onError: ({ message: errorMsg }) => {
-          if (currentStreamingMsg) {
-            if (!currentStreamingMsg.text) currentStreamingMsg.text = "";
-            currentStreamingMsg.text += `\n${t("chat.error_prefix")} ${errorMsg}`;
-            delete currentStreamingMsg._displayText;
-            currentStreamingMsg.streaming = false;
-            renderFull();
-          }
-        },
-      });
-    } catch (err) {
-      if (err.name !== "AbortError") {
-        logger.error("Meeting chat stream error", { roomId, error: err.message });
-        if (currentStreamingMsg) {
-          currentStreamingMsg.text += `\n${t("chat.error_prefix")} ${err.message}`;
-          currentStreamingMsg.streaming = false;
-          renderFull();
-        }
-      }
-    } finally {
-      state.meetingStreaming = false;
-      if (input && state.meetingMode) {
-        input.placeholder = t("meeting.placeholder");
-        input.focus();
-      }
-      updateSendButton();
-      ctx.controllers.meeting?.updatePanel?.();
     }
   }
 

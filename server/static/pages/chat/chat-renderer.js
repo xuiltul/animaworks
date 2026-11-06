@@ -455,19 +455,18 @@ export function createChatRenderer(ctx) {
     const messagesEl = $("chatPageMessages");
     if (!messagesEl) return;
 
-    const isMeeting = state.meetingMode && state.meetingRoom;
-    const name = isMeeting ? "meeting" : state.selectedAnima;
-    const tid = isMeeting ? state.meetingRoom.room_id : state.selectedThreadId;
+    const name = state.selectedAnima;
+    const tid = state.selectedThreadId;
     const mgr = state.manager;
     const history = name ? mgr.getMessages(name, tid) : [];
     const hs = name ? mgr.getHistoryState(name, tid) : { sessions: [], feedItems: [], isFeed: false, hasMore: false, nextBefore: null, loading: false };
 
-    const currentAnima = isMeeting ? null : state.animas.find(a => a.name === name);
+    const currentAnima = state.animas.find(a => a.name === name);
     const animaStatus = currentAnima?.status;
 
-    if (!isMeeting && (currentAnima?.needs_repair || currentAnima?.bootstrap_state?.state === "needs_repair"
+    if (currentAnima?.needs_repair || currentAnima?.bootstrap_state?.state === "needs_repair"
         || animaStatus === "bootstrapping" || animaStatus === "starting" || animaStatus === "not_found"
-        || (animaStatus === "error" && currentAnima?._bootstrapFailed))) {
+        || (animaStatus === "error" && currentAnima?._bootstrapFailed)) {
       renderBootstrapProgress(messagesEl, currentAnima);
       return;
     }
@@ -508,7 +507,7 @@ export function createChatRenderer(ctx) {
         messagesEl.innerHTML = renderDemoSuggestedCards(state.selectedAnima);
         return;
       }
-      if (currentAnima?.needs_user_input && !state.demoMode && !isMeeting) {
+      if (currentAnima?.needs_user_input && !state.demoMode) {
         const animaName = currentAnima.name;
         const response = state.firstMeetingResponses.get(animaName);
         if (response) {
@@ -534,7 +533,7 @@ export function createChatRenderer(ctx) {
     }
 
     // Only background work so far: keep looking a little, then say so plainly.
-    const noConversation = hs.isFeed && !isMeeting && !state.demoMode && history.length === 0 && !hasFeedConversation(hs);
+    const noConversation = hs.isFeed && !state.demoMode && history.length === 0 && !hasFeedConversation(hs);
     const searching = noConversation && _ensureConversationAutoload(name, tid, hs);
 
     let topHtml = "";
@@ -627,7 +626,7 @@ export function createChatRenderer(ctx) {
 
     // Demo data ships only background activity; without a conversation the
     // visitor has no hint what to ask, so offer the suggestion cards below it.
-    if (state.demoMode && !isMeeting && state.selectedAnima && !hasRenderedConversation && history.length === 0) {
+    if (state.demoMode && state.selectedAnima && !hasRenderedConversation && history.length === 0) {
       sessionsHtml += renderDemoSuggestedCards(state.selectedAnima, { inline: true });
     }
 
@@ -685,7 +684,7 @@ export function createChatRenderer(ctx) {
     });
     if (window.lucide) lucide.createIcons({ nodes: [messagesEl] });
     initTextArtifactHandlers();
-    if (!isMeeting && name) _scheduleOlderFeedPrefetch(name, tid, hs);
+    if (name) _scheduleOlderFeedPrefetch(name, tid, hs);
 
     if (scrollToBottom) {
       messagesEl.scrollTop = messagesEl.scrollHeight;

@@ -45,7 +45,6 @@ let _instance = null;
 /**
  * @typedef {object} ManagerConfig
  * @property {function} streamChat - (animaName, body, signal, callbacks) => Promise
- * @property {function} [streamMeetingChat] - (roomId, body, signal, callbacks) => Promise
  * @property {function} fetchActiveStream - (animaName, threadId?) => Promise<object|null>
  * @property {function} fetchStreamProgress - (animaName, responseId) => Promise<object|null>
  * @property {function} getUser - () => string
@@ -480,63 +479,6 @@ export class ChatSessionManager extends EventTarget {
       session._streamingSince = null;
       session._abortController = null;
       this.#dispatch("stream-state-changed", { anima, thread, isStreaming: false });
-      onFinally?.();
-    }
-  }
-
-  /**
-   * Send a meeting chat message via SSE streaming.
-   * Uses session key "meeting:{roomId}" for meeting-specific state.
-   *
-   * @param {string} roomId - Meeting room ID
-   * @param {string} text - Message text
-   * @param {object} options
-   * @param {object} [options.callbacks] - SSE event callbacks (onTextDelta, onSpeakerStart, onSpeakerEnd, etc.)
-   * @param {function} [options.onFinally]
-   * @returns {Promise<{ success, queued, error }>}
-   */
-  async sendMeetingChat(roomId, text, options = {}) {
-    const { callbacks = {}, onFinally } = options;
-
-    const sessionKey = `meeting:${roomId}`;
-    const session = this.getSession(sessionKey, "default");
-
-    if (!this.#config.streamMeetingChat) {
-      return { success: false, error: new Error("streamMeetingChat not configured") };
-    }
-    if (session.isStreaming) {
-      return { streamingMsg: null, success: false, queued: true };
-    }
-
-    const sendTs = new Date().toISOString();
-    session.messages.push({ role: "user", text, timestamp: sendTs });
-
-    session._abortController = new AbortController();
-    session._streamingMsg = { streaming: true };
-    session._streamingSince = Date.now();
-
-    this.#dispatch("stream-state-changed", { anima: sessionKey, thread: "default", isStreaming: true });
-
-    try {
-      const user = this.#config.getUser();
-      const bodyObj = { message: text || "", from_person: user };
-
-      await this.#config.streamMeetingChat(
-        roomId, JSON.stringify(bodyObj), session._abortController.signal, callbacks,
-      );
-      return { success: true };
-    } catch (err) {
-      if (err.name === "AbortError") {
-        callbacks.onAbort?.();
-      } else {
-        callbacks.onError?.({ message: err.message });
-      }
-      return { success: false, error: err };
-    } finally {
-      session._streamingMsg = null;
-      session._streamingSince = null;
-      session._abortController = null;
-      this.#dispatch("stream-state-changed", { anima: sessionKey, thread: "default", isStreaming: false });
       onFinally?.();
     }
   }

@@ -13,7 +13,6 @@ import { createMemoryPopover } from "./memory-popover.js";
 import { createStreamingController } from "./streaming-controller.js";
 import { createEventsController } from "./events-controller.js";
 import { createImageVoiceController } from "./image-voice-controller.js";
-import { createMeetingController } from "./meeting-controller.js";
 import { createWorkIndicatorController } from "./work-indicator-controller.js";
 import { initSplitter } from "./splitter.js";
 import { onEvent } from "../../modules/websocket.js";
@@ -51,9 +50,6 @@ function paneHtml() {
         </div>
         <div class="chat-pane-head-tools" data-slot="head-tools"></div>
         <div class="chat-header-actions">
-          <button type="button" class="meeting-mode-toggle" data-chat-id="meetingModeToggle" title="${t("meeting.toggle")}" aria-label="${escapeHtml(t("meeting.toggle"))}">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </button>
           <div class="chat-add-conversation" data-chat-id="chatAddConversationArea">
             <button type="button" data-chat-id="chatAddConversationBtn" class="chat-add-conversation-btn">${t("chat.anima_select")}</button>
             <div data-chat-id="chatAddConversationMenu" class="chat-add-conversation-menu" role="listbox" aria-label="${t("chat.anima_select")}"></div>
@@ -91,8 +87,6 @@ function paneHtml() {
           <button class="chat-unified-user-logout" data-chat-id="chatUnifiedUserLogout">${t("ws.logout")}</button>
         </div>
       </div>
-
-      <div class="meeting-participant-panel" data-chat-id="meetingParticipantPanel" style="display:none"></div>
 
       <div class="chat-messages-area">
         <div data-chat-id="chatPageMessages" class="chat-messages chat-line-talk" style="flex:1; overflow-y:auto; padding:1rem;">
@@ -298,7 +292,6 @@ export function createPaneHost(rootContainer) {
     ctx.controllers.streaming = createStreamingController(ctx);
     ctx.controllers.events = createEventsController(ctx);
     ctx.controllers.imageVoice = createImageVoiceController(ctx);
-    ctx.controllers.meeting = createMeetingController(ctx);
     ctx.controllers.workIndicator = createWorkIndicatorController(ctx);
     ctx.controllers.head = createPaneHead(ctx);
     ctx.controllers.presencePanel = createPresencePanel(ctx);
@@ -313,7 +306,6 @@ export function createPaneHost(rootContainer) {
     _initModelSelect(ctx, paneEl);
 
     ctx.controllers.events.bindPaneEvents();
-    ctx.controllers.meeting.init();
     ctx.controllers.anima.loadAnimas();
 
     // A member hired after this page loaded is otherwise unknown here, so its

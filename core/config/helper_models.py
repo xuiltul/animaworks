@@ -32,7 +32,6 @@ HELPER_MODEL_ROLES: tuple[str, ...] = (
     "distillation",
     "reconsolidation",
     "asset_reconcile",
-    "meeting_summary",
 )
 
 
@@ -72,7 +71,6 @@ _ROLE_LEGACY_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     "reconsolidation": (("llm_model", "llm_credential"),),
     "conversation_compression": (("llm_model", "llm_credential"),),
     "asset_reconcile": (("llm_model", "llm_credential"),),
-    "meeting_summary": (("llm_model", "llm_credential"),),
     "weekly_consolidation": (
         ("weekly_llm_model", "weekly_llm_credential"),
         ("llm_model", "llm_credential"),
@@ -89,7 +87,6 @@ _ROLES_WITH_LEGACY_FALLBACK = frozenset(
         "reconsolidation",
         "conversation_compression",
         "asset_reconcile",
-        "meeting_summary",
     }
 )
 
