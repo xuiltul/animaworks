@@ -18,12 +18,9 @@ class _CommsToolsHost(Protocol):
     _call_human_keys: Any
     _channel_company_boundary_error: Any
     _cross_company_communication_error: Any
-    _fanout_board_mentions: Any
-    _fire_board_slack_sync: Any
     _human_notifier: Any
     _last_call_human_callback_id: Any
     _last_call_human_denied: Any
-    _last_post_channel_succeeded: Any
     _messenger: Any
     _on_message_sent: Any
     _pending_notifications: Any

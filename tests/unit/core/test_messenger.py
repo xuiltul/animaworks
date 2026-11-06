@@ -26,6 +26,9 @@ from core.tooling.handler_comms import CommsToolsMixin
 def shared_dir(tmp_path: Path) -> Path:
     d = tmp_path / "shared"
     d.mkdir()
+    anima_dir = tmp_path / "animas" / "alice"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     return d
 
 
@@ -765,7 +768,7 @@ class TestActivityLoggingWarning:
 
         # Create anima directory so the activity log path check passes
         anima_dir = shared_dir.parent / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
+        anima_dir.mkdir(parents=True, exist_ok=True)
 
         mock_activity = MagicMock()
         mock_activity.log.side_effect = RuntimeError("disk full")
@@ -782,7 +785,7 @@ class TestActivityLoggingWarning:
     def test_send_succeeds_despite_activity_failure(self, shared_dir, messenger):
         """send() should succeed even when ActivityLogger fails."""
         anima_dir = shared_dir.parent / "animas" / "alice"
-        anima_dir.mkdir(parents=True)
+        anima_dir.mkdir(parents=True, exist_ok=True)
 
         mock_activity = MagicMock()
         mock_activity.log.side_effect = RuntimeError("boom")
@@ -826,32 +829,13 @@ class TestServerFallback:
         ):
             messenger.send("bob", "hello", skip_logging=True)
 
-    def test_post_channel_falls_back_to_server_on_erofs(self, messenger: Messenger, shared_dir: Path) -> None:
+    def test_post_channel_compatibility_wrapper_uses_board_writer(self, messenger: Messenger, shared_dir: Path) -> None:
         channels = shared_dir / "channels"
         channels.mkdir()
         (channels / "general.jsonl").write_text("", encoding="utf-8")
-        captured: dict = {}
+        messenger.post_channel("general", "hi all")
 
-        def fake_post(path, **kwargs):
-            captured["url"] = path
-            captured["json"] = kwargs.get("json")
-            resp = MagicMock()
-            resp.raise_for_status.return_value = None
-            return resp
-
-        real_open = Path.open
-
-        def deny_append(self, mode="r", *args, **kwargs):
-            if "a" in mode:
-                raise OSError(30, "Read-only file system")
-            return real_open(self, mode, *args, **kwargs)
-
-        with (
-            patch("pathlib.Path.open", deny_append),
-            patch("core.host_api.host_api.post", side_effect=fake_post),
-        ):
-            messenger.post_channel("general", "hi all")
-
-        assert captured["url"].endswith("/api/internal/post-channel")
-        assert captured["json"]["channel"] == "general"
-        assert captured["json"]["from_anima"] == "alice"
+        row = json.loads((channels / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["from"] == "alice"
+        assert row["text"] == "hi all"
+        assert row["kind"] == "anima"

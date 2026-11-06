@@ -26,7 +26,40 @@ def shared_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (shared / "inbox").mkdir(exist_ok=True)
     (shared / "channels").mkdir(exist_ok=True)
     (shared / "dm_logs").mkdir(exist_ok=True)
+    for name in ("alice", "bob", "charlie", "sakura", "yuki", "mio"):
+        anima_dir = d / "animas" / name
+        anima_dir.mkdir(parents=True, exist_ok=True)
+        (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     return shared
+
+
+@pytest.fixture(autouse=True)
+def _direct_mirror_client(shared_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the central writer as the remote-server endpoint in this isolated test."""
+    from core.messaging.board import human_principal, post_to_board
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        result = post_to_board(
+            channel,
+            text,
+            human_principal(from_name or "human"),
+            request_id=request_id,
+            origin="mirror" if suppress_mentions else "internal",
+            notify=not suppress_mentions,
+            shared_dir=shared_dir,
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
 
 
 class TestE2EDMFlow:
@@ -157,7 +190,7 @@ class TestE2EAtAllMirroring:
         sakura.receive_external(
             "@all The server error is now resolved.",
             source="human",
-            external_user_id="",  # Use empty so from_name=human (passes channel validation)
+            external_user_id="",  # Empty sender maps to the human principal.
         )
 
         # Message should be in sakura's inbox
@@ -179,7 +212,7 @@ class TestE2EAtAllMirroring:
         sakura.receive_external(
             "@all Error is resolved",
             source="human",
-            external_user_id="",  # Use empty so from_name=human (passes channel validation)
+            external_user_id="",  # Empty sender maps to the human principal.
         )
 
         # All animas should see it in the general channel

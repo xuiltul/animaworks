@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -34,12 +35,19 @@ def _setup_post(monkeypatch, tmp_path: Path, caller: InternalCaller | None) -> t
     channels_dir = shared_dir / "channels"
     channels_dir.mkdir(parents=True)
     (channels_dir / "general.jsonl").write_text("", encoding="utf-8")
+    animas_dir = tmp_path / "animas"
+    for name in ("alice", "bob"):
+        (animas_dir / name).mkdir(parents=True)
+        (animas_dir / name / "status.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr("core.paths.get_shared_dir", lambda: shared_dir)
     monkeypatch.setattr(
         "core.config.models.load_config",
         lambda: SimpleNamespace(animas={}),
     )
-    return TestClient(_app(monkeypatch, caller)), channels_dir / "general.jsonl"
+    app = _app(monkeypatch, caller)
+    app.state.shared_dir = shared_dir
+    app.state.animas_dir = animas_dir
+    return TestClient(app), channels_dir / "general.jsonl"
 
 
 def _body(source: str, *, from_name: str | None = None) -> dict[str, str | None]:
@@ -87,10 +95,61 @@ def test_operator_caller_can_use_body_source_and_sender(monkeypatch, tmp_path: P
 
     response = client.post(
         "/api/internal/post-channel",
-        json=_body("slack", from_name="operator-sender"),
+        json=_body("operator", from_name="operator-sender"),
     )
 
     assert response.status_code == 200
     entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
     assert entry["from"] == "operator-sender"
-    assert entry["source"] == "slack"
+    assert entry["source"] == "human"
+    assert entry["kind"] == "operator"
+
+
+def test_suppress_mentions_keeps_post_but_skips_inbox_delivery(monkeypatch, tmp_path: Path) -> None:
+    client, channel_file = _setup_post(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+
+    response = client.post(
+        "/api/internal/post-channel",
+        json={**_body("anima"), "text": "Please review @bob", "suppress_mentions": True},
+    )
+
+    assert response.status_code == 200
+    result = response.json()["post"]
+    assert result["committed"] is True
+    assert result["notified"] == []
+    assert list((channel_file.parent.parent / "inbox").glob("bob/*.json")) == []
+    entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+    assert entry["text"] == "Please review @bob"
+
+
+@pytest.mark.parametrize(
+    ("source", "from_name", "caller", "expected_origin"),
+    [
+        ("anima", None, InternalCaller(kind="anima", name="alice"), "internal"),
+        ("human", "external-user", InternalCaller(kind="operator", name="operator"), "mirror"),
+    ],
+)
+def test_suppression_preserves_origin_for_outbound_hook(
+    monkeypatch,
+    tmp_path: Path,
+    source: str,
+    from_name: str | None,
+    caller: InternalCaller,
+    expected_origin: str,
+) -> None:
+    from core.messaging.board import register_post_hook, unregister_post_hook
+
+    client, _channel_file = _setup_post(monkeypatch, tmp_path, caller)
+    origins: list[str] = []
+    register_post_hook("origin_capture", lambda post: origins.append(post.origin) or "sent")
+    try:
+        response = client.post(
+            "/api/internal/post-channel",
+            json={**_body(source, from_name=from_name), "suppress_mentions": True},
+        )
+    finally:
+        unregister_post_hook("origin_capture")
+
+    assert response.status_code == 200
+    assert response.json()["post"]["notified"] == []
+    assert origins == [expected_origin]

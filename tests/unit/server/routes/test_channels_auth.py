@@ -13,11 +13,21 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+@pytest.fixture(autouse=True)
+def _sakura_status(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "sakura"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
+
+
 def _make_test_app(shared_dir: Path):
     from fastapi import FastAPI
 
     from server.routes.channels import create_channels_router
 
+    anima_dir = shared_dir.parent / "animas" / "sakura"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     app = FastAPI()
     app.state.shared_dir = shared_dir
     app.state.ws_manager = MagicMock()
@@ -108,9 +118,8 @@ class TestChannelPostUnauthenticatedFromName:
             )
         assert resp.status_code == 200
 
-        ws = app.state.ws_manager
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["data"]["from"] == "human"
+        entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert entry["from"] == "human"
 
     async def test_unauthenticated_default_from_name_is_human(self, tmp_path: Path):
         """Default from_name (no from_name in request) is 'human' when unauthenticated."""
@@ -127,9 +136,8 @@ class TestChannelPostUnauthenticatedFromName:
             )
         assert resp.status_code == 200
 
-        ws = app.state.ws_manager
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["data"]["from"] == "human"
+        entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert entry["from"] == "human"
 
 
 # ── post_channel() from_name validation ──────────────────

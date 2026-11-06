@@ -1,7 +1,8 @@
 """Unit tests for WT-3 low-priority improvement batch (8 fixes).
 
+Board mention delivery is covered by ``tests/unit/core/messaging/test_board.py``.
+
 Covers:
-- Fix 8:  Board mention fanout targets running Animas only
 - Fix 10: A2 streaming comment updates (agent.py + LiteLLM executor)
 - Fix 11: CLAUDE.md Mode B session chaining exclusion note
 - Fix N4: ProcessHandle streaming lock
@@ -19,138 +20,11 @@ import asyncio
 import json
 import re
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from core.time_utils import now_jst
-from core.tooling.handler import ToolHandler
-
-# ══════════════════════════════════════════════════════════════════════
-# Fix 8: Board Mention Fanout — running Animas only
-# ══════════════════════════════════════════════════════════════════════
-
-
-def _make_handler(tmp_path: Path, anima_name: str = "alice") -> ToolHandler:
-    """Create a ToolHandler with minimal mocked dependencies."""
-
-    anima_dir = tmp_path / "animas" / anima_name
-    anima_dir.mkdir(parents=True)
-    (anima_dir / "permissions.md").write_text("", encoding="utf-8")
-    for name in {anima_name, "bob", "carol", "dave", "eve"}:
-        candidate = tmp_path / "animas" / name
-        candidate.mkdir(parents=True, exist_ok=True)
-        (candidate / "status.json").write_text("{}", encoding="utf-8")
-
-    memory = MagicMock()
-    memory.read_permissions.return_value = ""
-    memory.search_memory_text.return_value = []
-
-    messenger = MagicMock()
-
-    handler = ToolHandler(
-        anima_dir=anima_dir,
-        memory=memory,
-        messenger=messenger,
-        tool_registry=[],
-    )
-    return handler
-
-
-class TestFanoutAllExcludesStoppedAnimas:
-    """Fix 8: @all fanout only targets running Animas (socket present)."""
-
-    @pytest.fixture(autouse=True)
-    def _bypass_acl(self, data_dir_at_tmp_path: Path):
-        """Bypass channel ACL checks — these tests use MagicMock messenger."""
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            yield
-
-    def test_fanout_all_excludes_stopped_animas(self, tmp_path):
-        """@all mention should only reach Animas with active socket files.
-
-        Setup: 3 Animas exist (bob, carol, dave).
-        Only bob and carol have .sock files (running).
-        dave is stopped (no socket).
-
-        Expect: fanout delivers to bob and carol only.
-        """
-        handler = _make_handler(tmp_path, anima_name="alice")
-
-        # Create socket dir with only bob and carol running
-        sockets_dir = tmp_path / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        (sockets_dir / "bob.sock").touch()
-        (sockets_dir / "carol.sock").touch()
-        # dave has no socket — stopped
-
-        handler._fanout_board_mentions("general", "Hello @all !")
-
-        messenger = handler._messenger
-        # Should have called send() for bob and carol (sorted order)
-        assert messenger.send.call_count == 2
-        targets = sorted(c[1]["to"] for c in messenger.send.call_args_list)
-        assert targets == ["bob", "carol"]
-        assert "dave" not in targets
-
-    def test_fanout_all_excludes_self(self, tmp_path):
-        """@all should never deliver back to the posting Anima itself."""
-        handler = _make_handler(tmp_path, anima_name="alice")
-
-        sockets_dir = tmp_path / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        (sockets_dir / "alice.sock").touch()
-        (sockets_dir / "bob.sock").touch()
-
-        handler._fanout_board_mentions("general", "Hey @all")
-
-        messenger = handler._messenger
-        assert messenger.send.call_count == 1
-        call_kwargs = messenger.send.call_args_list[0][1]
-        assert call_kwargs["to"] == "bob"
-
-
-class TestFanoutNamedExcludesStoppedAnimas:
-    """Fix 8: Named @mention only reaches running targets."""
-
-    @pytest.fixture(autouse=True)
-    def _bypass_acl(self, data_dir_at_tmp_path: Path):
-        """Bypass channel ACL checks — these tests use MagicMock messenger."""
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            yield
-
-    def test_fanout_named_excludes_stopped_animas(self, tmp_path):
-        """Named @bob @dave mention should only reach bob (running).
-
-        dave is stopped (no socket) and should be excluded.
-        """
-        handler = _make_handler(tmp_path, anima_name="alice")
-
-        sockets_dir = tmp_path / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        (sockets_dir / "bob.sock").touch()
-        # dave has no socket — stopped
-
-        handler._fanout_board_mentions("ops", "Hey @bob @dave check this")
-
-        messenger = handler._messenger
-        assert messenger.send.call_count == 1
-        call_kwargs = messenger.send.call_args_list[0][1]
-        assert call_kwargs["to"] == "bob"
-
-    def test_fanout_no_running_targets_is_noop(self, tmp_path):
-        """If all mentioned Animas are stopped, no messages should be sent."""
-        handler = _make_handler(tmp_path, anima_name="alice")
-
-        sockets_dir = tmp_path / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        # No sockets at all
-
-        handler._fanout_board_mentions("general", "Hey @dave @eve")
-
-        messenger = handler._messenger
-        messenger.send.assert_not_called()
-
 
 # ══════════════════════════════════════════════════════════════════════
 # Fix 10: A2 Streaming Comments

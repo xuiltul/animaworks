@@ -2,60 +2,81 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
+from core.i18n import t
 from core.tooling.handler import ToolHandler
 
 
 @pytest.fixture
-def post_handler(tmp_path: Path, data_dir_at_tmp_path: Path) -> tuple[ToolHandler, MagicMock]:
+def post_handler(
+    tmp_path: Path,
+    data_dir_at_tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ToolHandler, MagicMock]:
+    from core.messaging.board import anima_principal, post_to_board
+
     anima_dir = tmp_path / "animas" / "alice"
     anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     memory = MagicMock()
     memory.read_permissions.return_value = ""
     messenger = MagicMock()
     messenger.anima_name = "alice"
     messenger.shared_dir = tmp_path / "shared"
     (messenger.shared_dir / "channels").mkdir(parents=True)
+    (messenger.shared_dir / "channels" / "general.jsonl").touch()
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        result = post_to_board(
+            channel,
+            text,
+            anima_principal(from_anima, animas_dir=tmp_path / "animas"),
+            request_id=request_id,
+            origin="internal",
+            notify=not suppress_mentions,
+            shared_dir=messenger.shared_dir,
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
     handler = ToolHandler(anima_dir, memory, messenger, tool_registry=[])
     handler._activity.log = MagicMock()
-    handler._fanout_board_mentions = MagicMock()
-    handler._fire_board_slack_sync = MagicMock()
     return handler, messenger
 
 
-@pytest.mark.parametrize("failure", ["acl", "company", "poster"])
 def test_rejected_post_does_not_create_channel_post_activity(
     post_handler: tuple[ToolHandler, MagicMock],
-    failure: str,
 ) -> None:
     handler, messenger = post_handler
-    handler._channel_company_boundary_error = MagicMock(return_value="Error: company boundary")
-    if failure != "company":
-        handler._channel_company_boundary_error.return_value = None
-    if failure == "poster":
-        messenger.post_channel.side_effect = ValueError("invalid poster")
+    from core.messaging.messenger import ChannelMeta, save_channel_meta
 
-    with patch("core.messaging.messenger.is_channel_member", return_value=failure != "acl"):
-        result = handler.handle("post_channel", {"channel": "general", "text": "hello"})
+    save_channel_meta(messenger.shared_dir, "general", ChannelMeta(members=["bob"]))
+    result = handler.handle("post_channel", {"channel": "general", "text": "hello"})
 
-    if failure == "poster":
-        assert json.loads(result)["status"] == "error"
-    else:
-        assert result.startswith("Error")
-    activity_types = [call.args[0] for call in handler._activity.log.call_args_list]
-    assert "channel_post" not in activity_types
+    assert result.startswith("Error")
+    assert not (messenger.shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8")
+    assert not (messenger.shared_dir.parent / "animas" / "alice" / "activity_log").exists()
 
 
 def test_successful_post_creates_channel_post_activity(post_handler: tuple[ToolHandler, MagicMock]) -> None:
     handler, _messenger = post_handler
-    handler._channel_company_boundary_error = MagicMock(return_value=None)
+    result = handler.handle("post_channel", {"channel": "general", "text": "hello"})
 
-    with patch("core.messaging.messenger.is_channel_member", return_value=True):
-        result = handler.handle("post_channel", {"channel": "general", "text": "hello"})
-
-    assert result == "Posted to #general"
+    assert result == t("handler.channel_post_success", channel="general")
     activity_types = [call.args[0] for call in handler._activity.log.call_args_list]
-    assert "channel_post" in activity_types
+    assert "channel_post" not in activity_types
+    log_files = list((handler._anima_dir / "activity_log").glob("*.jsonl"))
+    entries = [json.loads(line) for path in log_files for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [entry["type"] for entry in entries].count("channel_post") == 1

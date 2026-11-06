@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from core.messaging.board import BoardPost, Principal
 from core.messaging.board_fanout import fanout_board_mentions
 from core.messaging.mentions import extract_mentions
 
@@ -29,25 +31,31 @@ def test_extract_mentions_preserves_all_special_case() -> None:
 
 
 def test_fanout_uses_complete_known_names_and_punctuation(tmp_path: Path) -> None:
-    sockets_dir = tmp_path / "run" / "sockets"
-    sockets_dir.mkdir(parents=True)
-    for name in ("team-lead", "bob", "unknown"):
-        (sockets_dir / f"{name}.sock").touch()
-    messenger = MagicMock()
-    messenger.shared_dir = tmp_path / "shared"
-    boundary = SimpleNamespace(cross_company=False)
+    shared_dir = tmp_path / "shared"
+    (shared_dir / "channels").mkdir(parents=True)
+    (shared_dir / "channels" / "general.jsonl").touch()
+    animas_dir = tmp_path / "animas"
+    for name in ("alice", "team-lead", "bob", "unknown"):
+        (animas_dir / name).mkdir(parents=True)
+        (animas_dir / name / "status.json").write_text(json.dumps({"enabled": True}), encoding="utf-8")
+    post = BoardPost(
+        channel="general",
+        ts="2026-01-01T00:00:00+00:00",
+        from_person="alice",
+        text="@TEAM-LEAD。 @bob- @unknown_suffix",
+        source="anima",
+        id="p1",
+        kind="anima",
+        origin="internal",
+        principal=Principal(kind="anima", name="alice"),
+    )
+    boundary = SimpleNamespace(cross_company=False, resolved_via="")
 
     with (
-        patch("core.paths.get_data_dir", return_value=tmp_path),
-        patch("core.messaging.messenger.is_channel_member", return_value=True),
         patch("core.org.company.check_company_boundary", return_value=boundary),
+        patch("core.messaging.messenger.Messenger.send") as send,
     ):
-        fanout_board_mentions(
-            messenger,
-            "alice",
-            "general",
-            "@TEAM-LEAD。 @bob- @unknown_suffix",
-            animas_dir=tmp_path,
-        )
+        notified, _ = fanout_board_mentions(shared_dir, post)
 
-    assert {call.kwargs["to"] for call in messenger.send.call_args_list} == {"team-lead", "bob"}
+    assert set(notified) == {"team-lead", "bob"}
+    assert {call.kwargs["to"] for call in send.call_args_list} == {"team-lead", "bob"}
