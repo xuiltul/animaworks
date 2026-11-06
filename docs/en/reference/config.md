@@ -446,7 +446,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 ### `server`
 
-| Key | Type | Default Value | Description |
+| Key | Type | Default value | Description |
 |---|---|---|---|
 | `server` | `ServerConfig` | `{ServerConfig}` | HTTP server, authentication, and usage control configuration. |
 | `server.session_ttl_days` | `int \| None` | `90` | None = unlimited |
