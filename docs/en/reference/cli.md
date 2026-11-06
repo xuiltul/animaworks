@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=d381aa269e104fc13b7413556212b1ae09c5385a36a4e4c9da2af55d9140c099 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=36d5b678ab5628ceb7c6a2a48f724df76728fd4fd7c66d4bf1718cfada6fe976 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -249,15 +249,14 @@ Read DM history with peer
 
 ## `board post`
 
-Post to channel
+Posts to a channel. Format: board post <channel> [<text> | -]. If the body is omitted or '-' is specified, it is read from standard input. Legacy format: board post <from> <channel> <text>.
 
-`usage: animaworks board post [-h] from_anima channel text`
+`usage: animaworks board post [-h] [--as NAME] ARG [ARG ...]`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
-| from_anima | positional | — | — | Sender anima name |
-| channel | positional | — | — | Channel name |
-| text | positional | — | — | Message text |
+| post_args | positional | — | — | <channel> [<text> \| -], or legacy format <from> <channel> <text> |
+| --as | option | — | — | Poster name (post as the host) |
 
 ## `board read`
 

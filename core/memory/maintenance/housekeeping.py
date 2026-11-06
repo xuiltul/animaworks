@@ -83,7 +83,6 @@ _HOUSEKEEPING_RULES = (
     _rule("daemon_log", "server-daemon.log[.N]", "daemon_log", "daemon_log_max_size_mb", "daemon_log_keep_generations", root="data", path="logs/server-daemon.log"),
     _rule("anima_logs", "<anima>/*", "anima_logs", "anima_log_retention_days", "anima_log_total_max_size_mb", root="data", path="logs/animas"),
     _rule("frontend_logs", "dated backups", "frontend_logs", "frontend_log_backup_count", root="data", path="logs/frontend"),
-    _rule("dm_archives", "*.archive.jsonl", "delete_old_files", "dm_log_archive_retention_days", root="data", path="shared/dm_logs", error_label="dm archive", success_log="DM archive cleanup: deleted %d files"),
     _rule("cron_logs", "*/state/cron_logs/*.jsonl", "delete_old_files", "cron_log_retention_days", age_mode="filename", retention_cap_days=14, error_label="cron log", success_log="Cron log cleanup: deleted %d files"),
     _rule("shortterm", "*/shortterm/{chat,heartbeat,cron,inbox,task}/**/*", "shortterm", "shortterm_retention_days", "shortterm_archive_retention_days", "shortterm_thread_gc_days"),
     _rule("facts_locks", "*/facts/*.lock", "facts_locks", "facts_lock_stale_hours"),
@@ -621,17 +620,6 @@ def _cleanup_shared_inbox(
         logger.info("Shared inbox cleanup: %s", per_anima)
     totals["per_anima"] = per_anima
     return totals
-
-
-def _cleanup_dm_archives(dm_logs_dir: Path, retention_days: int) -> dict[str, Any]:
-    """Delete DM log archive files older than *retention_days*."""
-    return _delete_old_files(
-        dm_logs_dir,
-        "*.archive.jsonl",
-        retention_days,
-        error_label="dm archive",
-        success_log="DM archive cleanup: deleted %d files",
-    )
 
 
 def _cleanup_cron_logs(animas_dir: Path, retention_days: int) -> dict[str, Any]:

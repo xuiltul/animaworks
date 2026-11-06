@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 35c538246468d5040221b087d672b01198d2b832e94a57503ee3ec66e096cb69 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 8b96c3c6e68000d4c959fe8ca3956780720810b22cef0d8ef9b78fee22c7b653 -->
 
 # 設定リファレンス
 
@@ -239,6 +239,14 @@
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
 | `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
+| `helper_models.meeting_summary` | `HelperModelRole \| None` | `null` | — |
+| `helper_models.meeting_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.meeting_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
+| `helper_models.meeting_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
+| `helper_models.meeting_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
+| `helper_models.meeting_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
+| `helper_models.meeting_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.meeting_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
 | `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |
@@ -471,7 +479,7 @@
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 
@@ -709,7 +717,6 @@
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
-| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |

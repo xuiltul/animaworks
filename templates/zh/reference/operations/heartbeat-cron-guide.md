@@ -1,32 +1,32 @@
-# 定期执行的配置与运维
+# 定期运行的配置与运维
 
-心跳（定期巡回）与 Cron（定时任务）的配置方法与运维指南。
-当需要更改定期执行的行为，或添加新的定时任务时，请参照本文。
+心跳（定期巡检）和 Cron（定时任务）的配置方法与运维指南。
+需要更改定期运行行为或添加新的定时任务时，请参阅本文。
 
 ## 什么是心跳
 
-心跳是 Digital Anima 定期自动启动、确认状况并进行计划的机制。
-它将人类定期检查收件箱、审视进行中工作的行为自动化。
+心跳是 Digital Anima 定期自动启动并检查状况、制定计划的机制。
+它将人类定期查看收件箱、回顾进行中的工作的行为自动化。
 
-### 重要：心跳仅用于“确认与计划”
+### 重要：心跳仅用于“检查和计划”
 
-Heartbeat 确认有意义的变化，并判断必要的下一步应对。不需要仪式性的回顾报告。
+Heartbeat 用于检查有意义的变化，并判断接下来需要采取哪些措施。不需要进行形式化的回顾汇报。
 
-- MUST: Heartbeat 聚焦于状况确认与判断
-- MUST NOT: 不在心跳内执行长时间运行任务（编码、大量工具调用等）
-- MUST: 发现需要执行的任务时，若有部下则通过 `delegate_task` 委派，或通过 `submit_tasks` 投入任务
+- MUST：Heartbeat 仅限于检查状况和作出判断
+- MUST NOT：不要在心跳中执行耗时较长的任务（编写代码、大量调用工具等）
+- MUST：发现需要执行的任务时，如果有部下，则通过 `delegate_task` 委派；或者通过 `submit_tasks` 投入任务
 
 已投入的任务由 **TaskExec 路径**独立于定期 Heartbeat 执行。
-TaskExec 从正本 TaskStore 获取可执行的持久任务。唤醒通知与恢复由宿主管理，不监控旧的 LLM JSON 文件。
+TaskExec 从权威 TaskStore 获取可执行的持久化任务。唤醒通知和恢复由主机管理，不会监控旧版 LLM JSON 文件。
 
-### 心跳与对话的并行运行
+### 心跳与对话并行运行
 
-心跳与人类对话由 **不同的锁** 管理，因此可以同时运行。
-即使心跳正在执行，也能立即响应来自人类的消息。
+心跳和与人类的对话由**不同的锁**管理，因此可以同时运行。
+即使正在执行心跳，也可以立即响应人类发送的消息。
 
 ### 通过 submit_tasks 投入任务
 
-发现心跳中应执行的任务时，使用 `submit_tasks` 工具投入任务：
+如果在心跳中发现需要执行的任务，请使用 `submit_tasks` 工具投入任务：
 
 ```
 submit_tasks(batch_id="hb-20260301-api-test", tasks=[
@@ -35,38 +35,38 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 ])
 ```
 
-`submit_tasks` 在验证后，将任务与完整的执行输入一并保存到一个正本 TaskStore 中。
-执行权的获取与尝试历史由宿主管理。`in_progress` 用于查看，智能体通过 `update_task` 声明 `done` / `pending` / `cancelled`。中断的 pending 任务应对同一 ID 指定 `resume: true` 显式恢复，不要用其他任务替换。
+`submit_tasks` 验证后，会将任务和完整的执行输入一并保存到同一个权威 TaskStore 中。
+执行权的获取和尝试历史由主机管理。`in_progress` 仅供查看；智能体通过 `update_task` 声明 `done` / `pending` / `cancelled`。对于已中断的 pending 任务，请为同一 ID 指定 `resume: true` 以明确恢复，不要用其他任务替换。
 
-**长时间 CLI 工具**（`animaworks-tool submit …`）作为 `task_type="command"` 注册到 TaskStore，由 PendingTaskExecutor 获取尝试并在后台执行。完成结果通过 `state/background_tasks/{task_id}.json` 与通知确认。详情请参照 `operations/background-tasks.md`。
+**长时间运行的 CLI 工具**（`animaworks-tool submit …`）会作为 `task_type="command"` 注册到 TaskStore，由 PendingTaskExecutor 获取尝试并在后台执行。可通过 `state/background_tasks/{task_id}.json` 和通知查看完成结果。详情请参阅 `operations/background-tasks.md`。
 
-**注意**：不要直接编辑保存目标。旧的 `state/task_queue.jsonl` 与 `state/pending/` 作为迁移/导出用的证据保存，不要作为运行中的投入目标。
+**注意**：不要直接编辑保存位置。旧版 `state/task_queue.jsonl` 和 `state/pending/` 仅作为迁移和导出的记录保存，不要用作运行中的任务投入目标。
 
-即使是单个任务也使用 `submit_tasks`（tasks 数组 1 条）。
-多个独立任务通过 `parallel: true` 并行执行，存在依赖关系时指定 `depends_on`。
-详情请参照 task-management。
+即使只有一个任务，也要使用 `submit_tasks`（tasks 数组中包含 1 项）。
+多个独立任务使用 `parallel: true` 并行执行；存在依赖关系时指定 `depends_on`。
+详情请参阅 task-management。
 
-### 心跳的触发类型
+### 心跳触发类型
 
-心跳有两种触发类型：
+心跳有两种触发方式：
 
-| 触发器 | 说明 |
+| 触发方式 | 说明 |
 |---------|------|
-| 定期心跳 | 按照 `config.json` 的 `heartbeat.interval_minutes`，由 APScheduler 定期启动 |
-| 消息触发 | 当 Inbox 中有未读消息到达时立即启动（作为 Inbox 路径处理） |
+| 定期心跳 | 根据 `config.json` 中的 `heartbeat.interval_minutes`，由 APScheduler 定期启动 |
+| 消息触发 | Inbox 收到未读消息时立即启动（按 Inbox 路径处理） |
 
-消息触发通过 Inbox 的 JSON 文件变更通知启动。为防备通知遗漏，每 45 秒重新确认未读。
-同时运行的 Inbox 处理只有 1 个，执行中到达的消息会在下一次统一处理。Provider 错误时等待 `rate_guard` 的恢复时间，保留未读消息。
-没有基于接收 intent 的启动过滤，也没有以消息为起点的 cooldown / cascade 抑制。仅对了解、感谢类消息不回复的行为规则在 Inbox 提示词中指示。
+消息触发由 Inbox JSON 文件变更通知启动。为防止遗漏通知，每 45 秒重新检查一次未读消息。
+同时只会运行一个 Inbox 处理任务；运行期间收到的消息会合并到下一次处理中。Provider 出错时，会等待 `rate_guard` 指定的恢复时间，并保留未读消息。
+没有基于接收 intent 的启动筛选，也没有针对消息触发的 cooldown / cascade 抑制。对于只表示知悉或感谢的消息，不作回复的行为规则应通过 Inbox 提示词指定。
 
 ## HEARTBEAT.md 的配置
 
-`HEARTBEAT.md` 是各 Anima 的配置文件，定义活动时间与检查项。
-心跳的执行间隔可通过 `config.json` 的 `heartbeat.interval_minutes` 配置（1〜1440 分钟，默认 30）。在 `HEARTBEAT.md` 中无法更改。
-每个 Anima 会被赋予基于名称的 0〜9 分钟偏移，以分散同时启动。
+`HEARTBEAT.md` 是每个 Anima 的配置文件，用于定义活动时间和检查项。
+心跳的运行间隔可通过 `config.json` 的 `heartbeat.interval_minutes` 配置（1～1440 分钟，默认 30 分钟）。无法通过 `HEARTBEAT.md` 更改。
+每个 Anima 会根据名称分配 0～9 分钟的偏移量，以错开同时启动。
 文件路径：`~/.animaworks/animas/{name}/HEARTBEAT.md`
 
-上司编辑部下 Anima 的 `HEARTBEAT.md` 时，不要直接操作文件，而应使用 `read_memory_file` / `write_memory_file`，并以 `../{anima_name}/HEARTBEAT.md` 这样的相对路径指定。
+上司要编辑下属 Anima 的 `HEARTBEAT.md` 时，应使用 `read_memory_file` / `write_memory_file`，而非直接操作文件，并使用类似 `../{anima_name}/HEARTBEAT.md` 的相对路径指定。
 
 ### 格式
 
@@ -89,24 +89,24 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 
 ### 配置字段
 
-**执行间隔**：
-- 通过 `config.json` 的 `heartbeat.interval_minutes` 配置（1〜1440 分钟，默认 30）。无法在 `HEARTBEAT.md` 中更改
+**运行间隔**：
+- 通过 `config.json` 的 `heartbeat.interval_minutes` 配置（1～1440 分钟，默认 30 分钟）。无法通过 `HEARTBEAT.md` 更改
 
 **活动时间**（SHOULD）：
-- 以 `HH:MM - HH:MM` 格式记载（例：`9:00 - 22:00`）
-- 在此时间之外心跳不会启动
-- 未设置时的默认值：24 小时（全时段）
-- 时区可通过 `config.json` 的 `system.timezone` 配置。未设置时自动检测系统时区
+- 使用 `HH:MM - HH:MM` 格式填写（例如：`9:00 - 22:00`）
+- 在此时间范围之外不会启动心跳
+- 未配置时的默认值：24 小时（全天）
+- 时区可通过 `config.json` 的 `system.timezone` 配置。未配置时会自动检测系统时区
 
 **检查清单**（MUST）：
-- 心跳启动时智能体确认的项目
-- 以项目列表（以 `- ` 开头）记载
+- 智能体在心跳启动时检查的项目
+- 使用项目列表（以 `- ` 开头）填写
 - 检查清单内容会原样传递给智能体的提示词
-- 可自定义：可根据 Anima 的角色添加、更改项目
+- 可自定义：可根据 Anima 的职责添加或更改项目
 
-### 检查清单的自定义示例
+### 自定义检查清单示例
 
-默认（所有 Anima 通用）：
+默认值（所有 Anima 通用）：
 ```markdown
 ## チェックリスト
 - Inboxに未読メッセージがあるか
@@ -134,62 +134,56 @@ submit_tasks(batch_id="hb-20260301-api-test", tasks=[
 - 何もなければ何もしない（HEARTBEAT_OK）
 ```
 
-### 执行模型（成本优化）
+### 运行模型（成本优化）
 
-当配置了 `background_model` 时，Heartbeat / Inbox / Cron 会使用该模型而非主模型执行。
-Chat（与人类的对话）与 TaskExec（实际作业）维持主模型。
+如果已配置 `background_model`，Heartbeat / Inbox / Cron 将使用该模型运行，而非主模型。
+Chat（与人类对话）和 TaskExec（实际工作）仍使用主模型。
 
 配置方法：`animaworks anima set-background-model {名前} claude-sonnet-5-5`
-详情请参照 `reference/operations/model-guide.md` 的“后台模型”章节。
+详情请参阅 `reference/operations/model-guide.md` 的“后台模型”章节。
 
-### 心跳的内部行为
+### 心跳的内部工作机制
 
-- **崩溃恢复**：上次心跳失败时，错误信息会保存到 `state/recovery_note.md`。下次启动时会注入提示词，恢复后文件被删除。
-- **回顾记录**：心跳输出中若有 `[REFLECTION]...[/REFLECTION]` 块，会作为 `heartbeat_reflection` 记录到 activity_log，并包含在后续的心跳上下文中。
-- **部下检查**：拥有部下的 Anima，其心跳、Cron 提示词中会自动注入部下状态确认指令。
-- **会话时间限制**（`config.json` 的 `heartbeat`）：经过 `soft_timeout_seconds`（默认 300 秒）后注入用于收尾的提醒，在 `hard_timeout_seconds`（默认 600 秒）强制结束会话。
-- **空闲时自动压缩**：`heartbeat.idle_compaction_minutes`（默认 10 分钟）— 流结束后经过此时间会触发空闲自动压缩（执行引擎侧的配置）。
-- **Board 投稿**：同一 run 中对同一频道最多 1 次。跨 run 的投稿间隔没有限制。
+- **崩溃恢复**：如果上次心跳失败，错误信息会保存到 `state/recovery_note.md`。下次启动时，该信息会注入提示词；恢复后会删除此文件。
+- **回顾记录**：如果心跳输出中包含 `[REFLECTION]...[/REFLECTION]` 块，该内容会作为 `heartbeat_reflection` 记录到 activity_log 中，并纳入之后心跳的上下文。
+- **部下检查**：对于有部下的 Anima，心跳和 Cron 的提示词会自动注入检查部下状态的指令。
+- **会话时间限制**（`config.json` 的 `heartbeat`）：经过 `soft_timeout_seconds`（默认 300 秒）后注入收尾提醒；经过 `hard_timeout_seconds`（默认 600 秒）后强制结束会话。
+- **空闲时自动压缩**：`heartbeat.idle_compaction_minutes`（默认 10 分钟）— 流结束后经过这段时间，将运行空闲自动压缩（执行引擎侧的配置）。
 
 ### 定期心跳的调度方式
 
-当有效间隔（应用 Activity Level 后、下限 5 分钟取整）为 **60 分钟以下且能整除 60** 时，会以 APScheduler 的 `CronTrigger` 分散注册到分钟槽（与基于名称的 0〜9 分钟偏移组合）。
+当实际间隔（应用 Activity Level 后、下限按 5 分钟取整）**不超过 60 分钟且能整除 60** 时，会通过 APScheduler 的 `CronTrigger` 分散注册到各分钟时段（并结合基于名称的 0～9 分钟偏移量）。
 
-其他情况（例：有效 61 分钟，或 43 分钟这样不能整除 60 的间隔）则通过 **每分钟轮询**（`_heartbeat_check`）按“距上次经过的时间”触发。这是为规避旧 `IntervalTrigger` 遗留缺陷的实现。
+其他情况（例如实际间隔为 61 分钟，或 43 分钟这类无法整除 60 的间隔）则通过**每分钟轮询**（`_heartbeat_check`），根据“距上次运行的时间”触发。此实现用于规避由旧版 `IntervalTrigger` 引发的问题。
 
-### 后台工具与 DM 日志（core/tasks/background.py）
+### 后台工具（core/tasks/background.py）
 
-`core/tasks/background.py` 并非心跳/Cron 的调度本身，而是负责 **长时间工具调用的后台执行**（包括状态的 JSON 持久化）与 **旧版共享 DM 日志（`shared/dm_logs/`）的轮转**。运维详情、CLI 路径也请参照 `operations/background-tasks.md`。
+`core/tasks/background.py` 不负责心跳/Cron 的调度本身，而负责**长时间工具调用的后台运行**（包括状态的 JSON 持久化）。运维详情和 CLI 路径也请参阅 `operations/background-tasks.md`。
 
 #### BackgroundTaskManager
 
-- **保存目标**：`state/background_tasks/{task_id}.json`。`task_id` 为 UUID 的前 12 个字符（十六进制）。每个文件记录 `task_id`, `anima_name`, `tool_name`, `tool_args`, `status`, `created_at`, `completed_at`, `result`, `error`。
-- **状态 (`TaskStatus`)**：`pending` / `running` / `completed` / `failed`。在 `submit` / `submit_async` 中，投入后立即以 `running` 写入 JSON，完成或异常时更新为 `completed` / `failed`。
-- **执行 API**：`submit(tool_name, tool_args, execute_fn)` 将同步 callable 通过 `asyncio` 的 `run_in_executor` 在线程池执行。`submit_async` 直接 await 异步 callable。提供 `get_task`（内存优先，无则磁盘）、`list_tasks`（也合并磁盘上的 JSON，按创建时间从新到旧）、`active_count`（内存上的 `running` 条数）。
-- **完成回调**：传给 `on_complete` 的异步函数在任务保存后被调用。即使回调内出现异常，任务结果也会保留，仅记录到日志（典型情况下与写入 `state/background_notifications/` 组合，在**下次心跳**中读取、删除并纳入对话上下文的路径）。
-- **候选判定 `is_eligible(tool_name)`**：若映射中存在键则为后台对象。键接受以下两者。(1) **schema 名**（例：`generate_3d_model`）— Mode A 的外部工具分发等。(2) **`ツール名:サブコマンド`**（例：`image_gen:pipeline`）— 各工具模块的 `EXECUTION_PROFILE` 中 `background_eligible: true` 的条目由 `get_eligible_tools_from_profiles()` 以此格式注册（Mode S 的 `submit` 路径等）。
-- **候选工具映射的构建 `from_profiles()`**：将以下 3 层以 dict 的 `update` 合并，**后者覆盖前者**。(1) `_DEFAULT_ELIGIBLE_TOOLS`（代码默认）(2) 参数 `profiles`（`EXECUTION_PROFILE` 聚合）(3) 参数 `config_eligible`（通常为从 `config.json` 的 `background_task.eligible_tools` 展开 `threshold_s` 得到的 `名前 → 秒`）。值为用于 profile 联动的预期秒数（整数）。
-- **代码默认 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**：`generate_character_assets` 30、`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各 30、`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各 30、`local_llm` 60、`run_command` 60。
-- **清理 `cleanup_old_tasks(max_age_hours=24)`**：`status` 在 `completed` / `failed` 中删除 `completed_at` 为 **早于参数指定时间（默认 24 小时）** 的 JSON。此外，仍为 `running` 且从 `created_at` 起经过 **超过 48 小时** 的文件作为崩溃孤儿删除。返回值为删除件数。
-- **保留时间**：`cleanup_old_tasks` 的完成任务保留时间由参数 `max_age_hours`（默认 24 小时）指定。没有对应的 `config.json` 配置键。
+- **保存位置**：`state/background_tasks/{task_id}.json`。`task_id` 是 UUID 的前 12 个字符（十六进制）。每个文件记录 `task_id`、`anima_name`、`tool_name`、`tool_args`、`status`、`created_at`、`completed_at`、`result`、`error`。
+- **状态（`TaskStatus`）**：`pending` / `running` / `completed` / `failed`。对于 `submit` / `submit_async`，投入后会立即以 `running` 写入 JSON；任务完成或发生异常时，状态会更新为 `completed` / `failed`。
+- **执行 API**：`submit(tool_name, tool_args, execute_fn)` 会在线程池中通过 `asyncio` 的 `run_in_executor` 执行同步 callable。`submit_async` 会直接 await 异步 callable。提供 `get_task`（优先从内存获取，没有时从磁盘获取）、`list_tasks`（合并磁盘上的 JSON，按创建时间从新到旧排列）、`active_count`（内存中的 `running` 数量）。
+- **完成回调**：传递给 `on_complete` 的异步函数会在任务保存后调用。即使回调中发生异常，任务结果仍会保留，异常仅记入日志（通常会结合写入 `state/background_notifications/`；之后在**下次心跳**中读取、删除并纳入对话上下文）。
+- **候选判定 `is_eligible(tool_name)`**：如果映射中存在对应键，则视为后台运行目标。键支持以下两种形式：(1) **模式名称**（例如 `generate_3d_model`）— 如 Mode A 的外部工具分发。(2) **`ツール名:サブコマンド`**（例如 `image_gen:pipeline`）— 各工具模块在 `EXECUTION_PROFILE` 中通过 `get_eligible_tools_from_profiles()` 将 `background_eligible: true` 条目按此形式注册（如 Mode S 的 `submit` 路径）。
+- **构建候选工具映射 `from_profiles()`**：通过 dict 的 `update` 合并以下 3 层，**后者优先覆盖前者**。(1) `_DEFAULT_ELIGIBLE_TOOLS`（代码默认值）(2) 参数 `profiles`（`EXECUTION_PROFILE` 汇总）(3) 参数 `config_eligible`（通常是从 `config.json` 的 `background_task.eligible_tools` 展开 `threshold_s` 后得到的 `名前 → 秒`）。值为供配置文件联动使用的预期秒数（整数）。
+- **代码默认值 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**：`generate_character_assets` 为 30，`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各为 30，`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各为 30，`local_llm` 为 60，`run_command` 为 60。
+- **清理 `cleanup_old_tasks(max_age_hours=24)`**：`status` 会通过 `completed` / `failed` 删除 `completed_at` 早于**参数指定时间（默认 24 小时）**的 JSON。此外，`running` 状态的文件如果从 `created_at` 起已超过 **48 小时**，也会作为崩溃遗留文件删除。返回值为删除数量。
+- **保留时间**：`cleanup_old_tasks` 已完成任务的保留时间由参数 `max_age_hours` 指定（默认 24 小时）。没有对应的 `config.json` 配置键。
 
-#### rotate_dm_logs（系统 Cron）
+- **其他服务器定时任务**：除以 Anima 为单位的 `cron.md` 外，生命周期管理还会注册内存维护、RAG 等系统 Cron（例如，每日汇总 02:00，每日索引 04:00）。时间以配置时区为准。
 
-- **执行时机**：在生命周期（`core/lifecycle/system_crons.py` 等）的系统 Cron 中 **每天 04:30**（服务器配置时区）。`server/supervisor/_mgr_scheduler.py` 侧也会注册同一 ID 的作业。
-- **对象**：`shared/dm_logs/*.jsonl`（文件名中包含 `.archive.` 的跳过）。
-- **动作**：以 `core.time_utils` 的本地当前时间为基准，解析每行 JSON 的 `ts`（ISO 格式），将早于 **默认 7 天** 的条目追加归档到 `{stem}.{YYYYMMDD}.archive.jsonl`，然后从当前文件中移除。`ts` 解析失败的行 **保留在当前文件中**（防止数据丢失）。
-- **其他服务器定时作业**：除按 Anima 的 `cron.md` 之外，生命周期还会注册内存维护、RAG 等系统 Cron（例：每日整合 02:00、每日索引 04:00）。时刻以配置时区为基准。DM 轮转为上述 04:30。
+### 心跳配置热重载
 
-### 心跳配置的热重载
-
-在文件系统上更新 HEARTBEAT.md 后，下次心跳执行时 `_check_schedule_freshness()` 会检测到变更，SchedulerManager 会自动重载调度。
-无需重启服务器（MAY skip restart）。APScheduler 的作业会被重新注册。
+在文件系统中更新 HEARTBEAT.md 后，`_check_schedule_freshness()` 会在下次心跳运行时检测到变更，并由 SchedulerManager 自动重新加载调度。
+无需重启服务器（MAY skip restart）。APScheduler 作业会重新注册。
 
 ## 每个 Anima 的 Heartbeat 间隔配置
 
-### 在 status.json 中的配置
+### 在 status.json 中配置
 
-root 管理员可以在 root CLI/API 中为各个 Anima 单独配置 `heartbeat_interval_minutes`。值保存在 root 所有的 `status.json` 中，Anima 进程不会编辑它。
+root 管理员可以通过 root CLI/API 为单个 Anima 配置 `heartbeat_interval_minutes`。值会保存到 root 所有的 `status.json` 中，Anima 进程不会编辑该文件。
 
 ```json
 {
@@ -197,46 +191,46 @@ root 管理员可以在 root CLI/API 中为各个 Anima 单独配置 `heartbeat_
 }
 ```
 
-- 可配置范围：1〜1440 分钟（1 天）
+- 可配置范围：1～1440 分钟（1 天）
 - 未配置时：回退到 `config.json` 的 `heartbeat.interval_minutes`（默认 30 分钟）
-- `status.json` 归 root 所有。管理员可以在服务器停止期间通过 `animaworks config set animas.<name>.heartbeat_interval_minutes <minutes>` 设置单独的覆盖值。服务器启动期间，CLI 会通过 root API 反映。Anima 进程不会编辑此文件。
+- `status.json` 归 root 所有。管理员可在服务器停止期间通过 `animaworks config set animas.<name>.heartbeat_interval_minutes <minutes>` 设置单独的覆盖值。服务器运行期间，CLI 会通过 root API 应用设置。Anima 进程不会编辑此文件。
 
 ### 推荐指南
 
-| 状况 | 推荐间隔 | 理由 |
+| 状况 | 推荐间隔 | 原因 |
 |------|----------|------|
-| 活跃的开发项目进行中 | 15〜30 分钟 | 需要频繁掌握状况 |
-| 常规业务 | 30〜60 分钟 | 默认值。频率均衡 |
-| 低负载・待机状态 | 60〜120 分钟 | 节约成本。没有任务时设长一些 |
-| 长期休眠・非活跃 | 120〜1440 分钟 | 以最小限度的巡回掌握状况 |
+| 正在进行活跃的开发项目 | 15〜30分钟 | 需要频繁了解情况 |
+| 日常工作 | 30〜60分钟 | 默认值。频率较为均衡 |
+| 低负载・待机状态 | 60〜120分钟 | 节省成本。没有任务时可设得更长 |
+| 长期休眠・非活跃 | 120〜1440分钟 | 以最低限度的巡查了解情况 |
 
 ### 与 Activity Level 的关系
 
-当设置了全局 Activity Level（10%〜400%）时，实际间隔按以下公式计算：
+如果已设置全局 Activity Level（10%〜400%），实际间隔按以下公式计算：
 
 ```
 実効間隔 = ベース間隔 / (Activity Level / 100)
 ```
 
-例：基准 30 分钟、Activity Level 50% → 实际 60 分钟
-例：基准 30 分钟、Activity Level 200% → 实际 15 分钟
+示例：基准间隔30分钟，Activity Level 50% → 实际间隔60分钟
+示例：基准间隔30分钟，Activity Level 200% → 实际间隔15分钟
 
-- 实际间隔的下限为 5 分钟（无论怎么提升都不会低于 5 分钟）
+- 实际间隔下限为5分钟（无论提升多少，都不会低于5分钟）
 
-### Activity Schedule（按时间段自动切换 / 夜间模式）
+### Activity Schedule（按时段自动切换／夜间模式）
 
-根据时间段自动切换 Activity Level 的机制。
-用于希望在夜间或休息日降低成本，或希望仅在业务时间段内活跃运行的情况。
+根据时段自动切换 Activity Level 的机制。
+适用于希望在夜间或休息日控制成本，或只在工作时间活跃运行的情况。
 
-#### 机制
+#### 工作原理
 
-- 在 `config.json` 的 `activity_schedule` 中设置时间段条目
-- 每分钟检查当前时刻，自动将 Activity Level 更改为对应时间段的级别
-- Activity Level 变化后，所有 Anima 的心跳会立即重新调度
+- 在 `config.json` 的 `activity_schedule` 中设置时段条目
+- 每分钟检查当前时间，并自动将 Activity Level 调整为对应时段的级别
+- Activity Level 发生变化时，所有 Anima 的心跳都会立即重新安排
 
 #### 配置格式
 
-每个条目包含 `start`（开始时刻）、`end`（结束时刻）、`level`（Activity Level %）三个字段：
+每个条目包含3个字段：`start`（开始时间）、`end`（结束时间）、`level`（Activity Level %）：
 
 ```json
 {
@@ -247,43 +241,43 @@ root 管理员可以在 root CLI/API 中为各个 Anima 单独配置 `heartbeat_
 }
 ```
 
-- 时刻为 `HH:MM` 格式（24 小时制）
-- **支持跨日期**：可以指定 `"22:00"` 〜 `"06:00"` 这样 start > end 的情况（覆盖深夜时段）
-- `level` 的范围为 10〜400
-- 最多 24 个条目
-- 用空数组 `[]` 禁用调度模式（恢复为固定 Activity Level）
+- 时间采用 `HH:MM` 格式（24小时制）
+- **支持跨日期**：可以指定 `"22:00"` 〜 `"06:00"` 这样的 start > end 时段（覆盖深夜时段）
+- `level` 的范围为10〜400
+- 最多可设置24个条目
+- 使用空数组 `[]` 可禁用计划模式（恢复为固定 Activity Level）
 
 #### 配置方法
 
-- **Settings UI**：夜间模式复选框 + 时间段・级别设置
-- **API**：向 `PUT /api/settings/activity-schedule` 发送上述 JSON
-- **root 配置 API**：使用 Settings UI，或向 `PUT /api/settings/activity-schedule` 发送上述 JSON。Anima 进程不要直接编辑 `config.json`
+- **Settings UI**：夜间模式复选框 + 时段和级别配置
+- **API**：将上述 JSON 发送到 `PUT /api/settings/activity-schedule`
+- **root 配置 API**：使用 Settings UI，或将上述 JSON 发送到 `PUT /api/settings/activity-schedule`。不要从 Anima 进程直接编辑 `config.json`
 
 #### 注意事项
 
-- 手动更改 Activity Level 时，当前时间段对应的调度条目也会联动更新
-- 调度在服务器启动时也会立即应用（按启动时点的时刻设置为对应级别）
-- 当不属于任何时间段时，维持最后设置的 Activity Level
+- 手动更改 Activity Level 时，当前时段对应的计划条目也会同步更新
+- 计划会在服务器启动时立即应用（根据启动时的时间设置对应级别）
+- 如果当前时间不属于任何时段，则维持最后设置的 Activity Level
 
 ## 什么是 Cron 任务
 
-Cron 是“在指定时间自动执行的任务”。如果说心跳是“定期巡回”，那么 Cron 就是“定时业务”。
+Cron 是“在指定时间自动执行的任务”。心跳是“定期巡查”，而 Cron 则是“定时工作”。
 
-例：
-- 每天早上 9:00 制定业务计划
-- 每周五 17:00 进行周度回顾
-- 每天 2:00 执行备份脚本
+示例：
+- 每天早上9:00制定工作计划
+- 每周五17:00进行每周回顾
+- 每天2:00运行备份脚本
 
-## cron.md 的配置
+## 配置 cron.md
 
 Cron 任务以 Markdown + YAML 格式定义在 `cron.md` 中。
 文件路径：`~/.animaworks/animas/{name}/cron.md`
 
-当上司编辑下属 Anima 的 `cron.md` 时，不要直接操作文件，而应使用 `read_memory_file` / `write_memory_file`，并以 `../{anima_name}/cron.md` 这样的相对路径指定。
+上司编辑下属 Anima 的 `cron.md` 时，应使用 `read_memory_file` / `write_memory_file`，而不是直接操作文件，并使用类似 `../{anima_name}/cron.md` 的相对路径指定。
 
 ### 基本格式
 
-每个任务以 `## タスク名` 标题开始，在正文开头用 `schedule:` 指令记载标准 5 字段 cron 表达式。
+每个任务以 `## タスク名` 标题开头，并在正文开头使用 `schedule:` 指令写入标准的五字段 cron 表达式。
 
 ```markdown
 # Cron: {name}
@@ -301,36 +295,36 @@ type: llm
 今週のepisodes/を読み返し、パターンを抽出してknowledge/に統合する。
 ```
 
-旧格式（如 `## タスク名（毎日 9:00 JST）` 那样在括号内写调度的方式）会在服务器启动时或通过 `animaworks migrate` 自动转换为新格式。
+旧格式（例如在 `## タスク名（毎日 9:00 JST）` 中将计划写在括号内的格式）会在服务器启动时或通过 `animaworks migrate` 自动转换为新格式。
 
-### CronTask 的 Schema
+### CronTask 的模式
 
 每个任务在内部会被解析为以下 `CronTask` 模型：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |-----------|------|-----------|------|
-| `name` | str | （必填） | 任务名。从 `##` 标题中提取 |
-| `schedule` | str | （必填） | 标准 5 字段 cron 表达式。从 `schedule:` 指令中提取 |
+| `name` | str | （必填） | 任务名称。从 `##` 标题中提取 |
+| `schedule` | str | （必填） | 标准的五字段 cron 表达式。从 `schedule:` 指令中提取 |
 | `type` | str | `"llm"` | 任务类型：`"llm"` 或 `"command"` |
-| `description` | str | `""` | LLM 型的指示文（在 type: llm 时使用） |
-| `command` | str \| None | `None` | Command 型的 bash 命令 |
-| `tool` | str \| None | `None` | Command 型的内部工具名 |
-| `args` | dict \| None | `None` | tool 的参数（YAML 格式） |
-| `skip_pattern` | str \| None | `None` | Command 型：若 stdout 匹配此正则表达式则跳过 follow-up LLM |
-| `trigger_heartbeat` | bool | `True` | Command 型：若为 `False` 则跳过命令输出后的 follow-up cron LLM |
+| `description` | str | `""` | LLM 类型的指令文本（用于 type: llm） |
+| `command` | str \| None | `None` | Command 类型的 bash 命令 |
+| `tool` | str \| None | `None` | Command 类型的内部工具名称 |
+| `args` | dict \| None | `None` | tool 参数（YAML 格式） |
+| `skip_pattern` | str \| None | `None` | Command 类型：stdout 与此正则表达式匹配时，跳过后续 LLM |
+| `trigger_heartbeat` | bool | `True` | Command 类型：如果是 `False`，则在命令输出后跳过后续 cron LLM |
 
-## LLM 型 Cron 任务
+## LLM 类型 Cron 任务
 
-`type: llm` 是由智能体（LLM）伴随判断・思考执行的任务。
-description 中写的指示会作为提示词传递给智能体。
+`type: llm` 是由代理（LLM）通过判断和思考来执行的任务。
+description 中写明的指令会作为提示词传递给代理。
 
 ### 特点
 
-- 智能体使用工具、搜索记忆、做出判断
-- 结果不定形（每个任务输出不同）
-- 执行需要模型的 API 调用（产生成本）
+- 代理会使用工具、搜索记忆并作出判断
+- 结果不固定（每个任务的输出各不相同）
+- 执行时需要调用模型 API（会产生费用）
 
-### 记述示例
+### 示例
 
 ```markdown
 ## 毎朝の業務計画
@@ -342,17 +336,17 @@ type: llm
 正本タスク一覧（`list_tasks`） の未着手タスクも確認し、必要なら優先度を見直す。
 ```
 
-description（`type:` 行之后的正文）应（SHOULD）包含以下内容：
-- 确认什么（输入）
+description（`type:` 行之后的正文）应包含（SHOULD）以下内容：
+- 要检查什么（输入）
 - 如何判断（标准）
-- 输出什么（成果物）
+- 要输出什么（产出）
 
-## Command 型 Cron 任务
+## Command 类型 Cron 任务
 
-`type: command` 是不经过智能体判断、执行固定命令或工具的任务。
-适合确定性的处理（备份、发送通知等）。
+`type: command` 是不经过代理判断，直接运行固定命令或工具的任务。
+适用于确定性处理（备份、发送通知等）。
 
-### bash 命令型
+### bash 命令类型
 
 ```markdown
 ## バックアップ実行
@@ -361,10 +355,10 @@ type: command
 command: /usr/local/bin/backup.sh
 ```
 
-在 `command:` 中以一行记载 bash 命令。
-命令通过 shell 执行。
+在 `command:` 中用一行写入 bash 命令。
+命令会通过 shell 执行。
 
-### 内部工具型
+### 内部工具类型
 
 ```markdown
 ## Slack朝の挨拶
@@ -376,15 +370,15 @@ args:
   message: "おはようございます！本日もよろしくお願いします。"
 ```
 
-在 `tool:` 中记载内部工具名，在 `args:` 中以 YAML 格式记载参数。
-args 作为 YAML 的缩进块被解析（2 空格缩进）。
+在 `tool:` 中写入内部工具名称，并在 `args:` 中以 YAML 格式写入参数。
+args 会作为 YAML 缩进块解析（缩进2个空格）。
 
-### Command 型的 follow-up 控制
+### Command 类型的后续处理控制
 
-Command 型任务在命令正常结束且有 stdout 时，会将其输出传递给 LLM 进行 follow-up 分析（在相当于 heartbeat 的上下文中执行）。
+Command 类型任务在命令正常结束且有 stdout 输出时，会将该输出传递给 LLM 进行后续分析（在相当于 heartbeat 的上下文中执行）。
 
-- **`trigger_heartbeat: false`** — 跳过 follow-up LLM（当不需要分析输出时）
-- **`skip_pattern: <正規表現>`** — 若 stdout 匹配此正则表达式则跳过 follow-up
+- **`trigger_heartbeat: false`** — 跳过后续 LLM（无需分析输出时）
+- **`skip_pattern: <正規表現>`** — stdout 与此正则表达式匹配时，跳过后续处理
 
 ```markdown
 ## ログ取得（出力分析不要）
@@ -400,24 +394,24 @@ skip_pattern: ^OK$
 command: /usr/local/bin/health-check.sh
 ```
 
-### LLM 型与 Command 型的使用区分
+### LLM 类型与 Command 类型的选择
 
-| 观点 | LLM 型 | Command 型 |
+| 角度 | LLM 类型 | Command 类型 |
 |------|--------|-----------|
 | 是否需要判断 | 是 | 否 |
 | API 成本 | 有 | 无 |
-| 输出的可预测性 | 不定形 | 确定性 |
-| 适合的任务 | 计划制定、回顾、文章撰写 | 备份、发送通知、数据获取 |
-| 出错时的应对 | 智能体自主处理 | 仅记录到日志 |
+| 输出的可预测性 | 不固定 | 确定 |
+| 适用任务 | 制定计划、回顾、撰写文章 | 备份、发送通知、获取数据 |
+| 出错时的处理 | 代理自主处理 | 仅记录到日志 |
 
-犹豫时的指南：
-- “只是每次做同样的事”→ Command 型（SHOULD）
-- “根据状况判断会变化”→ LLM 型（SHOULD）
-- “命令执行 + 结果解读”→ LLM 型，在 description 中指示执行命令
+拿不准时可参考以下指南：
+- “每次只做同一件事” → Command 类型（SHOULD）
+- “需要根据情况改变判断” → LLM 类型（SHOULD）
+- “运行命令 + 解释结果” → 使用 LLM 类型，并在 description 中指示运行命令
 
-## 调度记法
+## 计划语法
 
-cron.md 的 `schedule:` 指令中记载 **标准 5 字段 cron 表达式**。
+cron.md 的 `schedule:` 指令中必须写入**标准的五字段 cron 表达式**。
 
 ### 标准 cron 表达式（必填）
 
@@ -425,20 +419,20 @@ cron.md 的 `schedule:` 指令中记载 **标准 5 字段 cron 表达式**。
 分 時 日 月 曜日
 ```
 
-例：
-- `0 9 * * *` — 每天 9:00
-- `0 9 * * 1-5` — 工作日 9:00
-- `*/30 9-17 * * *` — 9:00〜17:00 每 30 分钟
-- `0 2 1 * *` — 每月 1 日 2:00
-- `0 17 * * 5` — 每周五 17:00
+示例：
+- `0 9 * * *` — 每天9:00
+- `0 9 * * 1-5` — 工作日9:00
+- `*/30 9-17 * * *` — 9:00〜17:00每30分钟
+- `0 2 1 * *` — 每月1日2:00
+- `0 17 * * 5` — 每周五17:00
 
-时区可在 `config.json` 的 `system.timezone` 中配置。未配置时自动检测系统时区。
+可以通过 `config.json` 的 `system.timezone` 设置时区。未设置时会自动检测系统时区。
 
-### 从日语调度迁移
+### 从日语计划迁移
 
-以旧格式（`## タスク名（毎日 9:00 JST）`）书写的 cron.md 会在服务器启动时或通过 `animaworks migrate` 自动转换为标准 cron 表达式。转换对应表：
+以旧格式（`## タスク名（毎日 9:00 JST）`）编写的 cron.md 会在服务器启动时或通过 `animaworks migrate` 自动转换为标准 cron 表达式。转换对照表：
 
-| 日语记法 | cron 表达式示例 |
+| 日语写法 | cron 表达式示例 |
 |-----------|----------|
 | `毎日 HH:MM` | `0 9 * * *` |
 | `平日 HH:MM` | `0 9 * * 1-5` |
@@ -447,28 +441,28 @@ cron.md 的 `schedule:` 指令中记载 **标准 5 字段 cron 表达式**。
 | `X分毎` | `*/5 * * * *` |
 | `X時間毎` | `0 */2 * * *` |
 
-`隔週`、`毎月最終日`、`第N曜日` 无法自动转换。请手动记载 cron 表达式。
+`隔週`、`毎月最終日`、`第N曜日` 无法自动转换。请手动编写 cron 表达式。
 
-## cron_logs 的确认方法
+## 如何查看 cron_logs
 
-Cron 任务的执行结果会记录到服务器日志中。
-也会通过 WebSocket 作为 `anima.cron` 事件广播。
+Cron 任务的执行结果会记录在服务器日志中。
+也会通过 WebSocket 以 `anima.cron` 事件的形式广播。
 
-日志的确认方法：
-- 服务器日志：`animaworks.lifecycle` logger 的 INFO 级别
-- Web UI：显示在仪表盘的活动 feed 中
-- episodes/: LLM 型任务的情况下，智能体自身会写入 episodes/ 日志（SHOULD）
+查看日志的方法：
+- 服务器日志：`animaworks.lifecycle` 记录器的 INFO 级别
+- Web UI：显示在仪表板的活动动态中
+- 对于 episodes/: LLM 类型任务，代理自身应在 episodes/ 中写入日志（SHOULD）
 
-LLM 型任务的结果会作为 `CycleResult` 记录，包含以下信息：
+LLM 类型任务的结果会记录为 `CycleResult`，包含以下信息：
 - `trigger`：`"cron"`
-- `action`：智能体的行动摘要
-- `summary`：结果的摘要文本
+- `action`：代理行为摘要
+- `summary`：结果摘要文本
 - `duration_ms`：执行时间（毫秒）
 - `context_usage_ratio`：上下文使用率
 
-## 常见的 Cron 配置示例
+## 常见 Cron 配置示例
 
-### 基本套装（推荐所有 Anima）
+### 基本套件（推荐所有 Anima 使用）
 
 ```markdown
 # Cron: {name}
@@ -521,9 +515,9 @@ procedures/ の手順書を確認し、実際の運用と乖離がないか見�
 変更があれば手順書を更新する。
 ```
 
-### 注释掉
+### 注释掉任务
 
-不想执行的任务用 HTML 注释包围：
+不希望执行的任务请用 HTML 注释括起来：
 
 ```markdown
 <!--
@@ -534,20 +528,20 @@ type: llm
 -->
 ```
 
-注释内的 `## ` 标题会被解析器忽略。
+注释中的 `## ` 标题会被解析器忽略。
 
-## Cron 配置的热重载
+## Cron 配置热重载
 
-更新 cron.md 后，与 HEARTBEAT.md 一样，调度会自动重载。
-即使 Anima 自身改写了 cron.md，也会立即反映（self-modify 模式）。
-上司可以用 write memory 工具编辑下属的 `cron.md` / `HEARTBEAT.md`。来自被授权上司的 `AGENTS.md` 变更请求也会被转发到 root 并获得授权。更改 `status.json` 时使用对应的面向上司的工具或 root CLI/API。不要通过 Read / Write / Edit / apply_patch / `Path.write_text` / shell 重定向等直接写入 root 所有的文件。
+更新 cron.md 后，计划会自动重新加载，与 HEARTBEAT.md 一样。
+即使 Anima 自身改写 cron.md，也会立即生效（self-modify 模式）。
+上司可以使用 write memory 工具编辑下属的 `cron.md` / `HEARTBEAT.md`。来自获准上司的 `AGENTS.md` 修改请求也会转发给 root 并获得授权。修改 `status.json` 时，请使用面向上司的对应工具或 root CLI/API。不要通过 Read / Write / Edit / apply_patch / `Path.write_text` / shell 重定向等方式直接写入 root 所有的文件。
 
 重载时的行为：
-1. 删除该 Anima 的所有现有 cron 任务
-2. 解析更新后的 cron.md，注册新任务
-3. 日志中输出 `Schedule reloaded for '{name}'`
+1. 删除对应 Anima 的所有现有 cron 作业
+2. 解析更新后的 cron.md 并注册新作业
+3. 日志中会输出 `Schedule reloaded for '{name}'`
 
 自行更新 cron.md 时的注意事项：
 - 在标题（`## タスク名`）之后紧接着放置 `schedule:` 指令（MUST）
-- 调度以标准 5 字段 cron 表达式记载（MUST）
-- type 行放在 schedule 之后（SHOULD）
+- 计划必须使用标准的五字段 cron 表达式编写（MUST）
+- type 行应放在 schedule 之后（SHOULD）

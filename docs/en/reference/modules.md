@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=3129147f9df562237df49a9c41053040cae56bef755ecee28842064ec522f16e generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=b0cbbd6a56a7bbe194b3267fff1593e98d4c0eff4dc2195fb7d856e316542374 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -17,7 +17,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 885 | — |
+| `cli.parser` | 893 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -29,8 +29,8 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
 | `cli.commands.anima_export_cmd` | 67 | — |
-| `cli.commands.anima_mgmt` | 1174 | CLI commands for anima process management. |
-| `cli.commands.board` | 141 | — |
+| `cli.commands.anima_mgmt` | 1160 | CLI commands for anima process management. |
+| `cli.commands.board` | 215 | — |
 | `cli.commands.company_cmd` | 272 | — |
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
@@ -103,9 +103,9 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `core.host_api` | 88 | — |
 | `core.internal_api` | 51 | — |
 | `core.paths` | 235 | Centralized path resolution for AnimaWorks. |
-| `core.schemas` | 241 | — |
+| `core.schemas` | 242 | — |
 | `core.time_utils` | 103 | — |
-| `core.trust` | 434 | — |
+| `core.trust` | 444 | — |
 
 ## `core.activity`
 
@@ -148,7 +148,7 @@ Digital Anima lifecycle and runtime objects.
 |---|---:|---|
 | `core.anima` | 23 | — |
 | `core.anima._mixin_protocols（非公開）` | 130 | Structural host protocols for the compositional mixins. |
-| `core.anima.admin` | 170 | — |
+| `core.anima.admin` | 144 | — |
 | `core.anima.asset_reconciler` | 787 | — |
 | `core.anima.bootstrap_state` | 592 | — |
 | `core.anima.chat_attachments` | 253 | — |
@@ -161,7 +161,7 @@ Digital Anima lifecycle and runtime objects.
 | `core.anima.inbox` | 1021 | — |
 | `core.anima.inbox_overflow` | 100 | — |
 | `core.anima.lifecycle` | 1662 | — |
-| `core.anima.messaging` | 1332 | — |
+| `core.anima.messaging` | 1426 | — |
 | `core.anima.response_normalize` | 141 | — |
 | `core.anima.roster` | 83 | — |
 | `core.anima.settings_store` | 111 | — |
@@ -192,7 +192,7 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Application configuration schema, loading, validation, and migration.
+Application configuration schemas, loading, validation, and migration.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -201,7 +201,7 @@ Application configuration schema, loading, validation, and migration.
 | `core.config.env_slots` | 92 | — |
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
-| `core.config.helper_models` | 497 | — |
+| `core.config.helper_models` | 500 | — |
 | `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
@@ -261,9 +261,9 @@ Configuration models and startup security guards for isolated enclave mode.
 
 ## `core.execution`
 
-Tool execution, command execution, safety controls.
+Tool execution, command execution, and safety controls.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
@@ -299,14 +299,15 @@ Tool execution, command execution, safety controls.
 | `core.execution.mcp_env` | 39 | — |
 | `core.execution.process_runner` | 184 | — |
 | `core.execution.reminder` | 128 | — |
+| `core.execution.session.board_reply` | 38 | — |
 | `core.execution.session.engine_session` | 160 | — |
-| `core.execution.session.session_context` | 114 | — |
+| `core.execution.session.session_context` | 116 | — |
 | `core.execution.session.session_ids` | 116 | — |
 | `core.execution.session.session_store` | 139 | — |
 | `core.execution.session.session_types` | 73 | — |
 | `core.execution.tool_evidence` | 182 | — |
 | `core.execution.watchdog` | 139 | — |
-| `core.execution.workspace_env` | 71 | — |
+| `core.execution.workspace_env` | 74 | — |
 
 ## `core.execution.engines`
 
@@ -392,7 +393,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 458 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 524 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
@@ -401,11 +402,12 @@ Translation catalog and language selection.
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
 | `core.i18n.strings.models` | 70 | Localized CLI messages for model inspection. |
 | `core.i18n.strings.phone` | 127 | — |
+| `core.i18n.strings.room_manager` | 29 | i18n strings for meeting room manager. |
 | `core.i18n.strings.server` | 341 | Domain-specific i18n strings. |
 | `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
 | `core.i18n.strings.tmp` | 74 | — |
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
-| `core.i18n.strings.tooling_schema` | 540 | Domain-specific i18n strings (schema.*). |
+| `core.i18n.strings.tooling_schema` | 538 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
 | `core.i18n.strings.zoom` | 26 | — |
 
@@ -415,13 +417,13 @@ Translation catalog and language selection.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
-| `core.i18n.strings` | 63 | Merge all domain string modules into a single dict. |
+| `core.i18n.strings` | 65 | Merge all domain string modules into a single dict. |
 
 ## `core.infra`
 
-Foundation features such as logging, databases, and caching.
+Core infrastructure features such as logs, databases, and caches.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
@@ -430,7 +432,7 @@ Foundation features such as logging, databases, and caching.
 | `core.infra.inference` | 127 | — |
 | `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
 | `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
-| `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
+| `core.infra.runtime_init` | 445 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 
@@ -586,7 +588,7 @@ Storage, search, and organization of conversation and episode memories.
 | `core.memory.maintenance.cron_noop` | 241 | — |
 | `core.memory.maintenance.distillation` | 548 | — |
 | `core.memory.maintenance.forgetting` | 588 | — |
-| `core.memory.maintenance.housekeeping` | 1964 | — |
+| `core.memory.maintenance.housekeeping` | 1952 | — |
 | `core.memory.maintenance.hygiene` | 75 | — |
 | `core.memory.maintenance.reconsolidation` | 669 | — |
 | `core.memory.maintenance.resolution_tracker` | 60 | — |
@@ -712,7 +714,7 @@ Storage, search, and organization of conversation and episode memories.
 
 ## `core.messaging`
 
-Message delivery between Animas and to external parties.
+Message delivery between anima and to external parties.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -722,8 +724,9 @@ Message delivery between Animas and to external parties.
 | `core.messaging.board_fanout` | 102 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
+| `core.messaging.meeting_room_store` | 130 | — |
 | `core.messaging.mentions` | 32 | — |
-| `core.messaging.messenger` | 1099 | — |
+| `core.messaging.messenger` | 1051 | — |
 | `core.messaging.outbound` | 408 | — |
 | `core.messaging.outbound_auto` | 380 | — |
 | `core.messaging.recipient_status` | 79 | — |
@@ -842,7 +845,7 @@ System prompt and context construction.
 
 ## `core.runtime`
 
-Anima main runtime components, interprocess communication, and task execution.
+Anima main runtime components, inter-process communication, task execution.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -859,8 +862,8 @@ Anima main runtime components, interprocess communication, and task execution.
 | `core.runtime.schedule_parser` | 484 | — |
 | `core.runtime.scheduler_manager` | 1059 | APScheduler management for heartbeat and cron tasks. |
 | `core.runtime.state_writer` | 27 | — |
-| `core.runtime.streaming_handler` | 445 | Streaming IPC message handler. |
-| `core.runtime.task_runner` | 1054 | Disposable task runner entry point. |
+| `core.runtime.streaming_handler` | 449 | Streaming IPC message handler. |
+| `core.runtime.task_runner` | 1056 | Disposable task runner entry point. |
 | `core.runtime.task_runner_supervisor` | 1450 | Anima-main-side lifecycle manager for disposable task runner processes. |
 | `core.runtime.transport` | 240 | Transport helpers for IPC server/client communication. |
 
@@ -931,7 +934,7 @@ Task registration, status management, and execution control.
 |---|---:|---|
 | `core.tasks` | 1 | Task queue, task board, delegated/background task execution and external task sources. |
 | `core.tasks.autonomy_report` | 475 | — |
-| `core.tasks.background` | 618 | — |
+| `core.tasks.background` | 521 | — |
 | `core.tasks.board.board_actions` | 260 | — |
 | `core.tasks.board.housekeeping` | 188 | — |
 | `core.tasks.board.models` | 39 | Pydantic models for the single TaskBoard view (read straight from TaskStore). |
@@ -992,18 +995,18 @@ Tool schemas, permissions, and execution infrastructure.
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.tooling` | 1 | Tooling package; import specific modules to avoid eager handler loading. |
-| `core.tooling._handler_protocols（非公開）` | 230 | Structural host protocols for the compositional mixins. |
+| `core.tooling._handler_protocols（非公開）` | 231 | Structural host protocols for the compositional mixins. |
 | `core.tooling.codex_command_hook` | 31 | Core command-policy decision for Codex's PreToolUse hook. |
 | `core.tooling.dispatch` | 256 | — |
-| `core.tooling.handler` | 889 | — |
-| `core.tooling.handler_base` | 289 | — |
+| `core.tooling.handler` | 902 | — |
+| `core.tooling.handler_base` | 340 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
-| `core.tooling.handler_comms` | 934 | — |
+| `core.tooling.handler_comms` | 986 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
 | `core.tooling.handler_files` | 899 | — |
-| `core.tooling.handler_memory` | 1515 | — |
+| `core.tooling.handler_memory` | 1514 | — |
 | `core.tooling.handler_org` | 39 | — |
 | `core.tooling.handler_org_dashboard` | 203 | — |
 | `core.tooling.handler_perms` | 448 | — |
@@ -1012,7 +1015,7 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.handler_workspace` | 279 | — |
 | `core.tooling.org_helpers` | 158 | — |
 | `core.tooling.permissions` | 344 | — |
-| `core.tooling.policy.action_gate` | 188 | — |
+| `core.tooling.policy.action_gate` | 189 | — |
 | `core.tooling.policy.command_policy` | 496 | — |
 | `core.tooling.policy.registry` | 65 | — |
 | `core.tooling.policy.schemas.admin` | 221 | — |
@@ -1029,11 +1032,11 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.policy.schemas.task` | 204 | — |
 | `core.tooling.policy.schemas.workspace` | 46 | — |
 | `core.tooling.policy.submit_tasks` | 91 | — |
-| `core.tooling.policy.surface` | 259 | — |
+| `core.tooling.policy.surface` | 255 | — |
 | `core.tooling.policy.tool_content` | 42 | — |
 | `core.tooling.skill_creator` | 120 | — |
 | `core.tooling.skill_promotion_tool` | 176 | — |
-| `core.tooling.standalone` | 320 | — |
+| `core.tooling.standalone` | 322 | — |
 | `core.tooling.tool_context` | 17 | Shared runtime state passed to ToolHandler mixin delegates. |
 
 ## `core.tooling.policy`
@@ -1098,7 +1101,7 @@ Voice input/output and voice dialogue.
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1563 | — |
+| `server.app` | 1569 | — |
 | `server.board_hooks` | 127 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1106,6 +1109,7 @@ Voice input/output and voice dialogue.
 | `server.localhost` | 86 | — |
 | `server.loop_watchdog` | 102 | Report event loop stalls in the log, with the stack that caused them. |
 | `server.reload_manager` | 115 | — |
+| `server.room_manager` | 542 | Meeting room lifecycle, orchestration, and minutes generation. |
 | `server.stream_registry` | 489 | — |
 | `server.websocket` | 165 | — |
 
@@ -1130,15 +1134,15 @@ Voice input/output and voice dialogue.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
-| `server.routes` | 61 | — |
-| `server.routes.animas` | 1271 | — |
+| `server.routes` | 63 | — |
+| `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 478 | — |
+| `server.routes.channels` | 433 | — |
 | `server.routes.chat` | 459 | — |
-| `server.routes.chat_chunk_handler` | 265 | — |
+| `server.routes.chat_chunk_handler` | 289 | — |
 | `server.routes.chat_emotion` | 8 | — |
 | `server.routes.chat_files` | 99 | — |
 | `server.routes.chat_images` | 80 | — |
@@ -1155,10 +1159,11 @@ Voice input/output and voice dialogue.
 | `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
+| `server.routes.room` | 443 | Meeting room API routes with SSE streaming. |
 | `server.routes.sessions` | 949 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
-| `server.routes.system` | 1217 | — |
+| `server.routes.system` | 1224 | — |
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
@@ -1179,14 +1184,14 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `server.supervisor` | 23 | Server-level supervision APIs for managing Anima processes. |
-| `server.supervisor._manager_protocols（非公開）` | 86 | Structural host protocols for the compositional mixins. |
+| `server.supervisor._manager_protocols（非公開）` | 85 | Structural host protocols for the compositional mixins. |
 | `server.supervisor._mgr_health（非公開）` | 470 | Health check mixin for ProcessSupervisor. |
 | `server.supervisor._mgr_rag_repair（非公開）` | 278 | Supervised RAG repair mixin for ProcessSupervisor. |
 | `server.supervisor._mgr_reconcile（非公開）` | 335 | Reconciliation mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_scheduler（非公開）` | 1317 | System scheduler mixin for ProcessSupervisor. |
+| `server.supervisor._mgr_scheduler（非公開）` | 1291 | System scheduler mixin for ProcessSupervisor. |
 | `server.supervisor.activity_schedule` | 100 | — |
 | `server.supervisor.auto_updater` | 198 | — |
 | `server.supervisor.manager` | 1308 | Process Supervisor - Manages lifecycle of Anima child processes. |

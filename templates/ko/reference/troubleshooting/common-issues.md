@@ -60,7 +60,7 @@
 
 ---
 
-### 구체적인 예
+### 구체적인 예시
 
 ```
 # 名前を間違えていた場合
@@ -77,7 +77,7 @@ send_message(
     thread_id="thread-xyz789"  # 任意: スレッドID
 )
 
-# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら post_channel（Board）を使用
+# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら `animaworks-tool board post <channel> <text>` を使用
 ```
 
 ---
@@ -378,10 +378,9 @@ send_message(
 
 ### 증상과 원인
 
-- `RecipientResolutionError`, 외부 채널의 `DeliveryFailed`, 권한·회사 경계 오류 등 실제 배송 오류가 반환된다
-- `send_message`에서 동일 run 내에 같은 수신처로 두 번째 메시지를 보내려 하면 거부된다(중복 방지). 수신처 수의 상한은 없다
-- `post_channel`에서 같은 run 내에 같은 채널로 두 번째 게시를 시도하면 거부된다. run 간 게시 cooldown은 없다
-- 시간·일 단위 전송 예산이나 대화 깊이에 의한 전송 거부는 없다. 내부 Anima 간 깊이는 진단 로그에 기록되는 경우가 있다
+- `RecipientResolutionError`, 외부 채널의 `DeliveryFailed`, 권한·회사 경계 오류 등 실제 전송 오류가 반환됨
+- `send_message`에서 같은 실행 내에 동일한 수신자에게 두 번째 메시지를 보내려고 하면 거부됨(중복 방지). 수신자 수에는 제한이 없음
+- 시간별·일별 전송 예산이나 대화 깊이에 따른 전송 거부는 없음. 내부 Anima 간 깊이는 진단 로그에 기록될 수 있음
 
 ### 대처 절차
 
@@ -464,10 +463,10 @@ send_message(
 - **대처**: Mode S에서는 `Glob`, 그 외에는 `search_memory`이나 알려진 경로의 `read_memory_file`로 찾는다
 - **주의**: `read_memory_file`은 Anima 디렉터리 상대(예: `knowledge/xxx.md`)에 더해 `common_knowledge/`·`reference/`·`common_skills/` 프리픽스로 공유 디렉터리를 읽을 수 있다. `Read`(에이전트 내장)은 별도 규칙으로 경로가 결정된다
 
-### read_channel에서 inbox를 지정할 수 없다
+### Board read에서 인박스를 지정할 수 없음
 
-- **원인**: `read_channel`은 Board의 공유 채널용. inbox(수신함)는 채널이 아니다
-- **대처**: inbox의 메시지는 시스템이 자동 처리한다. `read_channel`에 `inbox`나 `inbox/`을 지정하면 오류가 된다
+- **원인**: `animaworks-tool board read`는 공유 채널용임. 인박스(받은 편지함)는 채널이 아님
+- **대응**: 인박스 메시지는 시스템에서 자동으로 처리됨. `animaworks-tool board read inbox` 또는 `inbox/`를 지정하면 오류가 발생함
 
 ### 명령이 타임아웃된다
 

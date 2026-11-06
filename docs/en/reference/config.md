@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=0648b0f3224be2d4b0b58344af1045e8137d10520dd00c523a84884f9b55fd8e generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=e240ec3368a047652b9bdffd20ca902b80c2a0e8542d3a125f6c5e6be5278eb4 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -166,7 +166,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `helper_models` | `HelperModelsConfig` | `{HelperModelsConfig}` | Model, authentication credentials, explicit fallback candidates, and one-shot policy for each helper LLM call. |
+| `helper_models` | `HelperModelsConfig` | `{HelperModelsConfig}` | Model, authentication credentials, explicit fallback candidates, and one-shot policy for each auxiliary LLM call. |
 | `helper_models.episode_summary` | `HelperModelRole \| None` | `null` | — |
 | `helper_models.episode_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.episode_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
@@ -239,6 +239,14 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
 | `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
+| `helper_models.meeting_summary` | `HelperModelRole \| None` | `null` | — |
+| `helper_models.meeting_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.meeting_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
+| `helper_models.meeting_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
+| `helper_models.meeting_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
+| `helper_models.meeting_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
+| `helper_models.meeting_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.meeting_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
 | `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |
@@ -438,7 +446,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 ### `server`
 
-| Key | Type | Default | Description |
+| Key | Type | Default value | Description |
 |---|---|---|---|
 | `server` | `ServerConfig` | `{ServerConfig}` | HTTP server, authentication, and usage control configuration. |
 | `server.session_ttl_days` | `int \| None` | `90` | None = unlimited |
@@ -471,7 +479,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 
@@ -698,7 +706,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 ### `housekeeping`
 
-| Key | Type | Default value | Description |
+| Key | Type | Default | Description |
 |---|---|---|---|
 | `housekeeping` | `HousekeepingConfig` | `{HousekeepingConfig}` | Periodic cleanup of runtime data. |
 | `housekeeping.enabled` | `bool` | `true` | — |
@@ -709,7 +717,6 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
-| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |

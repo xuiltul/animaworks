@@ -257,6 +257,16 @@ def resolve_tool_trust(tool_name: str, args: Mapping[str, Any] | None = None) ->
     and action, and defaults to untrusted when that pair is not registered.
     """
     effective_name = tool_name.removeprefix("mcp__aw__")
+    if effective_name.casefold() in {"bash", "execute_command"}:
+        command = args.get("command") if args is not None else None
+        if isinstance(command, str) and any(
+            cli_command in command
+            for cli_command in (
+                "animaworks-tool board read",
+                "animaworks-tool board dm-history",
+            )
+        ):
+            return "untrusted"
     if effective_name == "use_tool":
         tool = args.get("tool_name") if args is not None else None
         action = args.get("action") if args is not None else None

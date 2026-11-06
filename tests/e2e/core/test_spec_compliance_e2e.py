@@ -202,13 +202,6 @@ def test_heartbeat_history_from_activity_log(anima_dir: Path) -> None:
 # ── Fix 5: dead code removed E2E ──────────────────────────────
 
 
-def test_append_dm_log_restored() -> None:
-    """_append_dm_log method restored on Messenger for legacy fallback writes."""
-    from core.messaging.messenger import Messenger
-
-    assert hasattr(Messenger, "_append_dm_log"), "_append_dm_log should exist for parallel dm_logs/ writes"
-
-
 def test_append_transcript_removed() -> None:
     """_append_transcript method no longer exists on ConversationMemory."""
     from core.memory.conversation.memory import ConversationMemory

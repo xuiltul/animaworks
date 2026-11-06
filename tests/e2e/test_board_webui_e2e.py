@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
+from core.time_utils import now_jst
+
 
 def _create_app(shared_dir: Path):
     """Create a test FastAPI app with channels router and real filesystem."""
@@ -38,7 +40,6 @@ def _seed_channels(shared_dir: Path) -> None:
     channels_dir.mkdir(parents=True, exist_ok=True)
     (channels_dir / "general.jsonl").touch()
     (channels_dir / "ops.jsonl").touch()
-    (shared_dir / "dm_logs").mkdir(parents=True, exist_ok=True)
 
 
 # ── Full Channel Flow ────────────────────────────────────
@@ -168,20 +169,43 @@ class TestE2EDMFlow:
 
     @patch("core.config.models.load_config", side_effect=Exception("no config"))
     async def test_dm_history_with_messenger(self, _mock_cfg: MagicMock, tmp_path: Path):
-        """Verify DM history reading works with real JSONL files."""
+        """Verify DM history reading uses activity log files."""
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()
         _seed_channels(shared_dir)
-
-        # Simulate DM conversation by writing JSONL directly
-        dm_file = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        entries = [
-            {"ts": "2026-02-17T10:00:00", "from": "alice", "text": "Hi Bob", "source": "anima"},
-            {"ts": "2026-02-17T10:01:00", "from": "bob", "text": "Hi Alice", "source": "anima"},
-            {"ts": "2026-02-17T10:02:00", "from": "alice", "text": "How are you?", "source": "anima"},
-        ]
-        dm_file.write_text(
-            "\n".join(json.dumps(e, ensure_ascii=False) for e in entries) + "\n",
+        today = now_jst().strftime("%Y-%m-%d")
+        alice_log = tmp_path / "animas" / "alice" / "activity_log" / f"{today}.jsonl"
+        bob_log = tmp_path / "animas" / "bob" / "activity_log" / f"{today}.jsonl"
+        alice_log.parent.mkdir(parents=True)
+        bob_log.parent.mkdir(parents=True)
+        alice_log.write_text(
+            "\n".join(
+                json.dumps(entry, ensure_ascii=False)
+                for entry in (
+                    {
+                        "ts": f"{today}T10:00:00",
+                        "type": "message_sent",
+                        "from": "alice",
+                        "to": "bob",
+                        "content": "Hi Bob",
+                    },
+                    {
+                        "ts": f"{today}T10:02:00",
+                        "type": "message_sent",
+                        "from": "alice",
+                        "to": "bob",
+                        "content": "How are you?",
+                    },
+                )
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        bob_log.write_text(
+            json.dumps(
+                {"ts": f"{today}T10:01:00", "type": "message_sent", "from": "bob", "to": "alice", "content": "Hi Alice"}
+            )
+            + "\n",
             encoding="utf-8",
         )
 

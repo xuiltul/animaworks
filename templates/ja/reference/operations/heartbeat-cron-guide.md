@@ -149,7 +149,6 @@ Chat（人間との対話）と TaskExec（実作業）はメインモデルを�
 - **部下チェック**: 部下を持つ Anima には、ハートビート・Cron のプロンプトに部下の状態確認指示が自動注入される。
 - **セッション時間制限**（`config.json` の `heartbeat`）: `soft_timeout_seconds`（デフォルト300秒）経過でラップアップ用のリマインダを注入、`hard_timeout_seconds`（デフォルト600秒）でセッションを強制終了する。
 - **アイドル時の自動コンパクト**: `heartbeat.idle_compaction_minutes`（デフォルト10分）— ストリーム終了からこの時間経過後にアイドル自動コンパクションが走る（実行エンジン側の設定）。
-- **Board 投稿**: 同一 run では同じチャネルに 1 回まで。run をまたぐ投稿間隔の制限はない。
 
 ### 定期ハートビートのスケジュール方式
 
@@ -157,9 +156,9 @@ Chat（人間との対話）と TaskExec（実作業）はメインモデルを�
 
 それ以外（例: 実効61分、または43分のように 60 を割り切れない間隔）は **1分ごとのポーリング**（`_heartbeat_check`）で「前回からの経過」により発火する。古い `IntervalTrigger` 由来の不具合回避のための実装。
 
-### バックグラウンドツールと DM ログ（core/tasks/background.py）
+### バックグラウンドツール（core/tasks/background.py）
 
-`core/tasks/background.py` はハートビート/Cron のスケジュールそのものではなく、**長時間ツール呼び出しのバックグラウンド実行**（状態の JSON 永続化を含む）と **レガシー共有 DM ログ（`shared/dm_logs/`）のローテーション**を担う。運用の詳細・CLI 経路は `operations/background-tasks.md` も参照。
+`core/tasks/background.py` はハートビート/Cron のスケジュールそのものではなく、**長時間ツール呼び出しのバックグラウンド実行**（状態の JSON 永続化を含む）を担う。運用の詳細・CLI 経路は `operations/background-tasks.md` も参照。
 
 #### BackgroundTaskManager
 
@@ -173,12 +172,7 @@ Chat（人間との対話）と TaskExec（実作業）はメインモデルを�
 - **掃除 `cleanup_old_tasks(max_age_hours=24)`**: `status` が `completed` / `failed` で `completed_at` が **引数で指定した時間（デフォルト 24 時間）より古い** JSON を削除する。加えて `running` のまま `created_at` から **48 時間超**経過したファイルはクラッシュ孤児として削除する。戻り値は削除件数。
 - **保持時間**: `cleanup_old_tasks` の完了タスク保持時間は引数 `max_age_hours`（デフォルト24時間）で指定する。対応する `config.json` 設定キーはない。
 
-#### rotate_dm_logs（システム Cron）
-
-- **実行タイミング**: ライフサイクル（`core/lifecycle/system_crons.py` 等）のシステム Cron で **毎日 04:30**（サーバー設定タイムゾーン）。`server/supervisor/_mgr_scheduler.py` 側でも同一 ID のジョブが登録される構成。
-- **対象**: `shared/dm_logs/*.jsonl`（ファイル名に `.archive.` を含むものはスキップ）。
-- **動作**: `core.time_utils` のローカル現在時刻基準で、各行 JSON の `ts`（ISO 形式）をパースし、**デフォルト 7 日**より古いエントリを `{stem}.{YYYYMMDD}.archive.jsonl` に追記アーカイブしたうえで、現行ファイルから除去する。`ts` の解釈に失敗した行は **現行ファイルに残す**（データ損失防止）。
-- **その他のサーバー定時ジョブ**: Anima 単位の `cron.md` とは別に、ライフサイクルがメモリ保守・RAG 等のシステム Cron を登録する（例: 日次コンソリデーション 02:00、日次インデックス 04:00）。時刻は設定タイムゾーン基準。DM ローテーションは上記 04:30。
+- **その他のサーバー定時ジョブ**: Anima 単位の `cron.md` とは別に、ライフサイクルがメモリ保守・RAG 等のシステム Cron を登録する（例: 日次コンソリデーション 02:00、日次インデックス 04:00）。時刻は設定タイムゾーン基準。
 
 ### ハートビート設定のホットリロード
 

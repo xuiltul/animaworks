@@ -12,7 +12,7 @@ from __future__ import annotations
 These tests use REAL file I/O operations (no mocks for files) and test
 actual end-to-end workflows for:
   - Shared channel visibility in priming (cross-Anima posts)
-  - Messenger.send() creating message_sent (dm_logs no longer written)
+  - Messenger.send() creating message_sent
   - Full-content preservation in dm_received activity log entries
   - format_for_priming() content_trim parameter
   - read_dm_history() type filtering (message_sent/message_received, exclude response_sent)
@@ -169,7 +169,7 @@ class TestSharedChannelVisibleInPriming:
 
 
 class TestMessengerSendCreatesMessageSent:
-    """Test 2: Messenger.send() creates message_sent in activity log (dm_logs abolished)."""
+    """Test 2: Messenger.send() creates message_sent in activity log."""
 
     def test_messenger_send_creates_message_sent(
         self,
@@ -177,9 +177,7 @@ class TestMessengerSendCreatesMessageSent:
     ) -> None:
         """Messenger.send() records message_sent in activity log.
 
-        After unification, send() writes only to:
-        animas/{sender}/activity_log/{date}.jsonl (message_sent).
-        dm_logs/ is no longer written.
+        send() records the message in animas/{sender}/activity_log/{date}.jsonl.
         """
         # Build directory structure
         shared_dir = tmp_path / "shared"
@@ -202,11 +200,6 @@ class TestMessengerSendCreatesMessageSent:
         msg_entry = msg_sent_entries[0]
         assert msg_entry.get("to") == "recipient"
         assert msg_entry.get("content") == "hello from sender"
-
-        # 2. dm_logs is no longer written
-        pair = sorted(["sender", "recipient"])
-        dm_log_path = shared_dir / "dm_logs" / f"{pair[0]}-{pair[1]}.jsonl"
-        assert not dm_log_path.exists(), "DM log file should not be created (dm_logs abolished)"
 
 
 class TestDmReceivedFullContentInActivityLog:

@@ -182,6 +182,8 @@ def test_cli_argv_mapping() -> None:
     assert action_tool_name_from_cli_argv(["gmail", "draft-update", "draft-id"]) == "gmail_draft_update"
     assert action_tool_name_from_cli_argv(["gmail", "send", "--to", "a@example.com"]) == "gmail_send"
     assert action_tool_name_from_cli_argv(["chatwork", "send", "room", "body"]) == "chatwork_send"
+    assert action_tool_name_from_cli_argv(["board", "post", "general", "body"]) == "post_channel"
+    assert action_tool_name_from_cli_argv(["board", "post", "general", "-", "--as", "operator"]) == "post_channel"
     assert action_tool_name_from_cli_argv(["slack", "send", "#ops", "body"]) == "slack_send"
     assert action_tool_name_from_cli_argv(["discord", "send", "general", "body"]) == "discord_send"
     assert action_tool_name_from_cli_argv(["call_human", "subject", "body"]) == "call_human"

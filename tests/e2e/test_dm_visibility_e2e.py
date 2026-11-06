@@ -5,7 +5,7 @@
 
 Verifies that:
 1. DM API endpoints read from per-Anima activity_log (unified activity log)
-2. Legacy dm_logs/ are merged with activity_log without duplicates
+2. DM history returns messages recorded in activity logs
 """
 
 from __future__ import annotations
@@ -47,7 +47,6 @@ def _setup_data_dir(tmp_path: Path) -> tuple[Path, Path, Path]:
     shared_dir = data_dir / "shared"
     shared_dir.mkdir()
     (shared_dir / "channels").mkdir()
-    (shared_dir / "dm_logs").mkdir()
     (shared_dir / "inbox").mkdir()
     animas_dir = data_dir / "animas"
     animas_dir.mkdir()
@@ -60,15 +59,6 @@ def _make_anima_dir(animas_dir: Path, name: str) -> Path:
     anima_dir.mkdir(parents=True, exist_ok=True)
     (anima_dir / "activity_log").mkdir(exist_ok=True)
     return anima_dir
-
-
-def _write_legacy_dm(shared_dir: Path, pair: str, entries: list[dict]) -> None:
-    """Write JSONL entries to a legacy dm_logs/ file."""
-    dm_dir = shared_dir / "dm_logs"
-    dm_dir.mkdir(parents=True, exist_ok=True)
-    filepath = dm_dir / f"{pair}.jsonl"
-    lines = [json.dumps(e, ensure_ascii=False) for e in entries]
-    filepath.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ── Test 1: DM API returns messages from activity_log ──────────
@@ -254,155 +244,3 @@ class TestDMApiReturnsMessagesFromActivityLog:
         # The dedup key is "ts|content", so identical entries should be merged
         exact_matches = [m for m in messages if m["text"] == "Exact same message"]
         assert len(exact_matches) == 1, f"Expected 1 deduplicated message, got {len(exact_matches)}: {exact_matches}"
-
-
-# ── Test 2: DM API merges legacy and activity_log ─────────────
-
-
-class TestDMApiMergesLegacyAndActivityLog:
-    """Legacy dm_logs/ + activity_log messages are merged without duplicates."""
-
-    async def test_legacy_and_activity_log_both_appear(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Old messages from dm_logs/ and new messages from activity_log
-        are both returned by GET /api/dm/{pair}."""
-        _data_dir, shared_dir, animas_dir = _setup_data_dir(tmp_path)
-
-        alice_dir = _make_anima_dir(animas_dir, "alice")
-
-        # Legacy messages (old dm_logs/ format)
-        legacy_entries = [
-            {
-                "ts": "2026-01-15T10:00:00",
-                "from": "alice",
-                "text": "Legacy message 1",
-                "source": "anima",
-            },
-            {
-                "ts": "2026-01-15T11:00:00",
-                "from": "bob",
-                "text": "Legacy message 2",
-                "source": "anima",
-            },
-        ]
-        _write_legacy_dm(shared_dir, "alice-bob", legacy_entries)
-
-        # New messages via activity_log
-        alice_activity = ActivityLogger(alice_dir)
-        alice_activity.log(
-            "dm_sent",
-            content="New activity_log message",
-            from_person="alice",
-            to_person="bob",
-        )
-
-        app = _create_app(shared_dir)
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/dm/alice-bob?limit=100")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        messages = data["messages"]
-        texts = [m["text"] for m in messages]
-
-        # Both legacy and new messages should be present
-        assert "Legacy message 1" in texts, f"Legacy msg1 missing. Got: {texts}"
-        assert "Legacy message 2" in texts, f"Legacy msg2 missing. Got: {texts}"
-        assert "New activity_log message" in texts, f"Activity log msg missing. Got: {texts}"
-
-        # Total should include all unique messages
-        assert data["total"] >= 3
-
-    @patch("core.config.models.load_config", side_effect=Exception("no config"))
-    async def test_dm_list_merges_counts_from_both_sources(
-        self,
-        _mock_cfg: MagicMock,
-        tmp_path: Path,
-    ) -> None:
-        """GET /api/dm includes counts from both legacy dm_logs/ and activity_log."""
-        _data_dir, shared_dir, animas_dir = _setup_data_dir(tmp_path)
-
-        alice_dir = _make_anima_dir(animas_dir, "alice")
-        _make_anima_dir(animas_dir, "bob")
-
-        # 2 legacy messages
-        legacy_entries = [
-            {"ts": "2026-01-15T10:00:00", "from": "alice", "text": "Old 1", "source": "anima"},
-            {"ts": "2026-01-15T11:00:00", "from": "bob", "text": "Old 2", "source": "anima"},
-        ]
-        _write_legacy_dm(shared_dir, "alice-bob", legacy_entries)
-
-        # 1 new message via activity_log
-        alice_activity = ActivityLogger(alice_dir)
-        alice_activity.log(
-            "dm_sent",
-            content="New msg",
-            from_person="alice",
-            to_person="bob",
-        )
-
-        app = _create_app(shared_dir)
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/dm")
-
-        assert resp.status_code == 200
-        pairs = resp.json()
-        ab = next((p for p in pairs if p["pair"] == "alice-bob"), None)
-        assert ab is not None
-        # Legacy count (2) + activity_log count (at least 1)
-        assert ab["message_count"] >= 3
-
-    async def test_no_duplicates_when_same_message_in_both(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """If the same ts|content exists in both legacy and activity_log,
-        it is not duplicated in the response."""
-        _data_dir, shared_dir, animas_dir = _setup_data_dir(tmp_path)
-
-        alice_dir = _make_anima_dir(animas_dir, "alice")
-        _make_anima_dir(animas_dir, "bob")
-
-        fixed_ts = "2026-02-18T09:00:00"
-        shared_content = "This message exists in both sources"
-
-        # Write to legacy dm_logs/
-        _write_legacy_dm(
-            shared_dir,
-            "alice-bob",
-            [
-                {"ts": fixed_ts, "from": "alice", "text": shared_content, "source": "anima"},
-            ],
-        )
-
-        # Write identical entry to alice's activity_log
-        log_file = alice_dir / "activity_log" / "2026-02-18.jsonl"
-        entry = {
-            "ts": fixed_ts,
-            "type": "dm_sent",
-            "content": shared_content,
-            "from": "alice",
-            "to": "bob",
-        }
-        log_file.write_text(
-            json.dumps(entry, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-
-        app = _create_app(shared_dir)
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/dm/alice-bob?limit=100")
-
-        assert resp.status_code == 200
-        data = resp.json()
-        messages = data["messages"]
-
-        # The dedup key is "ts|content" (or "ts|text"), so identical entries
-        # from both sources should be merged into one
-        matching = [m for m in messages if m.get("text") == shared_content]
-        assert len(matching) == 1, f"Expected 1 deduplicated message, got {len(matching)}: {matching}"

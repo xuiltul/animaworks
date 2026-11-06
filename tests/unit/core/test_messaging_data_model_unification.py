@@ -3,7 +3,6 @@
 Verifies:
 1. Event type alias resolution (_resolve_type_filter)
 2. messenger.send() records message_sent with from_type
-3. messenger.send() no longer writes to dm_logs/
 4. activity.py type_map contains unified labels
 5. DM grouping handles both old and new event types
 6. activity-log aliases preserve legacy message history
@@ -268,11 +267,11 @@ class TestDMGroupingUnified:
         assert len(groups[0].entries) == 2
 
 
-# ── messenger.send() event name & dm_logs ────────────────
+# ── messenger.send() event recording ─────────────────────
 
 
 class TestMessengerSendUnified:
-    """Verify messenger.send() uses message_sent and skips dm_logs."""
+    """Verify messenger.send() records message_sent."""
 
     @pytest.fixture
     def shared_dir(self, tmp_path: Path) -> Path:
@@ -301,23 +300,6 @@ class TestMessengerSendUnified:
         assert len(entries) == 1
         assert entries[0].type == "message_sent"
         assert entries[0].meta.get("from_type") == "anima"
-
-    def test_send_does_not_write_dm_logs(
-        self,
-        shared_dir: Path,
-        anima_dir: Path,
-    ) -> None:
-        from core.messaging.messenger import Messenger
-
-        m = Messenger(shared_dir, "alice")
-        m.send("bob", "Hello Bob!")
-
-        dm_logs = shared_dir / "dm_logs"
-        if dm_logs.exists():
-            files = list(dm_logs.glob("*.jsonl"))
-            for f in files:
-                content = f.read_text(encoding="utf-8").strip()
-                assert content == "", f"dm_logs should not have new entries: {f}"
 
     def test_send_with_intent_in_meta(
         self,

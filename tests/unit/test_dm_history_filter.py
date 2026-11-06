@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -75,8 +74,7 @@ class TestReadDmHistoryDirection:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", direction="sent")
+        result = messenger.read_dm_history("peer", direction="sent")
 
         assert len(result) == 1
         assert result[0]["text"] == "outgoing"
@@ -88,8 +86,7 @@ class TestReadDmHistoryDirection:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", direction="received")
+        result = messenger.read_dm_history("peer", direction="received")
 
         assert len(result) == 1
         assert result[0]["text"] == "incoming"
@@ -101,8 +98,7 @@ class TestReadDmHistoryDirection:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", direction="both")
+        result = messenger.read_dm_history("peer", direction="both")
 
         assert len(result) == 2
 
@@ -113,8 +109,7 @@ class TestReadDmHistoryDirection:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", direction="invalid_value")
+        result = messenger.read_dm_history("peer", direction="invalid_value")
 
         assert len(result) == 2
 
@@ -130,8 +125,7 @@ class TestReadDmHistoryHours:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", hours=24)
+        result = messenger.read_dm_history("peer", hours=24)
 
         assert len(result) == 1
         assert result[0]["text"] == "recent"
@@ -143,8 +137,7 @@ class TestReadDmHistoryHours:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", hours=None)
+        result = messenger.read_dm_history("peer", hours=None)
 
         assert len(result) == 2
 
@@ -160,8 +153,7 @@ class TestReadDmHistoryKeyword:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", keyword="承認申請")
+        result = messenger.read_dm_history("peer", keyword="承認申請")
 
         assert len(result) == 1
         assert "承認申請" in result[0]["text"]
@@ -173,8 +165,7 @@ class TestReadDmHistoryKeyword:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", keyword=None)
+        result = messenger.read_dm_history("peer", keyword=None)
 
         assert len(result) == 2
 
@@ -184,8 +175,7 @@ class TestReadDmHistoryKeyword:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", keyword="nonexistent")
+        result = messenger.read_dm_history("peer", keyword="nonexistent")
 
         assert len(result) == 0
 
@@ -202,8 +192,7 @@ class TestReadDmHistoryCombined:
         ]
         _write_activity(anima_dir, entries)
 
-        with patch("core.messaging.messenger.Messenger._get_dm_log_path", return_value=Path("/nonexist")):
-            result = messenger.read_dm_history("peer", direction="sent", keyword="PR #469")
+        result = messenger.read_dm_history("peer", direction="sent", keyword="PR #469")
 
         assert len(result) == 1
         assert result[0]["text"] == "PR #469 承認申請"

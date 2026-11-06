@@ -284,7 +284,7 @@ def _normalize_memory_path(raw: str, anima_dir: Path) -> _PathNormResult:
     Resolves absolute paths, collapses slashes, and maps shared dirs
     (common_knowledge, reference, common_skills, shared/channels) to
     canonical prefixes. For shared/channels, returns channel_redirect
-    so the caller can delegate to read_channel/post_channel.
+    so the caller can direct the user to the Board CLI.
     """
     original = raw
     raw = raw.strip()
@@ -781,7 +781,10 @@ class MemoryToolsMixin:
             err = self._check_file_permission(raw_path)
             if err:
                 return err
-            return self._handle_read_channel({"channel": norm.channel_redirect})
+            return _error_result(
+                "PermissionDenied",
+                t("handler.memory_channel_read_cli", channel=norm.channel_redirect),
+            )
         rel = args["path"] = norm.rel
 
         redirect_note = ""
@@ -893,9 +896,7 @@ class MemoryToolsMixin:
                 if not allowed:
                     return _error_result(
                         "PermissionDenied",
-                        f"Path '{rel}' resolves outside your directory. "
-                        "Use relative paths like 'knowledge/foo.md'. "
-                        "For shared channels use read_channel/post_channel.",
+                        t("handler.memory_read_outside_cli", path=rel),
                     )
         err = self._check_file_permission(str(path))
         if err:
@@ -1106,11 +1107,9 @@ class MemoryToolsMixin:
             err = self._check_file_permission(raw_path, write=True)
             if err:
                 return err
-            return self._handle_post_channel(
-                {
-                    "channel": norm.channel_redirect,
-                    "content": args.get("content", ""),
-                }
+            return _error_result(
+                "PermissionDenied",
+                t("handler.memory_channel_write_cli", channel=norm.channel_redirect),
             )
         rel = args["path"] = norm.rel
 

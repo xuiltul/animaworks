@@ -91,13 +91,15 @@ call_human(
 
 ### 5. 批准后 — 发布
 
-批准送达后，通过 `post_channel` 将报告发布到**运用指令（injection等）指定的Board频道**:
+收到批准后，将报告发布到**运维指令（如 injection 等）指定的 Board 频道** `animaworks-tool board post <channel> <text>`：
 
 ```
-post_channel(channel="{指定されたBoard名}", content="{承認済みレポート}")
+animaworks-tool board post {指定されたBoard名} - <<'EOF'
+{承認済みレポート}
+EOF
 ```
 
-若未指定发布目标Board，则不进行发布，向上司（若无则向人类）告知已获批准的报告在手并请示指令。
+如果未指定要发布到哪个 Board，则不要发布，并告知上司（若没有上司，则告知相关人员）已备好获批的报告，等待指令。
 
 ## 禁止事项
 

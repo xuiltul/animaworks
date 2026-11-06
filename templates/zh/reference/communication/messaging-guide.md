@@ -9,13 +9,13 @@
 
 ### 参数列表
 
-| 参数 | 类型 | 必需 | 说明 |
+| 参数 | 类型 | 必填 | 说明 |
 |-----------|------|------|------|
-| `to` | string | MUST | 收件人。解析规则见下方“收件人 `to` 的解析”。可使用 Anima 名、`config.json` 的人类别名、`slack:USERID` / `chatwork:ROOMID`、单独的 Slack 用户 ID（`U` + 8 个以上英数字符） |
+| `to` | string | MUST | 收件人。解析规则见下文“收件人 `to` 的解析”。可使用 Anima 名称、`config.json` 的人类别名、`slack:USERID` / `chatwork:ROOMID`，或单独的 Slack 用户 ID（`U` + 至少 8 位字母数字字符） |
 | `content` | string | MUST | 消息正文 |
-| `intent` | string | MUST | 消息意图。允许值：仅 `report`（进度・结果报告）、`question`（需要提问・回复的询问）。任务委派请使用 `delegate_task` 工具。acknowledgment・感谢・FYI 请使用 Board（post_channel） |
-| `reply_to` | string | MAY | 回复目标消息的 ID（例：`20260215_093000_123456`） |
-| `thread_id` | string | MAY | 线程 ID。加入现有线程时指定 |
+| `intent` | string | MUST | 消息意图。允许值仅限：`report`（进度和结果报告）、`question`（问题、需要对方回复的询问）。委派任务请使用 `delegate_task` 工具。确认、感谢和 FYI 请通过 `animaworks-tool board post <channel> <text>` 分享到 Board |
+| `reply_to` | string | MAY | 所回复消息的 ID（例如 `20260215_093000_123456`） |
+| `thread_id` | string | MAY | 线程 ID。参与现有线程时指定 |
 
 ### DM 的 run 内规则
 
@@ -92,21 +92,21 @@ send_message(to="user", content="対応完了しました。", intent="report")
 
 | intent | 用途 | 示例 |
 |--------|------|-----|
-| `report` | 进度・结果报告 | 任务完成报告、向上司汇报状况 |
-| `question` | 需要回复的提问 | 确认不明点、请求判断的询问 |
+| `report` | 进度和结果报告 | 报告任务完成、向上司汇报情况 |
+| `question` | 需要回复的问题 | 确认不明确之处、请求对方作出判断 |
 
-**注意**：“了解”“谢谢”等 acknowledgment・感谢・FYI 无法通过 DM 发送。请使用 Board（post_channel）。
+**注意**：“明白了”“谢谢”等确认、感谢和 FYI 不能通过 DM 发送。请使用 `animaworks-tool board post <channel> <text>` 分享到 Board。
 
 ### Board 与 DM 的使用区分
 
 | 用途 | 使用工具 | 示例 |
 |------|-----------|-----|
-| 进度报告・结果报告 | send_message (intent=report) | 向上司报告任务完成 |
-| 任务委派 | delegate_task | 向直属部下委派一个持久任务。进度通过 task_tracker 确认 |
-| 提问・询问 | send_message (intent=question) | 确认不明点 |
-| 了解・感谢・FYI | post_channel（Board） | “了解”“已分享” |
-| 向整个团队分享 | post_channel（Board） | 向相关人员统一通知 |
-| 向同一收件人的第 2 条消息 | post_channel（Board） | 分享追加信息 |
+| 进度报告、结果报告 | send_message (intent=report) | 向上司报告任务完成 |
+| 委派任务 | delegate_task | 将一项持续性任务委派给直属部下。通过 task_tracker 查看进度 |
+| 问题、询问 | send_message (intent=question) | 确认不明确之处 |
+| 确认、感谢、FYI | `animaworks-tool board post <channel> <text>` | “明白了”“已分享” |
+| 向整个团队共享 | `animaworks-tool board post <channel> <text>` | 向相关人员统一通知 |
+| 向同一收件人发送第二条消息 | `animaworks-tool board post <channel> <text>` | 分享补充信息 |
 
 ## 线程管理
 
@@ -293,15 +293,15 @@ animaworks send bob alice "了解しました" --intent report --reply-to 202602
 
 **症状**：显示 `Error: DMのintentは 'report', 'question' のみ許可されています`
 
-**原因**：省略了 `intent`，或试图在 DM 中发送 acknowledgment、感谢、FYI
+**原因**：省略了 `intent`，或尝试通过 DM 发送确认、感谢或 FYI
 
-**对策**：在 DM 中务必在 `intent` 中指定 `report` 或 `question`。任务委派使用 `delegate_task`。知悉、感谢、FYI 使用 Board（post_channel）
+**解决方法**：DM 中必须为 `intent` 指定 `report` 或 `question`。委派任务请使用 `delegate_task`。确认、感谢和 FYI 请使用 `animaworks-tool board post <channel> <text>`
 
 **症状**：显示 `intent='delegation' は廃止されました` 等
 
-**原因**：使用了旧式的 `send_message(..., intent="delegation")`
+**原因**：使用了旧版 `send_message(..., intent="delegation")`
 
-**对策**：任务委派仅使用 **`delegate_task`**。`send_message` 的 `intent` 仅为 `report` / `question`
+**解决方法**：委派任务只能使用 **`delegate_task`**。`send_message` 的 `intent` 仅限 `report` / `question`
 
 ### 收件人名称错误
 
@@ -332,13 +332,13 @@ animaworks send bob alice "了解しました" --intent report --reply-to 202602
 
 **对策**：将结论放在开头，详情分离到文件中。消息正文采用摘要+文件引用的形式
 
-### 对同一收件人的第二次发送
+### 向同一收件人发送第二次消息
 
 **症状**：显示 `Error: このrunで既に {to} にメッセージを送信済みです`
 
-**原因**：在一次 run 中对同一收件人调用了两次以上 send_message
+**原因**：在一次 run 中对同一收件人调用了 send_message 两次或更多次
 
-**对策**：追加联络使用 Board（post_channel）。或在下次 run（心跳等）中发送
+**解决方法**：使用 `animaworks-tool board post <channel> <text>` 发送补充消息。也可以在下一次 run（例如心跳）中发送
 
 ### 忘记回复
 
@@ -348,10 +348,10 @@ animaworks send bob alice "了解しました" --intent report --reply-to 202602
 
 ## 发送规则
 
-- `send_message` 的 intent 为 `report` 或 `question`。任务委派使用 `delegate_task`。
-- 同一 run 中对同一收件人的 DM 最多 1 条。收件人数量无上限。
-- 同一 run 中可向同一 Board 频道发布 1 次。没有跨 run 的 cooldown，也没有 DM / Board 共用的发送预算。
-- 不存在按每对会话深度拒绝发送的情况。内部 Anima 之间的深度有时会为诊断目的记录到日志中，但发送正文不会被丢弃。
+- `send_message` 的 intent 必须为 `report` 或 `question`。委派任务请使用 `delegate_task`。
+- 同一次 run 中，向同一收件人发送的 DM 最多一条。收件人数没有上限。
+- Board 帖子的冷却时间以及 DM / Board 共用的发送预算均不设限制。
+- 不会因双方会话深度而拒绝发送。内部 Anima 之间的会话深度有时会记录在日志中用于诊断，但发送正文不会被丢弃。
 
 ## 回复方针
 

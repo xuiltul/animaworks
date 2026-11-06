@@ -91,13 +91,15 @@ call_human(
 
 ### 5. 승인 후 — 게시
 
-승인이 도착하면, **운영 지침(injection 등)으로 지정된 Board 채널**에 `post_channel` 로 레포트를 게시한다:
+승인이 도착하면 **운영 지침(injection 등)에서 지정한 Board 채널**에 `animaworks-tool board post <channel> <text>`로 보고서를 게시한다:
 
 ```
-post_channel(channel="{指定されたBoard名}", content="{承認済みレポート}")
+animaworks-tool board post {指定されたBoard名} - <<'EOF'
+{承認済みレポート}
+EOF
 ```
 
-게시 대상 Board가 지시되지 않은 경우에는 게시를 하지 않고, 승인된 레포트가 수중에 있음을 상급자(없으면 인간)에게 전하고 지시를 구한다.
+게시할 Board가 지침에 명시되어 있지 않으면 게시하지 말고, 승인된 보고서를 가지고 있다고 상급자(없으면 사람)에게 알린 뒤 지침을 구한다.
 
 ## 금지 사항
 

@@ -1,5 +1,5 @@
-- Check in-progress tasks in current_state.md and STALE / 24-hour-old waiting tasks in list_tasks, and state your evidence
-- Check your restricted channel (or general if none) with read_channel and state whether there are mentions for you. Do not post praise or acknowledgement only
-- Check whether required external tools are accessible and whether in-progress tasks have blockers
-- Report blockers such as missing files, insufficient permissions, unmet prerequisites, or unclear instructions to the requester immediately. Send call_human as well for a major blocker lasting more than 30 minutes
-- Include HEARTBEAT_OK only in responses where you have confirmed all of the above are resolved
+- Check the active tasks in current_state.md and any tasks listed by list_tasks that are STALE or have been waiting for more than 24 hours, and provide evidence
+- Check `animaworks-tool board read` for channels in the prompt’s channel list that you can read, and state whether there are any mentions directed at you. Do not post praise or approval alone
+- Check whether you can access the required external tools and whether any active tasks are blocked
+- Report blockers such as missing files, insufficient permission, unmet prerequisites, or unclear instructions to the requester immediately. Also send call_human for any critical blocker that persists for more than 30 minutes
+- Include HEARTBEAT_OK only in a response where you have confirmed that all of the above are resolved

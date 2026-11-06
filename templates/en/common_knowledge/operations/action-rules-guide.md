@@ -21,11 +21,11 @@ keywords: メール, 下書き, 重複確認
 | `keywords` | Optional | Terms that improve search precision |
 | Body | Required | Confirmation content shown at shutdown. Required reading files are written as `read_memory_file(path="...")` |
 
-## Target Tool Names in ToolHandler
+## Tool Names Targeted by ToolHandler
 
 - `call_human`
 - `send_message`
-- `post_channel`
+- `animaworks-tool board post`
 - `write_memory_file`
 - `gmail_draft`
 - `gmail_send`

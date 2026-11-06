@@ -510,7 +510,7 @@ class TestHandlerPostReadACL:
             }
         )
         assert "typo-room" in result
-        assert "manage_channel" in result
+        assert "animaworks-tool internal manage-channel create typo-room" in result
         assert "create" in result
         after = set(channels_dir.iterdir()) if channels_dir.exists() else set()
         assert after == before

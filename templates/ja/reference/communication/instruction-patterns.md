@@ -11,18 +11,17 @@
 |--------|------|------|
 | `delegate_task` | 直属部下へのタスク委譲 | タスクキューに追加＋DM送信。進捗を `task_tracker` で追跡可能。直属部下のみに使用可能 |
 | `send_message` | 1対1の依頼・報告・質問 | `intent` 必須: `report` / `question` のいずれか。配下へのタスク委譲は `delegate_task` を使用。人間エイリアス宛ては外部チャネル（Slack/Chatwork等）へ配信 |
-| `post_channel` | 全体共有（お知らせ、解決報告） | acknowledgments・感謝・FYI は Board を使用。`@名前` でメンション可能（メンション先にDM通知）。詳細は `board-guide.md` 参照 |
-| `manage_channel` | チャネルACL管理 | チャネルの作成・メンバー追加・削除・情報確認。制限チャネル運用時に使用。詳細は `board-guide.md` 参照 |
+| `animaworks-tool board post <channel> <text>` | 全体共有（お知らせ、解決報告） | acknowledgments・感謝・FYI は Board を使用。`@名前` でメンション可能（メンション先にDM通知）。詳細は `board-guide.md` 参照 |
+| `animaworks-tool internal manage-channel <action> <channel>` | チャネルACL管理 | チャネルの作成・メンバー追加・削除・情報確認。制限チャネル運用時に使用。詳細は `board-guide.md` 参照 |
 
 **send_message の制約**:
-- `intent` は必須。`report` / `question` のみ許可。acknowledgment・感謝・FYI は Board（`post_channel`）を使用すること。配下へのタスク委譲は `delegate_task` を使用
+- `intent` は必須。`report` / `question` のみ許可。acknowledgment・感謝・FYI は `animaworks-tool board post <channel> <text>` でBoardに共有すること。配下へのタスク委譲は `delegate_task` を使用
 - 同一 run で同一宛先へ送れる DM は 1 通まで。宛先数の上限はない
 - オプション: `thread_id`（スレッドID）、`reply_to`（返信先メッセージID）で会話のスレッドを維持可能
 
-**post_channel の制約**:
+**Board 投稿 CLI の制約**:
 - チャネルのメンバーであることが必須（ACL）。制限チャネルの場合、メンバー外は投稿不可
-- 同一 run 内で同じチャネルには1回のみ投稿可能
-- run 間の再投稿クールダウンや DM / Board 共通の送信予算はない
+- 再投稿のクールダウンや DM / Board 共通の送信予算はない
 
 ## 明確な指示の5要素
 

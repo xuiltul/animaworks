@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/memory/priming.md -->
-<!-- i18n: source-sha256=0081dfa1257d883fc97eee25f5116efbb8b51b9c5d27c1879fdc6512ae266bd3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d5a04a5c993d7ed7bc3ff3758c23f89175249339ec84279d9c33e9ffd1b807f8 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Confirmed commit: 193a5e72
 
@@ -9,20 +9,20 @@ Automatic recall is the process of retrieving relevant memory cues from the exec
 
 ## Profiles and Channels
 
-The default value of `PrimingConfig.profile` is `compact`. If `priming_profile` is specified as `compact` or `full` in `status.json` for each Anima, it can override that Anima's configuration. The channel overview is as follows.
+The default for `PrimingConfig.profile` is `compact`. You can override an Anima’s configuration by specifying `priming_profile` as `compact` or `full` in its `status.json`. The channels are summarized below.
 
-| Channel | What is retrieved | `compact` | `full` |
+| Channel | What it retrieves | `compact` | `full` |
 |---|---|---:|---:|
 | A | Sender profile | ○ | ○ |
-| B | Recent activity in the activity log | — | ○ |
-| C0 | Pointers to resident candidates and important knowledge | ○ | ○ |
-| C | Search for related knowledge | Conditional | ○ |
+| B | Activity log and recent activity in shared channels | Conditional on background triggers | ○ |
+| C0 | Pointers to persistent candidates and important knowledge | ○ | ○ |
+| C | Search for relevant knowledge | Conditional | ○ |
 | E | Incomplete tasks | ○ | ○ |
 | F | Past episodes | — | ○ |
-| G | Not an independent channel. Graph-derived candidates accompanying episode search | — | ○ (within F's search) |
-| Auxiliary | Recent sent content, unsent notifications to humans | ○ | ○ |
+| G | Not an independent channel; graph-derived candidates accompanying episode search | — | ○ (within F search) |
+| Auxiliary | Recent sends and notifications to humans that have not been sent | ○ | ○ |
 
-In `compact`, channels A, E, C0, and auxiliary information are collected in parallel. The C search is performed when `channel` is `chat` or `task`, or when `intent` is `question`, `request`, or `delegation`. Reading recent activity (B), searching episodes (F), and graph candidates equivalent to G that may be used within that search are not targets for retrieval in `compact`. G is not an independent Priming channel.
+At `compact`, channels A, E, and C0 and auxiliary information are gathered in parallel. A search of C is performed when `channel` is `chat` or `task`, or when `intent` is `question`, `request`, or `delegation`. B is fetched on background triggers `heartbeat`・`inbox`・`cron` when `compact_background_recall_enabled` is enabled and the limits on the number of recent activities and tokens are positive. F is also fetched when there is a background trigger and a query, and the episode count and token limits are positive. G is not an independent Priming channel; it may be used within the F search.
 
 ## C0 and `always_prime`
 

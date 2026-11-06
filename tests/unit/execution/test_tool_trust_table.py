@@ -52,6 +52,10 @@ def test_trust_table_covers_all_runtime_tool_names(tmp_path: Path, monkeypatch) 
 def test_resolve_tool_trust_normalizes_and_resolves_dynamic_tools() -> None:
     assert resolve_tool_trust("mcp__aw__read_memory_file") == "trusted"
     assert resolve_tool_trust("Read") == "medium"
+    assert resolve_tool_trust("Bash", {"command": "animaworks-tool board read general"}) == "untrusted"
+    assert resolve_tool_trust("Bash", {"command": "animaworks-tool board dm-history alice bob"}) == "untrusted"
+    assert resolve_tool_trust("Bash", {"command": "animaworks-tool board post general hello"}) == "medium"
+    assert resolve_tool_trust("Bash", {"command": "pwd"}) == "medium"
     assert resolve_tool_trust("use_tool", {"tool_name": "slack", "action": "messages"}) == "untrusted"
     assert resolve_tool_trust("use_tool") == "untrusted"
     assert resolve_tool_trust("unknown_tool") == "untrusted"

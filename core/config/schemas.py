@@ -702,7 +702,7 @@ class ServerConfig(BaseModel):
     ollama_total_timeout: int = 0  # Hard upper bound (seconds) on a single Ollama generation call; 0 = unlimited
     media_proxy: MediaProxyConfig = MediaProxyConfig()
     base_path: str = ""  # Reverse proxy sub-path (e.g. "/app"); empty = root deploy
-    internal_api_auth: Literal["off", "log", "enforce"] = "log"  # /api/internal/* caller verification
+    internal_api_auth: Literal["off", "log", "enforce"] = "enforce"  # /api/internal/* caller verification
 
     @model_validator(mode="after")
     def _validate_intervals(self) -> ServerConfig:
@@ -889,7 +889,6 @@ class HousekeepingConfig(BaseModel):
     anima_log_retention_days: int = Field(default=30, ge=1)
     anima_log_total_max_size_mb: int = Field(default=200, ge=1)
     frontend_log_backup_count: int = 7
-    dm_log_archive_retention_days: int = 30
     cron_log_retention_days: int = 14
     shortterm_retention_days: int = 7
     shortterm_archive_retention_days: int = Field(default=30, ge=1)

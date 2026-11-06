@@ -12,13 +12,13 @@
 | ツール | 用途 | 備考 |
 |--------|------|------|
 | `send_message` | 上司・同僚への1対1報告・質問 | 報告・進捗・判断依頼は `intent="report"`、質問は `intent="question"`。Anima 名・エイリアス・`slack:`/`chatwork:` 等（下記参照） |
-| `post_channel` | チーム全体へのお知らせ（Board） | acknowledgments・感謝・FYI は Board を使用。同一チャネル1 run 1回。run 間の cooldown はない |
+| `animaworks-tool board post <channel> <text>` | チーム全体へのお知らせ（Board） | acknowledgments・感謝・FYI は Board を使用 |
 | `call_human` | 人間への緊急通知 | サービス停止・セキュリティインシデント等 |
 
 **send_message の制約**:
 - `intent` は必須で、値は **`report` または `question` のみ**（報告・進捗は `report`、質問は `question`）。**`delegation` は `send_message` では使えない**（ツールが拒否する）。タスク委譲は `delegate_task` を使う
 - 同一 run で同一宛先へ送れる DM は 1 通まで。宛先数の上限はない
-- 追加の連絡は Board（post_channel）を使用する
+- 追加の連絡は `animaworks-tool board post <channel> <text>` を使用する
 - **宛先** は下記「宛先の解決」を参照（Anima 名・人間エイリアス・`slack:` / `chatwork:` 直指定など）
 - **注**: チャットセッション中は人間宛てに send_message は使えない。直接テキストで返答する
 

@@ -416,8 +416,7 @@ class TestFallbackBehavior:
         shared_dir,
         make_handler,
     ):
-        """ToolHandler logs external sends to the unified activity log
-        (dm_logs are no longer written by messenger.send)."""
+        """ToolHandler logs external sends to the unified activity log."""
         mock_slack.return_value = json.dumps({"status": "sent"})
         sakura_dir = make_anima("sakura")
         messenger = Messenger(shared_dir, "sakura")

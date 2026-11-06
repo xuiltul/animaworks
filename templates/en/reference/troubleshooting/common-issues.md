@@ -58,7 +58,7 @@ If the issue is not resolved here, refer to `troubleshooting/escalation-flowchar
    - Note the situation in `state/current_state.md`
    - Report to your supervisor
 
-### Specific Examples
+### Examples
 
 ```
 # 名前を間違えていた場合
@@ -75,7 +75,7 @@ send_message(
     thread_id="thread-xyz789"  # 任意: スレッドID
 )
 
-# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら post_channel（Board）を使用
+# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら `animaworks-tool board post <channel> <text>` を使用
 ```
 
 ---
@@ -374,10 +374,9 @@ For an overview of the tool system, see `operations/tool-usage-overview.md`.
 
 ### Symptoms and Causes
 
-- Actual delivery errors are returned, such as `RecipientResolutionError`, `DeliveryFailed` for external channels, permission or company boundary errors
-- When trying to send a second message to the same destination within the same run using `send_message`, it is rejected (duplicate prevention). There is no limit on the number of destinations
-- When trying to post a second time to the same channel within the same run using `post_channel`, it is rejected. There is no posting cooldown between runs
-- There is no sending budget per time or day, nor sending rejection based on conversation depth. Depth between internal Anima instances may be recorded in diagnostic logs
+- `RecipientResolutionError`, errors from external channel `DeliveryFailed`, permission or company-boundary errors, and other actual delivery errors are returned
+- In `send_message`, attempting to send a second message to the same recipient in the same run is rejected (duplicate prevention). There is no limit on the number of recipients
+- Sending is not rejected due to hourly or daily send budgets or conversation depth. Depth between internal Anima may be recorded in diagnostic logs
 
 ### Handling Procedure
 
@@ -460,10 +459,10 @@ The query text for heartbeat / cron is the text collected from the recent `[REFL
 - **Handling**: In Mode S, use `Glob`; otherwise, use `search_memory` or `read_memory_file` for known paths
 - **Note**: `read_memory_file` can read shared directories with the `common_knowledge/`, `reference/`, and `common_skills/` prefixes in addition to Anima directory-relative paths (e.g., `knowledge/xxx.md`). For `Read` (agent built-in), the path is determined by different rules
 
-### Cannot specify inbox with read_channel
+### Cannot Specify an Inbox in Board Read
 
-- **Cause**: `read_channel` is for shared channels on the Board. The inbox (message box) is not a channel
-- **Handling**: Messages in the inbox are processed automatically by the system. Specifying `inbox` or `inbox/` in `read_channel` will result in an error
+- **Cause**: `animaworks-tool board read` is for shared channels. An inbox is not a channel
+- **Solution**: The system automatically processes inbox messages. Specifying `animaworks-tool board read inbox` or `inbox/` causes an error
 
 ### Command times out
 
