@@ -109,12 +109,12 @@ def test_legacy_config_precedes_helper_default() -> None:
     assert resolved.source == "config.consolidation.llm_model"
 
 
-def test_helper_default_precedes_code_default() -> None:
+def test_helper_default_precedes_code_default_for_asset_reconcile() -> None:
     config = AnimaWorksConfig.model_validate(
         {"helper_models": {"default": {"model": "ollama/helper-default", "credential": "local-gateway"}}}
     )
 
-    resolved = resolve_helper_model("meeting_summary", config=config)
+    resolved = resolve_helper_model("asset_reconcile", config=config)
 
     assert resolved.model == "ollama/helper-default"
     assert resolved.credential == "local-gateway"
@@ -150,7 +150,6 @@ def test_old_production_config_resolves_existing_helper_roles() -> None:
         "distillation",
         "reconsolidation",
         "asset_reconcile",
-        "meeting_summary",
     ):
         resolved = resolve_helper_model(role, config=config)
         assert (resolved.model, resolved.credential) == ("codex/gpt-6-luna", "openai")

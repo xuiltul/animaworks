@@ -508,14 +508,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "DM送信済み",
         "en": "DM sent",
     },
-    "handler.meeting_dm_redirected": {
-        "ja": "{to} 宛のDMは会議チャンネルへリダイレクトしました。",
-        "en": "DM to {to} was redirected into the meeting channel.",
-    },
-    "handler.meeting_tool_blocked": {
-        "ja": "会議中は {tool} を使用できません。会議内で @メンション を使って発言してください。",
-        "en": "Tool '{tool}' is not available during meetings. Use @mentions to communicate within the meeting.",
-    },
     "handler.code_search_requires_project": {
         "ja": "code検索にはprojectが必要です",
         "en": "code search requires a project",

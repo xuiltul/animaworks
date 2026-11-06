@@ -22,9 +22,6 @@ from core.tooling.handler_base import (
     active_session_type,
     board_reply_channels,
     build_outgoing_origin_chain,
-    meeting_context,
-    meeting_mode,
-    record_meeting_redirect,
 )
 
 if TYPE_CHECKING:
@@ -95,11 +92,6 @@ class CommsToolsMixin:
     _session_origin: str
     _session_origin_chain: list[str]
 
-    @staticmethod
-    def _resolve_meeting_participant(to: str, participants: list[Any]) -> str:
-        participant_map = {str(name).lower(): str(name) for name in participants if str(name)}
-        return participant_map.get(to.lower(), "")
-
     def _handle_send_message(self: _CommsToolsHost, args: dict[str, Any]) -> str:
         if not self._messenger:
             return "Error: messenger not configured"
@@ -120,52 +112,8 @@ class CommsToolsMixin:
             return t("handler.dm_intent_error")
 
         current_replied = self.replied_to_for(active_session_type.get())
-        meeting_target = ""
-        if meeting_mode.get():
-            ctx = meeting_context.get() or {}
-            participants = ctx.get("participants", []) if isinstance(ctx, dict) else []
-            meeting_target = self._resolve_meeting_participant(to, participants)
-            if not meeting_target:
-                return t("handler.meeting_tool_blocked", tool="send_message")
-
-        effective_to = meeting_target or to
-        if effective_to in current_replied:
-            return t("handler.dm_already_sent", to=effective_to)
-
-        if meeting_target:
-            from core.paths import get_animas_dir
-
-            animas_dir = get_animas_dir()
-            company_error = _company_boundary_error(
-                self._anima_name,
-                meeting_target,
-                animas_dir=animas_dir,
-            )
-            if company_error is not None:
-                return company_error
-            try:
-                record_meeting_redirect(
-                    from_name=self._anima_name,
-                    to_name=meeting_target,
-                    content=content,
-                    intent=intent,
-                )
-            except Exception as e:
-                logger.warning("Meeting redirect delivery failed: %s -> %s: %s", self._anima_name, meeting_target, e)
-                return _error_result("DeliveryFailed", f"Failed to deliver meeting redirect: {e}")
-            self._replied_to.setdefault(active_session_type.get(), set()).add(meeting_target)
-            self._persist_replied_to(meeting_target, success=True)
-            try:
-                self._activity.log(
-                    "meeting_redirect_sent",
-                    content=content,
-                    to_person=meeting_target,
-                    summary=f"meeting → {meeting_target}: {content[:80]}",
-                    meta={"intent": intent, "delivery": "meeting"},
-                )
-            except Exception:
-                logger.warning("Activity logging failed for meeting redirect to %s", meeting_target)
-            return t("handler.meeting_dm_redirected", to=meeting_target)
+        if to in current_replied:
+            return t("handler.dm_already_sent", to=to)
 
         # ── Resolve recipient ──
         try:

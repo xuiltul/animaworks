@@ -620,16 +620,6 @@
     width: 100%;
   }
 
-  .chat-header-actions .meeting-mode-toggle {
-    width: 40px;
-    height: 40px;
-    border-radius: 999px;
-  }
-  .chat-header-actions .meeting-mode-toggle svg {
-    width: 18px;
-    height: 18px;
-  }
-
   .chat-add-conversation {
     width: 100%;
     display: flex;
@@ -665,20 +655,15 @@
     grid-row: 1;
   }
 
-  .meeting-participant-panel {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
   .chat-messages-area {
     grid-column: 2;
-    grid-row: 3;
+    grid-row: 2;
     min-height: 0;
   }
 
   [data-chat-id="chatPageForm"] {
     grid-column: 2;
-    grid-row: 4;
+    grid-row: 3;
   }
 }
 
@@ -4098,250 +4083,11 @@ button.chat-file-card-open {
   }
 }
 
-/* ── Meeting Mode ────────────────────────── */
-.meeting-mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border-radius: 6px;
-  border: 1px solid var(--aw-color-border-dark, #e0e0e0);
-  background: transparent;
-  color: var(--aw-color-text-secondary, #666);
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-.meeting-mode-toggle.active {
-  background: var(--aw-color-accent);
-  color: #fff;
-  border-color: var(--aw-color-accent);
-}
-.meeting-mode-toggle:hover,
-.meeting-mode-toggle:active {
-  opacity: 0.85;
-}
-.meeting-mode-toggle svg {
-  pointer-events: none;
-}
-
-.meeting-participant-panel {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--aw-color-border-light, #e0e0e0);
-  font-size: 0.8rem;
-  flex-wrap: wrap;
-  background: var(--aw-color-bg-secondary, #f8f9fa);
-  overflow-y: auto;
-  max-height: 50vh;
-}
-
-.meeting-participant-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: var(--aw-color-bg-tertiary, #e9ecef);
-  font-size: 0.75rem;
-}
-.meeting-participant-chip.is-chair {
-  background: var(--aw-color-accent);
-  color: #fff;
-}
-.meeting-participant-chip .chip-avatar {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-}
-.meeting-participant-chip .chip-avatar-img {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-.meeting-participant-chip .chip-avatar-initial {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--aw-color-bg-primary);
-  background: var(--aw-color-accent);
-}
-.meeting-participant-chip .chip-remove {
-  cursor: pointer;
-  opacity: 0.6;
-  margin-left: 2px;
-}
-.meeting-participant-chip .chip-remove:hover,
-.meeting-participant-chip .chip-remove:active {
-  opacity: 1;
-}
-
-.meeting-add-btn {
-  padding: 2px 8px;
-  border-radius: 12px;
-  border: 1px dashed var(--aw-color-border-dark, #ccc);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.75rem;
-  color: var(--aw-color-text-secondary, #666);
-}
-.meeting-add-btn:hover,
-.meeting-add-btn:active {
-  border-color: var(--aw-color-accent);
-  color: var(--aw-color-accent);
-}
-
-.meeting-end-btn {
-  margin-left: auto;
-  padding: 2px 10px;
-  border-radius: 12px;
-  border: 1px solid #dc3545;
-  background: transparent;
-  color: #dc3545;
-  cursor: pointer;
-  font-size: 0.75rem;
-}
-.meeting-end-btn:hover,
-.meeting-end-btn:active {
-  background: #dc3545;
-  color: #fff;
-}
-
-/* Speaker label in meeting bubbles */
-.chat-speaker-label {
-  font-size: 0.72rem;
-  font-weight: 600;
-  opacity: 0.8;
-  margin-bottom: 2px;
-}
-
 .chat-message-meta {
   font-size: 0.72rem;
   opacity: 0.72;
   margin-bottom: 4px;
   line-height: 1.35;
-}
-
-/* Meeting setup panel */
-.meeting-setup {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 100%;
-}
-.meeting-setup-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--aw-color-text-secondary);
-  flex-shrink: 0;
-}
-.meeting-setup-anima-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-}
-.meeting-setup-anima {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--aw-color-border-dark, #e0e0e0);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: all 0.15s;
-}
-.meeting-setup-anima .chip-avatar,
-.meeting-setup-anima .chip-avatar-img {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-.meeting-setup-anima .chip-avatar-initial {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--aw-color-bg-primary);
-  background: var(--aw-color-accent);
-  flex-shrink: 0;
-}
-.meeting-setup-anima input[type="checkbox"],
-.meeting-setup-anima input[type="radio"] {
-  flex-shrink: 0;
-}
-.meeting-setup-anima.selected {
-  border-color: var(--aw-color-accent);
-  background: color-mix(in srgb, var(--aw-color-accent) 12%, transparent);
-}
-.meeting-setup-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-shrink: 0;
-}
-.meeting-start-btn {
-  padding: 6px 16px;
-  border-radius: 8px;
-  border: none;
-  background: var(--aw-color-accent);
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-.meeting-start-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.meeting-add-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px;
-  background: var(--aw-color-bg-primary);
-  border: 1px solid var(--aw-color-border-medium);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-  max-height: 200px;
-  overflow-y: auto;
-}
-.meeting-add-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--aw-color-text-primary);
-  text-align: left;
-}
-.meeting-add-item:hover,
-.meeting-add-item:active {
-  background: var(--aw-color-bg-hover);
 }
 
 .chat-file-viewer-title .chat-file-card-badge {

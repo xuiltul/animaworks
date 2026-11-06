@@ -1,4 +1,4 @@
-// ── Left rail: every Anima with live status, plus split / meeting tools ──
+// ── Left rail: every Anima with live status, plus split tools ──
 import { presence, displayStatus } from "../../modules/anima-presence.js";
 import { faceUrl } from "../../shared/chat/emotion-face.js";
 import { attachFaceFallback } from "./pane-head.js";
@@ -73,10 +73,8 @@ export function createAnimaRail({ el, getPanes, getFocused, t, escapeHtml, onToo
 
     const multi = panes.length > 1;
     const full = panes.length >= 4;
-    const meetingOn = Boolean(fctx.state.meetingMode);
     const tools = `<span class="chat-rail-sep"></span>`
-      + (full ? "" : `<button type="button" class="chat-rail-tool${multi ? " on" : ""}" data-tool="split" title="${escapeHtml(t("pane.split"))}">${escapeHtml(t("chat.presence.rail_split"))}</button>`)
-      + `<button type="button" class="chat-rail-tool${meetingOn ? " on" : ""}" data-tool="meeting" title="${escapeHtml(t("meeting.toggle"))}">${escapeHtml(t("chat.presence.rail_meeting"))}</button>`;
+      + (full ? "" : `<button type="button" class="chat-rail-tool${multi ? " on" : ""}" data-tool="split" title="${escapeHtml(t("pane.split"))}">${escapeHtml(t("chat.presence.rail_split"))}</button>`);
 
     const html = items + tools;
     if (html === _last) return;
@@ -184,8 +182,7 @@ export function createAnimaRail({ el, getPanes, getFocused, t, escapeHtml, onToo
     }
     const tool = e.target.closest?.(".chat-rail-tool");
     if (tool) {
-      const id = tool.dataset.tool === "split" ? "chatSplitPaneBtn" : "meetingModeToggle";
-      focused.el.querySelector(`[data-chat-id="${id}"]`)?.click();
+      focused.el.querySelector('[data-chat-id="chatSplitPaneBtn"]')?.click();
       setTimeout(() => { _last = ""; onToolsChanged?.(); }, 50);
     }
   });

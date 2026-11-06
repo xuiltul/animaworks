@@ -24,7 +24,7 @@
 }
 
 @media (max-width: 560px) {
-  /* ── Header: ☰ · face · name ▾ … call · meeting · background · thread ── */
+  /* ── Header: ☰ · face · name ▾ … call · background · thread ── */
   .chat-anima-tabs-header {
     height: 52px;
     padding: 0 6px 0 4px;
@@ -82,13 +82,6 @@
   .chat-unified-user-btn { display: none !important; }
 
   .chat-anima-tabs-header .chat-call-btn { width: 32px; height: 32px; }
-  .chat-anima-tabs-header .meeting-mode-toggle {
-    width: 32px;
-    height: 32px;
-    border: 0;
-    border-radius: 50%;
-    background: none;
-  }
   .chat-anima-tabs-header .chat-thread-dropdown-btn {
     background: var(--aw-color-bg-hover);
     color: var(--aw-color-text-primary);

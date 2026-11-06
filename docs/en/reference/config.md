@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=e240ec3368a047652b9bdffd20ca902b80c2a0e8542d3a125f6c5e6be5278eb4 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=592404a324536200764ecf86f068e6a21b87874392581c42ff9c6e98a18152d3 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -239,14 +239,6 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
 | `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
-| `helper_models.meeting_summary` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.meeting_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
-| `helper_models.meeting_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
-| `helper_models.meeting_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
-| `helper_models.meeting_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
-| `helper_models.meeting_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.meeting_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
-| `helper_models.meeting_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
 | `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |

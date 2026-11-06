@@ -49,7 +49,6 @@ from core.tooling.handler_base import (  # noqa: F401
     ToolExecutionError,
     _error_result,
     active_session_type,
-    meeting_mode,
     suppress_board_fanout,
     suppress_board_fanout_channels,
 )
@@ -67,16 +66,6 @@ from core.tooling.handler_workspace import WorkspaceToolsMixin
 from core.tooling.tool_context import ToolContext
 
 logger = logging.getLogger("animaworks.tool_handler")
-
-_MEETING_BLOCKED_TOOLS: frozenset[str] = frozenset(
-    {
-        "post_channel",
-        "delegate_task",
-        "call_human",
-        "read_dm_history",
-        "read_channel",
-    }
-)
 
 
 @runtime_checkable
@@ -585,8 +574,6 @@ class ToolHandler(
         Returns the tool result as a string (truncated if >500KB).
         """
         try:
-            if meeting_mode.get() and name in _MEETING_BLOCKED_TOOLS:
-                return t("handler.meeting_tool_blocked", tool=name)
             logger.debug("tool_call name=%s args_keys=%s", name, list(args.keys()))
 
             handler = self._dispatch.get(name)

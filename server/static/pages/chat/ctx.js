@@ -2,7 +2,7 @@
 import { t } from "/shared/i18n.js";
 import { api } from "../../modules/api.js";
 import { state as appState, escapeHtml, renderMarkdown, renderSafeMarkdown, timeStr, smartTimestamp } from "../../modules/state.js";
-import { streamChat, streamMeetingChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
+import { streamChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
 import { createLogger } from "../../shared/logger.js";
 import { createImageInput, initLightbox, renderChatFiles, renderChatImages } from "../../shared/image-input.js";
 import { initFileViewer } from "../../shared/file-viewer.js";
@@ -40,7 +40,7 @@ export function createChatContext() {
     return await api(url);
   };
   mgr.configure({
-    streamChat, streamMeetingChat, fetchActiveStream, fetchStreamProgress,
+    streamChat, fetchActiveStream, fetchStreamProgress,
     getUser: () => document.getElementById("currentUserLabel")?.textContent || localStorage.getItem("animaworks_user") || "human",
     fetchHistory: fetchChatFeedHistory,
   });
@@ -82,7 +82,7 @@ export function createChatContext() {
 
   const deps = {
     t, api, escapeHtml, renderMarkdown, renderSafeMarkdown, timeStr, smartTimestamp,
-    streamChat, streamMeetingChat, fetchActiveStream, fetchStreamProgress,
+    streamChat, fetchActiveStream, fetchStreamProgress,
     logger,
     createImageInput, initLightbox, initFileViewer, renderChatFiles, renderChatImages,
     initVoiceUI, updateVoiceUIAnima,

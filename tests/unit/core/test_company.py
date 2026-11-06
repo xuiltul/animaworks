@@ -29,7 +29,6 @@ from core.org.company import (
 )
 from core.org.org_sync import sync_org_structure
 from core.tooling.handler import ToolHandler
-from core.tooling.handler_base import meeting_context, meeting_mode
 from core.tooling.handler_delegation import DelegationMixin
 
 
@@ -377,29 +376,6 @@ def test_send_message_allows_same_company(
 
     assert "Message sent to worker" in result
     assert len(list((tmp_path / "shared" / "inbox" / "worker").glob("*.json"))) == 1
-
-
-def test_send_message_meeting_redirect_rejects_cross_company(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
-    boss_dir = _make_anima(tmp_path, "boss", company="alpha")
-    _make_anima(tmp_path, "worker", company="beta")
-    _write_company(tmp_path, "beta", "Beta Corporation")
-    _save_org_config(tmp_path)
-    messenger = Messenger(tmp_path / "shared", "boss")
-    handler = _make_tool_handler(boss_dir, messenger)
-    mode_token = meeting_mode.set(True)
-    context_token = meeting_context.set({"participants": ["worker"]})
-    try:
-        result = handler._handle_send_message({"to": "worker", "content": "hello", "intent": "report"})
-    finally:
-        meeting_context.reset(context_token)
-        meeting_mode.reset(mode_token)
-
-    assert "Beta Corporation" in result
-    assert not list((tmp_path / "shared" / "inbox" / "worker").glob("*.json"))
 
 
 def test_send_message_unverifiable_boundary_fails_closed_with_stable_error(

@@ -1176,12 +1176,6 @@ def create_system_router() -> APIRouter:
             supervisor._save_bootstrap_retries()  # noqa: SLF001
             bootstrap_retry_removed = True
 
-        rooms_reloaded = 0
-        room_manager = getattr(request.app.state, "room_manager", None)
-        if room_manager is not None:
-            room_manager.load_all_rooms()
-            rooms_reloaded = len(room_manager.list_rooms(include_closed=True))
-
         discord_gateway_reloaded = False
         discord_gateway = getattr(request.app.state, "discord_gateway_manager", None)
         if discord_gateway is not None:
@@ -1205,7 +1199,6 @@ def create_system_router() -> APIRouter:
         result = {
             "discord_mappings_updated": discord_updated,
             "bootstrap_retry_removed": bootstrap_retry_removed,
-            "rooms_reloaded": rooms_reloaded,
             "discord_gateway_reloaded": discord_gateway_reloaded,
             "github_gateway_reloaded": github_gateway_reloaded,
             "config_reloaded": config_reloaded,

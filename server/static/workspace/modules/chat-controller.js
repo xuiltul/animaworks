@@ -19,7 +19,7 @@ import {
   triggerGreeting, buildVoiceChatCallbacks, initVoiceUI, updateVoiceUIAnima,
 } from "./chat-mobile.js";
 import { ChatSessionManager } from "../../shared/chat/session-manager.js";
-import { streamChat, streamMeetingChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
+import { streamChat, fetchActiveStream, fetchStreamProgress } from "../../shared/chat-stream.js";
 import { getCurrentUser } from "./login.js";
 import { fetchConversationHistory } from "./api.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
@@ -41,7 +41,7 @@ function _getImageManager() { return convImageInputManager; }
 function _ensureManagerConfigured() {
   const mgr = ChatSessionManager.getInstance();
   mgr.configure({
-    streamChat, streamMeetingChat, fetchActiveStream, fetchStreamProgress,
+    streamChat, fetchActiveStream, fetchStreamProgress,
     getUser: () => getCurrentUser() || "guest",
     fetchHistory: async (animaName, limit, before, threadId) => {
       return fetchConversationHistory(animaName, limit, before, threadId);

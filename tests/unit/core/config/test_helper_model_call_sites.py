@@ -222,9 +222,8 @@ async def test_project_and_weekly_consolidation_resolve_distinct_roles(tmp_path:
 
 
 @pytest.mark.asyncio
-async def test_asset_and_meeting_summaries_use_helper_registry(tmp_path: Path) -> None:
+async def test_asset_summary_uses_helper_registry(tmp_path: Path) -> None:
     from core.anima.asset_reconciler import _synthesize_prompt_via_llm
-    from server.room_manager import RoomManager
 
     helper = _resolved("asset_reconcile")
     completion = AsyncMock(return_value="asset prompt")
@@ -237,11 +236,3 @@ async def test_asset_and_meeting_summaries_use_helper_registry(tmp_path: Path) -
 
     resolver.assert_called_once_with("asset_reconcile", tmp_path / "mei")
     assert completion.await_args.kwargs["role"] == "asset_reconcile"
-
-    manager = RoomManager(tmp_path / "meetings")
-    manager._format_entries = lambda _entries: "meeting transcript"  # type: ignore[method-assign]
-    with patch(
-        "core.llm.helper_completion.one_shot_helper_completion", new=AsyncMock(return_value="meeting summary")
-    ) as meeting:
-        assert await manager._call_summary_llm([]) == "meeting summary"
-    assert meeting.await_args.kwargs["role"] == "meeting_summary"

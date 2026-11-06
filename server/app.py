@@ -1206,12 +1206,6 @@ def create_app(
     app.state.worker_services_ready = False
     app.state.startup_preflight_runner = _startup_default_preflight_runner
 
-    # Meeting room manager
-    from server.room_manager import RoomManager
-
-    room_manager = RoomManager(shared_dir / "meetings")
-    room_manager.load_all_rooms()
-    app.state.room_manager = room_manager
     app.state.stream_registry = StreamRegistry()
 
     # ── Global exception handler ────────────────────────────

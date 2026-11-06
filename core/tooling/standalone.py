@@ -67,8 +67,6 @@ _ERROR_PREFIXES = ("error", "unknown tool", "エラー", "오류", "错误", "�
 _ERROR_HINTS = (
     "cannot send to '",
     "宛先 '",
-    "会議中は",
-    "not available during meetings",
     "dm send failed:",
     "dm送信失敗:",
 )

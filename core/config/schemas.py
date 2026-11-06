@@ -451,7 +451,6 @@ class HelperModelsConfig(BaseModel):
     distillation: HelperModelRole | None = None
     reconsolidation: HelperModelRole | None = None
     asset_reconcile: HelperModelRole | None = None
-    meeting_summary: HelperModelRole | None = None
     default: HelperModelRole = Field(default_factory=HelperModelRole)
 
 

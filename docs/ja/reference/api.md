@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: 865614d7da4c33d5a36827a7f5cf10daa57a4c474b05f4e4e053ab5cbd3d0dc9 -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 7ceda907ffd9bd26da54ecda882c2f5b508f2d03508b0c833d6f3a46f3e48c1b -->
 
 # API リファレンス
 
@@ -206,16 +206,6 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 ## `server/routes/phone_stream.py`
 
 | WS | `/api/webhooks/twilio/stream` | 不要（除外一覧） | — | `server/routes/phone_stream.py:phone_media_stream` |
-
-## `server/routes/room.py`
-
-| GET | `/api/rooms` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | List meeting rooms. | `server/routes/room.py:list_rooms` |
-| POST | `/api/rooms` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Create a new meeting room. | `server/routes/room.py:create_room` |
-| GET | `/api/rooms/{room_id}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Get room details including conversation. | `server/routes/room.py:get_room` |
-| POST | `/api/rooms/{room_id}/chat/stream` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Main SSE streaming endpoint for meeting chat. | `server/routes/room.py:meeting_chat_stream` |
-| POST | `/api/rooms/{room_id}/close` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Close room and generate minutes. | `server/routes/room.py:close_room` |
-| POST | `/api/rooms/{room_id}/participants` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Add a participant to the room. | `server/routes/room.py:add_participant` |
-| DELETE | `/api/rooms/{room_id}/participants/{name}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Remove a participant from the room. | `server/routes/room.py:remove_participant` |
 
 ## `server/routes/sessions.py`
 
