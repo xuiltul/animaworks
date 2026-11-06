@@ -12,30 +12,26 @@ description: >-
 
 cron 的**解析**由 `core/runtime/schedule_parser.py`（`parse_cron_md` / `parse_schedule`）负责，**注册・执行・重载**由 `core/runtime/scheduler_manager.py`（APScheduler、`AsyncIOScheduler(timezone=get_app_timezone())`）负责。
 
-### `core/tasks/background.py`（与 cron 不同系统）
+### `core/tasks/background.py`（与 cron 属于不同系统）
 
-此模块**不做 cron 调度**。负责长时间工具调用的后台执行以及 DM 日志的轮转。不要与 cron 混淆。
+此模块**不负责 cron 调度**，而是负责在后台执行耗时较长的工具调用。请勿与 cron 混淆。
 
 **`BackgroundTaskManager`**
 
-- **角色**: 在 `asyncio` 上异步执行目标工具，并将状态保存到磁盘。
-- **持久化位置**: `state/background_tasks/{task_id}.json`（`pending` / `running` / `completed` / `failed`、结果字符串・错误・时间戳）。
-- **公开 API（概要）**:
+- **职责**：在 `asyncio` 上异步执行目标工具，并将状态保存到磁盘。
+- **持久化位置**：`state/background_tasks/{task_id}.json`（`pending` / `running` / `completed` / `failed`，结果字符串、错误和时间戳）。
+- **公开 API（概要）**：
   - `submit(tool_name, tool_args, execute_fn)` — 在线程池中运行同步执行函数。
-  - `submit_async(...)` — 异步 `execute_fn` 版。
+  - `submit_async(...)` — 异步 `execute_fn` 版本。
   - `get_task` / `list_tasks` / `active_count` — 查询。
-  - `cleanup_old_tasks(max_age_hours=24)` — 删除完成・失败任务中超过 **24 小时**的。此外还删除处于 `running` 状态超过 **48 小时**的 JSON（崩溃孤儿）。
-- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: 后台目标工具集合按以下 **3 层合并**（后者优先）。
-  1. 代码内默认 `_DEFAULT_ELIGIBLE_TOOLS`（Mode A 兼容的固定列表）
-  2. 各工具模块的 `EXECUTION_PROFILE` 中 `background_eligible: true` 的条目（`core.integrations._base.get_eligible_tools_from_profiles`）。键为 `"{tool}:{subcommand}"` 格式（与 Mode S 的 `submit` 一致）
-  3. 从 `config.json` 等传入的 `config_eligible`（显式覆盖）
-- **`is_eligible(tool_name)`**: 可用以下任一名称匹配 — schema 名（例: `generate_3d_model`）、profile 键（例: `image_gen:3d`）。
-- **默认包含在 `_DEFAULT_ELIGIBLE_TOOLS` 中的示例**（值为参考秒数）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）。
-- **完成钩子**: 可在 `on_complete` 中设置 `Callable[[BackgroundTask], Awaitable[None]]`。应用侧从此处写入到 `state/background_notifications/` 的 Markdown 通知等（`background.py` 本身不触碰通知目录）。
-
-**`rotate_dm_logs`**
-
-- 将 `shared/dm_logs/*.jsonl` 的条目按 `max_age_days`（默认 **7 天**）截断，将旧行追加归档到 `{stem}.{YYYYMMDD}.archive.jsonl`。虽不是 cron 任务，但因定义在与后台系维护相同的文件中，故供参考记载。
+  - `cleanup_old_tasks(max_age_hours=24)` — 删除完成或失败超过 **24 小时**的任务。此外，也会删除仍处于 `running` 状态超过 **48 小时**的 JSON 文件（崩溃后遗留的孤儿文件）。
+- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**：后台目标工具集合通过以下 **3 层合并**（后者优先）：
+  1. 代码内默认值 `_DEFAULT_ELIGIBLE_TOOLS`（与 Mode A 兼容的固定列表）
+  2. 来自各工具模块的 `EXECUTION_PROFILE` 的 `background_eligible: true` 条目（`core.integrations._base.get_eligible_tools_from_profiles`）。键采用 `"{tool}:{subcommand}"` 格式（与 Mode S 的 `submit` 一致）
+  3. 通过 `config.json` 等传入的 `config_eligible`（显式覆盖）
+- **`is_eligible(tool_name)`**：可通过以下任一名称进行匹配 — 架构名称（例如 `generate_3d_model`）、配置文件键（例如 `image_gen:3d`）。
+- **默认包含在 `_DEFAULT_ELIGIBLE_TOOLS` 中的示例**（数值为秒，仅供参考）：`generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30 秒），`local_llm` / `run_command`（各 60 秒）。
+- **完成钩子**：可在 `on_complete` 中设置 `Callable[[BackgroundTask], Awaitable[None]]`。应用侧可以在此处编写向 `state/background_notifications/` 发送 Markdown 通知等逻辑（`background.py` 本身不会访问通知目录）。
 
 ---
 

@@ -23,20 +23,19 @@ AnimaWorks의 설정 구조와 Anima 추가 절차에 대한 참조.
 
 ### 초기화 시 생성되는 디렉터리
 
-`ensure_runtime_dir`(`core/infra/runtime_init.py`)에 의해 다음이 생성됨:
+`ensure_runtime_dir`(`core/infra/runtime_init.py`)에 의해 다음 항목이 생성됩니다:
 
 - `animas/` — Anima 디렉터리
-- `shared/inbox/` — 수신 메시지 큐
+- `shared/inbox/` — 수신 메시지 대기열
 - `shared/users/` — 사용자 프로필
 - `shared/channels/` — 공유 채널(general, ops의 초기 파일)
-- `shared/dm_logs/` — DM 이력(폴백용)
-- `tmp/attachments/` — 첨부 파일 임시 저장
+- `tmp/attachments/` — 첨부 파일 임시 저장소
 - `common_skills/` / `common_knowledge/` — 공통 스킬·지식
 - `prompts/` / `company/` — 프롬프트·조직 템플릿
 - `tool_prompts.sqlite3` — 도구 프롬프트 DB
-- `models.json` — 모델명→실행 모드 매핑(`config_defaults/`에서 복사)
+- `models.json` — 모델 이름→실행 모드 매핑(`config_defaults/`에서 복사)
 
-시작할 때마다 `common_skills`와 `common_knowledge`은 템플릿에서 증분 동기화되며, 새 항목만 추가된다(기존 파일은 유지).
+시작할 때마다 `common_skills`와 `common_knowledge`는 템플릿에서 증분 동기화되며, 새 항목만 추가됩니다(기존 파일은 유지).
 
 ## config.json의 전체 구조
 

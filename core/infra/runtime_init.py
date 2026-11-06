@@ -357,12 +357,6 @@ def _ensure_runtime_only_dirs(data_dir: Path) -> None:
         pass
     (data_dir / "shared" / "users").mkdir(parents=True, exist_ok=True)
     (data_dir / "shared" / "channels").mkdir(parents=True, exist_ok=True)
-    dm_logs_dir = data_dir / "shared" / "dm_logs"
-    dm_logs_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        dm_logs_dir.chmod(0o700)
-    except OSError:
-        pass
     (data_dir / "tmp" / "attachments").mkdir(parents=True, exist_ok=True)
     (data_dir / "common_skills").mkdir(parents=True, exist_ok=True)
     (data_dir / "common_knowledge").mkdir(parents=True, exist_ok=True)

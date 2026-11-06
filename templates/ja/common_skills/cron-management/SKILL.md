@@ -13,7 +13,7 @@ cron の**パース**は `core/runtime/schedule_parser.py`（`parse_cron_md` / `
 
 ### `core/tasks/background.py`（cron とは別系統）
 
-このモジュールは **cron のスケジューリングをしない**。長時間ツール呼び出しのバックグラウンド実行と、DM ログのローテーションを担当する。cron と混同しないこと。
+このモジュールは **cron のスケジューリングをしない**。長時間ツール呼び出しのバックグラウンド実行を担当する。cron と混同しないこと。
 
 **`BackgroundTaskManager`**
 
@@ -31,10 +31,6 @@ cron の**パース**は `core/runtime/schedule_parser.py`（`parse_cron_md` / `
 - **`is_eligible(tool_name)`**: 次のどちらの名前でも照合可能 — スキーマ名（例: `generate_3d_model`）、プロファイルキー（例: `image_gen:3d`）。
 - **デフォルトで `_DEFAULT_ELIGIBLE_TOOLS` に含まれる例**（値は目安秒）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）。
 - **完了フック**: `on_complete` に `Callable[[BackgroundTask], Awaitable[None]]` を設定可能。アプリ側でここから `state/background_notifications/` への Markdown 通知などを書く（`background.py` 自体は通知ディレクトリを触らない）。
-
-**`rotate_dm_logs`**
-
-- `shared/dm_logs/*.jsonl` のエントリを `max_age_days`（デフォルト **7 日**）で切り、古い行を `{stem}.{YYYYMMDD}.archive.jsonl` に追記アーカイブする。cron タスクではないが、バックグラウンド系メンテと同一ファイルに定義されているため参照用に記載。
 
 ---
 

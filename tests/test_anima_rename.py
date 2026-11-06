@@ -31,7 +31,6 @@ def _setup_data_dir(tmp_path: Path) -> Path:
     data_dir.mkdir()
     (data_dir / "animas").mkdir()
     (data_dir / "shared" / "inbox").mkdir(parents=True)
-    (data_dir / "shared" / "dm_logs").mkdir(parents=True)
     (data_dir / "shared" / "channels").mkdir(parents=True)
     (data_dir / "run" / "sockets").mkdir(parents=True)
     (data_dir / "run" / "animas").mkdir(parents=True)
@@ -84,12 +83,15 @@ class TestRenameAnimaInConfig:
     def test_supervisor_references_updated(self, tmp_path: Path) -> None:
         """Other animas' supervisor references are updated."""
         data_dir = _setup_data_dir(tmp_path)
-        _create_config(data_dir, {
-            "sakura": {"supervisor": None},
-            "mei": {"supervisor": "sakura"},
-            "aoi": {"supervisor": "sakura"},
-            "kana": {"supervisor": "mei"},
-        })
+        _create_config(
+            data_dir,
+            {
+                "sakura": {"supervisor": None},
+                "mei": {"supervisor": "sakura"},
+                "aoi": {"supervisor": "sakura"},
+                "kana": {"supervisor": "mei"},
+            },
+        )
 
         count = rename_anima_in_config(data_dir, "sakura", "hinata")
 
@@ -105,12 +107,8 @@ class TestRenameAnimaInConfig:
         config = AnimaWorksConfig()
         config.animas["sakura"] = AnimaModelConfig()
         config.external_messaging = ExternalMessagingConfig(
-            slack=ExternalMessagingChannelConfig(
-                anima_mapping={"C123": "sakura", "C456": "mei"}
-            ),
-            chatwork=ExternalMessagingChannelConfig(
-                anima_mapping={"R789": "sakura"}
-            ),
+            slack=ExternalMessagingChannelConfig(anima_mapping={"C123": "sakura", "C456": "mei"}),
+            chatwork=ExternalMessagingChannelConfig(anima_mapping={"R789": "sakura"}),
         )
         save_config(config, data_dir / "config.json")
 
@@ -129,9 +127,7 @@ class TestRenameAnimaInConfig:
         config = AnimaWorksConfig()
         config.animas["sakura"] = AnimaModelConfig()
         config.external_messaging = ExternalMessagingConfig(
-            slack=ExternalMessagingChannelConfig(
-                app_id_mapping={"A111": "sakura", "A222": "mei"}
-            ),
+            slack=ExternalMessagingChannelConfig(app_id_mapping={"A111": "sakura", "A222": "mei"}),
         )
         save_config(config, data_dir / "config.json")
 
@@ -168,75 +164,6 @@ class TestRenameAnimaInConfig:
             rename_anima_in_config(data_dir, "sakura", "hinata")
 
 
-# ── Tests for _rename_dm_logs ─────────────────────────────────
-
-
-class TestRenameDmLogs:
-    """Tests for DM log file renaming."""
-
-    def test_rename_dm_log_file(self, tmp_path: Path) -> None:
-        """DM log files are correctly renamed."""
-        from cli.commands.anima_mgmt import _rename_dm_logs
-
-        shared_dir = tmp_path / "shared"
-        dm_dir = shared_dir / "dm_logs"
-        dm_dir.mkdir(parents=True)
-
-        (dm_dir / "mei-sakura.jsonl").write_text('{"ts":"2026-03-01"}\n', encoding="utf-8")
-
-        count = _rename_dm_logs(shared_dir, "sakura", "hinata")
-
-        assert count == 1
-        assert not (dm_dir / "mei-sakura.jsonl").exists()
-        new_file = dm_dir / "hinata-mei.jsonl"
-        assert new_file.exists()
-        assert '{"ts":"2026-03-01"}' in new_file.read_text(encoding="utf-8")
-
-    def test_rename_preserves_sort_order(self, tmp_path: Path) -> None:
-        """Renamed DM log file has correct sort order in name."""
-        from cli.commands.anima_mgmt import _rename_dm_logs
-
-        shared_dir = tmp_path / "shared"
-        dm_dir = shared_dir / "dm_logs"
-        dm_dir.mkdir(parents=True)
-
-        (dm_dir / "aoi-sakura.jsonl").write_text("data\n", encoding="utf-8")
-
-        _rename_dm_logs(shared_dir, "sakura", "zzz")
-
-        assert (dm_dir / "aoi-zzz.jsonl").exists()
-
-    def test_merge_on_collision(self, tmp_path: Path) -> None:
-        """Merges content when renamed file already exists."""
-        from cli.commands.anima_mgmt import _rename_dm_logs
-
-        shared_dir = tmp_path / "shared"
-        dm_dir = shared_dir / "dm_logs"
-        dm_dir.mkdir(parents=True)
-
-        (dm_dir / "mei-sakura.jsonl").write_text("old\n", encoding="utf-8")
-        (dm_dir / "hinata-mei.jsonl").write_text("existing\n", encoding="utf-8")
-
-        count = _rename_dm_logs(shared_dir, "sakura", "hinata")
-
-        assert count == 1
-        assert not (dm_dir / "mei-sakura.jsonl").exists()
-        content = (dm_dir / "hinata-mei.jsonl").read_text(encoding="utf-8")
-        assert "existing" in content
-        assert "old" in content
-
-    def test_no_dm_logs_dir(self, tmp_path: Path) -> None:
-        """Returns 0 when dm_logs/ does not exist."""
-        from cli.commands.anima_mgmt import _rename_dm_logs
-
-        shared_dir = tmp_path / "shared"
-        shared_dir.mkdir()
-
-        count = _rename_dm_logs(shared_dir, "sakura", "hinata")
-
-        assert count == 0
-
-
 # ── Tests for cmd_anima_rename (integration) ──────────────────
 
 
@@ -261,7 +188,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_full_rename_offline(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Full rename with server offline."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -269,10 +199,13 @@ class TestCmdAnimaRename:
         data_dir = _setup_data_dir(tmp_path)
         _create_anima(data_dir, "sakura")
         _create_anima(data_dir, "mei", supervisor="sakura")
-        _create_config(data_dir, {
-            "sakura": {"supervisor": None},
-            "mei": {"supervisor": "sakura"},
-        })
+        _create_config(
+            data_dir,
+            {
+                "sakura": {"supervisor": None},
+                "mei": {"supervisor": "sakura"},
+            },
+        )
 
         mock_data_dir.return_value = data_dir
         mock_animas_dir.return_value = data_dir / "animas"
@@ -291,7 +224,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_target_exists_error(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Error when target name already exists."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -309,7 +245,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_source_not_found_error(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Error when source anima doesn't exist."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -325,7 +264,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_invalid_new_name_error(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Error for invalid new name."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -342,7 +284,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_same_name_error(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Error when old and new names are the same."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -359,7 +304,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_status_json_supervisor_updated(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Other animas' status.json supervisor refs are updated."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -368,31 +316,33 @@ class TestCmdAnimaRename:
         _create_anima(data_dir, "sakura")
         _create_anima(data_dir, "mei", supervisor="sakura")
         _create_anima(data_dir, "aoi", supervisor="sakura")
-        _create_config(data_dir, {
-            "sakura": {},
-            "mei": {"supervisor": "sakura"},
-            "aoi": {"supervisor": "sakura"},
-        })
+        _create_config(
+            data_dir,
+            {
+                "sakura": {},
+                "mei": {"supervisor": "sakura"},
+                "aoi": {"supervisor": "sakura"},
+            },
+        )
 
         mock_data_dir.return_value = data_dir
         mock_animas_dir.return_value = data_dir / "animas"
 
         cmd_anima_rename(self._make_args("sakura", "hinata"))
 
-        mei_status = json.loads(
-            (data_dir / "animas" / "mei" / "status.json").read_text(encoding="utf-8")
-        )
+        mei_status = json.loads((data_dir / "animas" / "mei" / "status.json").read_text(encoding="utf-8"))
         assert mei_status["supervisor"] == "hinata"
 
-        aoi_status = json.loads(
-            (data_dir / "animas" / "aoi" / "status.json").read_text(encoding="utf-8")
-        )
+        aoi_status = json.loads((data_dir / "animas" / "aoi" / "status.json").read_text(encoding="utf-8"))
         assert aoi_status["supervisor"] == "hinata"
 
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_inbox_renamed(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Inbox directory is renamed when it exists."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -413,31 +363,11 @@ class TestCmdAnimaRename:
 
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
-    def test_dm_logs_renamed(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
-    ) -> None:
-        """DM log files are renamed during full rename."""
-        from cli.commands.anima_mgmt import cmd_anima_rename
-
-        data_dir = _setup_data_dir(tmp_path)
-        _create_anima(data_dir, "sakura")
-        _create_config(data_dir, {"sakura": {}})
-        (data_dir / "shared" / "dm_logs" / "mei-sakura.jsonl").write_text(
-            '{"test": true}\n', encoding="utf-8",
-        )
-
-        mock_data_dir.return_value = data_dir
-        mock_animas_dir.return_value = data_dir / "animas"
-
-        cmd_anima_rename(self._make_args("sakura", "hinata"))
-
-        assert not (data_dir / "shared" / "dm_logs" / "mei-sakura.jsonl").exists()
-        assert (data_dir / "shared" / "dm_logs" / "hinata-mei.jsonl").exists()
-
-    @patch("core.paths.get_data_dir")
-    @patch("core.paths.get_animas_dir")
     def test_rag_index_meta_cleared(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """RAG index_meta.json is cleared after rename."""
         from cli.commands.anima_mgmt import cmd_anima_rename
@@ -446,7 +376,8 @@ class TestCmdAnimaRename:
         _create_anima(data_dir, "sakura")
         _create_config(data_dir, {"sakura": {}})
         (data_dir / "animas" / "sakura" / "index_meta.json").write_text(
-            '{"old": "data"}\n', encoding="utf-8",
+            '{"old": "data"}\n',
+            encoding="utf-8",
         )
         (data_dir / "animas" / "sakura" / "shared_index_meta.json").write_text(
             '{"shared_company_name": "old-company"}\n',
@@ -466,7 +397,10 @@ class TestCmdAnimaRename:
     @patch("core.paths.get_data_dir")
     @patch("core.paths.get_animas_dir")
     def test_stale_socket_cleaned(
-        self, mock_animas_dir, mock_data_dir, tmp_path: Path,
+        self,
+        mock_animas_dir,
+        mock_data_dir,
+        tmp_path: Path,
     ) -> None:
         """Stale socket and PID files are cleaned up."""
         from cli.commands.anima_mgmt import cmd_anima_rename

@@ -34,7 +34,6 @@ class TestHousekeepingConfig:
         assert cfg.anima_log_retention_days == 30
         assert cfg.anima_log_total_max_size_mb == 200
         assert cfg.frontend_log_backup_count == 7
-        assert cfg.dm_log_archive_retention_days == 30
         assert cfg.cron_log_retention_days == 14
         assert cfg.shortterm_retention_days == 7
         assert cfg.shortterm_archive_retention_days == 30
@@ -66,7 +65,6 @@ class TestHousekeepingConfig:
             anima_log_retention_days=14,
             anima_log_total_max_size_mb=100,
             frontend_log_backup_count=14,
-            dm_log_archive_retention_days=60,
             cron_log_retention_days=14,
             shortterm_retention_days=14,
             shortterm_archive_retention_days=60,
@@ -120,9 +118,14 @@ class TestHousekeepingConfig:
         assert "housekeeping" in data
         assert data["housekeeping"]["enabled"] is True
         assert data["housekeeping"]["run_time"] == "05:30"
-
         restored = AnimaWorksConfig(**data)
         assert restored.housekeeping.prompt_log_retention_days == 3
+
+    def test_ignores_removed_housekeeping_setting_in_existing_config(self):
+        from core.config.models import AnimaWorksConfig
+
+        config = AnimaWorksConfig.model_validate_json('{"housekeeping":{"dm_log_archive_retention_days":60}}')
+        assert config.housekeeping.enabled is True
 
     @pytest.mark.asyncio
     async def test_run_housekeeping_leaves_retired_vector_log_untouched(self, tmp_path: Path):
@@ -381,47 +384,6 @@ class TestRotateDaemonLog:
         result = _rotate_daemon_log(log, max_size_mb=1, keep_generations=2)
         assert result["rotated"] is True
         assert not (tmp_path / "server-daemon.log.3").exists()
-
-
-# ── _cleanup_dm_archives tests ─────────────────────────────────
-
-
-class TestCleanupDmArchives:
-    """Test DM archive cleanup."""
-
-    def test_skips_when_dir_not_found(self, tmp_path: Path):
-        from core.memory.maintenance.housekeeping import _cleanup_dm_archives
-
-        result = _cleanup_dm_archives(tmp_path / "nonexistent", 30)
-        assert result["skipped"] is True
-
-    def test_deletes_old_archives(self, tmp_path: Path):
-        from core.memory.maintenance.housekeeping import _cleanup_dm_archives
-
-        old_archive = tmp_path / "alice-bob.20260101.archive.jsonl"
-        old_archive.write_text("{}\n")
-        old_time = time.time() - (60 * 86400)  # 60 days ago
-        os.utime(old_archive, (old_time, old_time))
-
-        recent_archive = tmp_path / "alice-charlie.20260304.archive.jsonl"
-        recent_archive.write_text("{}\n")
-
-        result = _cleanup_dm_archives(tmp_path, retention_days=30)
-        assert result["deleted_files"] == 1
-        assert not old_archive.exists()
-        assert recent_archive.exists()
-
-    def test_ignores_non_archive_files(self, tmp_path: Path):
-        from core.memory.maintenance.housekeeping import _cleanup_dm_archives
-
-        normal = tmp_path / "alice-bob.jsonl"
-        normal.write_text("{}\n")
-        old_time = time.time() - (60 * 86400)
-        os.utime(normal, (old_time, old_time))
-
-        result = _cleanup_dm_archives(tmp_path, retention_days=30)
-        assert result["deleted_files"] == 0
-        assert normal.exists()
 
 
 # ── _cleanup_cron_logs tests ───────────────────────────────────
@@ -905,9 +867,6 @@ class TestRunHousekeeping:
         old_time = time.time() - (14 * 86400)
         os.utime(old_st, (old_time, old_time))
 
-        # Set up dm_logs dir (empty for this test)
-        (data_dir / "shared" / "dm_logs").mkdir(parents=True)
-
         # Set up logs dir (no daemon log for this test)
         (data_dir / "logs").mkdir(parents=True)
 
@@ -949,7 +908,6 @@ class TestRunHousekeeping:
         assert results["daemon_log"]["skipped"] is True
         assert "anima_logs" in results
         assert "frontend_logs" in results
-        assert "dm_archives" in results
         assert results["task_results"]["deleted_files"] == 1
         assert old_pf.exists()
         assert "corrupt_vectordb_archives" in results
@@ -971,7 +929,6 @@ class TestRunHousekeeping:
         assert "daemon_log" in results
         assert "anima_logs" in results
         assert "frontend_logs" in results
-        assert "dm_archives" in results
         assert "cron_logs" in results
         assert "shortterm" in results
         assert "facts_locks" in results

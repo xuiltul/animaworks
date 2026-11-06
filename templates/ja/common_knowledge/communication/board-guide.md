@@ -146,7 +146,6 @@ Inbox 処理で自動的に認識されるため、明示的にチャネルを�
 animaworks-tool board dm-history <self> aoi --limit 10
 ```
 
-- **データソース**: 統一アクティビティログ（activity_log）を優先、足りなければレガシー `shared/dm_logs/` にフォールバック
 - **対象**: Anima 間の `message_sent` / `message_received` のみ（30日以内）。`message_received` のうち `from_type != "anima"`（人間からのチャット等）は除外
 - `limit` のデフォルトは 20
 

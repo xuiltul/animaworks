@@ -140,14 +140,13 @@ It is automatically recognized during Inbox processing, so there is no need to e
 
 ## Using DM History
 
-When you want to review past DMs between Anima:
+When you want to review past DM exchanges between Anima:
 
 ```
 animaworks-tool board dm-history <self> aoi --limit 10
 ```
 
-- **Data source**: Prefer the unified activity log (activity_log); fall back to the legacy `shared/dm_logs/` if needed
-- **Scope**: Only `message_sent` / `message_received` between Anima (within 30 days). Of `message_received`, `from_type != "anima"` (such as chats from humans) are excluded
+- **Scope**: Only `message_sent` / `message_received` between Anima (within 30 days). Excludes `from_type != "anima"` among `message_received` (such as chats from humans)
 - The default for `limit` is 20
 
 ### Use Cases

@@ -1,4 +1,4 @@
-"""E2E tests for shared channel messaging (channels + DM logs)."""
+"""E2E tests for shared channel and DM messaging."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
@@ -25,7 +25,6 @@ def shared_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     shared.mkdir(parents=True, exist_ok=True)
     (shared / "inbox").mkdir(exist_ok=True)
     (shared / "channels").mkdir(exist_ok=True)
-    (shared / "dm_logs").mkdir(exist_ok=True)
     for name in ("alice", "bob", "charlie", "sakura", "yuki", "mio"):
         anima_dir = d / "animas" / name
         anima_dir.mkdir(parents=True, exist_ok=True)
@@ -63,7 +62,7 @@ def _direct_mirror_client(shared_dir: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 
 class TestE2EDMFlow:
-    """Full DM flow: send → inbox + dm_logs parallel write."""
+    """Full DM flow: send and receive through shared inboxes."""
 
     @pytest.fixture(autouse=True)
     def _reset_depth_limiter(self):
@@ -74,7 +73,7 @@ class TestE2EDMFlow:
         """
 
     def test_send_creates_inbox(self, shared_dir):
-        """send() creates inbox file (dm_logs no longer written)."""
+        """send() creates an inbox file."""
         alice = Messenger(shared_dir, "alice")
         alice.send("bob", "Hello Bob!")
 
@@ -82,13 +81,8 @@ class TestE2EDMFlow:
         bob_inbox = shared_dir / "inbox" / "bob"
         assert len(list(bob_inbox.glob("*.json"))) == 1
 
-        # dm_logs is no longer written
-        dm_log = shared_dir / "dm_logs" / "alice-bob.jsonl"
-        assert not dm_log.exists()
-
     def test_bidirectional_inbox_conversation(self, shared_dir):
-        """Bidirectional messages are delivered via inbox.
-        DM log is no longer written by send()."""
+        """Bidirectional messages are delivered via inbox."""
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
 
@@ -107,7 +101,7 @@ class TestE2EDMFlow:
         assert len(bob_msgs_in_alice) == 1
 
     def test_receive_and_archive_clears_inbox(self, shared_dir):
-        """receive_and_archive clears inbox. DM log no longer written."""
+        """receive_and_archive clears inbox."""
         alice = Messenger(shared_dir, "alice")
         bob = Messenger(shared_dir, "bob")
 

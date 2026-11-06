@@ -12,30 +12,26 @@ description: >-
 
 cron의 **파싱**은 `core/runtime/schedule_parser.py`（`parse_cron_md` / `parse_schedule`), **등록·실행·리로드**는 `core/runtime/scheduler_manager.py`（APScheduler, `AsyncIOScheduler(timezone=get_app_timezone())`)이 담당한다.
 
-### `core/tasks/background.py` (cron과는 다른 계열)
+### `core/tasks/background.py`（cron과는 별도 계통）
 
-이 모듈은 **cron 스케줄링을 하지 않는다**. 장시간 도구 호출의 백그라운드 실행과 DM 로그의 로테이션을 담당한다. cron과 혼동하지 말 것.
+이 모듈은 **cron 스케줄링을 하지 않는다**. 장시간 도구 호출의 백그라운드 실행을 담당한다. cron과 혼동하지 말 것.
 
 **`BackgroundTaskManager`**
 
-- **역할**: 대상 도구를 `asyncio` 상에서 비동기 실행하고, 상태를 디스크에 저장한다.
-- **영속화 위치**: `state/background_tasks/{task_id}.json`(`pending` / `running` / `completed` / `failed`, 결과 문자열·오류·타임스탬프).
-- **공개 API (개요)**:
+- **역할**: 대상 도구를 `asyncio`에서 비동기 실행하고, 상태를 디스크에 저장한다.
+- **영속화 위치**: `state/background_tasks/{task_id}.json`（`pending` / `running` / `completed` / `failed`, 결과 문자열·오류·타임스탬프）。
+- **공개 API（개요）**:
   - `submit(tool_name, tool_args, execute_fn)` — 동기 실행 함수를 스레드 풀에서 실행한다.
   - `submit_async(...)` — 비동기 `execute_fn` 버전.
   - `get_task` / `list_tasks` / `active_count` — 조회.
-  - `cleanup_old_tasks(max_age_hours=24)` — 완료·실패 작업을 **24시간** 초과 시 삭제. 추가로 `running` 상태로 **48시간** 초과 경과한 JSON(크래시 고아)도 삭제.
-- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: 백그라운드 대상 도구 집합은 다음 **3계층 병합**(나중 것이 우선).
-  1. 코드 내 기본값 `_DEFAULT_ELIGIBLE_TOOLS`(Mode A 호환의 고정 목록)
-  2. 각 도구 모듈의 `EXECUTION_PROFILE`에서 `background_eligible: true`의 엔트리(`core.integrations._base.get_eligible_tools_from_profiles`). 키는 `"{tool}:{subcommand}"` 형식(Mode S의 `submit`와 정합)
-  3. `config.json` 등에서 전달되는 `config_eligible`(명시적 덮어쓰기)
-- **`is_eligible(tool_name)`**: 다음 두 이름 중 어느 것으로도 매칭 가능 — 스키마 이름(예: `generate_3d_model`), 프로필 키(예: `image_gen:3d`).
-- **기본적으로 `_DEFAULT_ELIGIBLE_TOOLS`에 포함되는 예**(값은 대략적인 초): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`(각 30), `local_llm` / `run_command`(각 60).
-- **완료 훅**: `on_complete`에 `Callable[[BackgroundTask], Awaitable[None]]`을 설정 가능. 앱 측에서 여기서 `state/background_notifications/`로의 Markdown 알림 등을 작성한다(`background.py` 자체는 알림 디렉터리를 건드리지 않는다).
-
-**`rotate_dm_logs`**
-
-- `shared/dm_logs/*.jsonl`의 엔트리를 `max_age_days`(기본 **7일**)로 잘라, 오래된 줄을 `{stem}.{YYYYMMDD}.archive.jsonl`에 추가 아카이브한다. cron 작업은 아니지만, 백그라운드 계열 유지보수와 같은 파일에 정의되어 있어 참조용으로 기재.
+  - `cleanup_old_tasks(max_age_hours=24)` — 완료·실패 작업 중 **24시간**이 지난 항목을 삭제한다. 또한 `running` 상태로 **48시간** 넘게 경과한 JSON（충돌로 남은 고아 파일）도 삭제한다.
+- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: 백그라운드 대상 도구 집합은 다음 **3단계 병합**（나중 항목이 우선）으로 구성한다.
+  1. 코드 내 기본값 `_DEFAULT_ELIGIBLE_TOOLS`（Mode A 호환 고정 목록）
+  2. 각 도구 모듈의 `EXECUTION_PROFILE`에서 가져온 `background_eligible: true` 항목（`core.integrations._base.get_eligible_tools_from_profiles`）。키는 `"{tool}:{subcommand}"` 형식（Mode S의 `submit`와 일치）
+  3. `config.json` 등에서 전달되는 `config_eligible`（명시적 재정의）
+- **`is_eligible(tool_name)`**: 다음 두 이름 중 어느 것으로도 대조할 수 있다 — 스키마명（예: `generate_3d_model`）, 프로필 키（예: `image_gen:3d`）。
+- **기본적으로 `_DEFAULT_ELIGIBLE_TOOLS`에 포함되는 예시**（값은 대략적인 초 단위）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（각 30）, `local_llm` / `run_command`（각 60）。
+- **완료 후크**: `on_complete`에 `Callable[[BackgroundTask], Awaitable[None]]`을 설정할 수 있다. 애플리케이션 측에서 이를 통해 `state/background_notifications/`로 보내는 Markdown 알림 등을 작성한다（`background.py` 자체는 알림 디렉터리에 접근하지 않는다）。
 
 ---
 

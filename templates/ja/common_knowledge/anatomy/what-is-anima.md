@@ -75,7 +75,6 @@ Chat と Heartbeat（および cron / TaskExec などのバックグラウンド
 - **CLI 経由（`animaworks-tool submit`）**: コマンド型ツールも TaskStore に `task_type="command"` として登録される。`PendingTaskExecutor` がTaskStoreから試行を取得し、BackgroundTaskManager が実行する。結果状態は互換性のため `state/background_tasks/{task_id}.json` にも保存され、完了通知から確認できる。
 - **整理**: `cleanup_old_tasks(max_age_hours=24)` は、`completed` / `failed` で `completed_at` から指定時間を超えた JSON と、`running` のまま `created_at` から **48 時間超**経過したファイル（プロセスクラッシュ等の孤児）を削除する。保持時間は呼び出し側が引数 `max_age_hours` で指定し、設定キーはない。
 
-同じモジュールの **`rotate_dm_logs`** は、`shared/dm_logs/*.jsonl` のうち `max_age_days`（デフォルト 7 日）より古い行を `{元ファイル名}.{YYYYMMDD}.archive.jsonl` に追記アーカイブし、アクティブファイルを最近の行だけに書き換える（DM 履歴の肥大化対策）。
 
 ### 4. 成長
 

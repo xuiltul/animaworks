@@ -148,10 +148,6 @@ submit したらすぐに次の作業に移ること。
 - **無効化**: `config.json` で `background_task.enabled: false` にすると `BackgroundTaskManager` 自体が作られない。submit は TaskStore に登録されるが、実行試行は pending に戻り、要確認通知が発生する。
 - **掃除**: `cleanup_old_tasks(max_age_hours=24)` は、(1) `completed` / `failed` で `completed_at` が指定時間を超えた JSON、(2) `running` のまま `created_at` が **48 時間超**過去のファイル（プロセスクラッシュ等の孤児）を削除する。戻り値は削除件数。保持時間は呼び出し側が `max_age_hours` で指定し、対応する `config.json` 設定キーはない。
 
-### 同ファイル内のその他 API: `rotate_dm_logs`
-
-`core/tasks/background.py` には **バックグラウンドツール実行とは独立**に、`rotate_dm_logs(shared_dir, max_age_days=7)` がある。`shared/dm_logs/*.jsonl` のうち、エントリの `ts` が閾値より古い行を `{stem}.{YYYYMMDD}.archive.jsonl` へ追記アーカイブし、アクティブファイルからは除く。実処理は `_rotate_dm_logs_sync`（`run_in_executor` でオフロード）。
-
 ### コマンド型タスク（`animaworks-tool submit`）
 
 1. `animaworks-tool submit` は `task_type="command"`、ツール名、引数、Anima、`task_id` を含む入力を TaskStore に原子的に登録する（`ANIMAWORKS_ANIMA_DIR` 必須）。

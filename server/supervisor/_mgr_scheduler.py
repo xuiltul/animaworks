@@ -300,17 +300,6 @@ class SchedulerMixin:
         except Exception:
             logger.debug("Housekeeping schedule setup failed", exc_info=True)
 
-        # DM log rotation
-        self.scheduler.add_job(
-            self._run_dm_log_rotation,
-            CronTrigger(hour=4, minute=30),
-            id="system_dm_log_rotation",
-            name="System: DM Log Rotation",
-            replace_existing=True,
-            misfire_grace_time=600,
-        )
-        logger.info("System cron: DM log rotation at 04:30")
-
         self.scheduler.add_job(
             self._apply_activity_schedule_tick,
             CronTrigger(minute="*"),
@@ -1233,21 +1222,6 @@ class SchedulerMixin:
 
         if mark_complete:
             await _mark_job_done(self._get_data_dir(), "last_housekeeping")
-
-    async def _run_dm_log_rotation(self: _SchedulerMixinHost) -> None:
-        """Archive old dm_log entries beyond 7 days."""
-        logger.info("Starting DM log rotation")
-        try:
-            from core.tasks.background import rotate_dm_logs
-
-            shared_dir = self._get_data_dir() / "shared"
-            result = await rotate_dm_logs(shared_dir)
-            if result:
-                logger.info("DM log rotation completed: %s", result)
-            else:
-                logger.debug("DM log rotation: nothing to archive")
-        except Exception:
-            logger.exception("DM log rotation failed")
 
     # ── Catch-up for missed scheduled jobs ──────────────────────────
 

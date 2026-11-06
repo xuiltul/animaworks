@@ -29,7 +29,6 @@ AnimaWorks の設定構造と Anima 追加手順のリファレンス。
 - `shared/inbox/` — 受信メッセージキュー
 - `shared/users/` — ユーザープロファイル
 - `shared/channels/` — 共有チャネル（general, ops の初期ファイル）
-- `shared/dm_logs/` — DM 履歴（フォールバック用）
 - `tmp/attachments/` — 添付ファイル一時保存
 - `common_skills/` / `common_knowledge/` — 共通スキル・知識
 - `prompts/` / `company/` — プロンプト・組織テンプレート

@@ -176,7 +176,6 @@ class TestProcessMessageModelOverride:
         d.mkdir()
         (d / "channels").mkdir()
         (d / "users").mkdir()
-        (d / "dm_logs").mkdir()
         return d
 
     @patch("core.anima.digital_anima.AgentCore")
