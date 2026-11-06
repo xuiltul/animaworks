@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=2d0c336014450a74e74398208f0cdaf110308cc0add681c50dba1bea68c70e26 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=5ca788f017ac39ec604d5bef837cd61bd91063812e85dfc087681abb48e75a20 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -446,12 +446,12 @@
 
 ### `server`
 
-| 키 | 유형 | 기본값 | 설명 |
+| 키 | 형식 | 기본값 | 설명 |
 |---|---|---|---|
 | `server` | `ServerConfig` | `{ServerConfig}` | HTTP 서버, 인증, 사용량 제어 설정. |
-| `server.session_ttl_days` | `int \| None` | `90` | None = unlimited |
-| `server.ipc_stream_timeout` | `int` | `60` | per-chunk timeout in seconds |
-| `server.keepalive_interval` | `int` | `30` | keep-alive emission interval in seconds |
+| `server.session_ttl_days` | `int \| None` | `90` | None = 무제한 |
+| `server.ipc_stream_timeout` | `int` | `60` | 청크별 제한 시간(초) |
+| `server.keepalive_interval` | `int` | `30` | keep-alive 전송 간격(초) |
 | `server.runner_liveness_timeout` | `int` | `900` | — |
 | `server.chat_max_concurrency` | `int` | `1` | — |
 | `server.anima_startup_ready_timeout` | `int` | `120` | — |
@@ -461,14 +461,14 @@
 | `server.runner_warmup_seconds` | `int` | `180` | — |
 | `server.spawn_timeout` | `int` | `300` | — |
 | `server.supervisor_respawn_max_retries` | `int` | `3` | — |
-| `server.supervisor_respawn_retry_interval_seconds` | `float` | `30.0` | base backoff interval (seconds) |
-| `server.supervisor_respawn_backoff_max_seconds` | `float` | `1800.0` | max backoff (seconds) |
-| `server.stream_checkpoint_enabled` | `bool` | `true` | save tool results during streaming |
-| `server.stream_retry_max` | `int` | `3` | max automatic retries on stream disconnect |
-| `server.stream_retry_delay_s` | `float` | `5.0` | delay between retries (seconds) |
-| `server.llm_num_retries` | `int` | `3` | retries for LLM API calls (429/5xx/network) |
+| `server.supervisor_respawn_retry_interval_seconds` | `float` | `30.0` | 기본 백오프 간격(초) |
+| `server.supervisor_respawn_backoff_max_seconds` | `float` | `1800.0` | 최대 백오프(초) |
+| `server.stream_checkpoint_enabled` | `bool` | `true` | 스트리밍 중 도구 결과 저장 |
+| `server.stream_retry_max` | `int` | `3` | 스트림 연결이 끊겼을 때 최대 자동 재시도 횟수 |
+| `server.stream_retry_delay_s` | `float` | `5.0` | 재시도 간 대기 시간(초) |
+| `server.llm_num_retries` | `int` | `3` | LLM API 호출 재시도 횟수(429/5xx/network) |
 | `server.ollama_keep_alive` | `str` | `""` | — |
-| `server.ollama_total_timeout` | `int` | `0` | Hard upper bound (seconds) on a single Ollama generation call; 0 = unlimited |
+| `server.ollama_total_timeout` | `int` | `0` | 단일 Ollama 생성 호출의 엄격한 최대 시간(초); 0 = 무제한 |
 | `server.media_proxy` | `MediaProxyConfig` | `{MediaProxyConfig}` | — |
 | `server.media_proxy.mode` | `Literal['allowlist', 'open_with_scan']` | `"open_with_scan"` | — |
 | `server.media_proxy.allowed_domains` | `list[str]` | `["cdn.search.brave.com","images.unsplash.com","images.pexels.com","upload.wikimedia.org"]` | — |
@@ -478,8 +478,8 @@
 | `server.media_proxy.timeout_read_s` | `float` | `10.0` | — |
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
-| `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.base_path` | `str` | `""` | 리버스 프록시 하위 경로(예: "/app"); 비어 있으면 루트에 배포 |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* 호출자 확인 |
 
 ### `llm_rate_guard`
 

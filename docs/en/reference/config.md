@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=2d0c336014450a74e74398208f0cdaf110308cc0add681c50dba1bea68c70e26 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=5ca788f017ac39ec604d5bef837cd61bd91063812e85dfc087681abb48e75a20 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -446,7 +446,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 ### `server`
 
-| Key | Type | Default | Description |
+| Key | Type | Default Value | Description |
 |---|---|---|---|
 | `server` | `ServerConfig` | `{ServerConfig}` | HTTP server, authentication, and usage control configuration. |
 | `server.session_ttl_days` | `int \| None` | `90` | None = unlimited |
@@ -479,7 +479,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 

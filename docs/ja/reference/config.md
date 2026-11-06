@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 9b89c3025be17c0cd1a2ada623aea9e7c041c0c11ce1f4900525c7e62a1319ea -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: fbfe87c99fffcd4bf7a4c4dce89bc222fde29ce4c9e86bd09a58d821bfc5bfe7 -->
 
 # 設定リファレンス
 
@@ -479,7 +479,7 @@
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 
