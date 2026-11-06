@@ -24,7 +24,7 @@ from core.tooling.handler_base import (
     meeting_context,
     meeting_mode,
     record_meeting_redirect,
-    suppress_board_fanout,
+    suppress_board_fanout_channels,
 )
 
 if TYPE_CHECKING:
@@ -393,26 +393,31 @@ class CommsToolsMixin:
         return None
 
     def _channel_company_boundary_error(self: _CommsToolsHost, channel: str) -> str | None:
-        """Retain the existing read-side company boundary check."""
+        """Return the existing read-side company error for *channel*."""
         if not self._messenger:
             return None
+        from core.messaging.board import anima_principal, board_access
         from core.messaging.messenger import load_channel_meta
-        from core.org.company import get_company, get_company_display_name
+        from core.org.company import get_company_display_name
 
-        meta = load_channel_meta(self._messenger.shared_dir, channel)
+        shared_dir = self._messenger.shared_dir
         animas_dir = self._anima_dir.parent
-        data_dir = animas_dir.parent
-        if meta is not None and meta.members:
+        principal = anima_principal(self._anima_name, animas_dir=animas_dir)
+        decision = board_access(shared_dir, channel, principal, "read")
+        if decision.allowed:
+            return None
+        if decision.reason == "company_unreadable":
+            return t("handler.company_boundary_unverifiable")
+        if decision.reason not in {"cross_company", "company_mismatch", "company_assigned_legacy"}:
+            return None
+
+        meta = load_channel_meta(shared_dir, channel)
+        if decision.reason == "cross_company" and meta is not None and meta.members:
             return self._cross_company_communication_error(meta.members)
         company = (meta.company if meta is not None else "") or ""
-        poster_company = get_company(self._anima_name, animas_dir=animas_dir)
         if company:
-            if poster_company is None or poster_company == company:
-                return None
-            display_name = get_company_display_name(company, data_dir=data_dir)
+            display_name = get_company_display_name(company, data_dir=animas_dir.parent)
             return t("handler.cross_company_message_blocked", display_name=display_name)
-        if poster_company is None:
-            return None
         return t("handler.channel_company_unset", channel=channel)
 
     # ── Channel tool handlers ────────────────────────────────
@@ -455,7 +460,7 @@ class CommsToolsMixin:
                 text,
                 from_anima=self._anima_name,
                 source="anima",
-                suppress_mentions=suppress_board_fanout.get(),
+                suppress_mentions=channel in suppress_board_fanout_channels.get(),
             )
         except BoardPostClientError as exc:
             if exc.status_code == 404:
@@ -522,17 +527,23 @@ class CommsToolsMixin:
 
         # ── ACL gate ──
         from core.exceptions import RecipientNotFoundError
-        from core.messaging.messenger import _validate_name, is_channel_member
+        from core.messaging.board import anima_principal, board_access
+        from core.messaging.messenger import _validate_name
 
         try:
             _validate_name(channel, "channel name")
         except RecipientNotFoundError:
             return _error_result("InvalidArguments", f"Invalid channel name: {channel!r}")
-        if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
+        principal = anima_principal(self._anima_name, animas_dir=self._anima_dir.parent)
+        decision = board_access(self._messenger.shared_dir, channel, principal, "read")
+        if not decision.allowed:
+            if decision.reason == "company_unreadable":
+                return t("handler.company_boundary_unverifiable")
+            if decision.reason in {"cross_company", "company_mismatch", "company_assigned_legacy"}:
+                company_error = self._channel_company_boundary_error(channel)
+                if company_error is not None:
+                    return company_error
             return t("handler.channel_acl_denied", channel=channel)
-        company_error = self._channel_company_boundary_error(channel)
-        if company_error is not None:
-            return company_error
 
         channels_dir = self._messenger.shared_dir / "channels"
         if not (channels_dir / f"{channel}.jsonl").is_file() and not (channels_dir / f"{channel}.meta.json").is_file():

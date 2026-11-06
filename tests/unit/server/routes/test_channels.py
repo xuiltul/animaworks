@@ -1141,3 +1141,39 @@ class TestGetDMHistory:
             # Dots and uppercase violate the safe name regex
             resp = await client.get("/api/dm/..secret")
         assert resp.status_code == 400
+
+
+# ── Board read access ───────────────────────────────────
+
+
+class TestChannelReadBoardAccess:
+    async def test_get_denies_channel_with_unreadable_meta(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human"}],
+        )
+        (shared_dir / "channels" / "general.meta.json").write_text("{not json", encoding="utf-8")
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general")
+        assert resp.status_code == 403
+
+    async def test_list_skips_channel_with_unreadable_meta(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human"}],
+        )
+        (shared_dir / "channels" / "general.meta.json").write_text("{not json", encoding="utf-8")
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels")
+        assert resp.status_code == 200
+        assert resp.json() == []

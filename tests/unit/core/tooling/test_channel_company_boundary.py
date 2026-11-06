@@ -267,6 +267,40 @@ def test_company_scoped_open_channel_read_other_company_rejects(tmp_path: Path) 
     assert "secret" not in result
 
 
+def test_read_channel_rejects_unreadable_company(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    (tmp_path / "animas" / "alice" / "status.json").write_text("{broken", encoding="utf-8")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "general.jsonl").write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "other", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "general"})
+
+    assert result == t("handler.company_boundary_unverifiable")
+    assert "secret" not in result
+
+
+def test_read_channel_rejects_closed_channel_for_anima(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "old-board.jsonl").write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "other", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    save_channel_meta(tmp_path / "shared", "old-board", ChannelMeta(members=["alice"], closed=True))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "old-board"})
+
+    assert result == t("handler.channel_acl_denied", channel="old-board")
+    assert "secret" not in result
+
+
 def test_unassigned_anima_can_read_scoped_and_unattributed_open_channels(
     tmp_path: Path,
 ) -> None:

@@ -67,12 +67,30 @@ _RE_THREAD_CTX = re.compile(
     r"(\[Thread context[^\]]*\].*?\[/Thread context\]\s*)",
     re.DOTALL,
 )
+_BOARD_REPLY_CHANNEL_RE = re.compile(r"^\[board_reply:channel=([^,\]\s]+),from=")
 _THREAD_CTX_BUDGET = 300
 _MSG_BODY_BUDGET = 2000
 _MAX_INBOX_RETRIES = 3
 _INBOX_THREAD_ID = "inbox"
 _RESCUE_QUEUE_ACTIVE_STATUSES = {"pending", "in_progress", "delegated"}
 _RESCUE_QUEUE_CANCEL_REASONS = {"expired", "archived", "tombstoned"}
+
+
+def _board_mention_channel(item: InboxItem) -> str:
+    """Return the Board channel that triggered one inbox message."""
+    msg = item.msg
+    if msg.type != "board_mention":
+        return ""
+    meta_channel = msg.meta.get("board_channel") if isinstance(msg.meta, dict) else None
+    if isinstance(meta_channel, str) and meta_channel:
+        return meta_channel
+    match = _BOARD_REPLY_CHANNEL_RE.match(msg.content or "")
+    return match.group(1) if match is not None else ""
+
+
+def _board_mention_suppression_channels(items: list[InboxItem]) -> frozenset[str]:
+    """Collect only the channels whose mention replies must stay suppressed."""
+    return frozenset(channel for item in items if (channel := _board_mention_channel(item)))
 
 
 async def _append_episode_off_loop(memory: Any, episode: str, *, origin: str) -> None:
@@ -437,9 +455,9 @@ class InboxMixin:
                         messages=messages_text,
                     )
 
-                    # Suppress board fanout when replying to board_mention
-                    has_board_mention = any(item.msg.type == "board_mention" for item in inbox_result.inbox_items)
-                    from core.tooling.handler import active_session_type, suppress_board_fanout
+                    # Suppress only the channels that triggered board_mention replies
+                    suppression_channels = _board_mention_suppression_channels(inbox_result.inbox_items)
+                    from core.tooling.handler import active_session_type, suppress_board_fanout_channels
 
                     agent_session_acquired = False
                     agent_session_lock = None
@@ -455,7 +473,9 @@ class InboxMixin:
                         await agent_session_context.__aenter__()
                         agent_session_acquired = True
                     agent.set_interrupt_event(self._get_interrupt_event("_inbox"))
-                    _fanout_token = suppress_board_fanout.set(True) if has_board_mention else None
+                    _fanout_token = (
+                        suppress_board_fanout_channels.set(suppression_channels) if suppression_channels else None
+                    )
                     _session_token = agent._tool_handler.set_active_session_type("inbox")
                     agent._tool_handler._trigger = trigger
 
@@ -543,7 +563,7 @@ class InboxMixin:
                             agent.update_model_config(original_config)
                         await asyncio.to_thread(journal.close)
                         if _fanout_token is not None:
-                            suppress_board_fanout.reset(_fanout_token)
+                            suppress_board_fanout_channels.reset(_fanout_token)
                         active_session_type.reset(_session_token)
                         if agent_session_acquired:
                             if isinstance(agent_session_lock, asyncio.Lock):

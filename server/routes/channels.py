@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core.activity.logger import ActivityLogger
+from core.messaging.board import board_access, human_principal
 from core.messaging.messenger import Messenger
 
 logger = logging.getLogger("animaworks.routes.channels")
@@ -104,9 +105,12 @@ def create_channels_router() -> APIRouter:
 
         from core.messaging.messenger import load_channel_meta
 
+        principal = human_principal("human")
         channels: list[dict] = []
         for f in sorted(channels_dir.glob("*.jsonl")):
             name = f.stem
+            if not board_access(shared_dir, name, principal, "read").allowed:
+                continue
             meta_info = _get_channel_meta(f)
 
             channel_info: dict = {
@@ -134,7 +138,7 @@ def create_channels_router() -> APIRouter:
     ):
         """Get messages from a specific channel.
 
-        Web UI requests are treated as ``human`` source and bypass ACL.
+        Web UI requests are treated as human principals and follow ``board_access``.
 
         When *since* is provided (ISO timestamp), only messages strictly
         newer than that timestamp are returned (for incremental polling).
@@ -148,6 +152,12 @@ def create_channels_router() -> APIRouter:
             return JSONResponse(
                 status_code=404,
                 content={"detail": f"Channel '{name}' not found"},
+            )
+
+        if not board_access(shared_dir, name, human_principal("human"), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
             )
 
         try:

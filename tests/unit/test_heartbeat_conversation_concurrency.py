@@ -390,25 +390,25 @@ class TestShortTermMemorySeparation:
         assert hb_stm.shortterm_dir.exists()
 
 
-# ── Test 7: suppress_board_fanout context variable ───────────────
+# ── Test 7: suppress_board_fanout_channels context variable ───────
 
 
 @pytest.mark.unit
 class TestSuppressBoardFanoutContextVar:
-    """Verify suppress_board_fanout uses contextvars."""
+    """Verify suppress_board_fanout_channels uses contextvars."""
 
-    def test_default_is_false(self) -> None:
-        from core.tooling.handler import suppress_board_fanout
+    def test_default_is_empty(self) -> None:
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        assert suppress_board_fanout.get() is False
+        assert suppress_board_fanout_channels.get() == frozenset()
 
     def test_set_and_reset(self) -> None:
-        from core.tooling.handler import suppress_board_fanout
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        token = suppress_board_fanout.set(True)
-        assert suppress_board_fanout.get() is True
-        suppress_board_fanout.reset(token)
-        assert suppress_board_fanout.get() is False
+        token = suppress_board_fanout_channels.set(frozenset({"general"}))
+        assert suppress_board_fanout_channels.get() == frozenset({"general"})
+        suppress_board_fanout_channels.reset(token)
+        assert suppress_board_fanout_channels.get() == frozenset()
 
 
 # ── Test 8: replied_to session separation ────────────────────────

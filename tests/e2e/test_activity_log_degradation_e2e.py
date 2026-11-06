@@ -47,6 +47,7 @@ def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "test-anima"
     for subdir in ("activity_log", "knowledge", "episodes", "skills"):
         (d / subdir).mkdir(parents=True)
+    (d / "status.json").write_text("{}", encoding="utf-8")
     return d
 
 

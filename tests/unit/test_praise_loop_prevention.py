@@ -177,14 +177,14 @@ class TestSuppressBoardFanout:
         handler: ToolHandler,
         post_api: MagicMock,
     ) -> None:
-        """suppress_board_fanout=False keeps notifications enabled."""
-        from core.tooling.handler import suppress_board_fanout
+        """An empty suppression set keeps notifications enabled."""
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        token = suppress_board_fanout.set(False)
+        token = suppress_board_fanout_channels.set(frozenset())
         try:
             handler._handle_post_channel({"channel": "dev", "text": "@bob check"})
         finally:
-            suppress_board_fanout.reset(token)
+            suppress_board_fanout_channels.reset(token)
         assert post_api.call_args.kwargs["suppress_mentions"] is False
 
     def test_post_channel_suppresses_fanout_when_flag_true(
@@ -192,14 +192,14 @@ class TestSuppressBoardFanout:
         handler: ToolHandler,
         post_api: MagicMock,
     ) -> None:
-        """suppress_board_fanout=True disables server-side mention delivery."""
-        from core.tooling.handler import suppress_board_fanout
+        """A channel in the suppression set disables server-side mention delivery."""
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        token = suppress_board_fanout.set(True)
+        token = suppress_board_fanout_channels.set(frozenset({"general"}))
         try:
             handler._handle_post_channel({"channel": "general", "text": "@all thanks"})
         finally:
-            suppress_board_fanout.reset(token)
+            suppress_board_fanout_channels.reset(token)
         assert post_api.call_args.kwargs["suppress_mentions"] is True
 
     def test_post_channel_still_posts_when_fanout_suppressed(
@@ -208,9 +208,9 @@ class TestSuppressBoardFanout:
         post_api: MagicMock,
     ) -> None:
         """Even with fanout suppressed, the channel post itself should still succeed."""
-        from core.tooling.handler import suppress_board_fanout
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        token = suppress_board_fanout.set(True)
+        token = suppress_board_fanout_channels.set(frozenset({"general"}))
         try:
             result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
@@ -218,7 +218,7 @@ class TestSuppressBoardFanout:
 
             assert result == t("handler.channel_post_success", channel="general")
         finally:
-            suppress_board_fanout.reset(token)
+            suppress_board_fanout_channels.reset(token)
         post_api.assert_called_once()
         assert post_api.call_args.kwargs["suppress_mentions"] is True
 
@@ -226,7 +226,7 @@ class TestSuppressBoardFanout:
         self,
         handler: ToolHandler,
     ) -> None:
-        """suppress_board_fanout ContextVar should default to False."""
-        from core.tooling.handler import suppress_board_fanout
+        """suppress_board_fanout_channels ContextVar should default to empty."""
+        from core.tooling.handler import suppress_board_fanout_channels
 
-        assert suppress_board_fanout.get() is False
+        assert suppress_board_fanout_channels.get() == frozenset()

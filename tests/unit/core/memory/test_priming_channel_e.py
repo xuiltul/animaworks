@@ -22,6 +22,7 @@ from core.time_utils import now_jst
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "sakura"
     d.mkdir(parents=True)
+    (d / "status.json").write_text("{}", encoding="utf-8")
     (d / "episodes").mkdir()
     (d / "knowledge").mkdir()
     (d / "skills").mkdir()
