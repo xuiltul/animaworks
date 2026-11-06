@@ -660,7 +660,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "1ab769aaec0b1f5c3d3ce3e8defd0e1df9209eb9c13a98b17dc92c27b6daf27a",
+      "source_sha256": "37adff20e9df4a0f40524ca4d79d970ff46cfab152fa7eab9c43fc1559e1bc18",
       "statuses": [
         "translated"
       ],
@@ -1144,7 +1144,7 @@
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
         "7e01fa4fcfdb1052cbf24a853c76b7bc8f12e3d1e4d617a490811db38d6c5a10",
         "a96116b8867f9b9c700623c95cd30479136b453d5b5c83fd857f5effb6d3a819",
-        "e7590bf46141f991c50e0ba355f790fadef4f42dc024009be00ad652c63914ed",
+        "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
         "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
         "36405749eca4c7549a20affcb16ee9d6565d1bf57db7f4919f70f4790dd5521c",
@@ -1189,7 +1189,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "4d6653cb1eff61ac0a28393b229c36f1b5f94bf49ce487154ff8d154b7b87e54",
+      "source_sha256": "eb56db21815d79a4ad7df5aebf730c79c301d8fcc7740de907ada8deed04db2b",
       "statuses": [
         "translated",
         "translated",
@@ -2034,7 +2034,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "1ab769aaec0b1f5c3d3ce3e8defd0e1df9209eb9c13a98b17dc92c27b6daf27a",
+      "source_sha256": "37adff20e9df4a0f40524ca4d79d970ff46cfab152fa7eab9c43fc1559e1bc18",
       "statuses": [
         "translated"
       ],
@@ -2518,7 +2518,7 @@
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
         "7e01fa4fcfdb1052cbf24a853c76b7bc8f12e3d1e4d617a490811db38d6c5a10",
         "a96116b8867f9b9c700623c95cd30479136b453d5b5c83fd857f5effb6d3a819",
-        "e7590bf46141f991c50e0ba355f790fadef4f42dc024009be00ad652c63914ed",
+        "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
         "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
         "36405749eca4c7549a20affcb16ee9d6565d1bf57db7f4919f70f4790dd5521c",
@@ -2563,7 +2563,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "4d6653cb1eff61ac0a28393b229c36f1b5f94bf49ce487154ff8d154b7b87e54",
+      "source_sha256": "eb56db21815d79a4ad7df5aebf730c79c301d8fcc7740de907ada8deed04db2b",
       "statuses": [
         "translated",
         "translated",
