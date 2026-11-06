@@ -269,13 +269,13 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 }
 ```
 
-## Adding Core Tools to the Repository
+## When adding core tools to the repository
 
-1. Add `core/integrations/{name}.py` (items starting with `_` are excluded from scanning).
-2. `TOOL_MODULES` is automatically registered via `discover_core_tools()`. No manual list for `core/integrations/__init__.py` is needed.
-3. The curated allowlist for MCP is `MCP_TOOL_NAMES` in `core/tooling/surface.py`. `resolve_tool_surface` performs filtering based on trigger and role in MCP usage modes (S / C / D / G / X). Examples: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`. **External service core tools such as Slack / Gmail / `web_search` do not appear in MCP** — they typically go through **`use_tool` / Bash (`animaworks-tool`) / skills**.
-4. Add tests to `tests/`. If schemas or reference documents are auto-generated, also check the targets in `scripts/generate_reference.py`.
-5. For destructive operations, consider updating `gated: True` and the permission descriptions.
+1. Add `core/integrations/{name}.py` (items beginning with `_` are not scanned).
+2. `TOOL_MODULES` is registered automatically in `discover_core_tools()`. No manual list of `core/integrations/__init__.py` is needed.
+3. The curated MCP allowlist is `core/tooling/surface.py`'s `MCP_TOOL_NAMES`. `resolve_tool_surface` filters by trigger and role according to the MCP usage mode (S / C / D / G / X). Examples: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`. Board reads and posts are done via Bash (`animaworks-tool board read/post`). **Core tools for external services such as Slack / Gmail / `web_search` do not appear in MCP** — they are usually accessed via **`use_tool` / Bash (`animaworks-tool`) / skills**.
+4. Add tests to `tests/`. If schemas or reference documents are generated automatically, also check what is covered by `scripts/generate_reference.py`.
+5. For destructive operations, consider updating `gated: True` and the description on the permissions side.
 
 ## Validation Checklist
 

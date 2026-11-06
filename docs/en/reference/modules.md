@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=ea5b1478cdc7f7dec3f36001e55afe16663371e0baf30bb4fe3f06b0617adc3a generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=51f65b0eb515ebdf3e52f7c5bb38d5caac8f1b7b15e0222c8777f42ed5302467 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -17,7 +17,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 885 | — |
+| `cli.parser` | 893 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -30,7 +30,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.anima` | 303 | — |
 | `cli.commands.anima_export_cmd` | 67 | — |
 | `cli.commands.anima_mgmt` | 1174 | CLI commands for anima process management. |
-| `cli.commands.board` | 141 | — |
+| `cli.commands.board` | 215 | — |
 | `cli.commands.company_cmd` | 272 | — |
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
@@ -105,7 +105,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `core.paths` | 235 | Centralized path resolution for AnimaWorks. |
 | `core.schemas` | 242 | — |
 | `core.time_utils` | 103 | — |
-| `core.trust` | 434 | — |
+| `core.trust` | 444 | — |
 
 ## `core.activity`
 
@@ -261,9 +261,9 @@ Configuration models and startup security guards for isolated enclave mode.
 
 ## `core.execution`
 
-Tool execution, command execution, safety controls.
+Tool execution, command execution, and safety controls.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
@@ -299,14 +299,15 @@ Tool execution, command execution, safety controls.
 | `core.execution.mcp_env` | 39 | — |
 | `core.execution.process_runner` | 184 | — |
 | `core.execution.reminder` | 128 | — |
+| `core.execution.session.board_reply` | 38 | — |
 | `core.execution.session.engine_session` | 160 | — |
-| `core.execution.session.session_context` | 114 | — |
+| `core.execution.session.session_context` | 116 | — |
 | `core.execution.session.session_ids` | 116 | — |
 | `core.execution.session.session_store` | 139 | — |
 | `core.execution.session.session_types` | 73 | — |
 | `core.execution.tool_evidence` | 182 | — |
 | `core.execution.watchdog` | 139 | — |
-| `core.execution.workspace_env` | 71 | — |
+| `core.execution.workspace_env` | 74 | — |
 
 ## `core.execution.engines`
 
@@ -392,7 +393,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 466 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 524 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
@@ -406,7 +407,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
 | `core.i18n.strings.tmp` | 74 | — |
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
-| `core.i18n.strings.tooling_schema` | 540 | Domain-specific i18n strings (schema.*). |
+| `core.i18n.strings.tooling_schema` | 538 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
 | `core.i18n.strings.zoom` | 26 | — |
 
@@ -998,14 +999,14 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.codex_command_hook` | 31 | Core command-policy decision for Codex's PreToolUse hook. |
 | `core.tooling.dispatch` | 256 | — |
 | `core.tooling.handler` | 902 | — |
-| `core.tooling.handler_base` | 341 | — |
+| `core.tooling.handler_base` | 340 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
 | `core.tooling.handler_comms` | 986 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
 | `core.tooling.handler_files` | 899 | — |
-| `core.tooling.handler_memory` | 1515 | — |
+| `core.tooling.handler_memory` | 1514 | — |
 | `core.tooling.handler_org` | 39 | — |
 | `core.tooling.handler_org_dashboard` | 203 | — |
 | `core.tooling.handler_perms` | 448 | — |
@@ -1014,7 +1015,7 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.handler_workspace` | 279 | — |
 | `core.tooling.org_helpers` | 158 | — |
 | `core.tooling.permissions` | 344 | — |
-| `core.tooling.policy.action_gate` | 188 | — |
+| `core.tooling.policy.action_gate` | 189 | — |
 | `core.tooling.policy.command_policy` | 496 | — |
 | `core.tooling.policy.registry` | 65 | — |
 | `core.tooling.policy.schemas.admin` | 221 | — |
@@ -1031,7 +1032,7 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.policy.schemas.task` | 204 | — |
 | `core.tooling.policy.schemas.workspace` | 46 | — |
 | `core.tooling.policy.submit_tasks` | 91 | — |
-| `core.tooling.policy.surface` | 259 | — |
+| `core.tooling.policy.surface` | 255 | — |
 | `core.tooling.policy.tool_content` | 42 | — |
 | `core.tooling.skill_creator` | 120 | — |
 | `core.tooling.skill_promotion_tool` | 176 | — |

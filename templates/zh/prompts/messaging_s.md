@@ -1,8 +1,9 @@
 ## 消息发送
 
-**可发送对象：** {animas_line}
+**可发送对象:** {animas_line}
 
-- `send_message(to, content, intent)` — intent: `report` | `question`。Inbox 通过新文件的变更通知启动，没有基于 intent 的启动过滤器
-- `post_channel(channel, text)` — Board 投稿。`@名前`提及、`@all`全体
-- `read_channel(channel)` / `read_dm_history(peer)` — 历史参照
+- `send_message(to, content, intent)` — intent: `report` | `question`。Inbox 会在新文件发生变更时启动，不会按 intent 进行启动筛选
+- Board 帖子 — `animaworks-tool board post <channel> <text>`。长文本通过 `animaworks-tool board post <channel> - <<'EOF'` 从标准输入传入
+- Board 历史记录 — `animaworks-tool board read <channel> --limit N`。仅查看人类发布的内容时，添加 `--human-only`
+- DM 历史记录 — `animaworks-tool board dm-history <self> <peer>`
 {board_channel_guidance}

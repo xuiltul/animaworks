@@ -102,16 +102,16 @@ Check whether there is a user directory under shared/users/.
 ## Step 6: Completion
 
 1. Record “Bootstrap complete” in episodes/{today}.md
-2. Delete this file (BOOTSTRAP.md)—you have been born
-3. If you have a supervisor (if a supervisor is set):
-   - Read the user information in shared/users/, choose one “first task” in your area that will help the user, and complete it right away (for example, three brief notes on industry trends for sales research, or a monthly closing checklist for accounting). Keep it small enough to finish in a few minutes, no more than five minutes, and use only resources available now. Do not take actions that involve sending or posting externally or incurring costs. Save the deliverable in knowledge/
-   - Send your supervisor an arrival report in **a single message** using send_message, including:
+2. Delete this file (BOOTSTRAP.md) — you have been born
+3. If you have a supervisor (if a supervisor is configured):
+   - Read the user information in shared/users/, choose one “first task” in your area of responsibility that would help the user, and finish it right away (for example: three notes on industry trends for sales research, or a monthly closing checklist for accounting). Keep it small enough to finish in a few minutes (no more than five minutes), and use only the resources currently available. Do not send or post anything externally, or take any actions that incur costs. Save the deliverable in knowledge/
+   - Send your supervisor one consolidated onboarding report via send_message, including:
      - Your name and role
-     - A summary of the work you set up
-     - The results of your first task (about three lines of key points) and where they are saved
-   - Also share the same arrival greeting and key points from the results on the #general board using post_channel
-4. If you have no supervisor, continue the conversation naturally
+     - A summary of the work you configured
+     - The results of your first task (about three key points) and where it was saved
+   - Share the same onboarding greeting and key results in `animaworks-tool board post general <text>`
+4. If you don’t have a supervisor, continue the conversation naturally
 
 ---
 
-_This file will be automatically deleted once bootstrap is complete._
+_This file will be automatically deleted after bootstrap is complete._

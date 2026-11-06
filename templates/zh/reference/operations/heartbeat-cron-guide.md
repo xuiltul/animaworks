@@ -142,14 +142,13 @@ Chat（与人类的对话）与 TaskExec（实际作业）维持主模型。
 配置方法：`animaworks anima set-background-model {名前} claude-sonnet-5-5`
 详情请参照 `reference/operations/model-guide.md` 的“后台模型”章节。
 
-### 心跳的内部行为
+### 心跳的内部工作机制
 
-- **崩溃恢复**：上次心跳失败时，错误信息会保存到 `state/recovery_note.md`。下次启动时会注入提示词，恢复后文件被删除。
-- **回顾记录**：心跳输出中若有 `[REFLECTION]...[/REFLECTION]` 块，会作为 `heartbeat_reflection` 记录到 activity_log，并包含在后续的心跳上下文中。
-- **部下检查**：拥有部下的 Anima，其心跳、Cron 提示词中会自动注入部下状态确认指令。
-- **会话时间限制**（`config.json` 的 `heartbeat`）：经过 `soft_timeout_seconds`（默认 300 秒）后注入用于收尾的提醒，在 `hard_timeout_seconds`（默认 600 秒）强制结束会话。
-- **空闲时自动压缩**：`heartbeat.idle_compaction_minutes`（默认 10 分钟）— 流结束后经过此时间会触发空闲自动压缩（执行引擎侧的配置）。
-- **Board 投稿**：同一 run 中对同一频道最多 1 次。跨 run 的投稿间隔没有限制。
+- **崩溃恢复**：如果上一次心跳失败，错误信息会保存到 `state/recovery_note.md`。下次启动时，这些信息会注入提示词；恢复后，文件会被删除。
+- **反思记录**：如果心跳输出中包含 `[REFLECTION]...[/REFLECTION]` 块，该内容会作为 `heartbeat_reflection` 记录到 activity_log 中，并包含在后续心跳的上下文中。
+- **部下检查**：对于有部下的 Anima，心跳和 Cron 的提示词中会自动注入检查部下状态的指令。
+- **会话时间限制**（`config.json` 的 `heartbeat`）：经过 `soft_timeout_seconds`（默认 300 秒）后，会注入收尾提醒；经过 `hard_timeout_seconds`（默认 600 秒）后，会强制结束会话。
+- **空闲时自动压缩**：`heartbeat.idle_compaction_minutes`（默认 10 分钟）— 从流结束起经过这段时间后，将执行空闲自动压缩（执行引擎侧的配置）。
 
 ### 定期心跳的调度方式
 

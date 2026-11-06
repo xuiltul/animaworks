@@ -5,22 +5,22 @@
 Reporting to your supervisor is the lifeline of organizational operations.
 Reporting at the right time and in the right format supports early problem detection and rapid decision-making.
 
-## Tool Selection
+## Tool Usage
 
-Use the `send_message` tool for reporting. Follow the constraints below.
+Use the `send_message` tool for reports. Observe the following constraints.
 
 | Tool | Purpose | Notes |
 |--------|------|------|
-| `send_message` | One-on-one reports and questions to supervisors and colleagues | Reports, progress, and decision requests go to `intent="report"`; questions go to `intent="question"`. Anima names, aliases, `slack:`/`chatwork:`, etc. (see below) |
-| `post_channel` | Team-wide announcements (Board) | Use Board for acknowledgments, thanks, and FYI. One per channel per run. No cooldown between runs |
-| `call_human` | Urgent notifications to humans | Service shutdown, security incidents, etc. |
+| `send_message` | One-to-one reports or questions to a supervisor or colleague | Use `intent="report"` for reports, progress updates, and requests for decisions; use `intent="question"` for questions. Anima names, aliases, `slack:`/`chatwork:`, etc. (see below) |
+| `animaworks-tool board post <channel> <text>` | Announcements to the whole team (Board) | Use Board for acknowledgments, thanks, and FYI messages |
+| `call_human` | Emergency notifications to humans | Service shutdowns, security incidents, etc. |
 
 **send_message constraints**:
-- `intent` is required, and the value must be **only `report` or `question`** (reports and progress use `report`, questions use `question`). **`delegation` cannot be used with `send_message`** (the tool will reject it). Use `delegate_task` for task delegation
-- Only one DM can be sent to the same recipient per run. There is no limit on the number of recipients
-- Additional communication uses Board (post_channel)
-- **Recipients** follow the "Recipient Resolution" section below (Anima names, human aliases, `slack:` / `chatwork:` direct specification, etc.)
-- **Note**: During a chat session, send_message cannot be used for human recipients. Respond directly with text instead
+- `intent` is required, and its value must be **only `report` or `question`** (`report` for reports and progress updates; `question` for questions). **`delegation` cannot be used with `send_message`** (the tool will reject it). Use `delegate_task` to delegate tasks
+- You may send only one DM to the same recipient in a given run. There is no limit on the number of recipients
+- Use `animaworks-tool board post <channel> <text>` for additional communications
+- **Recipients**: See “Resolving recipients” below (Anima names, human aliases, directly specifying `slack:` / `chatwork:`, etc.)
+- **Note**: During a chat session, you cannot use send_message to message humans. Reply directly in text instead.
 
 ### Recipient Resolution and External Delivery (`core/messaging/outbound.py`)
 

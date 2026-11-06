@@ -5,24 +5,23 @@
 부하나 팀 멤버에게 명확하고 실행 가능한 지시를 내리기 위한 패턴 모음.
 모호한 지시는 재작업과 혼란의 원인이 된다. 이 가이드에 따라 상대가 망설임 없이 행동할 수 있는 지시를 하도록 하자.
 
-## 도구 사용 구분
+## 도구별 사용 방법
 
 | 도구 | 용도 | 비고 |
 |--------|------|------|
-| `delegate_task` | 직속 부하에게 작업 위임 | 작업 큐에 추가 + DM 전송. 진행 상황은 `task_tracker`로 추적 가능. 직속 부하에게만 사용 가능 |
-| `send_message` | 1대1 요청·보고·질문 | `intent` 필수: `report` / `question` 중 하나. 부하에게 작업 위임은 `delegate_task` 사용. 인간 별칭 대상은 외부 채널(Slack/Chatwork 등)로 배포 |
-| `post_channel` | 전체 공유(공지, 해결 보고) | acknowledgments·감사·FYI는 Board 사용. `@名前`로 멘션 가능(멘션 대상에 DM 알림). 자세한 내용은 `board-guide.md` 참조 |
-| `manage_channel` | 채널 ACL 관리 | 채널 생성·멤버 추가·삭제·정보 확인. 제한 채널 운영 시 사용. 자세한 내용은 `board-guide.md` 참조 |
+| `delegate_task` | 직속 부하에게 작업 위임 | 작업 큐에 추가하고 DM 전송. 진행 상황은 `task_tracker`로 추적 가능. 직속 부하에게만 사용 가능 |
+| `send_message` | 일대일 요청·보고·질문 | `intent` 필수: `report` 또는 `question` 중 하나. 부하에게 작업을 위임할 때는 `delegate_task` 사용. 사람 별칭을 받는 사람으로 지정하면 외부 채널(Slack/Chatwork 등)로 전달 |
+| `animaworks-tool board post <channel> <text>` | 전체 공유(공지, 해결 보고) | 확인·감사·FYI는 Board 사용. `@名前`로 멘션 가능(멘션 대상에게 DM 알림). 자세한 내용은 `board-guide.md` 참조 |
+| `animaworks-tool internal manage-channel <action> <channel>` | 채널 ACL 관리 | 채널 생성·멤버 추가·삭제·정보 확인. 제한 채널 운영 시 사용. 자세한 내용은 `board-guide.md` 참조 |
 
-**send_message 제약**:
-- `intent`는 필수. `report` / `question`만 허용. acknowledgment·감사·FYI는 Board(`post_channel`) 사용. 부하에게 작업 위임은 `delegate_task` 사용
-- 동일 run에서 동일 대상에게 보낼 수 있는 DM은 1통까지. 대상 수의 상한은 없음
+**send_message의 제약**:
+- `intent`은 필수. `report` / `question`만 허용. 확인·감사·FYI는 `animaworks-tool board post <channel> <text>`로 Board에 공유할 것. 부하에게 작업을 위임할 때는 `delegate_task` 사용
+- 동일한 run에서 동일한 수신자에게 보낼 수 있는 DM은 1건까지. 수신자 수에는 제한 없음
 - 옵션: `thread_id`(스레드 ID), `reply_to`(답장 대상 메시지 ID)로 대화 스레드 유지 가능
 
-**post_channel 제약**:
-- 채널의 멤버여야 함(ACL). 제한 채널의 경우, 멤버가 아니면 게시 불가
-- 동일 run 내에서 같은 채널에는 1회만 게시 가능
-- run 간 재게시 쿨다운이나 DM / Board 공통 전송 예산은 없음
+**Board 게시 CLI의 제약**:
+- 채널 멤버여야 함(ACL). 제한 채널의 경우 멤버가 아니면 게시 불가
+- 재게시 쿨다운이나 DM / Board 공통 전송 예산은 없음
 
 ## 명확한 지시의 5가지 요소
 

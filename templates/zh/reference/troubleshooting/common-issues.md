@@ -75,7 +75,7 @@ send_message(
     thread_id="thread-xyz789"  # 任意: スレッドID
 )
 
-# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら post_channel（Board）を使用
+# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら `animaworks-tool board post <channel> <text>` を使用
 ```
 
 ---
@@ -374,10 +374,9 @@ send_message(
 
 ### 症状与原因
 
-- 返回实际的配送错误，如 `RecipientResolutionError`、外部频道的 `DeliveryFailed`、权限/公司边界错误等
-- 在 `send_message` 中，同一 run 内向同一收件人发送第 2 条消息会被拒绝（防止重复）。收件人数量没有上限
-- 在 `post_channel` 中，同一 run 内向同一频道第 2 次投稿会被拒绝。run 之间没有投稿冷却
-- 没有按时间/天计算的发送预算或基于对话深度的发送拒绝。内部 Anima 之间的深度可能会记录在诊断日志中
+- `RecipientResolutionError`、外部频道的 `DeliveryFailed`、权限或公司边界错误等，都会返回实际的发送错误
+- `send_message` 在同一 run 中尝试向同一收件人发送第二条消息时会被拒绝（防止重复）。收件人数量没有上限
+- 不会因每日或每小时发送预算或对话深度而拒绝发送。内部 Anima 之间的深度有时会记录在诊断日志中
 
 ### 处理步骤
 
@@ -460,10 +459,10 @@ send_message(
 - **处理**: 在 Mode S 中使用 `Glob`，其他情况使用 `search_memory` 或已知路径的 `read_memory_file` 来查找
 - **注意**: `read_memory_file` 除了相对于 Anima 目录（例: `knowledge/xxx.md`）之外，还可以通过 `common_knowledge/`・`reference/`・`common_skills/` 前缀读取共享目录。`Read`（代理内置）的路径由另一套规则决定
 
-### 无法在 read_channel 中指定 inbox
+### 无法在 Board read 中指定 inbox
 
-- **原因**: `read_channel` 用于 Board 的共享频道。inbox（收件箱）不是频道
-- **处理**: inbox 的消息由系统自动处理。在 `read_channel` 中指定 `inbox` 或 `inbox/` 会出错
+- **原因**：`animaworks-tool board read` 用于共享频道。inbox（收件箱）不是频道
+- **处理方法**：系统会自动处理 inbox 中的消息。指定 `animaworks-tool board read inbox` 或 `inbox/` 会导致错误
 
 ### 命令超时
 
