@@ -186,6 +186,14 @@ class TestIsChannelMember:
         save_channel_meta(shared_dir, "secret", ChannelMeta(members=["alice"]))
         assert is_channel_member(shared_dir, "secret", "unknown", source="human") is True
 
+    def test_unreadable_meta_denies_anima_but_keeps_human_access(self, shared_dir: Path):
+        meta_path = shared_dir / "channels" / "broken.meta.json"
+        meta_path.write_text("not valid json{{{", encoding="utf-8")
+
+        assert is_channel_member(shared_dir, "broken", "alice") is False
+        assert is_channel_member(shared_dir, "broken", "alice", source="human") is True
+        assert load_channel_meta(shared_dir, "broken") is None
+
 
 # ── post_channel with ACL ────────────────────────────────
 

@@ -450,6 +450,8 @@ async def read_old_channels(
 
     anima_name = anima_dir.name
     mention_tag = f"@{anima_name}"
+    from core.messaging.messenger import is_channel_member
+
     now = now_local()
     cutoff_24h = now - timedelta(hours=24)
 
@@ -470,6 +472,9 @@ async def read_old_channels(
             )
             is None
         ):
+            continue
+
+        if not is_channel_member(shared_dir, channel_name, anima_name):
             continue
 
         try:

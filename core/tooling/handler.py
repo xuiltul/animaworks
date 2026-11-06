@@ -138,6 +138,7 @@ class ToolHandler(
         self._pending_notifications: list[dict[str, Any]] = []
         self._last_call_human_callback_id: str | None = None
         self._last_call_human_denied = False
+        self._last_post_channel_succeeded = False
         self._call_human_keys = CallHumanKeys()
         self._replied_to: dict[str, set[str]] = {
             "chat": set(),
@@ -656,6 +657,10 @@ class ToolHandler(
         """Record tool usage in unified activity log."""
         try:
             activity_type = self._ACTIVITY_TYPE_MAP.get(name)
+            if name == "post_channel":
+                if not self._last_post_channel_succeeded:
+                    activity_type = None
+                self._last_post_channel_succeeded = False
             if name == "call_human" and self._last_call_human_denied:
                 activity_type = None
                 self._last_call_human_denied = False

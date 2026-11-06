@@ -1214,7 +1214,8 @@ def create_internal_router() -> APIRouter:
     @internal.post("/internal/post-channel")
     def internal_post_channel(body: InternalPostChannelRequest, request: Request):
         """Append a channel post outside sandbox EROFS constraints."""
-        denied = ensure_self(getattr(request.state, "internal_caller", None), body.from_anima, path=request.url.path)
+        caller = getattr(request.state, "internal_caller", None)
+        denied = ensure_self(caller, body.from_anima, path=request.url.path)
         if denied is not None:
             return denied
         from core.anima.factory import validate_anima_name
@@ -1222,20 +1223,37 @@ def create_internal_router() -> APIRouter:
         from core.messaging.messenger import Messenger
         from core.paths import get_shared_dir
 
+        if caller is None and body.source != "anima":
+            from core.i18n import t
+
+            return JSONResponse(status_code=403, content={"detail": t("server.internal_auth_required")})
+
         if validate_anima_name(body.from_anima):
             return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
-        messenger = Messenger(get_shared_dir(), body.from_anima)
+
+        if caller is not None and caller.kind != "operator":
+            post_anima = caller.name
+            post_source = "anima"
+            from_name = None
+        else:
+            post_anima = body.from_anima
+            post_source = body.source
+            from_name = body.from_name
+
+        messenger = Messenger(get_shared_dir(), post_anima)
         try:
             messenger.post_channel(
                 body.channel,
                 body.text,
-                source=body.source,
-                from_name=body.from_name,
+                source=post_source,
+                from_name=from_name,
             )
         except ChannelNotFoundError as exc:
             return JSONResponse(status_code=404, content={"detail": str(exc)})
         except ChannelAccessDeniedError as exc:
             return JSONResponse(status_code=403, content={"detail": str(exc)})
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"detail": str(exc)})
         logger.info("internal post-channel: %s -> #%s", body.from_anima, body.channel)
         return {"ok": True}
 

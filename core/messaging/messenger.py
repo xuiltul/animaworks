@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.exceptions import (
     ChannelAccessDeniedError,
@@ -147,15 +147,24 @@ def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
 
     Returns ``None`` when no meta file exists (channel is open / legacy).
     """
+    state, meta = load_channel_meta_state(shared_dir, channel)
+    return meta if state == "ok" else None
+
+
+def load_channel_meta_state(
+    shared_dir: Path,
+    channel: str,
+) -> tuple[Literal["missing", "ok", "unreadable"], ChannelMeta | None]:
+    """Load channel metadata while distinguishing absent and unreadable files."""
     meta_path = shared_dir / "channels" / f"{channel}.meta.json"
-    if not meta_path.exists():
-        return None
     try:
         data = json.loads(meta_path.read_text(encoding="utf-8"))
-        return _channel_meta_from_data(data)
-    except (json.JSONDecodeError, OSError) as exc:
+        return "ok", _channel_meta_from_data(data)
+    except FileNotFoundError:
+        return "missing", None
+    except (json.JSONDecodeError, OSError, UnicodeError, AttributeError, TypeError) as exc:
         logger.warning("Failed to load channel meta for %s: %s", channel, exc)
-        return None
+        return "unreadable", None
 
 
 def save_channel_meta(shared_dir: Path, channel: str, meta: ChannelMeta) -> None:
@@ -202,8 +211,10 @@ def is_channel_member(
     """
     if source == "human":
         return True
-    meta = load_channel_meta(shared_dir, channel)
-    if meta is None or (not meta.members and not meta.closed):
+    state, meta = load_channel_meta_state(shared_dir, channel)
+    if state == "unreadable":
+        return False
+    if state == "missing" or meta is None or (not meta.members and not meta.closed):
         return True
     if meta.closed:
         return False
@@ -412,21 +423,21 @@ class Messenger:
                 from core.config.models import load_config
 
                 known_animas = set(load_config().animas.keys())
-                if known_animas and self.anima_name in known_animas and poster not in known_animas:
-                    logger.warning(
-                        "Rejecting channel post with unknown from_name=%r to #%s",
-                        poster,
-                        channel,
-                    )
-                    return
-            except Exception:
+            except Exception as exc:
                 logger.warning(
                     "Failed to validate channel from_name=%r for #%s; refusing post",
                     poster,
                     channel,
                     exc_info=True,
                 )
-                return
+                raise ValueError(t("handler.channel_post_validation_failed")) from exc
+            if known_animas and self.anima_name in known_animas and poster not in known_animas:
+                logger.warning(
+                    "Rejecting channel post with unknown from_name=%r to #%s",
+                    poster,
+                    channel,
+                )
+                raise ValueError(t("handler.channel_post_invalid_poster", poster=poster))
         channels_dir.mkdir(parents=True, exist_ok=True)
         try:
             append_jsonl_locked(
@@ -548,9 +559,14 @@ class Messenger:
         """Read messages mentioning @name from a shared channel."""
         _validate_name(channel, "channel name")
         target = name or self.anima_name
-        mention_tag = f"@{target}"
+        from core.messaging.mentions import extract_mentions
+
         all_msgs = self.read_channel(channel, limit=1000, source=source)
-        mentions = [m for m in all_msgs if mention_tag in m.get("text", "")]
+        mentions = [
+            m
+            for m in all_msgs
+            if any(mention.lower() == target.lower() for mention in extract_mentions(m.get("text", ""), {target}))
+        ]
         return mentions[-limit:]
 
     def read_dm_history(
@@ -1074,7 +1090,7 @@ class Messenger:
             human_name = external_user_id or "human"
             try:
                 self.post_channel("general", content, source="human", from_name=human_name)
-            except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
+            except (ChannelNotFoundError, ChannelAccessDeniedError, ValueError) as exc:
                 logger.warning(
                     "Skipping @all mirror to #general: %s",
                     exc,
