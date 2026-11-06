@@ -659,17 +659,10 @@ async def _startup_animas_background(app: FastAPI, *, suppress_errors: bool = Tr
                 app.state.github_gateway_manager = None
 
             # ── Slack channel → board sync (initial) ──────────────
-            if app.state.slack_socket_manager is not None:
-                try:
-                    from server.gateways.slack_channel_sync import SlackChannelSync
-
-                    channel_sync = SlackChannelSync()
-                    await channel_sync.sync(app.state.slack_socket_manager)
-                    app.state.slack_channel_sync = channel_sync
-                except Exception:
-                    logger.warning("Initial Slack channel sync failed", exc_info=True)
-                    app.state.slack_channel_sync = None
-            else:
+            try:
+                await _sync_slack_channels_if_enabled(app)
+            except Exception:
+                logger.warning("Initial Slack channel sync failed", exc_info=True)
                 app.state.slack_channel_sync = None
 
         # ── ConfigReloadManager ───────────────────────────────
@@ -686,6 +679,46 @@ async def _startup_animas_background(app: FastAPI, *, suppress_errors: bool = Tr
         logger.exception("Background anima startup failed")
         if not suppress_errors:
             raise
+
+
+async def _sync_slack_channels_if_enabled(app: FastAPI) -> None:
+    """Run Slack channel discovery only when explicitly enabled in config.
+
+    Config is loaded on every call so a hot reload can enable or disable
+    discovery without restarting the server.
+    """
+    try:
+        discovery_enabled = load_config().external_messaging.slack.channel_discovery
+    except Exception:
+        logger.debug("Could not read Slack channel discovery setting; skipping sync", exc_info=True)
+        discovery_enabled = False
+
+    if not discovery_enabled:
+        app.state.slack_channel_sync = None
+        return
+
+    manager = getattr(app.state, "slack_socket_manager", None)
+    if manager is None:
+        app.state.slack_channel_sync = None
+        return
+
+    from server.gateways.slack_channel_sync import SlackChannelSync
+
+    sync = getattr(app.state, "slack_channel_sync", None)
+    if sync is None:
+        sync = SlackChannelSync()
+    await sync.sync(manager)
+    app.state.slack_channel_sync = sync
+
+
+async def _slack_channel_resync(app: FastAPI) -> None:
+    """Periodically sync Slack channels, honoring the current discovery setting."""
+    try:
+        await _sync_slack_channels_if_enabled(app)
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.debug("Periodic Slack channel sync failed", exc_info=True)
 
 
 def _prepare_child_env_urls(app: FastAPI) -> None:
@@ -879,20 +912,10 @@ async def _activate_runtime_services(app: FastAPI) -> None:
     )
 
     # ── Slack channel → board periodic resync ─────────
-    async def _slack_channel_resync() -> None:
-        try:
-            sync = getattr(app.state, "slack_channel_sync", None)
-            mgr = getattr(app.state, "slack_socket_manager", None)
-            if sync is not None and mgr is not None:
-                await sync.sync(mgr)
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.debug("Periodic Slack channel sync failed", exc_info=True)
-
     msg_log_scheduler.add_job(
         _slack_channel_resync,
         IntervalTrigger(minutes=5),
+        args=[app],
         id="slack_channel_sync",
         name="System: Slack Channel → Board Sync",
         replace_existing=True,
