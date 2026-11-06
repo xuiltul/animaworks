@@ -136,7 +136,7 @@ class TestActionRulesGuideTemplate:
             if not any(part in historical_dirs for part in path.parts)
         )
         pattern = re.compile(
-            r"Channel D|channel D|channel_d|D:\s*Skill Match|"
+            r"Channel D|channel D|\bchannel_d\b|D:\s*Skill Match|"
             r"`skill`\s*(?:/|\||tool|ツール|도구)|`skill` tool|skill tool"
         )
         for path in paths:

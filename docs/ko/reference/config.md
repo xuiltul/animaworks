@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=2bceb82e46bd99c9be9680d66d2682b315501187ad1d2f428667edba281c8449 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=2d0c336014450a74e74398208f0cdaf110308cc0add681c50dba1bea68c70e26 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -501,9 +501,9 @@
 
 ### `external_messaging`
 
-| 키 | 유형 | 기본값 | 설명 |
+| 키 | 형식 | 기본값 | 설명 |
 |---|---|---|---|
-| `external_messaging` | `ExternalMessagingConfig` | `{ExternalMessagingConfig}` | Slack 등 외부 메시징 연동. |
+| `external_messaging` | `ExternalMessagingConfig` | `{ExternalMessagingConfig}` | Slack 등의 외부 메시징 연동. |
 | `external_messaging.preferred_channel` | `str` | `"slack"` | "slack" \| "chatwork" \| "discord" |
 | `external_messaging.user_aliases` | `dict[str, UserAliasConfig]` | `{}` | 별칭 → 연락처 정보 |
 | `external_messaging.user_aliases.slack_user_id` | `str` | `""` | — |
@@ -514,48 +514,51 @@
 | `external_messaging.slack` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.slack.enabled` | `bool` | `false` | — |
 | `external_messaging.slack.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.slack.channel_discovery` | `bool` | `false` | Slack 채널 자동 검색(SlackChannelSync) 실행; Slack 전용 |
 | `external_messaging.slack.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = 이 채널 무시) |
-| `external_messaging.slack.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 Anima |
+| `external_messaging.slack.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 anima |
 | `external_messaging.slack.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (Anima별 웹훅 라우팅) |
 | `external_messaging.slack.auto_response` | `bool` | `false` | LLM 응답을 원래 플랫폼에 자동 게시 |
 | `external_messaging.slack.board_mapping` | `dict[str, str]` | `{}` | channel_id → animaworks_board_name (자동 입력) |
-| `external_messaging.slack.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보낼 동기화 대상 보드 이름(허용 목록) |
-| `external_messaging.slack.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있으면 매핑된 모든 보드의 동기화를 허용 |
+| `external_messaging.slack.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보내 동기화할 보드 이름(허용 목록) |
+| `external_messaging.slack.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있을 때 매핑된 모든 보드 동기화를 허용 |
 | `external_messaging.slack.guild_id` | `str` | `""` | Discord 길드 스노플레이크 ID (Discord 전용) |
 | `external_messaging.slack.channel_members` | `dict[str, list[str]]` | `{}` | channel_id → [anima_name, ...] (Discord 전용) |
-| `external_messaging.slack.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 귀속 없음) |
+| `external_messaging.slack.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 출처 표시 안 함) |
 | `external_messaging.chatwork` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.chatwork.enabled` | `bool` | `false` | — |
 | `external_messaging.chatwork.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.chatwork.channel_discovery` | `bool` | `false` | Slack 채널 자동 검색(SlackChannelSync) 실행; Slack 전용 |
 | `external_messaging.chatwork.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = 이 채널 무시) |
-| `external_messaging.chatwork.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 Anima |
+| `external_messaging.chatwork.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 anima |
 | `external_messaging.chatwork.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (Anima별 웹훅 라우팅) |
 | `external_messaging.chatwork.auto_response` | `bool` | `false` | LLM 응답을 원래 플랫폼에 자동 게시 |
 | `external_messaging.chatwork.board_mapping` | `dict[str, str]` | `{}` | channel_id → animaworks_board_name (자동 입력) |
-| `external_messaging.chatwork.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보낼 동기화 대상 보드 이름(허용 목록) |
-| `external_messaging.chatwork.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있으면 매핑된 모든 보드의 동기화를 허용 |
+| `external_messaging.chatwork.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보내 동기화할 보드 이름(허용 목록) |
+| `external_messaging.chatwork.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있을 때 매핑된 모든 보드 동기화를 허용 |
 | `external_messaging.chatwork.guild_id` | `str` | `""` | Discord 길드 스노플레이크 ID (Discord 전용) |
 | `external_messaging.chatwork.channel_members` | `dict[str, list[str]]` | `{}` | channel_id → [anima_name, ...] (Discord 전용) |
-| `external_messaging.chatwork.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 귀속 없음) |
+| `external_messaging.chatwork.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 출처 표시 안 함) |
 | `external_messaging.discord` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.discord.enabled` | `bool` | `false` | — |
 | `external_messaging.discord.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.discord.channel_discovery` | `bool` | `false` | Slack 채널 자동 검색(SlackChannelSync) 실행; Slack 전용 |
 | `external_messaging.discord.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = 이 채널 무시) |
-| `external_messaging.discord.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 Anima |
+| `external_messaging.discord.default_anima` | `str` | `""` | 매핑되지 않은 채널의 대체 anima |
 | `external_messaging.discord.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (Anima별 웹훅 라우팅) |
 | `external_messaging.discord.auto_response` | `bool` | `false` | LLM 응답을 원래 플랫폼에 자동 게시 |
 | `external_messaging.discord.board_mapping` | `dict[str, str]` | `{}` | channel_id → animaworks_board_name (자동 입력) |
-| `external_messaging.discord.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보낼 동기화 대상 보드 이름(허용 목록) |
-| `external_messaging.discord.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있으면 매핑된 모든 보드의 동기화를 허용 |
+| `external_messaging.discord.board_outbound_sync` | `list[str]` | `[]` | 이 플랫폼으로 내보내 동기화할 보드 이름(허용 목록) |
+| `external_messaging.discord.board_outbound_sync_all` | `bool` | `false` | 허용 목록이 비어 있을 때 매핑된 모든 보드 동기화를 허용 |
 | `external_messaging.discord.guild_id` | `str` | `""` | Discord 길드 스노플레이크 ID (Discord 전용) |
 | `external_messaging.discord.channel_members` | `dict[str, list[str]]` | `{}` | channel_id → [anima_name, ...] (Discord 전용) |
-| `external_messaging.discord.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 귀속 없음) |
+| `external_messaging.discord.default_channel_company` | `str` | `""` | 자동 생성된 보드의 회사 (비어 있으면 출처 표시 안 함) |
 | `external_messaging.zoom` | `ZoomRTMSConfig` | `{ZoomRTMSConfig}` | — |
 | `external_messaging.zoom.enabled` | `bool` | `false` | — |
-| `external_messaging.zoom.default_anima` | `str` | `""` | 매핑되지 않은 회의의 대체 Anima |
+| `external_messaging.zoom.default_anima` | `str` | `""` | 매핑되지 않은 회의의 대체 anima |
 | `external_messaging.zoom.meeting_mapping` | `dict[str, str]` | `{}` | meeting_id → anima_name |
 | `external_messaging.zoom.chunk_interval_seconds` | `int` | `300` | 버퍼링된 대화록의 플러시 간격 |
-| `external_messaging.zoom.chunk_max_chars` | `int` | `4000` | 청크당 최대 문자 수 (먼저 도달하는 기준으로 플러시) |
+| `external_messaging.zoom.chunk_max_chars` | `int` | `4000` | 청크당 최대 문자 수 (먼저 도달하는 조건에 따라 플러시) |
 
 ### `external_tasks`
 
