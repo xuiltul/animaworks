@@ -51,6 +51,7 @@ from core.tooling.handler_base import (  # noqa: F401
     active_session_type,
     meeting_mode,
     suppress_board_fanout,
+    suppress_board_fanout_channels,
 )
 
 # ── Import Mixins ──

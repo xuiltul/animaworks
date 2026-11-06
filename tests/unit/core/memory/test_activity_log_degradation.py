@@ -43,6 +43,7 @@ def anima_dir(tmp_path: Path) -> Path:
     """Create a temporary anima directory with required subdirectories."""
     d = tmp_path / "animas" / "test-anima"
     d.mkdir(parents=True)
+    (d / "status.json").write_text("{}", encoding="utf-8")
     (d / "activity_log").mkdir()
     (d / "episodes").mkdir()
     (d / "knowledge").mkdir()

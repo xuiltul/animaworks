@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from core.exceptions import (
     ChannelAccessDeniedError,
@@ -28,6 +28,9 @@ from core.i18n import t
 from core.platform.atomic_io import append_jsonl_locked, atomic_write_json, update_json
 from core.schemas import EXTERNAL_PLATFORM_SOURCES, Message
 from core.time_utils import ensure_aware, now_iso, now_local
+
+if TYPE_CHECKING:
+    from core.messaging.board import Principal
 
 logger = logging.getLogger("animaworks.messenger")
 
@@ -219,6 +222,29 @@ def is_channel_member(
     if meta.closed:
         return False
     return anima_name in meta.members
+
+
+def _read_principal(shared_dir: Path, name: str, source: str) -> Principal:
+    """Build the Board principal for a read-side caller."""
+    from core.messaging.board import anima_principal, human_principal, operator_principal
+
+    if source == "human":
+        return human_principal(name)
+    if source == "operator":
+        return operator_principal(name)
+    animas_dir = shared_dir.parent / "animas"
+    if (animas_dir / name).is_dir():
+        return anima_principal(name, animas_dir=animas_dir)
+    # Host CLI callers (``Messenger(shared_dir, "cli")``) are operators, not Animas.
+    return operator_principal(name)
+
+
+def _is_human_board_entry(entry: dict[str, Any]) -> bool:
+    """Return whether a Board row originated from a human or external user."""
+    kind = entry.get("kind")
+    if kind is not None:
+        return kind in {"human", "external_user"}
+    return entry.get("source") == "human"
 
 
 @dataclass
@@ -464,7 +490,10 @@ class Messenger:
         _validate_name(channel, "channel name")
 
         # ── ACL check ──
-        if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
+        from core.messaging.board import board_access
+
+        principal = _read_principal(self.shared_dir, self.anima_name, source)
+        if not board_access(self.shared_dir, channel, principal, "read").allowed:
             logger.warning(
                 "ACL denied: %s cannot read #%s",
                 self.anima_name,
@@ -488,7 +517,7 @@ class Messenger:
                 entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if human_only and entry.get("source") != "human":
+            if human_only and not _is_human_board_entry(entry):
                 continue
             entries.append(entry)
             if len(entries) >= limit:

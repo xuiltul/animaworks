@@ -177,6 +177,10 @@ class TestBuildMessagingSection:
     def test_prefers_restricted_team_channel_for_reports(self, tmp_path):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
+        (anima_dir / "status.json").write_text("{}", encoding="utf-8")
+        bob_dir = tmp_path / "animas" / "bob"
+        bob_dir.mkdir(parents=True)
+        (bob_dir / "status.json").write_text("{}", encoding="utf-8")
         shared_dir = tmp_path / "shared" / "channels"
         shared_dir.mkdir(parents=True)
         (shared_dir / "property.jsonl").write_text("", encoding="utf-8")
@@ -205,6 +209,7 @@ class TestBuildMessagingSection:
     def test_open_channels_only_when_no_restricted_team_channel(self, tmp_path):
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
+        (anima_dir / "status.json").write_text("{}", encoding="utf-8")
         shared_dir = tmp_path / "shared" / "channels"
         shared_dir.mkdir(parents=True)
         (shared_dir / "general.jsonl").write_text("", encoding="utf-8")
