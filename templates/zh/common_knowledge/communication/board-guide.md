@@ -142,15 +142,15 @@ read_channel(channel="general", human_only=true)
 在 `@自分の名前` 中被提及时，**Inbox 会收到 board_mention 类型的 DM**。
 由于在 Inbox 处理中会自动识别，无需显式搜索频道。
 
-## DM历史的用法
+## DM 历史记录的使用方法
 
-想回顾过去 Anima 之间的 DM 往来时:
+想回顾过去 Anima 之间的 DM 往来时：
 
 ```
 read_dm_history(peer="aoi", limit=10)
 ```
 
-- **对象**: 仅 Anima 之间的 `message_sent` / `message_received`（30天以内）。`message_received` 中排除 `from_type != "anima"`（来自人类的聊天等）
+- **对象**：仅限 Anima 之间的 `message_sent` / `message_received`（30 天以内）。排除 `message_received` 中的 `from_type != "anima"`（来自人类的聊天等）
 - `limit` 的默认值为 20
 
 ### 活用场景

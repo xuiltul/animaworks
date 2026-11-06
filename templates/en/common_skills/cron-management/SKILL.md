@@ -12,26 +12,26 @@ description: >-
 
 Parsing of cron is handled by `core/runtime/schedule_parser.py` (`parse_cron_md` / `parse_schedule`), while registration, execution, and reloading are handled by `core/runtime/scheduler_manager.py` (APScheduler, `AsyncIOScheduler(timezone=get_app_timezone())`).
 
-### `core/tasks/background.py` (a separate system from cron)
+### `core/tasks/background.py` (separate from cron)
 
-This module does **not perform cron scheduling**. It handles background execution of long-running tool calls. Do not confuse it with cron.
+This module **does not handle cron scheduling**. It handles background execution of long-running tool calls. Do not confuse it with cron.
 
 **`BackgroundTaskManager`**
 
-- **Role**: Executes target tools asynchronously on `asyncio` and saves status to disk.
-- **Persistence location**: `state/background_tasks/{task_id}.json` (`pending` / `running` / `completed` / `failed`, result strings, errors, timestamps).
+- **Role**: Run the target tool asynchronously on `asyncio` and save its status to disk.
+- **Persistence location**: `state/background_tasks/{task_id}.json` (`pending` / `running` / `completed` / `failed`, result strings, errors, and timestamps).
 - **Public API (overview)**:
-  - `submit(tool_name, tool_args, execute_fn)` — Runs synchronous execution functions in a thread pool.
+  - `submit(tool_name, tool_args, execute_fn)` — Run a synchronous execution function in a thread pool.
   - `submit_async(...)` — Asynchronous `execute_fn` version.
-  - `get_task` / `list_tasks` / `active_count` — Queries.
-  - `cleanup_old_tasks(max_age_hours=24)` — Deletes completed and failed tasks older than **24 hours**. Additionally, deletes JSON files that have remained in `running` state for more than **48 hours** (crash orphans).
-- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: The set of background target tools is merged from the following **3 layers** (later wins).
+  - `get_task` / `list_tasks` / `active_count` — Query.
+  - `cleanup_old_tasks(max_age_hours=24)` — Delete completed and failed tasks older than **24 hours**. Also delete JSON files that have remained in `running` status for over **48 hours** (crash orphans).
+- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: The set of tools eligible for background execution is determined by a **three-layer merge** (later entries take precedence).
   1. In-code defaults `_DEFAULT_ELIGIBLE_TOOLS` (a fixed list compatible with Mode A)
-  2. Entries from `EXECUTION_PROFILE` to `background_eligible: true` in each tool module (`core.integrations._base.get_eligible_tools_from_profiles`). Keys use the `"{tool}:{subcommand}"` format (consistent with Mode S's `submit`)
-  3. `config_eligible` passed from `config.json` and others (explicit override)
-- **`is_eligible(tool_name)`**: Matching is possible by either of the following names — schema name (e.g., `generate_3d_model`), profile key (e.g., `image_gen:3d`).
+  2. Entries for `background_eligible: true` from each tool module’s `EXECUTION_PROFILE` (`core.integrations._base.get_eligible_tools_from_profiles`). Keys use the `"{tool}:{subcommand}"` format (consistent with Mode S’s `submit`)
+  3. `config_eligible` passed in from `config.json` and similar sources (explicit overrides)
+- **`is_eligible(tool_name)`**: Matching works with either name — the schema name (e.g., `generate_3d_model`) or the profile key (e.g., `image_gen:3d`).
 - **Examples included in `_DEFAULT_ELIGIBLE_TOOLS` by default** (values are approximate seconds): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations` (30 each), `local_llm` / `run_command` (60 each).
-- **Completion hook**: `Callable[[BackgroundTask], Awaitable[None]]` can be set in `on_complete`. The application side can write Markdown notifications to `state/background_notifications/` from here (`background.py` itself does not touch the notification directory).
+- **Completion hook**: You can set `Callable[[BackgroundTask], Awaitable[None]]` on `on_complete`. The application can use this to send Markdown notifications to `state/background_notifications/`, for example (`background.py` itself does not interact with the notification directory).
 
 ---
 

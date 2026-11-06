@@ -60,20 +60,20 @@ IDENTITY.md / SOUL.md와 AGENTS.md을 보강하고, HEARTBEAT.md와 cron.md를 �
 
 Chat과 Heartbeat(그리고 cron / TaskExec 등의 백그라운드 처리)는 **별도 락**으로 움직이므로, Heartbeat 실행 중에도 인간의 대화에 즉시 응답할 수 있다.
 
-#### 백그라운드 도구 실행(BackgroundTaskManager)
+#### 백그라운드 도구 실행（BackgroundTaskManager）
 
-`core/tasks/background.py`의 `BackgroundTaskManager`는 **장시간이 될 수 있는 외부 도구 호출을 백그라운드에서 실행**하고, 상태와 결과를 디스크에 남겨 이후에 참조할 수 있게 한다. `config.json`의 `background_task.enabled`가 `false`일 때는 매니저 자체가 비활성화되며, 에이전트를 통한 백그라운드 투입도 이루어지지 않는다.
+`core/tasks/background.py`의 `BackgroundTaskManager`은 **오래 걸리기 쉬운 외부 도구 호출을 백그라운드에서 실행**하고, 상태와 결과를 디스크에 저장해 나중에 참조할 수 있도록 한다. `config.json`의 `background_task.enabled`이 `false`인 경우에는 관리자 자체가 비활성화되어 에이전트를 통한 백그라운드 작업 제출도 이루어지지 않는다.
 
-- **영속화**: 각 작업은 `TaskStatus`(`running` / `completed` / `failed` 등)와 결과 문자열을 `state/background_tasks/{task_id}.json`에 저장한다. 메모리상의 캐시와 디스크 양쪽에서 `get_task` / `list_tasks`로 참조할 수 있다.
-- **투입 API**: `submit`는 `task_id`을 즉시 반환하고, `asyncio.create_task`로 래핑한 `_run_task`가 본체를 실행한다. 동기 도구 구현은 `run_in_executor`에서 스레드 풀 위에서 실행된다. 비동기 도구를 위해 `submit_async`도 있다. 완료 시 임의의 `on_complete` 콜백을 `await`한다(콜백 내부의 예외는 로그에 기록되며, 작업 결과에는 영향을 주지 않는다).
-- **대상 도구 결정 방법**(`BackgroundTaskManager.from_profiles`, **나중 것이 우선**):
+- **영속화**: 각 작업은 `TaskStatus`(`running` / `completed` / `failed` 등)과 결과 문자열을 `state/background_tasks/{task_id}.json`에 저장한다. 메모리 캐시와 디스크 모두에서 `get_task` / `list_tasks`로 참조할 수 있다.
+- **제출 API**: `submit`는 `task_id`을 즉시 반환하고, `asyncio.create_task`로 감싼 `_run_task`가 본 작업을 실행한다. 동기 도구 구현은 `run_in_executor`을 통해 스레드 풀에서 실행된다. 비동기 도구용으로 `submit_async`도 있다. 작업 완료 시 선택적으로 `on_complete` 콜백을 `await`한다(콜백 내 예외는 로그에 기록되며 작업 결과에는 영향을 주지 않는다).
+- **대상 도구 결정 방법**（`BackgroundTaskManager.from_profiles`, **나중에 지정한 항목이 우선**）:
   1. `_DEFAULT_ELIGIBLE_TOOLS`(코드 기본값·Mode A용 스키마 이름. 예: `generate_character_assets`, `generate_fullbody`, `generate_bustup`, `generate_icon`, `generate_chibi`, `generate_3d_model`, `generate_rigged_model`, `generate_animations`, `local_llm`, `run_command` 등)
-  2. `load_execution_profiles(TOOL_MODULES)`로 읽어들인 각 모듈의 `EXECUTION_PROFILE` 중 `background_eligible: true`의 엔트리. 키는 **`tool:subcmd`** 형식이 되며, 값은 `expected_seconds`(미설정 시 60)
-  3. `config.json`의 `background_task.eligible_tools`(각 도구의 `threshold_s`가 같은 맵의 값으로 덮어씀)
-  `is_eligible(name)`는 **이름이 맵에 포함되는지만** 본다(값은 참고용 초 수로 유지되며, 임계값 비교에는 사용되지 않는다).
-- **에이전트 경유**: `ToolHandler`가 미등록 도구를 외부 디스패치할 때, 이름이 위 맵에 있으면 `BackgroundTaskManager.submit`로 보내고, 즉시 `task_id`을 포함한 JSON을 반환한다. 결과 확인은 `check_background_task` / `list_background_tasks` 등의 도구로 수행한다.
-- **CLI 경유(`animaworks-tool submit`)**: 커맨드형 도구도 TaskStore에 `task_type="command"`로 등록된다. `PendingTaskExecutor`가 TaskStore에서 시도를 가져오고, BackgroundTaskManager가 실행한다. 결과 상태는 호환성을 위해 `state/background_tasks/{task_id}.json`에도 저장되며, 완료 알림에서 확인할 수 있다.
-- **정리**: `cleanup_old_tasks(max_age_hours=24)`는 `completed` / `failed`로 `completed_at`에서 지정 시간을 초과한 JSON과, `running` 상태 그대로 `created_at`에서 **48시간 초과** 경과한 파일(프로세스 크래시 등의 고아)을 삭제한다. 보존 시간은 호출 측이 인수 `max_age_hours`로 지정하며, 설정 키는 없다.
+  2. `load_execution_profiles(TOOL_MODULES)`로 불러온 각 모듈의 `EXECUTION_PROFILE` 중 `background_eligible: true` 항목. 키는 **`tool:subcmd`** 형식이며, 값은 `expected_seconds`(설정되지 않은 경우 60)
+  3. `config.json`의 `background_task.eligible_tools`(각 도구의 `threshold_s`가 동일한 맵의 값으로 덮어써짐)
+  `is_eligible(name)`은 **이름이 맵에 포함되어 있는지만** 확인한다(값은 참고용 초 단위로 저장되며, 임계값 비교에는 사용되지 않는다).
+- **에이전트를 통한 실행**: `ToolHandler`이 등록되지 않은 도구를 외부 디스패치할 때, 이름이 위 맵에 있으면 `BackgroundTaskManager.submit`로 넘기고 `task_id`을 포함한 JSON을 즉시 반환한다. 결과는 `check_background_task` / `list_background_tasks` 등의 도구로 확인한다.
+- **CLI를 통한 실행（`animaworks-tool submit`）**: 명령어형 도구도 TaskStore에 `task_type="command"`로 등록된다. `PendingTaskExecutor`이 TaskStore에서 실행 시도를 가져오고 BackgroundTaskManager가 실행한다. 호환성을 위해 결과 상태는 `state/background_tasks/{task_id}.json`에도 저장되며, 완료 알림에서 확인할 수 있다.
+- **정리**: `cleanup_old_tasks(max_age_hours=24)`은 `completed` / `failed`을 통해 `completed_at`에서 지정된 시간을 초과한 JSON과, `running` 상태로 `created_at`부터 **48시간 넘게** 지난 파일(프로세스 충돌 등으로 남은 고아 파일)을 삭제한다. 보존 시간은 호출자가 인수 `max_age_hours`으로 지정하며, 설정 키는 없다.
 
 
 ### 4. 성장

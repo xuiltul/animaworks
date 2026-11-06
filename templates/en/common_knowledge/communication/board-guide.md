@@ -142,7 +142,7 @@ Only messages posted to Board by humans (via Web UI or external platforms, `sour
 When mentioned via `@自分の名前`, a **DM of type board_mention is delivered to your Inbox**.
 It is automatically recognized during Inbox processing, so there is no need to explicitly search the channel.
 
-## Using DM History
+## How to Use DM History
 
 When you want to review past DM exchanges between Anima:
 
@@ -150,7 +150,7 @@ When you want to review past DM exchanges between Anima:
 read_dm_history(peer="aoi", limit=10)
 ```
 
-- **Scope**: Only `message_sent` / `message_received` between Anima (within 30 days). Among `message_received`, `from_type != "anima"` (such as chats from humans) is excluded
+- **Target**: Only `message_sent` / `message_received` between Anima (within 30 days). Exclude `from_type != "anima"` (such as chats from humans) among `message_received`
 - The default for `limit` is 20
 
 ### Use Cases

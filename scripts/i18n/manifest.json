@@ -3504,7 +3504,7 @@
     },
     "templates/en/common_knowledge/anatomy/what-is-anima.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "bd7494ec0f0ceeed623ab5de4948e9befa4779ada3c132933f14b732858cfa28",
@@ -3517,12 +3517,12 @@
         "8006a2ebc4f5c0a27749d00e438df2821e589355f8af93f9205b391157bf0ab5",
         "63f149baaa45ced1d28461475896982295a8ea1d82788422634ef1fa63916fc4",
         "b950fe83cddf681896bd618b5b38c0270a3687c6fde6e645bfc0b1b5634d942a",
-        "8d60c485c1ce8bb3e50257c83f8b558a1ec8e4ae3bb945bd31f6c2db3cc4a658",
+        "1550575285f91a77b7ef9b27b0c48c90e6fbb2fb7fcef47325404bdf679baafe",
         "33ea2bf0bd5c1cb4bc1f483d87241b33b93d004003d38b1998092f54901f2618",
         "7d325dc6bac2cbb71d792debb87f7aa3b06cd4ac2c8434fa6dc15ff2b59d5b83"
       ],
       "source": "templates/ja/common_knowledge/anatomy/what-is-anima.md",
-      "source_sha256": "f3db00cb959832d94ad83d3f47f2d3a37433d97d6b214a2c9d5bbea2bd46d200",
+      "source_sha256": "55fea0b9f471a6fc02d025a7bab82a79bb3ac5f7c0b21047ad64622d2f6ad0f2",
       "statuses": [
         "translated",
         "translated",
@@ -3542,7 +3542,7 @@
     },
     "templates/en/common_knowledge/communication/board-guide.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
@@ -3560,7 +3560,7 @@
         "c5f2e685f8519d4abd235abc94c46dbdf51d16de7dc2fdc34cf19a1e23634036",
         "f1952c434386abf6c350cb245153273cd58b246d3782d83fd6203716b062f2f8",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
-        "b7aa2b7be26d9d278b6849273ff3843c21ce22edd8f28f30fd5cd947cc5f5140",
+        "af9be21ec4769db1074a8989e4e5f1500b8919a1011ea0247e7cd97d166c40c0",
         "907274282e5c839dc6e839848f05eb74a39e0169908352bebfc9b5f98b6fc7fd",
         "3cac97b92ba47381e87059757eb191116331c7efc981df6dc1da051e0afd1760",
         "b7272d4813301aecf927e4a9a019fbb9ecea7d780ffe7b65769fe01160333a9d",
@@ -3571,7 +3571,7 @@
         "f05abb71c0f2a6dfe6db8966f62daf50bc158e4fe2a06e2e1dca59c64972d0a9"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "0adfebc77a4928901dde681ca5acb0f619ebd2331952592620323cd1437513c9",
+      "source_sha256": "74f1a8b791a1cb3876bb528478c22df7c5a5126f37c5a4196cc343618129e63a",
       "statuses": [
         "translated",
         "translated",
@@ -3722,8 +3722,8 @@
     },
     "templates/en/common_knowledge/operations/background-tasks.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna",
       "section_hashes": [
         "3b15c622e89bc1e2ac35578717904b0f1e0f0bed0f3e9c7156dfb1c48658ef54",
         "2a6486ea062a488777f76feaa832fac85a266e8b28840bdf654c8ab31d0b74b9",
@@ -3743,16 +3743,14 @@
         "35ab9bb6a21169fe6ae2fa597da0d35fdf18543d31746fff6154b698e2c78012",
         "e4ad91e32ecc5852051fc349616f708c94c99fae80f06dceaa99b15903bcfa2d",
         "cc474cf04ff3b6e6351354f1104c1000874c796a2ee73b91ac29e10e24e1149d",
-        "dbd38cf6562d47cd8d6f0e42ee377ccd07c576a45f53ad7e8a85f428fd3a6224",
         "03a68e4fee1e0757ae00cdc478e087bd20cb3cd0df3c17a27270ab5c9c51c6c1",
         "19c696dcf796c51f807e168922e8ba7d53f8cb8bc830037ef95040555022f03a",
         "198d92d87e3ac906baadaa8ae2ea71b30ca064f149f2d057bc6b4257e662b683",
         "e73ca0505874fd9538c180b6deaaddd86b56d629084f29a83dd6e8feae1bd182"
       ],
       "source": "templates/ja/common_knowledge/operations/background-tasks.md",
-      "source_sha256": "93a2183a42ce041fb065f7293e68165825e7bbfc91ebbb60a81cc7c1c9c6d6ea",
+      "source_sha256": "0b84312599f90c787e3db24c72e7b13ea1403e510181eb9a2698440630db56d0",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -4240,14 +4238,14 @@
     },
     "templates/en/common_skills/cron-management/SKILL.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "edd4ab0fab7bf9f590407ee22292cdbee78a552aca673350938614affaa2dc4e",
         "6306add4eeb9cb4e5ebc1cca066153cc2b0f480fe1f161366cb3ca931ee9821a",
         "0e81323d7874922134c9518090695842c4b7894de35e584255d0c6ecd874d419",
         "e304eebd823aceb4d3f94781c60cc7cf2b077776dc9bb79b4a7532cbce1b8930",
-        "e4089080c646bcaf351ab56b76ed6b7dfce2605e97d9ec3570064af9dea3a9d5",
+        "32e74d32c98a48c98c70a537eb38bec04cc8de537f51ca57c5be2c193af97f11",
         "025dfaaf101ae83c7f16d5d4c9ad8270b393a9d440f6ca981447b454879382e4",
         "dcae0f0f9ab8e442d6df55028e33facb2201778e3bfa7c7d81744cf1e3254dab",
         "1d2f3508d367b4179a0b477f02927985fbda8f0e1f50fb7b700ce3fc69b4f7bd",
@@ -4287,7 +4285,7 @@
         "1b316e36f1b079086fff17e0c63865ce00152a19a4572e1dfd50beef73634bf6"
       ],
       "source": "templates/ja/common_skills/cron-management/SKILL.md",
-      "source_sha256": "c4fe76f2d250262149336b1d89eba8ccd2f65eac81bef3ddb139d1b5c68671f3",
+      "source_sha256": "292920f63a6d0be550b66734e3338a92627393df70e83b340bebcf1f90ada4b7",
       "statuses": [
         "translated",
         "translated",
@@ -6990,7 +6988,7 @@
     },
     "templates/en/reference/operations/heartbeat-cron-guide.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "f5a4639d817cc88c767c97af1b7c8ebb6676faffa23f8f06b74f79e1b87ad543",
@@ -7006,9 +7004,8 @@
         "209dc7110ace1a4e0f339351583b2981521afb82713d3afee275a4558698618a",
         "152a4977fac9a0dab3954173b5bbd39fb9e572dd1bf735a8f29723c4e2e7a0f8",
         "771e9a1680a6860bda0a30e543c9e50c0727c8328c9059f2158b30893f8bfb45",
-        "02d0ccc5c5e70d220f0006e4aac0d5e01f935525704885b898c0172626451844",
-        "c246682238fca14fc0c5937c860c1aaa1d959daed4cfe918ad9c105231c25a9d",
-        "da13da46c979d0bd36c423e50472fec2d100f9fc0bd1f0b44e329c3201e9a9d1",
+        "3db9c0597ada6d71955d0b2a06323af2ac2594fc57f72df5057d14f85ef5250c",
+        "ca1e57058d455ed21f0ea6c031475d95b6b11ddd1fe74ac149262836e1d4eaf9",
         "ee62c9d910181704744430b30964a0465629f42b8eac216768bc816a4437038f",
         "d6088370d1c2086af240e192c31191281c070f2b8bb9e6a14c45984941eb3d08",
         "1949c33ccf256d11cc52fbc3ce323a8a0c183f8468cf32f6f2f8fe6c71c1d0d1",
@@ -7043,9 +7040,8 @@
         "e9aed51af0216bfa8a8e97366efb2408eb56fea12d65c269669b1f039a334ec6"
       ],
       "source": "templates/ja/reference/operations/heartbeat-cron-guide.md",
-      "source_sha256": "e689903bb7109ab635e00b13015874656a04327a1191e74cdfa4f03ff3064f64",
+      "source_sha256": "e2338071da137f5ab2673e75c84378e134fd1259692a06d78d6fbf40dd5239b6",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -7256,13 +7252,13 @@
     },
     "templates/en/reference/operations/project-setup.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "8360bb8dbd2cd323bc0f7594ffd91eb618ddf98e3356399377b75ef3d7aec0d8",
         "f00a5831614a155f38a1d1f68ef10e587d4019915d1e43b059c5281be3f5779c",
         "1ab4adc8757ee03eb1eb9a44fbea40513e92b4ec93a240cca7f4ca5f8ec6b524",
-        "fe9d1f1006fdd775074d86eedced75d7687a87f3ee404a41416a2f3ec89c92f5",
+        "7de18473ba7055556b0b282e59e98b77062318634aed60c7329a619e98511a77",
         "37c3b31021b10fb0f2a560e7bc7d6b27d9ca4e34ad3114fb590297f45ccffd36",
         "e1a13ff112e7103081f705a7a41773b05295d8e255216cdef0a2492938f28723",
         "88994f0b4e49906c425312ebb1b123297bb4b4894604d4321d9c74897fdc0b69",
@@ -7296,7 +7292,7 @@
         "c3d413e07dc04b9b8b72e66ef2efe359f236f8d08ad9eedc6d863b1f2c0f800a"
       ],
       "source": "templates/ja/reference/operations/project-setup.md",
-      "source_sha256": "96c680637002cd8767a3b5492a9b8d6c0a7ef61385c9d62684db72c8b761c839",
+      "source_sha256": "ce80a965bfdc9ee40be4514c4165c46305daa986bdecf557858563aa909ef9f4",
       "statuses": [
         "translated",
         "translated",
@@ -9270,7 +9266,7 @@
     },
     "templates/ko/common_knowledge/anatomy/what-is-anima.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "bd7494ec0f0ceeed623ab5de4948e9befa4779ada3c132933f14b732858cfa28",
@@ -9283,12 +9279,12 @@
         "8006a2ebc4f5c0a27749d00e438df2821e589355f8af93f9205b391157bf0ab5",
         "63f149baaa45ced1d28461475896982295a8ea1d82788422634ef1fa63916fc4",
         "b950fe83cddf681896bd618b5b38c0270a3687c6fde6e645bfc0b1b5634d942a",
-        "8d60c485c1ce8bb3e50257c83f8b558a1ec8e4ae3bb945bd31f6c2db3cc4a658",
+        "1550575285f91a77b7ef9b27b0c48c90e6fbb2fb7fcef47325404bdf679baafe",
         "33ea2bf0bd5c1cb4bc1f483d87241b33b93d004003d38b1998092f54901f2618",
         "7d325dc6bac2cbb71d792debb87f7aa3b06cd4ac2c8434fa6dc15ff2b59d5b83"
       ],
       "source": "templates/ja/common_knowledge/anatomy/what-is-anima.md",
-      "source_sha256": "f3db00cb959832d94ad83d3f47f2d3a37433d97d6b214a2c9d5bbea2bd46d200",
+      "source_sha256": "55fea0b9f471a6fc02d025a7bab82a79bb3ac5f7c0b21047ad64622d2f6ad0f2",
       "statuses": [
         "translated",
         "translated",
@@ -9308,7 +9304,7 @@
     },
     "templates/ko/common_knowledge/communication/board-guide.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
@@ -9326,7 +9322,7 @@
         "c5f2e685f8519d4abd235abc94c46dbdf51d16de7dc2fdc34cf19a1e23634036",
         "f1952c434386abf6c350cb245153273cd58b246d3782d83fd6203716b062f2f8",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
-        "b7aa2b7be26d9d278b6849273ff3843c21ce22edd8f28f30fd5cd947cc5f5140",
+        "af9be21ec4769db1074a8989e4e5f1500b8919a1011ea0247e7cd97d166c40c0",
         "907274282e5c839dc6e839848f05eb74a39e0169908352bebfc9b5f98b6fc7fd",
         "3cac97b92ba47381e87059757eb191116331c7efc981df6dc1da051e0afd1760",
         "b7272d4813301aecf927e4a9a019fbb9ecea7d780ffe7b65769fe01160333a9d",
@@ -9337,7 +9333,7 @@
         "f05abb71c0f2a6dfe6db8966f62daf50bc158e4fe2a06e2e1dca59c64972d0a9"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "0adfebc77a4928901dde681ca5acb0f619ebd2331952592620323cd1437513c9",
+      "source_sha256": "74f1a8b791a1cb3876bb528478c22df7c5a5126f37c5a4196cc343618129e63a",
       "statuses": [
         "translated",
         "translated",
@@ -9488,8 +9484,8 @@
     },
     "templates/ko/common_knowledge/operations/background-tasks.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
-      "model": "gpt-6-luna-2026-09-22",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna",
       "section_hashes": [
         "3b15c622e89bc1e2ac35578717904b0f1e0f0bed0f3e9c7156dfb1c48658ef54",
         "2a6486ea062a488777f76feaa832fac85a266e8b28840bdf654c8ab31d0b74b9",
@@ -9509,16 +9505,14 @@
         "35ab9bb6a21169fe6ae2fa597da0d35fdf18543d31746fff6154b698e2c78012",
         "e4ad91e32ecc5852051fc349616f708c94c99fae80f06dceaa99b15903bcfa2d",
         "cc474cf04ff3b6e6351354f1104c1000874c796a2ee73b91ac29e10e24e1149d",
-        "dbd38cf6562d47cd8d6f0e42ee377ccd07c576a45f53ad7e8a85f428fd3a6224",
         "03a68e4fee1e0757ae00cdc478e087bd20cb3cd0df3c17a27270ab5c9c51c6c1",
         "19c696dcf796c51f807e168922e8ba7d53f8cb8bc830037ef95040555022f03a",
         "198d92d87e3ac906baadaa8ae2ea71b30ca064f149f2d057bc6b4257e662b683",
         "e73ca0505874fd9538c180b6deaaddd86b56d629084f29a83dd6e8feae1bd182"
       ],
       "source": "templates/ja/common_knowledge/operations/background-tasks.md",
-      "source_sha256": "93a2183a42ce041fb065f7293e68165825e7bbfc91ebbb60a81cc7c1c9c6d6ea",
+      "source_sha256": "0b84312599f90c787e3db24c72e7b13ea1403e510181eb9a2698440630db56d0",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -10006,14 +10000,14 @@
     },
     "templates/ko/common_skills/cron-management/SKILL.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "edd4ab0fab7bf9f590407ee22292cdbee78a552aca673350938614affaa2dc4e",
         "6306add4eeb9cb4e5ebc1cca066153cc2b0f480fe1f161366cb3ca931ee9821a",
         "0e81323d7874922134c9518090695842c4b7894de35e584255d0c6ecd874d419",
         "e304eebd823aceb4d3f94781c60cc7cf2b077776dc9bb79b4a7532cbce1b8930",
-        "e4089080c646bcaf351ab56b76ed6b7dfce2605e97d9ec3570064af9dea3a9d5",
+        "32e74d32c98a48c98c70a537eb38bec04cc8de537f51ca57c5be2c193af97f11",
         "025dfaaf101ae83c7f16d5d4c9ad8270b393a9d440f6ca981447b454879382e4",
         "dcae0f0f9ab8e442d6df55028e33facb2201778e3bfa7c7d81744cf1e3254dab",
         "1d2f3508d367b4179a0b477f02927985fbda8f0e1f50fb7b700ce3fc69b4f7bd",
@@ -10053,7 +10047,7 @@
         "1b316e36f1b079086fff17e0c63865ce00152a19a4572e1dfd50beef73634bf6"
       ],
       "source": "templates/ja/common_skills/cron-management/SKILL.md",
-      "source_sha256": "c4fe76f2d250262149336b1d89eba8ccd2f65eac81bef3ddb139d1b5c68671f3",
+      "source_sha256": "292920f63a6d0be550b66734e3338a92627393df70e83b340bebcf1f90ada4b7",
       "statuses": [
         "translated",
         "translated",
@@ -12756,7 +12750,7 @@
     },
     "templates/ko/reference/operations/heartbeat-cron-guide.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "f5a4639d817cc88c767c97af1b7c8ebb6676faffa23f8f06b74f79e1b87ad543",
@@ -12772,9 +12766,8 @@
         "209dc7110ace1a4e0f339351583b2981521afb82713d3afee275a4558698618a",
         "152a4977fac9a0dab3954173b5bbd39fb9e572dd1bf735a8f29723c4e2e7a0f8",
         "771e9a1680a6860bda0a30e543c9e50c0727c8328c9059f2158b30893f8bfb45",
-        "02d0ccc5c5e70d220f0006e4aac0d5e01f935525704885b898c0172626451844",
-        "c246682238fca14fc0c5937c860c1aaa1d959daed4cfe918ad9c105231c25a9d",
-        "da13da46c979d0bd36c423e50472fec2d100f9fc0bd1f0b44e329c3201e9a9d1",
+        "3db9c0597ada6d71955d0b2a06323af2ac2594fc57f72df5057d14f85ef5250c",
+        "ca1e57058d455ed21f0ea6c031475d95b6b11ddd1fe74ac149262836e1d4eaf9",
         "ee62c9d910181704744430b30964a0465629f42b8eac216768bc816a4437038f",
         "d6088370d1c2086af240e192c31191281c070f2b8bb9e6a14c45984941eb3d08",
         "1949c33ccf256d11cc52fbc3ce323a8a0c183f8468cf32f6f2f8fe6c71c1d0d1",
@@ -12809,9 +12802,8 @@
         "e9aed51af0216bfa8a8e97366efb2408eb56fea12d65c269669b1f039a334ec6"
       ],
       "source": "templates/ja/reference/operations/heartbeat-cron-guide.md",
-      "source_sha256": "e689903bb7109ab635e00b13015874656a04327a1191e74cdfa4f03ff3064f64",
+      "source_sha256": "e2338071da137f5ab2673e75c84378e134fd1259692a06d78d6fbf40dd5239b6",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -13022,13 +13014,13 @@
     },
     "templates/ko/reference/operations/project-setup.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-06",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "8360bb8dbd2cd323bc0f7594ffd91eb618ddf98e3356399377b75ef3d7aec0d8",
         "f00a5831614a155f38a1d1f68ef10e587d4019915d1e43b059c5281be3f5779c",
         "1ab4adc8757ee03eb1eb9a44fbea40513e92b4ec93a240cca7f4ca5f8ec6b524",
-        "fe9d1f1006fdd775074d86eedced75d7687a87f3ee404a41416a2f3ec89c92f5",
+        "7de18473ba7055556b0b282e59e98b77062318634aed60c7329a619e98511a77",
         "37c3b31021b10fb0f2a560e7bc7d6b27d9ca4e34ad3114fb590297f45ccffd36",
         "e1a13ff112e7103081f705a7a41773b05295d8e255216cdef0a2492938f28723",
         "88994f0b4e49906c425312ebb1b123297bb4b4894604d4321d9c74897fdc0b69",
@@ -13062,7 +13054,7 @@
         "c3d413e07dc04b9b8b72e66ef2efe359f236f8d08ad9eedc6d863b1f2c0f800a"
       ],
       "source": "templates/ja/reference/operations/project-setup.md",
-      "source_sha256": "96c680637002cd8767a3b5492a9b8d6c0a7ef61385c9d62684db72c8b761c839",
+      "source_sha256": "ce80a965bfdc9ee40be4514c4165c46305daa986bdecf557858563aa909ef9f4",
       "statuses": [
         "translated",
         "translated",
@@ -15035,9 +15027,9 @@
       "translator_version": "2"
     },
     "templates/zh/common_knowledge/anatomy/what-is-anima.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "bd7494ec0f0ceeed623ab5de4948e9befa4779ada3c132933f14b732858cfa28",
         "1397b0c1ad19bc65e17461c0c46d9af2170459cb20f3c1ae0bf938bf2566ffb0",
@@ -15049,12 +15041,12 @@
         "8006a2ebc4f5c0a27749d00e438df2821e589355f8af93f9205b391157bf0ab5",
         "63f149baaa45ced1d28461475896982295a8ea1d82788422634ef1fa63916fc4",
         "b950fe83cddf681896bd618b5b38c0270a3687c6fde6e645bfc0b1b5634d942a",
-        "8d60c485c1ce8bb3e50257c83f8b558a1ec8e4ae3bb945bd31f6c2db3cc4a658",
+        "1550575285f91a77b7ef9b27b0c48c90e6fbb2fb7fcef47325404bdf679baafe",
         "33ea2bf0bd5c1cb4bc1f483d87241b33b93d004003d38b1998092f54901f2618",
         "7d325dc6bac2cbb71d792debb87f7aa3b06cd4ac2c8434fa6dc15ff2b59d5b83"
       ],
       "source": "templates/ja/common_knowledge/anatomy/what-is-anima.md",
-      "source_sha256": "f3db00cb959832d94ad83d3f47f2d3a37433d97d6b214a2c9d5bbea2bd46d200",
+      "source_sha256": "55fea0b9f471a6fc02d025a7bab82a79bb3ac5f7c0b21047ad64622d2f6ad0f2",
       "statuses": [
         "translated",
         "translated",
@@ -15073,9 +15065,9 @@
       "translator_version": "2"
     },
     "templates/zh/common_knowledge/communication/board-guide.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
         "e1b4a24f896dc18ee475ae9ecc98664ada462ec6ae9556a2d42b3a1043ff80cc",
@@ -15092,7 +15084,7 @@
         "c5f2e685f8519d4abd235abc94c46dbdf51d16de7dc2fdc34cf19a1e23634036",
         "f1952c434386abf6c350cb245153273cd58b246d3782d83fd6203716b062f2f8",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
-        "b7aa2b7be26d9d278b6849273ff3843c21ce22edd8f28f30fd5cd947cc5f5140",
+        "af9be21ec4769db1074a8989e4e5f1500b8919a1011ea0247e7cd97d166c40c0",
         "907274282e5c839dc6e839848f05eb74a39e0169908352bebfc9b5f98b6fc7fd",
         "3cac97b92ba47381e87059757eb191116331c7efc981df6dc1da051e0afd1760",
         "b7272d4813301aecf927e4a9a019fbb9ecea7d780ffe7b65769fe01160333a9d",
@@ -15103,7 +15095,7 @@
         "f05abb71c0f2a6dfe6db8966f62daf50bc158e4fe2a06e2e1dca59c64972d0a9"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "0adfebc77a4928901dde681ca5acb0f619ebd2331952592620323cd1437513c9",
+      "source_sha256": "74f1a8b791a1cb3876bb528478c22df7c5a5126f37c5a4196cc343618129e63a",
       "statuses": [
         "translated",
         "translated",
@@ -15253,9 +15245,9 @@
       "translator_version": "2"
     },
     "templates/zh/common_knowledge/operations/background-tasks.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna",
       "section_hashes": [
         "3b15c622e89bc1e2ac35578717904b0f1e0f0bed0f3e9c7156dfb1c48658ef54",
         "2a6486ea062a488777f76feaa832fac85a266e8b28840bdf654c8ab31d0b74b9",
@@ -15275,16 +15267,14 @@
         "35ab9bb6a21169fe6ae2fa597da0d35fdf18543d31746fff6154b698e2c78012",
         "e4ad91e32ecc5852051fc349616f708c94c99fae80f06dceaa99b15903bcfa2d",
         "cc474cf04ff3b6e6351354f1104c1000874c796a2ee73b91ac29e10e24e1149d",
-        "dbd38cf6562d47cd8d6f0e42ee377ccd07c576a45f53ad7e8a85f428fd3a6224",
         "03a68e4fee1e0757ae00cdc478e087bd20cb3cd0df3c17a27270ab5c9c51c6c1",
         "19c696dcf796c51f807e168922e8ba7d53f8cb8bc830037ef95040555022f03a",
         "198d92d87e3ac906baadaa8ae2ea71b30ca064f149f2d057bc6b4257e662b683",
         "e73ca0505874fd9538c180b6deaaddd86b56d629084f29a83dd6e8feae1bd182"
       ],
       "source": "templates/ja/common_knowledge/operations/background-tasks.md",
-      "source_sha256": "93a2183a42ce041fb065f7293e68165825e7bbfc91ebbb60a81cc7c1c9c6d6ea",
+      "source_sha256": "0b84312599f90c787e3db24c72e7b13ea1403e510181eb9a2698440630db56d0",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -15771,15 +15761,15 @@
       "translator_version": "2"
     },
     "templates/zh/common_skills/cron-management/SKILL.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "edd4ab0fab7bf9f590407ee22292cdbee78a552aca673350938614affaa2dc4e",
         "6306add4eeb9cb4e5ebc1cca066153cc2b0f480fe1f161366cb3ca931ee9821a",
         "0e81323d7874922134c9518090695842c4b7894de35e584255d0c6ecd874d419",
         "e304eebd823aceb4d3f94781c60cc7cf2b077776dc9bb79b4a7532cbce1b8930",
-        "e4089080c646bcaf351ab56b76ed6b7dfce2605e97d9ec3570064af9dea3a9d5",
+        "32e74d32c98a48c98c70a537eb38bec04cc8de537f51ca57c5be2c193af97f11",
         "025dfaaf101ae83c7f16d5d4c9ad8270b393a9d440f6ca981447b454879382e4",
         "dcae0f0f9ab8e442d6df55028e33facb2201778e3bfa7c7d81744cf1e3254dab",
         "1d2f3508d367b4179a0b477f02927985fbda8f0e1f50fb7b700ce3fc69b4f7bd",
@@ -15819,7 +15809,7 @@
         "1b316e36f1b079086fff17e0c63865ce00152a19a4572e1dfd50beef73634bf6"
       ],
       "source": "templates/ja/common_skills/cron-management/SKILL.md",
-      "source_sha256": "c4fe76f2d250262149336b1d89eba8ccd2f65eac81bef3ddb139d1b5c68671f3",
+      "source_sha256": "292920f63a6d0be550b66734e3338a92627393df70e83b340bebcf1f90ada4b7",
       "statuses": [
         "translated",
         "translated",
@@ -18521,9 +18511,9 @@
       "translator_version": "2"
     },
     "templates/zh/reference/operations/heartbeat-cron-guide.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "f5a4639d817cc88c767c97af1b7c8ebb6676faffa23f8f06b74f79e1b87ad543",
         "54795a358f15f9e2f4daeefd69e604be437e1503bf2f282c87b6b4eec56b9f3f",
@@ -18538,9 +18528,8 @@
         "209dc7110ace1a4e0f339351583b2981521afb82713d3afee275a4558698618a",
         "152a4977fac9a0dab3954173b5bbd39fb9e572dd1bf735a8f29723c4e2e7a0f8",
         "771e9a1680a6860bda0a30e543c9e50c0727c8328c9059f2158b30893f8bfb45",
-        "02d0ccc5c5e70d220f0006e4aac0d5e01f935525704885b898c0172626451844",
-        "c246682238fca14fc0c5937c860c1aaa1d959daed4cfe918ad9c105231c25a9d",
-        "da13da46c979d0bd36c423e50472fec2d100f9fc0bd1f0b44e329c3201e9a9d1",
+        "3db9c0597ada6d71955d0b2a06323af2ac2594fc57f72df5057d14f85ef5250c",
+        "ca1e57058d455ed21f0ea6c031475d95b6b11ddd1fe74ac149262836e1d4eaf9",
         "ee62c9d910181704744430b30964a0465629f42b8eac216768bc816a4437038f",
         "d6088370d1c2086af240e192c31191281c070f2b8bb9e6a14c45984941eb3d08",
         "1949c33ccf256d11cc52fbc3ce323a8a0c183f8468cf32f6f2f8fe6c71c1d0d1",
@@ -18575,9 +18564,8 @@
         "e9aed51af0216bfa8a8e97366efb2408eb56fea12d65c269669b1f039a334ec6"
       ],
       "source": "templates/ja/reference/operations/heartbeat-cron-guide.md",
-      "source_sha256": "e689903bb7109ab635e00b13015874656a04327a1191e74cdfa4f03ff3064f64",
+      "source_sha256": "e2338071da137f5ab2673e75c84378e134fd1259692a06d78d6fbf40dd5239b6",
       "statuses": [
-        "translated",
         "translated",
         "translated",
         "translated",
@@ -18787,14 +18775,14 @@
       "translator_version": "2"
     },
     "templates/zh/reference/operations/project-setup.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-06",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "8360bb8dbd2cd323bc0f7594ffd91eb618ddf98e3356399377b75ef3d7aec0d8",
         "f00a5831614a155f38a1d1f68ef10e587d4019915d1e43b059c5281be3f5779c",
         "1ab4adc8757ee03eb1eb9a44fbea40513e92b4ec93a240cca7f4ca5f8ec6b524",
-        "fe9d1f1006fdd775074d86eedced75d7687a87f3ee404a41416a2f3ec89c92f5",
+        "7de18473ba7055556b0b282e59e98b77062318634aed60c7329a619e98511a77",
         "37c3b31021b10fb0f2a560e7bc7d6b27d9ca4e34ad3114fb590297f45ccffd36",
         "e1a13ff112e7103081f705a7a41773b05295d8e255216cdef0a2492938f28723",
         "88994f0b4e49906c425312ebb1b123297bb4b4894604d4321d9c74897fdc0b69",
@@ -18828,7 +18816,7 @@
         "c3d413e07dc04b9b8b72e66ef2efe359f236f8d08ad9eedc6d863b1f2c0f800a"
       ],
       "source": "templates/ja/reference/operations/project-setup.md",
-      "source_sha256": "96c680637002cd8767a3b5492a9b8d6c0a7ef61385c9d62684db72c8b761c839",
+      "source_sha256": "ce80a965bfdc9ee40be4514c4165c46305daa986bdecf557858563aa909ef9f4",
       "statuses": [
         "translated",
         "translated",

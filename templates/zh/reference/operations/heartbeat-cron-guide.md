@@ -159,21 +159,21 @@ Chat（与人类的对话）与 TaskExec（实际作业）维持主模型。
 
 ### 后台工具（core/tasks/background.py）
 
-`core/tasks/background.py` 并非心跳/Cron 的调度本身，而是负责 **长时间工具调用的后台执行**（包括状态的 JSON 持久化）。运维详情、CLI 路径也请参照 `operations/background-tasks.md`。
+`core/tasks/background.py` 负责**长时间工具调用的后台执行**（包括状态的 JSON 持久化），而非心跳/Cron 的调度本身。有关运维详情和 CLI 路径，也请参阅 `operations/background-tasks.md`。
 
 #### BackgroundTaskManager
 
-- **保存目标**：`state/background_tasks/{task_id}.json`。`task_id` 为 UUID 的前 12 个字符（十六进制）。每个文件记录 `task_id`, `anima_name`, `tool_name`, `tool_args`, `status`, `created_at`, `completed_at`, `result`, `error`。
-- **状态 (`TaskStatus`)**：`pending` / `running` / `completed` / `failed`。在 `submit` / `submit_async` 中，投入后立即以 `running` 写入 JSON，完成或异常时更新为 `completed` / `failed`。
-- **执行 API**：`submit(tool_name, tool_args, execute_fn)` 将同步 callable 通过 `asyncio` 的 `run_in_executor` 在线程池执行。`submit_async` 直接 await 异步 callable。提供 `get_task`（内存优先，无则磁盘）、`list_tasks`（也合并磁盘上的 JSON，按创建时间从新到旧）、`active_count`（内存上的 `running` 条数）。
-- **完成回调**：传给 `on_complete` 的异步函数在任务保存后被调用。即使回调内出现异常，任务结果也会保留，仅记录到日志（典型情况下与写入 `state/background_notifications/` 组合，在**下次心跳**中读取、删除并纳入对话上下文的路径）。
-- **候选判定 `is_eligible(tool_name)`**：若映射中存在键则为后台对象。键接受以下两者。(1) **schema 名**（例：`generate_3d_model`）— Mode A 的外部工具分发等。(2) **`ツール名:サブコマンド`**（例：`image_gen:pipeline`）— 各工具模块的 `EXECUTION_PROFILE` 中 `background_eligible: true` 的条目由 `get_eligible_tools_from_profiles()` 以此格式注册（Mode S 的 `submit` 路径等）。
-- **候选工具映射的构建 `from_profiles()`**：将以下 3 层以 dict 的 `update` 合并，**后者覆盖前者**。(1) `_DEFAULT_ELIGIBLE_TOOLS`（代码默认）(2) 参数 `profiles`（`EXECUTION_PROFILE` 聚合）(3) 参数 `config_eligible`（通常为从 `config.json` 的 `background_task.eligible_tools` 展开 `threshold_s` 得到的 `名前 → 秒`）。值为用于 profile 联动的预期秒数（整数）。
-- **代码默认 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**：`generate_character_assets` 30、`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各 30、`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各 30、`local_llm` 60、`run_command` 60。
-- **清理 `cleanup_old_tasks(max_age_hours=24)`**：`status` 在 `completed` / `failed` 中删除 `completed_at` 为 **早于参数指定时间（默认 24 小时）** 的 JSON。此外，仍为 `running` 且从 `created_at` 起经过 **超过 48 小时** 的文件作为崩溃孤儿删除。返回值为删除件数。
-- **保留时间**：`cleanup_old_tasks` 的完成任务保留时间由参数 `max_age_hours`（默认 24 小时）指定。没有对应的 `config.json` 配置键。
+- **保存位置**：`state/background_tasks/{task_id}.json`。`task_id` 是 UUID 的前 12 个字符（十六进制）。每个文件记录 `task_id`、`anima_name`、`tool_name`、`tool_args`、`status`、`created_at`、`completed_at`、`result`、`error`。
+- **状态（`TaskStatus`）**：`pending` / `running` / `completed` / `failed`。`submit` / `submit_async` 会在提交后立即以 `running` 写入 JSON，并在完成或发生异常时更新为 `completed` / `failed`。
+- **执行 API**：`submit(tool_name, tool_args, execute_fn)` 会将同步 callable 放入 `asyncio` 的 `run_in_executor` 中，通过线程池执行。`submit_async` 会直接 await 异步 callable。提供 `get_task`（优先从内存读取，若没有则从磁盘读取）、`list_tasks`（合并磁盘上的 JSON，并按创建时间从新到旧排序）、`active_count`（内存中的 `running` 数量）。
+- **完成回调**：传递给 `on_complete` 的异步函数会在任务保存后调用。即使回调中发生异常，任务结果也会保留，异常只会记录到日志中（通常与写入 `state/background_notifications/` 配合，之后在**下一次心跳**时读取并删除，再纳入对话上下文）。
+- **候选判定 `is_eligible(tool_name)`**：如果映射中存在对应的键，则将其视为后台处理对象。键支持以下两种形式。(1) **架构名称**（例如：`generate_3d_model`）—例如 Mode A 的外部工具分派。(2) **`ツール名:サブコマンド`**（例如：`image_gen:pipeline`）—各工具模块的 `EXECUTION_PROFILE` 中，`background_eligible: true` 的条目会由 `get_eligible_tools_from_profiles()` 以此格式注册（例如 Mode S 的 `submit` 路径）。
+- **候选工具映射的构建 `from_profiles()`**：通过 dict 的 `update` 合并以下 3 层，并按**后者覆盖前者**的规则处理。(1) `_DEFAULT_ELIGIBLE_TOOLS`（代码默认值）(2) 参数 `profiles`（汇总 `EXECUTION_PROFILE`）(3) 参数 `config_eligible`（通常是从 `config.json` 的 `background_task.eligible_tools` 展开 `threshold_s` 后得到的 `名前 → 秒`）。值为用于配置文件关联的预期秒数（整数）。
+- **代码默认值 `_DEFAULT_ELIGIBLE_TOOLS`（秒）**：`generate_character_assets` 为 30，`generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` 各为 30，`generate_3d_model` / `generate_rigged_model` / `generate_animations` 各为 30，`local_llm` 为 60，`run_command` 为 60。
+- **清理 `cleanup_old_tasks(max_age_hours=24)`**：`status` 会在 `completed` / `failed` 中删除 `completed_at` 早于**参数指定的时间（默认 24 小时）**的 JSON。此外，`running` 状态持续超过 **48 小时**的文件（从 `created_at` 起算）会作为崩溃遗留文件删除。返回值为删除的文件数。
+- **保留时间**：`cleanup_old_tasks` 中已完成任务的保留时间由参数 `max_age_hours` 指定（默认 24 小时）。没有对应的 `config.json` 配置键。
 
-- **其他服务器定时作业**：除按 Anima 的 `cron.md` 之外，生命周期还会注册内存维护、RAG 等系统 Cron（例：每日整合 02:00、每日索引 04:00）。时刻以配置时区为基准。
+- **其他服务器定时任务**：除按 Anima 单位运行的 `cron.md` 外，生命周期管理还会注册内存维护、RAG 等系统 Cron（例如：每日 02:00 执行整合，每日 04:00 执行索引）。时间以配置的时区为准。
 
 ### 心跳配置的热重载
 
