@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=e57c923a28041a370ea56e5ebebcdedae1d658a54fb768d00dca1308a0798ceb generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=f615ba3e740e007e26782fc47b8260d78f1b940168a66932e57043f0db05510e generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -192,9 +192,9 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Schema, loading, validation, and migration of application configuration.
+Application configuration schemas, loading, validation, and migration.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
@@ -212,7 +212,7 @@ Schema, loading, validation, and migration of application configuration.
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1565 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1566 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -392,7 +392,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 434 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 438 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
@@ -998,7 +998,7 @@ Tool schemas, permissions, and execution infrastructure.
 | `core.tooling.handler` | 917 | — |
 | `core.tooling.handler_base` | 335 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
-| `core.tooling.handler_comms` | 1036 | — |
+| `core.tooling.handler_comms` | 1043 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
@@ -1095,10 +1095,10 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1543 | — |
+| `server.app` | 1566 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
@@ -1113,13 +1113,13 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
 | `server.gateways.discord_channel_sync` | 278 | — |
 | `server.gateways.discord_gateway` | 729 | — |
 | `server.gateways.github_gateway` | 534 | — |
-| `server.gateways.slack_channel_sync` | 506 | — |
+| `server.gateways.slack_channel_sync` | 515 | — |
 | `server.gateways.slack_interactive` | 239 | — |
 | `server.gateways.slack_socket` | 1151 | — |
 | `server.gateways.zoom_gateway` | 700 | — |

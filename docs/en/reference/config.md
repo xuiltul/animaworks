@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=2bceb82e46bd99c9be9680d66d2682b315501187ad1d2f428667edba281c8449 generated=2026-11-04 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=2d0c336014450a74e74398208f0cdaf110308cc0add681c50dba1bea68c70e26 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -514,6 +514,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `external_messaging.slack` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.slack.enabled` | `bool` | `false` | — |
 | `external_messaging.slack.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.slack.channel_discovery` | `bool` | `false` | run Slack channel auto-discovery (SlackChannelSync); Slack only |
 | `external_messaging.slack.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = ignore this channel) |
 | `external_messaging.slack.default_anima` | `str` | `""` | fallback anima for unmapped channels |
 | `external_messaging.slack.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (per-Anima webhook routing) |
@@ -527,6 +528,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `external_messaging.chatwork` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.chatwork.enabled` | `bool` | `false` | — |
 | `external_messaging.chatwork.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.chatwork.channel_discovery` | `bool` | `false` | run Slack channel auto-discovery (SlackChannelSync); Slack only |
 | `external_messaging.chatwork.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = ignore this channel) |
 | `external_messaging.chatwork.default_anima` | `str` | `""` | fallback anima for unmapped channels |
 | `external_messaging.chatwork.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (per-Anima webhook routing) |
@@ -540,6 +542,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `external_messaging.discord` | `ExternalMessagingChannelConfig` | `{ExternalMessagingChannelConfig}` | — |
 | `external_messaging.discord.enabled` | `bool` | `false` | — |
 | `external_messaging.discord.mode` | `str` | `"socket"` | "socket" \| "webhook" |
+| `external_messaging.discord.channel_discovery` | `bool` | `false` | run Slack channel auto-discovery (SlackChannelSync); Slack only |
 | `external_messaging.discord.anima_mapping` | `dict[str, str]` | `{}` | channel_id → anima_name ("" = ignore this channel) |
 | `external_messaging.discord.default_anima` | `str` | `""` | fallback anima for unmapped channels |
 | `external_messaging.discord.app_id_mapping` | `dict[str, str]` | `{}` | api_app_id → anima_name (per-Anima webhook routing) |
