@@ -518,11 +518,7 @@ class CommsToolsMixin:
             return _error_result("InvalidArguments", "channel is required")
         _ch_lower = channel.strip().lower()
         if _ch_lower == "inbox" or _ch_lower.startswith("inbox/") or _ch_lower.startswith("inbox\\"):
-            return _error_result(
-                "InvalidArguments",
-                f"'{channel}' is not a channel. Inbox messages are processed automatically; "
-                "do not use read_channel for inbox.",
-            )
+            return _error_result("InvalidArguments", t("handler.channel_inbox_cli", channel=channel))
 
         # ── ACL gate ──
         from core.exceptions import RecipientNotFoundError
@@ -538,11 +534,15 @@ class CommsToolsMixin:
         if company_error is not None:
             return company_error
 
+        channels_dir = self._messenger.shared_dir / "channels"
+        if not (channels_dir / f"{channel}.jsonl").is_file() and not (channels_dir / f"{channel}.meta.json").is_file():
+            return t("handler.channel_not_found", channel=channel)
+
         limit = args.get("limit", 20)
         human_only = args.get("human_only", False)
         messages = self._messenger.read_channel(channel, limit=limit, human_only=human_only)
         if not messages:
-            return f"No messages in #{channel}"
+            return t("handler.channel_empty", channel=channel)
         return _json.dumps(messages, ensure_ascii=False, indent=2)
 
     def _handle_read_dm_history(self: _CommsToolsHost, args: dict[str, Any]) -> str:

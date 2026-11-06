@@ -13,7 +13,7 @@
 |-----------|------|------|------|
 | `to` | string | MUST | 宛先。解決ルールは下記「宛先 `to` の解決」。Anima 名・`config.json` の人間エイリアス・`slack:USERID` / `chatwork:ROOMID`・Slack ユーザー ID 単体（`U` + 英数字 8 文字以上）が使える |
 | `content` | string | MUST | メッセージ本文 |
-| `intent` | string | MUST | メッセージの意図。許可値: `report`（進捗・結果報告）, `question`（質問・返答が必要な問い合わせ）のみ。タスク委譲には `delegate_task` ツールを使用すること。acknowledgment・感謝・FYI は Board（post_channel）を使用すること |
+| `intent` | string | MUST | メッセージの意図。許可値: `report`（進捗・結果報告）, `question`（質問・返答が必要な問い合わせ）のみ。タスク委譲には `delegate_task` ツールを使用すること。acknowledgment・感謝・FYI は `animaworks-tool board post <channel> <text>` でBoardに共有すること |
 | `reply_to` | string | MAY | 返信先メッセージの ID（例: `20260215_093000_123456`） |
 | `thread_id` | string | MAY | スレッド ID。既存スレッドに参加する場合に指定 |
 
@@ -95,7 +95,7 @@ send_message(to="user", content="対応完了しました。", intent="report")
 | `report` | 進捗・結果の報告 | タスク完了報告、上司への状況報告 |
 | `question` | 返答が必要な質問 | 不明点の確認、判断を仰ぐ問い合わせ |
 
-**注意**: 「了解しました」「ありがとうございます」などの acknowledgment・感謝・FYI は DM では送れない。Board（post_channel）を使用すること。
+**注意**: 「了解しました」「ありがとうございます」などの acknowledgment・感謝・FYI は DM では送れない。`animaworks-tool board post <channel> <text>` でBoardに共有すること。
 
 ### Board と DM の使い分け
 
@@ -104,9 +104,9 @@ send_message(to="user", content="対応完了しました。", intent="report")
 | 進捗報告・結果報告 | send_message (intent=report) | 上司へのタスク完了報告 |
 | タスク委譲 | delegate_task | 直属の部下に一つの永続タスクを委任。進捗は task_tracker で確認 |
 | 質問・問い合わせ | send_message (intent=question) | 不明点の確認 |
-| 了解・感謝・FYI | post_channel（Board） | 「了解しました」「共有しました」 |
-| チーム全体への共有 | post_channel（Board） | 関係者への一斉周知 |
-| 同一宛先への2通目 | post_channel（Board） | 追加情報の共有 |
+| 了解・感謝・FYI | `animaworks-tool board post <channel> <text>` | 「了解しました」「共有しました」 |
+| チーム全体への共有 | `animaworks-tool board post <channel> <text>` | 関係者への一斉周知 |
+| 同一宛先への2通目 | `animaworks-tool board post <channel> <text>` | 追加情報の共有 |
 
 ## スレッド管理
 
@@ -295,7 +295,7 @@ Slack メッセージが Inbox に書き込まれると、ファイル変更通�
 
 **原因**: `intent` を省略した、または acknowledgment・感謝・FYI を DM で送ろうとした
 
-**対策**: DM では必ず `intent` に `report` または `question` を指定する。タスク委譲には `delegate_task` を使用する。了解・感謝・FYI は Board（post_channel）を使用する
+**対策**: DM では必ず `intent` に `report` または `question` を指定する。タスク委譲には `delegate_task` を使用する。了解・感謝・FYI は `animaworks-tool board post <channel> <text>` を使用する
 
 **症状**: `intent='delegation' は廃止されました` などと表示される
 
@@ -338,7 +338,7 @@ Slack メッセージが Inbox に書き込まれると、ファイル変更通�
 
 **原因**: 1回の run で同一宛先に2回以上 send_message を呼んだ
 
-**対策**: 追加の連絡は Board（post_channel）を使用する。または次の run（ハートビート等）で送信する
+**対策**: 追加の連絡は `animaworks-tool board post <channel> <text>` を使用する。または次の run（ハートビート等）で送信する
 
 ### 返信を忘れる
 

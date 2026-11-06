@@ -135,6 +135,21 @@ def test_read_channel_rejects_mixed_company_members(tmp_path: Path) -> None:
     assert "secret" not in result
 
 
+def test_read_channel_distinguishes_missing_from_empty_channel(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", None)
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "general.jsonl").touch()
+    handler = _make_handler(tmp_path)
+
+    empty_result = handler._handle_read_channel({"channel": "general"})
+    missing_result = handler._handle_read_channel({"channel": "missing"})
+
+    assert empty_result == t("handler.channel_empty", channel="general")
+    assert missing_result == t("handler.channel_not_found", channel="missing")
+    assert empty_result != missing_result
+
+
 def test_open_channel_without_company_rejects_assigned_anima(tmp_path: Path) -> None:
     """Legacy open channels no longer expand to all animas; require company attr."""
     _make_anima(tmp_path, "alice", "alpha")

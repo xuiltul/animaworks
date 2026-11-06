@@ -90,10 +90,12 @@ call_human(
 
 ### 5. 承認後 — 投稿
 
-承認が届いたら、**運用指示（injection等）で指定されたBoardチャンネル**へ `post_channel` でレポートを投稿する:
+承認が届いたら、**運用指示（injection等）で指定されたBoardチャンネル**へ `animaworks-tool board post <channel> <text>` でレポートを投稿する:
 
 ```
-post_channel(channel="{指定されたBoard名}", content="{承認済みレポート}")
+animaworks-tool board post {指定されたBoard名} - <<'EOF'
+{承認済みレポート}
+EOF
 ```
 
 投稿先Boardが指示されていない場合は投稿を行わず、承認済みレポートが手元にある旨を上司（いなければ人間）に伝えて指示を仰ぐ。

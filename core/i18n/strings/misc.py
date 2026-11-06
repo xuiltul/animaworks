@@ -103,10 +103,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "builder.heartbeat_tool_fallback": {
         "ja": (
-            "Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, Write（pending作成用）\n- NG: コード変更、ファイル大量編集、長時間の分析・調査\n重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
+            "Heartbeatでは**観察・報告・計画・フォローアップ**にツールを使ってください。\n- OK: `animaworks-tool board read <channel>`、search_memory、read_memory_file、send_message、`animaworks-tool board post <channel> <text>`、update_task、delegate_task、submit_tasks、Write（pending作成用）\n- NG: コード変更、ファイル大量編集、長時間の分析・調査\n重い作業が必要な場合は state/pending/ にタスクファイルを書き出してください。"
         ),
         "en": (
-            "In Heartbeat, use tools for **observation, reporting, planning, and follow-up**.\n- OK: read_channel, search_memory, read_memory_file, send_message, post_channel, update_task, delegate_task, submit_tasks, Write (for pending creation)\n- NG: code changes, bulk file edits, lengthy analysis/investigation\nIf heavy work is needed, write a task file to state/pending/."
+            "In Heartbeat, use tools for **observation, reporting, planning, and follow-up**.\n- OK: `animaworks-tool board read <channel>`, search_memory, read_memory_file, send_message, `animaworks-tool board post <channel> <text>`, update_task, delegate_task, submit_tasks, Write (for pending creation)\n- NG: code changes, bulk file edits, lengthy analysis/investigation\nIf heavy work is needed, write a task file to state/pending/."
         ),
     },
     "builder.injection_size_warning": {

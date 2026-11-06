@@ -25,7 +25,6 @@ MCP_TOOL_NAMES: tuple[str, ...] = (
     "report_procedure_outcome",
     "report_knowledge_outcome",
     "send_message",
-    "post_channel",
     "attach_file",
     "call_human",
     "delegate_task",
@@ -67,7 +66,6 @@ CONSOLIDATION_BLOCKED_TOOL_NAMES: frozenset[str] = frozenset(
         "ping_subordinate",
         "submit_tasks",
         "send_message",
-        "post_channel",
         "grant_workspace_access",
     }
 )
@@ -84,7 +82,6 @@ COMPACT_TOOL_NAMES: frozenset[str] = frozenset(
         "read_memory_file",
         "write_memory_file",
         "send_message",
-        "post_channel",
     }
 )
 
@@ -107,7 +104,6 @@ _BUILDER_TOOL_NAMES: tuple[str, ...] = (
     "report_procedure_outcome",
     "report_knowledge_outcome",
     "grant_workspace_access",
-    "post_channel",
     "attach_file",
     "call_human",
     "ping_subordinate",

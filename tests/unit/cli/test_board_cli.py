@@ -13,6 +13,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _tool_result_payload(output: str) -> str:
+    return output.split("\n", 1)[1].rsplit("\n</tool_result>", 1)[0]
+
+
 def _make_handler(anima_dir: Path, shared_dir: Path):
     from core.tooling.handler import ToolHandler
 
@@ -46,30 +50,83 @@ class TestCmdBoardRead:
             "read_channel",
             {"channel": "general", "limit": 7, "human_only": True},
         )
-        assert json.loads(capsys.readouterr().out) == [{"text": "hi"}]
+        output = capsys.readouterr().out
+        assert '<tool_result tool="animaworks-tool board read" trust="untrusted">' in output
+        assert json.loads(_tool_result_payload(output)) == [{"text": "hi"}]
 
-    @patch("core.messaging.messenger.Messenger")
-    @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
-    @patch("core.infra.runtime_init.ensure_runtime_dir")
-    @patch("cli.commands.board.current_anima_dir", return_value=None)
     def test_operator_read_keeps_messenger_path(
         self,
-        mock_context,
-        mock_ensure,
-        mock_shared,
-        mock_messenger_cls,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys,
     ) -> None:
         from cli.commands.board import cmd_board_read
 
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        channels_dir.mkdir(parents=True)
+        (channels_dir / "general.jsonl").write_text('{"from":"alice","text":"hello"}\n', encoding="utf-8")
         mock_messenger = MagicMock()
         mock_messenger.read_channel.return_value = [{"from": "alice", "text": "hello"}]
-        mock_messenger_cls.return_value = mock_messenger
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: None)
+        monkeypatch.setattr("core.infra.runtime_init.ensure_runtime_dir", lambda: None)
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: shared_dir)
+        monkeypatch.setattr("core.messaging.messenger.Messenger", lambda *_args: mock_messenger)
         cmd_board_read(argparse.Namespace(channel="general", limit=10, human_only=False))
 
-        mock_messenger_cls.assert_called_once_with(Path("/tmp/shared"), "cli")
-        mock_messenger.read_channel.assert_called_once_with("general", limit=10, human_only=False)
-        assert json.loads(capsys.readouterr().out)[0]["from"] == "alice"
+        mock_messenger.read_channel.assert_called_once_with("general", limit=10, human_only=False, source="human")
+        output = capsys.readouterr().out
+        assert 'trust="untrusted"' in output
+        assert json.loads(_tool_result_payload(output))[0]["from"] == "alice"
+
+    def test_operator_read_distinguishes_missing_and_empty_channels(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ) -> None:
+        from cli.commands.board import cmd_board_read
+
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        channels_dir.mkdir(parents=True)
+        (channels_dir / "general.jsonl").touch()
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: None)
+        monkeypatch.setattr("core.infra.runtime_init.ensure_runtime_dir", lambda: None)
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: shared_dir)
+        monkeypatch.setattr(
+            "core.messaging.messenger.Messenger", lambda *_args: MagicMock(read_channel=lambda *_a, **_k: [])
+        )
+
+        cmd_board_read(argparse.Namespace(channel="general", limit=10, human_only=False))
+        empty_output = capsys.readouterr().out
+        assert "no posts" in empty_output.lower() or "投稿がありません" in empty_output
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_read(argparse.Namespace(channel="missing", limit=10, human_only=False))
+
+        assert exc_info.value.code == 1
+        missing_output = capsys.readouterr().out
+        assert "not found" in missing_output.lower() or "見つかりません" in missing_output
+        assert empty_output != missing_output
+
+    def test_operator_read_rejects_unreadable_channel_metadata(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        from cli.commands.board import cmd_board_read
+
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        channels_dir.mkdir(parents=True)
+        (channels_dir / "general.jsonl").touch()
+        (channels_dir / "general.meta.json").write_text("{", encoding="utf-8")
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: None)
+        monkeypatch.setattr("core.infra.runtime_init.ensure_runtime_dir", lambda: None)
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: shared_dir)
+        monkeypatch.setattr("core.messaging.messenger.Messenger", lambda *_args: MagicMock())
+
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_read(argparse.Namespace(channel="general", limit=10, human_only=False))
+
+        assert exc_info.value.code == 1
+        assert 'trust="untrusted"' in capsys.readouterr().out
 
 
 # ── Board post ────────────────────────────────────────────
@@ -139,7 +196,7 @@ class TestCmdBoardPost:
 
         anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        args = argparse.Namespace(from_anima="alice", channel="general", text="Hello @bob")
+        args = argparse.Namespace(post_args=["general", "Hello @bob"], as_name=None)
         run_tool = MagicMock()
         monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: anima_dir)
         monkeypatch.setattr("cli.commands.board.run_and_print", run_tool)
@@ -148,10 +205,88 @@ class TestCmdBoardPost:
 
         run_tool.assert_called_once_with("post_channel", {"channel": "general", "text": "Hello @bob"})
 
+    @pytest.mark.parametrize("post_args", [["general"], ["general", "-"]])
+    def test_anima_post_stdin_content_is_forwarded(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        post_args: list[str],
+    ) -> None:
+        from io import StringIO
+
+        from cli.commands.board import cmd_board_post
+
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        run_tool = MagicMock()
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: anima_dir)
+        monkeypatch.setattr("cli.commands.board.run_and_print", run_tool)
+        monkeypatch.setattr("cli.commands.board.sys.stdin", StringIO("Hello from stdin\n\n"))
+
+        cmd_board_post(argparse.Namespace(post_args=post_args, as_name=None))
+
+        run_tool.assert_called_once_with("post_channel", {"channel": "general", "text": "Hello from stdin\n"})
+
+    def test_operator_post_new_form_defaults_to_operator(self, operator_board: Path, capsys) -> None:
+        from cli.commands.board import cmd_board_post
+
+        cmd_board_post(argparse.Namespace(post_args=["general", "Hello"], as_name=None))
+
+        row = json.loads((operator_board / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["from"] == "operator"
+        assert row["kind"] == "operator"
+        assert "general" in capsys.readouterr().out
+
+    def test_operator_post_as_overrides_legacy_from(self, operator_board: Path) -> None:
+        from cli.commands.board import cmd_board_post
+
+        cmd_board_post(argparse.Namespace(post_args=["alice", "general", "Legacy body"], as_name="bob"))
+
+        row = json.loads((operator_board / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["from"] == "bob"
+        assert row["kind"] == "operator"
+
+    def test_operator_post_reads_channel_only_form_from_stdin(
+        self,
+        operator_board: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from io import StringIO
+
+        from cli.commands.board import cmd_board_post
+
+        monkeypatch.setattr("cli.commands.board.sys.stdin", StringIO("stdin body\n"))
+        cmd_board_post(argparse.Namespace(post_args=["general"], as_name=None))
+
+        row = json.loads((operator_board / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["text"] == "stdin body"
+
+    @pytest.mark.parametrize(
+        ("post_args", "expected_from"),
+        [(["general", "-"], "operator"), (["alice", "general", "-"], "alice")],
+    )
+    def test_operator_post_dash_reads_stdin_for_new_and_legacy_forms(
+        self,
+        operator_board: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        post_args: list[str],
+        expected_from: str,
+    ) -> None:
+        from io import StringIO
+
+        from cli.commands.board import cmd_board_post
+
+        monkeypatch.setattr("cli.commands.board.sys.stdin", StringIO("stdin body\r\n"))
+        cmd_board_post(argparse.Namespace(post_args=post_args, as_name=None))
+
+        row = json.loads((operator_board / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["text"] == "stdin body"
+        assert row["from"] == expected_from
+
     def test_anima_post_refuses_impersonation(self, tmp_path: Path, capsys) -> None:
         from cli.commands.board import cmd_board_post
 
-        args = argparse.Namespace(from_anima="bob", channel="general", text="hello")
+        args = argparse.Namespace(post_args=["bob", "general", "hello"], as_name=None)
         with (
             patch("cli.commands.board.current_anima_dir", return_value=tmp_path / "alice"),
             patch("cli._anima_tool.run_anima_tool") as run_tool,
@@ -162,6 +297,46 @@ class TestCmdBoardPost:
         assert exc_info.value.code == 1
         assert "alice" in capsys.readouterr().err
         run_tool.assert_not_called()
+
+    def test_anima_post_rejects_as_impersonation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        from cli.commands.board import cmd_board_post
+
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        run_tool = MagicMock()
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: anima_dir)
+        monkeypatch.setattr("cli.commands.board.run_and_print", run_tool)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_post(argparse.Namespace(post_args=["general", "hello"], as_name="bob"))
+
+        assert exc_info.value.code == 1
+        assert "alice" in capsys.readouterr().err
+        run_tool.assert_not_called()
+
+    @pytest.mark.parametrize("post_args", [["general"], ["general", "-"]])
+    def test_empty_stdin_is_an_error(self, monkeypatch: pytest.MonkeyPatch, post_args: list[str], capsys) -> None:
+        from io import StringIO
+
+        from cli.commands.board import cmd_board_post
+
+        monkeypatch.setattr("cli.commands.board.sys.stdin", StringIO(""))
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_post(argparse.Namespace(post_args=post_args, as_name=None))
+
+        assert exc_info.value.code == 1
+        error = capsys.readouterr().err
+        assert "empty" in error.lower() or "空" in error
+
+    def test_too_many_post_arguments_are_rejected(self, capsys) -> None:
+        from cli.commands.board import cmd_board_post
+
+        with pytest.raises(SystemExit) as exc_info:
+            cmd_board_post(argparse.Namespace(post_args=["alice", "general", "text", "extra"], as_name=None))
+
+        assert exc_info.value.code == 1
+        error = capsys.readouterr().err
+        assert "arguments" in error.lower() or "引数" in error
 
     def test_operator_post_missing_channel_exits_with_error(
         self,
@@ -230,7 +405,9 @@ class TestCmdBoardDmHistory:
             "read_dm_history",
             {"peer": "bob", "limit": 40, "direction": "sent", "hours": 24, "keyword": "deploy"},
         )
-        assert capsys.readouterr().out.strip() == "[]"
+        output = capsys.readouterr().out
+        assert '<tool_result tool="animaworks-tool board dm-history" trust="untrusted">' in output
+        assert _tool_result_payload(output) == "[]"
 
     @patch("core.messaging.messenger.Messenger")
     @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
@@ -267,7 +444,9 @@ class TestCmdBoardDmHistory:
             hours=12,
             keyword="deploy",
         )
-        assert json.loads(capsys.readouterr().out)[0]["text"] == "deploy"
+        output = capsys.readouterr().out
+        assert 'tool="animaworks-tool board dm-history" trust="untrusted"' in output
+        assert json.loads(_tool_result_payload(output))[0]["text"] == "deploy"
 
     def test_anima_dm_history_refuses_impersonation(self, tmp_path: Path, capsys) -> None:
         from cli.commands.board import cmd_board_dm_history
@@ -294,3 +473,37 @@ def test_board_dm_history_parser_exposes_schema_filters() -> None:
     assert args.direction == "sent"
     assert args.hours == 24
     assert args.keyword == "deploy"
+
+
+@pytest.mark.parametrize(
+    ("post_args", "as_name"),
+    [
+        (["general"], None),
+        (["general", "hello"], None),
+        (["general", "-"], None),
+        (["alice", "general", "legacy"], None),
+        (["general", "hello"], "bob"),
+    ],
+)
+def test_board_post_parser_accepts_new_and_legacy_forms(post_args: list[str], as_name: str | None) -> None:
+    from cli.parser import build_parser
+
+    argv = ["board", "post", *post_args]
+    if as_name:
+        argv.extend(["--as", as_name])
+    args = build_parser().parse_args(argv)
+
+    assert args.post_args == post_args
+    assert args.as_name == as_name
+
+
+def test_board_post_help_describes_stdin_and_legacy_form(capsys) -> None:
+    from cli.parser import build_parser
+
+    with pytest.raises(SystemExit) as exc_info:
+        build_parser().parse_args(["board", "post", "--help"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "read it from stdin" in output or "標準入力" in output
+    assert "legacy" in output.lower() or "旧形式" in output

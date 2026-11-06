@@ -77,7 +77,6 @@ class TestActionRulesGuideTemplate:
         required_tools = {
             "call_human",
             "send_message",
-            "post_channel",
             "write_memory_file",
             "gmail_draft",
             "gmail_send",
@@ -105,6 +104,10 @@ class TestActionRulesGuideTemplate:
             assert "slack_post" not in content
             for tool in required_tools:
                 assert f"`{tool}`" in content, f"{locale} action-rules-guide missing {tool}"
+            if locale == "ja":
+                assert "`animaworks-tool board post`" in content, f"{locale} action-rules-guide missing Board CLI"
+            else:
+                assert "`post_channel`" in content, f"{locale} action-rules-guide missing post_channel"
             for cli in cli_mappings:
                 assert cli in content, f"{locale} action-rules-guide missing {cli}"
 

@@ -402,17 +402,15 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.post_channel.desc": {
         "ja": (
-            "Boardチャネルにメッセージを投稿する。通常の作業報告・完了報告は、まず所属している部門/チームのチャネルに投稿する。generalは全体共有、opsは部門横断の運用・インフラ共有に使う。1対1の連絡にはsend_messageを使う。"
+            "Boardチャネルへの投稿は Bash から `animaworks-tool board post <channel> <text>` を実行する。長文は `animaworks-tool board post <channel> - <<'EOF'` で標準入力から渡せる。通常の作業報告・完了報告は所属チームのチャネルへ投稿し、1対1の連絡には send_message を使う。"
         ),
         "en": (
-            "Post a message to a Board channel. Routine work reports and completion updates should go to your team/department channel first. Use general for org-wide sharing and ops for cross-team operations or infrastructure topics. Use send_message for 1-to-1 communication."
+            "Post to a Board channel by running `animaworks-tool board post <channel> <text>` in Bash. For long text, use `animaworks-tool board post <channel> - <<'EOF'` and pass the body through stdin. Send routine work reports to your team channel first; use send_message for 1-to-1 communication."
         ),
     },
     "schema.post_channel.text": {
-        "ja": "投稿するメッセージ本文。@名前 でメンション可能（メンション先にDM通知される）。@all で起動中の全員にDM通知",
-        "en": (
-            "Message body to post. Use @name to mention (triggers DM notification to the mentioned person). @all sends DM notification to all active members"
-        ),
+        "ja": "投稿するメッセージ本文。`animaworks-tool board post <channel> <text>` の本文として渡す。@名前 でメンション可能。",
+        "en": ("Message body passed to `animaworks-tool board post <channel> <text>`. Use @name to mention an Anima."),
     },
     "schema.read_channel.channel": {
         "ja": "チャネル名（所属しているBoardチャネル名）",
@@ -420,10 +418,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.read_channel.desc": {
         "ja": (
-            "Boardチャネルの直近メッセージを読む。他のAnimaやユーザーが共有した情報を確認できる。所属している部門/チームチャネルや general / ops を必要に応じて参照する。human_only=trueでユーザー発言のみフィルタリング可能。inbox はチャネルではないため指定不可（inbox はシステムが自動処理）。"
+            "Boardチャネルの直近メッセージを読むには Bash から `animaworks-tool board read <channel> --limit N` を実行する。人間の投稿だけ読む場合は `--human-only` を付ける。inbox はチャネルではないため指定不可（inbox はシステムが自動処理）。"
         ),
         "en": (
-            "Read recent messages from a Board channel. Review information shared by other Animas and users in your team/department channels or in general/ops as needed. Set human_only=true to filter for human messages only. 'inbox' is not a channel and cannot be specified (it is processed automatically by the system)."
+            "Read recent Board messages by running `animaworks-tool board read <channel> --limit N` in Bash. Add `--human-only` to filter for human posts. 'inbox' is not a channel and cannot be specified (it is processed automatically by the system)."
         ),
     },
     "schema.read_channel.human_only": {
