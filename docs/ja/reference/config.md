@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 9b89c3025be17c0cd1a2ada623aea9e7c041c0c11ce1f4900525c7e62a1319ea -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 8e11644815d925b2acded841375b8abc8a3cf25518fdf4e880c01adf3526f24c -->
 
 # 設定リファレンス
 
@@ -717,7 +717,6 @@
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
-| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |

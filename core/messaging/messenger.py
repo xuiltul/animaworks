@@ -25,9 +25,9 @@ from core.exceptions import (
     RecipientNotFoundError,
 )  # noqa: F401
 from core.i18n import t
-from core.platform.atomic_io import append_jsonl_locked, atomic_write_json, update_json
+from core.platform.atomic_io import atomic_write_json, update_json
 from core.schemas import EXTERNAL_PLATFORM_SOURCES, Message
-from core.time_utils import ensure_aware, now_iso, now_local
+from core.time_utils import ensure_aware, now_local
 
 if TYPE_CHECKING:
     from core.messaging.board import Principal
