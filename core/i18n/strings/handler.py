@@ -202,6 +202,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Error: チャネル #{channel} は既に存在します",
         "en": "Error: Channel #{channel} already exists",
     },
+    "handler.channel_archived_name_reserved": {
+        "ja": "Error: #{channel} はアーカイブ済みの名前です。別の名前を使ってください。",
+        "en": "Error: The archived name #{channel} is reserved. Use a different name.",
+    },
     "handler.channel_created": {
         "ja": "チャネル #{channel} を作成しました（メンバー: {members}）",
         "en": "Channel #{channel} created (members: {members})",
@@ -223,6 +227,42 @@ STRINGS: dict[str, dict[str, str]] = {
             "Error: Channel #{channel} not found. "
             'Create it explicitly with manage_channel(action="create", channel="{channel}").'
         ),
+    },
+    "handler.channel_post_invalid_poster": {
+        "ja": "Error: 投稿者名が既知の Anima ではありません: {poster}",
+        "en": "Error: The channel poster is not a known Anima: {poster}",
+    },
+    "handler.channel_post_success": {
+        "ja": "#{channel} に投稿しました",
+        "en": "Posted to #{channel}",
+    },
+    "handler.channel_post_duplicate": {
+        "ja": "#{channel} への投稿は既に登録済みです",
+        "en": "The post to #{channel} was already recorded",
+    },
+    "handler.channel_post_notified": {
+        "ja": "通知しました: {names}",
+        "en": "Notified: {names}",
+    },
+    "handler.channel_post_not_notified": {
+        "ja": "通知しませんでした: {details}",
+        "en": "Not notified: {details}",
+    },
+    "handler.channel_post_failed": {
+        "ja": "Error: ボードへの投稿に失敗しました: {detail}",
+        "en": "Error: Board post failed: {detail}",
+    },
+    "cli.board_post_success": {
+        "ja": "#{channel} に投稿しました",
+        "en": "Posted to #{channel}",
+    },
+    "cli.board_post_failed": {
+        "ja": "Error: ボードへの投稿に失敗しました: {detail}",
+        "en": "Error: Board post failed: {detail}",
+    },
+    "handler.channel_post_validation_failed": {
+        "ja": "Error: 投稿者名を検証できないため投稿を中止しました",
+        "en": "Error: Could not validate the channel poster, so the post was refused",
     },
     "handler.channel_open": {
         "ja": "#{channel} はオープンチャネルです（全Animaがアクセス可能）",

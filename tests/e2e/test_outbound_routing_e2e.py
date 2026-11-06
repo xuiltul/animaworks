@@ -223,7 +223,11 @@ class TestBoardSlackSyncRouting:
         self,
         make_anima,
         make_handler,
+        shared_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ):
+        from core.messaging.board import anima_principal, post_to_board
+
         cfg = AnimaWorksConfig(
             external_messaging=ExternalMessagingConfig(
                 slack=ExternalMessagingChannelConfig(
@@ -237,6 +241,29 @@ class TestBoardSlackSyncRouting:
         sakura_dir = make_anima("sakura")
         handler = make_handler(sakura_dir)
 
+        def post_direct(
+            channel: str,
+            text: str,
+            *,
+            from_anima: str,
+            source: str = "anima",
+            from_name: str | None = None,
+            request_id: str | None = None,
+            suppress_mentions: bool = False,
+        ) -> dict:
+            result = post_to_board(
+                channel,
+                text,
+                anima_principal(from_anima, animas_dir=shared_dir.parent / "animas"),
+                request_id=request_id,
+                origin="internal",
+                notify=not suppress_mentions,
+                shared_dir=shared_dir,
+            )
+            return {"post": result.to_dict()}
+
+        monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
+
         with (
             patch("core.config.models.load_config", return_value=cfg),
             patch("core.messaging.outbound_auto._resolve_bot_token") as mock_token,
@@ -247,7 +274,9 @@ class TestBoardSlackSyncRouting:
                 {"channel": "warning-room", "text": "internal only"},
             )
 
-        assert result == "Posted to #warning-room"
+        from core.i18n import t
+
+        assert result == t("handler.channel_post_success", channel="warning-room")
         mock_token.assert_not_called()
         mock_client.assert_not_called()
 

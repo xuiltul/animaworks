@@ -50,6 +50,7 @@ from core.tooling.handler_base import (  # noqa: F401
     _error_result,
     active_session_type,
     suppress_board_fanout,
+    suppress_board_fanout_channels,
 )
 
 # ── Import Mixins ──
@@ -633,7 +634,6 @@ class ToolHandler(
     # ── Activity logging ──────────────────────────────────────
 
     _ACTIVITY_TYPE_MAP: dict[str, str] = {
-        "post_channel": "channel_post",
         "read_channel": "channel_read",
         "read_dm_history": "channel_read",
         "call_human": "human_notify",
@@ -652,16 +652,6 @@ class ToolHandler(
 
             if activity_type is None:
                 self._activity.log("tool_use", tool=name, summary=str(args)[:200], meta=meta or None)
-            elif name == "post_channel":
-                ch = args.get("channel", "")
-                txt = args.get("text", "")
-                self._activity.log(
-                    activity_type,
-                    content=txt[:200],
-                    channel=ch,
-                    summary=f"#{ch}: {txt[:80]}" if ch else txt[:80],
-                    meta=meta or None,
-                )
             elif name == "read_channel":
                 self._activity.log(
                     activity_type,

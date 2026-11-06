@@ -68,14 +68,17 @@ def append_jsonl_locked(
     *,
     raw_line: bool = False,
     fsync: bool = False,
+    lock_held: bool = False,
 ) -> None:
     """Append one JSONL record while holding the adjacent persistent lock.
 
     Writers serialize the complete encoded record before opening the target,
     then hold a ``flock`` on ``<name>.lock`` for the full append so concurrent
-    processes cannot interleave large lines. ``raw_line`` accepts an existing
-    single-line JSON representation when an operation must preserve its bytes.
-    Durability is opt-in to preserve each caller's existing fsync policy.
+    processes cannot interleave large lines. ``lock_held`` lets a caller append
+    within a larger transaction that already holds that same lock. ``raw_line``
+    accepts an existing single-line JSON representation when an operation must
+    preserve its bytes. Durability is opt-in to preserve each caller's existing
+    fsync policy.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     if raw_line:
@@ -88,11 +91,18 @@ def append_jsonl_locked(
     else:
         line = json.dumps(record, ensure_ascii=False) + "\n"
     lock_path = path.with_name(f"{path.name}.lock")
-    with locked_path(lock_path, exclusive=True, thread_lock=True), path.open("a", encoding="utf-8") as stream:
-        stream.write(line)
-        if fsync:
-            stream.flush()
-            os.fsync(stream.fileno())
+    if lock_held:
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(line)
+            if fsync:
+                stream.flush()
+                os.fsync(stream.fileno())
+    else:
+        with locked_path(lock_path, exclusive=True, thread_lock=True), path.open("a", encoding="utf-8") as stream:
+            stream.write(line)
+            if fsync:
+                stream.flush()
+                os.fsync(stream.fileno())
 
 
 def update_json(

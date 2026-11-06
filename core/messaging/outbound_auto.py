@@ -14,7 +14,7 @@ explicitly post a Slack reply via tool or CLI.
 
 import logging
 import os
-from typing import Any
+from typing import Any, Literal
 
 from core.channels.slack import SlackHTTPClient
 from core.credentials import _lookup_shared_credentials, _lookup_vault_credential
@@ -310,28 +310,31 @@ class BoardSlackSync:
         from_person: str,
         *,
         source: str = "",
-    ) -> str | None:
+    ) -> Literal["sent", "skipped", "failed"]:
         """Post a board message to the mapped Slack channel.
 
-        Returns the Slack message ts on success, or None.
-        Skips messages that originated from Slack (echo prevention).
+        Return a status so the centralized Board writer can record the result.
         """
-        if source == "slack":
-            return None
+        if source in {"slack", "discord"}:
+            return "skipped"
 
         from core.config.models import load_config
 
-        cfg = load_config()
-        slack_cfg = cfg.external_messaging.slack
+        try:
+            cfg = load_config()
+            slack_cfg = cfg.external_messaging.slack
+        except Exception:
+            logger.exception("BoardSlackSync: failed to load configuration for #%s", board_name)
+            return "failed"
         if not slack_cfg.enabled:
-            return None
+            return "skipped"
 
         outbound_whitelist = getattr(slack_cfg, "board_outbound_sync", [])
         if outbound_whitelist:
             if board_name not in outbound_whitelist:
-                return None
+                return "skipped"
         elif not getattr(slack_cfg, "board_outbound_sync_all", False):
-            return None
+            return "skipped"
 
         # Reverse lookup: board_name -> slack_channel_id
         channel_id = None
@@ -340,12 +343,12 @@ class BoardSlackSync:
                 channel_id = ch_id
                 break
         if not channel_id:
-            return None
+            return "skipped"
 
         token = _resolve_bot_token(from_person)
         if not token:
             logger.warning("BoardSlackSync: no token for board '%s' sync", board_name)
-            return None
+            return "failed"
 
         from core.integrations._slack_markdown import md_to_slack_mrkdwn
 
@@ -369,9 +372,9 @@ class BoardSlackSync:
                         channel_id,
                         data.get("error", "unknown"),
                     )
-                    return None
+                    return "failed"
                 logger.info("BoardSlackSync: synced '%s' -> %s", board_name, channel_id)
-                return data.get("ts")
+                return "sent"
         except Exception:
             logger.exception("BoardSlackSync: failed to sync '%s'", board_name)
-            return None
+            return "failed"

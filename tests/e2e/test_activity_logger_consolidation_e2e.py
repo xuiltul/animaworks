@@ -220,10 +220,12 @@ class TestToolHandlerActivityLogging:
         assert entry["tool"] == "search_memory"
 
     def test_log_tool_activity_channel_post(self, tmp_path):
-        """_log_tool_activity logs channel_post with correct fields."""
+        """The tool path leaves channel_post to the server-side Board writer."""
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
         handler = self._make_handler(anima_dir)
+        # Only posts that were appended are recorded.
+        handler._last_post_channel_succeeded = True
 
         handler._log_tool_activity(
             "post_channel",
@@ -234,9 +236,8 @@ class TestToolHandlerActivityLogging:
         jsonl_files = list(log_dir.glob("*.jsonl"))
         lines = jsonl_files[0].read_text(encoding="utf-8").strip().splitlines()
         entry = json.loads(lines[0])
-        assert entry["type"] == "channel_post"
-        assert entry["content"] == "Hello team!"
-        assert entry["channel"] == "general"
+        assert entry["type"] == "tool_use"
+        assert all(json.loads(line)["type"] != "channel_post" for line in lines)
 
     def test_log_tool_activity_read_channel(self, tmp_path):
         """_log_tool_activity logs channel_read with correct fields."""

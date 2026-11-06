@@ -18,6 +18,21 @@ from core.platform.process_role import assert_settings_write_allowed
 logger = logging.getLogger(__name__)
 
 
+def read_status_checked(anima_dir: Path) -> tuple[bool, dict[str, Any]]:
+    """Read an Anima status object and report whether it was readable."""
+    status_path = Path(anima_dir) / "status.json"
+    try:
+        with status_path.open(encoding="utf-8") as status_file:
+            status = json.load(status_file)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.debug("Unable to read %s: %s", status_path, exc)
+        return False, {}
+    if not isinstance(status, dict):
+        logger.debug("Ignoring non-object status file %s", status_path)
+        return False, {}
+    return True, status
+
+
 def read_status(anima_dir: Path) -> dict[str, Any]:
     """Read an Anima status object, falling back to an empty object on errors.
 
@@ -26,16 +41,7 @@ def read_status(anima_dir: Path) -> dict[str, Any]:
     :func:`update_status`, which rejects malformed existing JSON instead of
     replacing it with an empty object.
     """
-    status_path = Path(anima_dir) / "status.json"
-    try:
-        with status_path.open(encoding="utf-8") as status_file:
-            status = json.load(status_file)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        logger.debug("Unable to read %s: %s", status_path, exc)
-        return {}
-    if not isinstance(status, dict):
-        logger.debug("Ignoring non-object status file %s", status_path)
-        return {}
+    _, status = read_status_checked(anima_dir)
     return status
 
 
@@ -51,4 +57,4 @@ def update_status(anima_dir: Path, fn: Callable[[dict[str, Any]], dict[str, Any]
     return update_json(anima_dir / "status.json", fn)
 
 
-__all__ = ["read_status", "update_status"]
+__all__ = ["read_status", "read_status_checked", "update_status"]

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from core.i18n import t
 from core.memory import MemoryManager
 from core.messaging.messenger import Messenger
 from core.time_utils import now_jst
@@ -59,12 +60,26 @@ def _make_handler(
 class TestPostChannelPerRunGuard:
     """post_channel per-run ガードのユニットテスト。"""
 
+    @pytest.fixture(autouse=True)
+    def _mock_board_post(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Posting is routed through the internal API; keep this unit test offline."""
+        monkeypatch.setattr(
+            "core.messaging.board_client.post_via_server",
+            lambda *args, **kwargs: {
+                "committed": True,
+                "duplicate": False,
+                "id": "post-1",
+                "notified": [],
+                "not_notified": {},
+            },
+        )
+
     def test_post_channel_per_run_blocks_second_post(self, tmp_path: Path) -> None:
         """同一チャネルに2回投稿すると2回目がエラーになる。"""
         handler, _, _ = _make_handler(tmp_path)
 
         result1 = handler.handle("post_channel", {"channel": "general", "text": "First"})
-        assert "Posted to #general" in result1
+        assert t("handler.channel_post_success", channel="general") in result1
 
         result2 = handler.handle("post_channel", {"channel": "general", "text": "Second"})
         assert "Error" in result2
@@ -75,22 +90,22 @@ class TestPostChannelPerRunGuard:
         handler, _, _ = _make_handler(tmp_path)
 
         result1 = handler.handle("post_channel", {"channel": "general", "text": "Hello"})
-        assert "Posted to #general" in result1
+        assert t("handler.channel_post_success", channel="general") in result1
 
         result2 = handler.handle("post_channel", {"channel": "ops", "text": "Status OK"})
-        assert "Posted to #ops" in result2
+        assert t("handler.channel_post_success", channel="ops") in result2
 
     def test_reset_posted_channels_clears_tracking(self, tmp_path: Path) -> None:
         """reset_posted_channels後は再投稿可能になる。"""
         handler, _, _ = _make_handler(tmp_path)
 
         result1 = handler.handle("post_channel", {"channel": "general", "text": "First"})
-        assert "Posted to #general" in result1
+        assert t("handler.channel_post_success", channel="general") in result1
 
         handler.reset_posted_channels()
 
         result2 = handler.handle("post_channel", {"channel": "general", "text": "After reset"})
-        assert "Posted to #general" in result2
+        assert t("handler.channel_post_success", channel="general") in result2
 
 
 # ── Priming outbound section (via PrimingEngine) ────────────

@@ -13,11 +13,21 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+@pytest.fixture(autouse=True)
+def _sakura_status(tmp_path: Path) -> None:
+    anima_dir = tmp_path / "animas" / "sakura"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
+
+
 def _make_test_app(shared_dir: Path):
     from fastapi import FastAPI
 
     from server.routes.channels import create_channels_router
 
+    anima_dir = shared_dir.parent / "animas" / "sakura"
+    anima_dir.mkdir(parents=True, exist_ok=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     app = FastAPI()
     app.state.shared_dir = shared_dir
     app.state.ws_manager = MagicMock()
@@ -108,9 +118,8 @@ class TestChannelPostUnauthenticatedFromName:
             )
         assert resp.status_code == 200
 
-        ws = app.state.ws_manager
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["data"]["from"] == "human"
+        entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert entry["from"] == "human"
 
     async def test_unauthenticated_default_from_name_is_human(self, tmp_path: Path):
         """Default from_name (no from_name in request) is 'human' when unauthenticated."""
@@ -127,9 +136,8 @@ class TestChannelPostUnauthenticatedFromName:
             )
         assert resp.status_code == 200
 
-        ws = app.state.ws_manager
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["data"]["from"] == "human"
+        entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert entry["from"] == "human"
 
 
 # ── post_channel() from_name validation ──────────────────
@@ -190,7 +198,8 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         m = Messenger(shared_dir, "sakura")
-        m.post_channel("general", "Spoofed post", from_name="hacker")
+        with pytest.raises(ValueError):
+            m.post_channel("general", "Spoofed post", from_name="hacker")
 
         content = (shared_dir / "channels" / "general.jsonl").read_text().strip()
         assert content == "", "Unknown from_name should result in rejected post"
@@ -216,7 +225,7 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         m = Messenger(shared_dir, "sakura")
-        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"):
+        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"), pytest.raises(ValueError):
             m.post_channel("general", "Spoofed", from_name="hacker")
 
         assert any("unknown from_name" in r.message for r in caplog.records)
@@ -234,9 +243,9 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         messenger = Messenger(shared_dir, "sakura")
-        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"):
+        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"), pytest.raises(ValueError):
             messenger.post_channel("general", "Should not be posted", from_name="sakura")
 
         assert channel_file.read_text(encoding="utf-8") == ""
         assert any("Failed to validate channel from_name" in record.message for record in caplog.records)
-        mock_load.assert_called_once()
+        assert mock_load.called

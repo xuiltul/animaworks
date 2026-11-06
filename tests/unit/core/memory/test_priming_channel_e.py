@@ -14,6 +14,7 @@ import pytest
 
 from core.memory.priming import PrimingEngine, PrimingResult, format_priming_section
 from core.memory.priming.channel_b import read_old_channels
+from core.messaging.messenger import ChannelMeta, save_channel_meta
 from core.time_utils import now_jst
 
 
@@ -21,6 +22,7 @@ from core.time_utils import now_jst
 def anima_dir(tmp_path: Path) -> Path:
     d = tmp_path / "animas" / "sakura"
     d.mkdir(parents=True)
+    (d / "status.json").write_text("{}", encoding="utf-8")
     (d / "episodes").mkdir()
     (d / "knowledge").mkdir()
     (d / "skills").mkdir()
@@ -81,6 +83,34 @@ class TestFallbackChannels:
         empty_shared.mkdir()
         result = await read_old_channels(anima_dir, empty_shared)
         assert result == ""
+
+    @pytest.mark.parametrize(
+        "meta",
+        [ChannelMeta(members=["bob"]), ChannelMeta(members=[], closed=True)],
+        ids=["non-member", "closed"],
+    )
+    async def test_old_channel_fallback_skips_non_member_channels(self, tmp_path: Path, meta: ChannelMeta, monkeypatch):
+        anima_dir = tmp_path / "animas" / "alice"
+        anima_dir.mkdir(parents=True)
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        channels_dir.mkdir(parents=True)
+        channel_file = channels_dir / "general.jsonl"
+        channel_file.write_text(
+            json.dumps({"ts": now_jst().isoformat(), "from": "bob", "text": "secret post", "source": "anima"}) + "\n",
+            encoding="utf-8",
+        )
+        save_channel_meta(shared_dir, "general", meta)
+        original_read_text = Path.read_text
+
+        def reject_channel_read(path: Path, *args, **kwargs):
+            if path == channel_file:
+                raise AssertionError("ACL-rejected channel JSONL must not be read")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", reject_channel_read)
+
+        assert await read_old_channels(anima_dir, shared_dir) == ""
 
     async def test_reads_general_channel(self, anima_dir, shared_dir):
         now = now_jst()
