@@ -225,79 +225,9 @@ class TestReadChannelMentions:
 
 
 class TestReadDmHistory:
-    """read_dm_history() reads existing dm_logs files.
-
-    send() writes to dm_logs/ again for legacy fallback support.
-    These tests verify that read_dm_history() can parse dm_logs.
-    """
-
-    def _write_dm_log(self, shared_dir: Path, pair: str, entries: list[dict]) -> None:
-        """Helper: write JSONL entries to dm_logs/{pair}.jsonl."""
-        dm_dir = shared_dir / "dm_logs"
-        dm_dir.mkdir(parents=True, exist_ok=True)
-        filepath = dm_dir / f"{pair}.jsonl"
-        with filepath.open("a", encoding="utf-8") as f:
-            for entry in entries:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-    def test_no_history(self, shared_dir, messenger):
+    def test_no_history(self, messenger):
         result = messenger.read_dm_history("bob")
         assert result == []
-
-    def test_reads_legacy_log(self, shared_dir, messenger):
-        self._write_dm_log(
-            shared_dir,
-            "alice-bob",
-            [
-                {"ts": "2026-02-17T10:00:00", "from": "alice", "text": "Hello Bob!", "source": "anima"},
-            ],
-        )
-        result = messenger.read_dm_history("bob")
-        assert len(result) == 1
-        assert result[0]["from"] == "alice"
-        assert result[0]["text"] == "Hello Bob!"
-
-    def test_dm_log_path_sorted(self, shared_dir, messenger):
-        path = messenger._get_dm_log_path("bob")
-        assert path.name == "alice-bob.jsonl"
-        # From bob's perspective, path should be the same
-        bob = Messenger(shared_dir, "bob")
-        path_bob = bob._get_dm_log_path("alice")
-        assert path_bob.name == "alice-bob.jsonl"
-
-    def test_bidirectional_history(self, shared_dir):
-        alice = Messenger(shared_dir, "alice")
-        bob = Messenger(shared_dir, "bob")
-        # Manually write bidirectional entries (pair is always alice-bob)
-        dm_dir = shared_dir / "dm_logs"
-        dm_dir.mkdir(parents=True, exist_ok=True)
-        filepath = dm_dir / "alice-bob.jsonl"
-        entries = [
-            {"ts": "2026-02-17T10:00:00", "from": "alice", "text": "Hi Bob", "source": "anima"},
-            {"ts": "2026-02-17T10:00:01", "from": "bob", "text": "Hi Alice", "source": "anima"},
-        ]
-        with filepath.open("a", encoding="utf-8") as f:
-            for entry in entries:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        # Both should see the full history
-        history_alice = alice.read_dm_history("bob")
-        history_bob = bob.read_dm_history("alice")
-        assert len(history_alice) == 2
-        assert len(history_bob) == 2
-
-    def test_limit(self, shared_dir, messenger):
-        entries = [
-            {"ts": f"2026-02-17T10:{i:02d}:00", "from": "alice", "text": f"msg{i}", "source": "anima"}
-            for i in range(10)
-        ]
-        self._write_dm_log(shared_dir, "alice-bob", entries)
-        result = messenger.read_dm_history("bob", limit=3)
-        assert len(result) == 3
-
-    def test_send_creates_dm_log(self, shared_dir, messenger):
-        """send() no longer writes to dm_logs/ (dm_logs abolished)."""
-        messenger.send("bob", "Hello!")
-        assert not (shared_dir / "dm_logs").exists()
 
     def test_send_no_message_log(self, shared_dir, messenger):
         """send() should NOT create message_log anymore."""

@@ -24,7 +24,6 @@ def data_dir(tmp_path: Path) -> Path:
         (animas / name / "activity_log").mkdir(parents=True)
     (shared / "inbox" / "alice").mkdir(parents=True)
     (shared / "inbox" / "bob").mkdir(parents=True)
-    (shared / "dm_logs").mkdir(parents=True)
     return tmp_path
 
 
@@ -43,18 +42,6 @@ class TestSendToActivityLogPipeline:
         assert e.type == "message_sent"
         assert e.to_person == "bob"
         assert e.meta.get("from_type") == "anima"
-
-    def test_dm_logs_not_written(self, data_dir: Path) -> None:
-        shared = data_dir / "shared"
-        m = Messenger(shared, "alice")
-        m.send("bob", "Hello Bob!")
-
-        dm_logs_dir = shared / "dm_logs"
-        files = list(dm_logs_dir.glob("*.jsonl"))
-        total_content = ""
-        for f in files:
-            total_content += f.read_text(encoding="utf-8").strip()
-        assert total_content == ""
 
     def test_read_dm_history_uses_new_types(self, data_dir: Path) -> None:
         shared = data_dir / "shared"

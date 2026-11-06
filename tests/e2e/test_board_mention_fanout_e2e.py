@@ -29,7 +29,6 @@ def shared_dir(tmp_path: Path) -> Path:
     channels_dir.mkdir()
     for name in ("general", "ops", "dev"):
         (channels_dir / f"{name}.jsonl").write_text("", encoding="utf-8")
-    (d / "dm_logs").mkdir()
     return d
 
 

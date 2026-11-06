@@ -97,31 +97,6 @@ def delete_anima_files(data_dir: Path, name: str, *, archive: bool) -> DeleteRes
     )
 
 
-def rename_dm_logs(shared_dir: Path, old_name: str, new_name: str) -> int:
-    """Rename DM log files referencing *old_name*. Returns count of renamed files."""
-    dm_dir = shared_dir / "dm_logs"
-    if not dm_dir.exists():
-        return 0
-    count = 0
-    for path in sorted(dm_dir.glob("*.jsonl")):
-        parts = path.stem.split("-", 1)
-        if len(parts) != 2 or old_name not in parts:
-            continue
-        new_parts = sorted(new_name if part == old_name else part for part in parts)
-        new_path = dm_dir / f"{new_parts[0]}-{new_parts[1]}.jsonl"
-        if new_path.exists():
-            from core.platform.atomic_io import append_jsonl_locked
-
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    append_jsonl_locked(new_path, line, raw_line=True)
-            path.unlink()
-        else:
-            path.rename(new_path)
-        count += 1
-    return count
-
-
 def cleanup_rag_collections(anima_dir: Path, old_name: str, *, source: str = "cli") -> bool:
     """Delete old RAG collections, queuing a rebuild if ownership is busy."""
     from core.memory.rag.shared_meta import clear_shared_meta
@@ -165,6 +140,5 @@ def cleanup_rag_collections(anima_dir: Path, old_name: str, *, source: str = "cl
 __all__ = [
     "DeleteResult",
     "delete_anima_files",
-    "rename_dm_logs",
     "cleanup_rag_collections",
 ]

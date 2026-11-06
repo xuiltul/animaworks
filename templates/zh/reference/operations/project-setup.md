@@ -29,7 +29,6 @@ AnimaWorks 的配置结构与 Anima 添加步骤的参考。
 - `shared/inbox/` — 接收消息队列
 - `shared/users/` — 用户配置文件
 - `shared/channels/` — 共享频道（general、ops 的初始文件）
-- `shared/dm_logs/` — DM 历史（用于回退）
 - `tmp/attachments/` — 附件临时保存
 - `common_skills/` / `common_knowledge/` — 通用技能・知识
 - `prompts/` / `company/` — 提示词・组织模板

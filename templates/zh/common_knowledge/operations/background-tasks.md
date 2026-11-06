@@ -148,10 +148,6 @@ submit 后应立即转入下一项工作。
 - **禁用**: 通过 `config.json` 设为 `background_task.enabled: false` 时，`BackgroundTaskManager` 本身不会被创建。submit 会注册到 TaskStore，但执行尝试会回到 pending，并产生需确认通知。
 - **清理**: `cleanup_old_tasks(max_age_hours=24)` 会删除 (1) 通过 `completed` / `failed` 使 `completed_at` 超过指定时间的 JSON，(2) 仍为 `running` 且 `created_at` 已过去 **超过 48 小时** 的文件（进程崩溃等产生的孤儿）。返回值为删除件数。保留时间由调用方通过 `max_age_hours` 指定，没有对应的 `config.json` 配置键。
 
-### 同文件内的其他 API: `rotate_dm_logs`
-
-`core/tasks/background.py` 中，**独立于后台工具执行**，存在 `rotate_dm_logs(shared_dir, max_age_days=7)`。在 `shared/dm_logs/*.jsonl` 中，将条目 `ts` 早于阈值的行追加归档到 `{stem}.{YYYYMMDD}.archive.jsonl`，并从活动文件中移除。实际处理为 `_rotate_dm_logs_sync`（通过 `run_in_executor` 卸载）。
-
 ### 命令型任务（`animaworks-tool submit`）
 
 1. `animaworks-tool submit` 会原子地将包含 `task_type="command"`、工具名、参数、Anima、`task_id` 的输入注册到 TaskStore（`ANIMAWORKS_ANIMA_DIR` 必需）。

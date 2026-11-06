@@ -218,15 +218,6 @@ class InboxItem:
     path: Path
 
 
-def _restrict_dm_log_mode(filepath: Path) -> None:
-    """Keep DM logs readable by the runtime owner only (dir 0700, file 0600)."""
-    try:
-        filepath.parent.chmod(0o700)
-        filepath.chmod(0o600)
-    except OSError:
-        logger.debug("Failed to restrict dm_log mode: %s", filepath, exc_info=True)
-
-
 class Messenger:
     """File-system based messaging.
 
@@ -563,7 +554,7 @@ class Messenger:
     ) -> list[dict]:
         """Read DM history with a specific peer.
 
-        Reads from unified activity log first, falls back to legacy dm_logs/.
+        Reads from the unified activity log.
 
         Args:
             peer: Name of the DM peer.
@@ -620,25 +611,6 @@ class Messenger:
         except Exception:
             logger.debug("Failed to read DM history from activity log", exc_info=True)
 
-        # Fallback: legacy dm_logs/ (only for direction="both", no advanced filters)
-        if len(entries) < limit and direction == "both" and not hours and not keyword:
-            filepath = self._get_dm_log_path(peer)
-            if filepath.exists():
-                try:
-                    lines = filepath.read_text(encoding="utf-8").strip().splitlines()
-                except OSError:
-                    logger.warning("Failed to read DM history with: %s", peer)
-                    lines = []
-                for line in reversed(lines):
-                    if not line.strip():
-                        continue
-                    try:
-                        entries.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-                    if len(entries) >= limit * 2:
-                        break
-
         # Apply hours filter
         if hours is not None and hours > 0:
             from datetime import datetime, timedelta
@@ -669,26 +641,6 @@ class Messenger:
         # Sort by timestamp and return most recent
         entries.sort(key=lambda e: e.get("ts", ""))
         return entries[-limit:]
-
-    def _get_dm_log_path(self, peer: str) -> Path:
-        """Get DM log file path (pair names sorted alphabetically)."""
-        pair = sorted([self.anima_name, peer])
-        return self.shared_dir / "dm_logs" / f"{pair[0]}-{pair[1]}.jsonl"
-
-    def _append_dm_log(self, peer: str, content: str, *, intent: str = "") -> None:
-        """Append a DM entry to the legacy dm_logs/ file."""
-        filepath = self._get_dm_log_path(peer)
-        filepath.parent.mkdir(parents=True, exist_ok=True)
-        entry_dict: dict[str, Any] = {
-            "ts": now_iso(),
-            "from": self.anima_name,
-            "to": peer,
-            "text": content,
-        }
-        if intent:
-            entry_dict["intent"] = intent
-        append_jsonl_locked(filepath, entry_dict)
-        _restrict_dm_log_mode(filepath)
 
     def receive(self) -> list[Message]:
         known_animas: set[str] | None = None

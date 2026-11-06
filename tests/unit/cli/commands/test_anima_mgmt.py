@@ -14,24 +14,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def test_rename_dm_logs_appends_under_locked_jsonl_helper(tmp_path: Path) -> None:
-    from cli.commands.anima_mgmt import _rename_dm_logs
-
-    dm_logs = tmp_path / "shared" / "dm_logs"
-    dm_logs.mkdir(parents=True)
-    source = dm_logs / "alice-bob.jsonl"
-    destination = dm_logs / "bob-carol.jsonl"
-    source.write_text('{"from":"alice","text":"old"}\n', encoding="utf-8")
-    destination.write_text('{"from":"carol","text":"existing"}\n', encoding="utf-8")
-
-    assert _rename_dm_logs(tmp_path / "shared", "alice", "carol") == 1
-
-    lines = destination.read_text(encoding="utf-8").splitlines()
-    assert [json.loads(line)["text"] for line in lines] == ["existing", "old"]
-    assert not source.exists()
-    assert (dm_logs / "bob-carol.jsonl.lock").is_file()
-
-
 def test_rename_rag_cleanup_deletes_old_collections_through_owner(tmp_path: Path) -> None:
     from cli.commands.anima_mgmt import _cleanup_rag_collections
 

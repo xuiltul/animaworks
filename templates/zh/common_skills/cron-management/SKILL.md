@@ -14,7 +14,7 @@ cron 的**解析**由 `core/runtime/schedule_parser.py`（`parse_cron_md` / `par
 
 ### `core/tasks/background.py`（与 cron 不同系统）
 
-此模块**不做 cron 调度**。负责长时间工具调用的后台执行以及 DM 日志的轮转。不要与 cron 混淆。
+此模块**不做 cron 调度**。负责长时间工具调用的后台执行。不要与 cron 混淆。
 
 **`BackgroundTaskManager`**
 
@@ -32,10 +32,6 @@ cron 的**解析**由 `core/runtime/schedule_parser.py`（`parse_cron_md` / `par
 - **`is_eligible(tool_name)`**: 可用以下任一名称匹配 — schema 名（例: `generate_3d_model`）、profile 键（例: `image_gen:3d`）。
 - **默认包含在 `_DEFAULT_ELIGIBLE_TOOLS` 中的示例**（值为参考秒数）: `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`（各 30）、`local_llm` / `run_command`（各 60）。
 - **完成钩子**: 可在 `on_complete` 中设置 `Callable[[BackgroundTask], Awaitable[None]]`。应用侧从此处写入到 `state/background_notifications/` 的 Markdown 通知等（`background.py` 本身不触碰通知目录）。
-
-**`rotate_dm_logs`**
-
-- 将 `shared/dm_logs/*.jsonl` 的条目按 `max_age_days`（默认 **7 天**）截断，将旧行追加归档到 `{stem}.{YYYYMMDD}.archive.jsonl`。虽不是 cron 任务，但因定义在与后台系维护相同的文件中，故供参考记载。
 
 ---
 

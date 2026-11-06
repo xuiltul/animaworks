@@ -148,10 +148,6 @@ Results are picked up via the notification file for heartbeat, so no polling or 
 - **Disabling**: Setting `background_task.enabled: false` via `config.json` prevents `BackgroundTaskManager` itself from being created. submit is still registered in the TaskStore, but the execution attempt returns to pending, and a needs-review notification is generated.
 - **Cleanup**: `cleanup_old_tasks(max_age_hours=24)` deletes (1) JSON files where `completed_at` has exceeded the specified time via `completed` / `failed`, and (2) files where `created_at` has been in the `running` state for more than **48 hours** (orphans from process crashes, etc.). The return value is the number of deletions. The retention time is specified by the caller via `max_age_hours`, and there is no corresponding `config.json` configuration key.
 
-### Other APIs in the same file: `rotate_dm_logs`
-
-`core/tasks/background.py` also contains `rotate_dm_logs(shared_dir, max_age_days=7)`, **independent of background tool execution**. Among `shared/dm_logs/*.jsonl`, lines whose entry's `ts` is older than the threshold are appended to `{stem}.{YYYYMMDD}.archive.jsonl` as an archive and removed from the active file. The actual processing is done by `_rotate_dm_logs_sync` (offloaded via `run_in_executor`).
-
 ### Command-type tasks (`animaworks-tool submit`)
 
 1. `animaworks-tool submit` atomically registers input containing `task_type="command"`, the tool name, arguments, Anima, and `task_id` in the TaskStore (`ANIMAWORKS_ANIMA_DIR` required).

@@ -148,10 +148,6 @@ submit하면 즉시 다음 작업으로 넘어갈 것.
 - **비활성화**: `config.json`로 `background_task.enabled: false`로 설정하면 `BackgroundTaskManager` 자체가 생성되지 않는다. submit은 TaskStore에 등록되지만 실행 시도는 pending으로 돌아가고, 확인 필요 알림이 발생한다.
 - **정리**: `cleanup_old_tasks(max_age_hours=24)`은 (1) `completed` / `failed`로 `completed_at`가 지정 시간을 초과한 JSON, (2) `running` 그대로 `created_at`이 **48시간 초과** 과거의 파일(프로세스 크래시 등의 고아)을 삭제한다. 반환 값은 삭제 개수. 보존 시간은 호출 측이 `max_age_hours`로 지정하며, 해당하는 `config.json` 설정 키는 없다.
 
-### 같은 파일 내 기타 API: `rotate_dm_logs`
-
-`core/tasks/background.py`에는 **백그라운드 도구 실행과는 독립적으로** `rotate_dm_logs(shared_dir, max_age_days=7)`가 있다. `shared/dm_logs/*.jsonl` 중 항목의 `ts`가 임계값보다 오래된 행을 `{stem}.{YYYYMMDD}.archive.jsonl`로 추가 아카이브하고, 활성 파일에서는 제외한다. 실제 처리는 `_rotate_dm_logs_sync`(`run_in_executor`로 오프로드).
-
 ### 명령형 작업(`animaworks-tool submit`)
 
 1. `animaworks-tool submit`은 `task_type="command"`, 도구 이름, 인자, Anima, `task_id`을 포함한 입력을 TaskStore에 원자적으로 등록한다(`ANIMAWORKS_ANIMA_DIR` 필수).

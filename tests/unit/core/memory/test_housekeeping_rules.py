@@ -71,11 +71,6 @@ def _populate_cleanup_case(root: Path, *, now: datetime) -> list[Path]:
     (cron_logs / f"{(today - timedelta(days=20)).isoformat()}.jsonl").write_text("old\n")
     (cron_logs / f"{(today - timedelta(days=2)).isoformat()}.jsonl").write_text("recent\n")
 
-    dm_old = _write_file(root, "shared/dm_logs/alice-bob.archive.jsonl", b"old\n", age_days=60)
-    _write_file(root, "shared/dm_logs/alice-carol.archive.jsonl", b"recent\n")
-    _write_file(root, "shared/dm_logs/alice-bob.jsonl", b"not an archive\n", age_days=60)
-    assert dm_old.exists()
-
     curator = root / "animas/alice/state/skill_curator"
     curator.mkdir(parents=True)
     (curator / f"report-{(today - timedelta(days=40)).isoformat()}.json").write_text("old\n")
@@ -312,7 +307,6 @@ async def test_housekeeping_matches_pre_refactor_file_and_rotation_results(
         anima_log_retention_days=30,
         anima_log_total_max_size_mb=1,
         frontend_log_backup_count=2,
-        dm_log_archive_retention_days=30,
         cron_log_retention_days=30,
         shortterm_retention_days=7,
         shortterm_archive_retention_days=30,
@@ -341,6 +335,8 @@ async def test_housekeeping_matches_pre_refactor_file_and_rotation_results(
     before_results = await before_module.run_housekeeping(before_root, housekeeping=config, inbox=inbox_config)
     before_results.pop("pending_failed", None)  # Retired legacy command-descriptor cleanup.
     after_results = await current_housekeeping.run_housekeeping(after_root, housekeeping=config, inbox=inbox_config)
+    for retired_key in before_results.keys() - after_results.keys():
+        before_results.pop(retired_key, None)
     for result_key in current_housekeeping._WORKSPACE_SWEEP_RULE_KEYS:
         after_results.pop(result_key, None)  # These rules are covered against the pre-refactor snapshot separately.
 

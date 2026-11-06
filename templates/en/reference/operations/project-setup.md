@@ -29,7 +29,6 @@ The following are created by `ensure_runtime_dir` (`core/infra/runtime_init.py`)
 - `shared/inbox/` — Receive message queue
 - `shared/users/` — User profiles
 - `shared/channels/` — Shared channels (initial files for general, ops)
-- `shared/dm_logs/` — DM history (fallback)
 - `tmp/attachments/` — Temporary attachment storage
 - `common_skills/` / `common_knowledge/` — Common skills and knowledge
 - `prompts/` / `company/` — Prompt and organization templates

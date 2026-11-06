@@ -157,9 +157,9 @@ When the effective interval (after Activity Level application, rounded down to 5
 
 Otherwise (e.g., effective 61 minutes, or an interval like 43 minutes that does not divide 60 evenly), it fires via **1-minute polling** (`_heartbeat_check`) based on elapsed time since the last run. This is an implementation to avoid issues from the legacy `IntervalTrigger`.
 
-### Background Tools and DM Logs (core/tasks/background.py）
+### Background Tools (`core/tasks/background.py`）
 
-`core/tasks/background.py` is not the Heartbeat/Cron schedule itself, but handles **background execution of long-running tool calls** (including JSON state persistence) and **rotation of legacy shared DM logs (`shared/dm_logs/`)**. See `operations/background-tasks.md` for operational details and CLI paths.
+`core/tasks/background.py` is not the Heartbeat/Cron schedule itself, but handles **background execution of long-running tool calls** (including JSON state persistence). See `operations/background-tasks.md` for operational details and CLI paths.
 
 #### BackgroundTaskManager
 
@@ -173,12 +173,7 @@ Otherwise (e.g., effective 61 minutes, or an interval like 43 minutes that does 
 - **Cleanup `cleanup_old_tasks(max_age_hours=24)`**: `status` deletes JSON files in `completed` / `failed` whose `completed_at` is **older than the duration specified by the argument (24 hours by default)**. In addition, files that remain `running` for **more than 48 hours** since `created_at` are deleted as crash orphans. The return value is the number of deleted files.
 - **Retention period**: The retention period for completed tasks in `cleanup_old_tasks` is specified by the argument `max_age_hours` (24 hours by default). There is no corresponding `config.json` configuration key.
 
-#### rotate_dm_logs (System Cron)
-
-- **Execution timing**: Runs **daily at 04:30** (server-configured timezone) via the lifecycle (e.g., `core/lifecycle/system_crons.py`) system cron. The same job ID is also registered on the `server/supervisor/_mgr_scheduler.py` side.
-- **Target**: `shared/dm_logs/*.jsonl` (entries whose filenames contain `.archive.` are skipped).
-- **Behavior**: Based on the local current time of `core.time_utils`, parse the `ts` (ISO format) in each line of JSON, append entries older than the **default 7 days** to `{stem}.{YYYYMMDD}.archive.jsonl` as an archive, then remove them from the current file. Lines where `ts` parsing fails are **kept in the current file** (to prevent data loss).
-- **Other server scheduled jobs**: In addition to the per-Anima `cron.md`, the lifecycle registers system cron jobs for memory maintenance, RAG, etc. (e.g., daily consolidation at 02:00, daily indexing at 04:00). Times are based on the configured timezone. DM rotation runs at 04:30 as described above.
+- **Other server scheduled jobs**: In addition to the per-Anima `cron.md`, the lifecycle registers system cron jobs for memory maintenance, RAG, etc. (e.g., daily consolidation at 02:00, daily indexing at 04:00). Times are based on the configured timezone.
 
 ### Hot Reloading Heartbeat Configuration
 

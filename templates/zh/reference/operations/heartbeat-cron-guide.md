@@ -157,9 +157,9 @@ Chat（与人类的对话）与 TaskExec（实际作业）维持主模型。
 
 其他情况（例：有效 61 分钟，或 43 分钟这样不能整除 60 的间隔）则通过 **每分钟轮询**（`_heartbeat_check`）按“距上次经过的时间”触发。这是为规避旧 `IntervalTrigger` 遗留缺陷的实现。
 
-### 后台工具与 DM 日志（core/tasks/background.py）
+### 后台工具（core/tasks/background.py）
 
-`core/tasks/background.py` 并非心跳/Cron 的调度本身，而是负责 **长时间工具调用的后台执行**（包括状态的 JSON 持久化）与 **旧版共享 DM 日志（`shared/dm_logs/`）的轮转**。运维详情、CLI 路径也请参照 `operations/background-tasks.md`。
+`core/tasks/background.py` 并非心跳/Cron 的调度本身，而是负责 **长时间工具调用的后台执行**（包括状态的 JSON 持久化）。运维详情、CLI 路径也请参照 `operations/background-tasks.md`。
 
 #### BackgroundTaskManager
 
@@ -173,12 +173,7 @@ Chat（与人类的对话）与 TaskExec（实际作业）维持主模型。
 - **清理 `cleanup_old_tasks(max_age_hours=24)`**：`status` 在 `completed` / `failed` 中删除 `completed_at` 为 **早于参数指定时间（默认 24 小时）** 的 JSON。此外，仍为 `running` 且从 `created_at` 起经过 **超过 48 小时** 的文件作为崩溃孤儿删除。返回值为删除件数。
 - **保留时间**：`cleanup_old_tasks` 的完成任务保留时间由参数 `max_age_hours`（默认 24 小时）指定。没有对应的 `config.json` 配置键。
 
-#### rotate_dm_logs（系统 Cron）
-
-- **执行时机**：在生命周期（`core/lifecycle/system_crons.py` 等）的系统 Cron 中 **每天 04:30**（服务器配置时区）。`server/supervisor/_mgr_scheduler.py` 侧也会注册同一 ID 的作业。
-- **对象**：`shared/dm_logs/*.jsonl`（文件名中包含 `.archive.` 的跳过）。
-- **动作**：以 `core.time_utils` 的本地当前时间为基准，解析每行 JSON 的 `ts`（ISO 格式），将早于 **默认 7 天** 的条目追加归档到 `{stem}.{YYYYMMDD}.archive.jsonl`，然后从当前文件中移除。`ts` 解析失败的行 **保留在当前文件中**（防止数据丢失）。
-- **其他服务器定时作业**：除按 Anima 的 `cron.md` 之外，生命周期还会注册内存维护、RAG 等系统 Cron（例：每日整合 02:00、每日索引 04:00）。时刻以配置时区为基准。DM 轮转为上述 04:30。
+- **其他服务器定时作业**：除按 Anima 的 `cron.md` 之外，生命周期还会注册内存维护、RAG 等系统 Cron（例：每日整合 02:00、每日索引 04:00）。时刻以配置时区为基准。
 
 ### 心跳配置的热重载
 

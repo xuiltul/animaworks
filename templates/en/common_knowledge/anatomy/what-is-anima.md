@@ -75,7 +75,6 @@ The `core/tasks/background.py` of `BackgroundTaskManager` executes **external to
 - **Via CLI (`animaworks-tool submit`)**: Command-type tools are also registered in TaskStore as `task_type="command"`. `PendingTaskExecutor` retrieves the attempt from TaskStore, and BackgroundTaskManager executes it. The result status is also saved to `state/background_tasks/{task_id}.json` for compatibility and can be confirmed from the completion notification.
 - **Cleanup**: `cleanup_old_tasks(max_age_hours=24)` deletes JSON files from `completed_at` that have exceeded the specified time via `completed` / `failed`, and files that have remained in `running` state for more than **48 hours** from `created_at` (orphans from process crashes, etc.). The retention time is specified by the caller via the argument `max_age_hours`; there is no configuration key.
 
-The **`rotate_dm_logs`** of the same module archives lines older than `max_age_days` (default 7 days) from `shared/dm_logs/*.jsonl` by appending them to `{元ファイル名}.{YYYYMMDD}.archive.jsonl`, and rewrites the active file to contain only recent lines (to prevent DM history from growing too large).
 
 ### 4. Growth
 

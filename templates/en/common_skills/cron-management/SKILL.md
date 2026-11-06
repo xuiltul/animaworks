@@ -14,7 +14,7 @@ Parsing of cron is handled by `core/runtime/schedule_parser.py` (`parse_cron_md`
 
 ### `core/tasks/background.py` (a separate system from cron)
 
-This module does **not perform cron scheduling**. It handles background execution of long-running tool calls and rotation of DM logs. Do not confuse it with cron.
+This module does **not perform cron scheduling**. It handles background execution of long-running tool calls. Do not confuse it with cron.
 
 **`BackgroundTaskManager`**
 
@@ -32,10 +32,6 @@ This module does **not perform cron scheduling**. It handles background executio
 - **`is_eligible(tool_name)`**: Matching is possible by either of the following names — schema name (e.g., `generate_3d_model`), profile key (e.g., `image_gen:3d`).
 - **Examples included in `_DEFAULT_ELIGIBLE_TOOLS` by default** (values are approximate seconds): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations` (30 each), `local_llm` / `run_command` (60 each).
 - **Completion hook**: `Callable[[BackgroundTask], Awaitable[None]]` can be set in `on_complete`. The application side can write Markdown notifications to `state/background_notifications/` from here (`background.py` itself does not touch the notification directory).
-
-**`rotate_dm_logs`**
-
-- Truncates entries in `shared/dm_logs/*.jsonl` at `max_age_days` (default **7 days**), appending old lines to `{stem}.{YYYYMMDD}.archive.jsonl` as an archive. This is not a cron task, but it is defined in the same file as background maintenance, so it is listed here for reference.
 
 ---
 

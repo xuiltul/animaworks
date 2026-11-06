@@ -14,8 +14,8 @@ send/receive, human notifications, tool usage, heartbeat/cron) as
 append-only JSONL entries in ``{anima_dir}/activity_log/{date}.jsonl``.
 
 This module serves as the single data source for the Priming layer's
-"Recent Activity" channel, replacing the previously scattered transcript,
-dm_log, and heartbeat_history files.
+"Recent Activity" channel, replacing the previously scattered transcript
+and heartbeat_history files.
 
 Implementation is split across submodules; this file is the public
 façade that re-exports every symbol and defines the core

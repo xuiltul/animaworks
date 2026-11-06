@@ -15,7 +15,6 @@ activity log recording quality, and fix priming data loss:
 1.  priming.py — _read_shared_channels() reads shared/channels/*.jsonl
 2.  priming.py — _channel_b_recent_activity() integration (no limit, post-score limit)
 3.  messenger.py — send() records dm_sent in activity log
-4.  messenger.py — send() writes to dm_logs/
 5.  (removed — Section 9 deleted per Arch-1 hippocampus model)
 6.  handler.py — _fanout_board_mentions() includes stopped Animas
 7.  anima.py — DM receive limit 50
@@ -326,29 +325,6 @@ class TestMessengerSendActivityLog:
                 assert meta.get("from_type") == "anima"
                 break
         assert found_message_sent, "Should find a message_sent entry in activity log"
-
-
-# ── 4. messenger.py — send() no longer writes to dm_logs/ ────────────
-
-
-class TestMessengerSendDmLogs:
-    """Tests for Messenger.send() NOT writing to dm_logs/ (abolished)."""
-
-    def test_send_appends_to_dm_logs(self, tmp_path: Path):
-        """Verify that send() does NOT write to shared/dm_logs/ (dm_logs abolished)."""
-        from core.messaging.messenger import Messenger
-
-        shared = tmp_path / "shared"
-        (shared / "inbox" / "alice").mkdir(parents=True)
-        (shared / "inbox" / "bob").mkdir(parents=True)
-        (tmp_path / "animas" / "alice").mkdir(parents=True)
-
-        messenger = Messenger(shared, "alice")
-        messenger.send(to="bob", content="Hi Bob!")
-
-        # dm_logs is no longer written; verify it does NOT exist
-        dm_log = shared / "dm_logs" / "alice-bob.jsonl"
-        assert not dm_log.exists(), "dm_logs should NOT be written (abolished)"
 
 
 # ── 5. (Section 9 deleted — Arch-1 hippocampus model) ─────────────
@@ -788,7 +764,7 @@ class TestActivityLoggerBasic:
 
 
 class TestMessengerSendIntegration:
-    """Integration tests for Messenger.send() with activity log and dm_logs."""
+    """Integration tests for Messenger.send() with the activity log."""
 
     @pytest.fixture(autouse=True)
     def _reset_depth_limiter(self):
@@ -798,8 +774,8 @@ class TestMessengerSendIntegration:
         state to clear.  This fixture is kept for backward compatibility.
         """
 
-    def test_send_writes_both_activity_and_dm_logs(self, tmp_path: Path):
-        """Verify send() writes only to activity log (dm_logs abolished)."""
+    def test_send_writes_activity_event(self, tmp_path: Path):
+        """Verify send() records its activity event."""
         from core.messaging.messenger import Messenger
 
         shared = tmp_path / "shared"
@@ -818,10 +794,6 @@ class TestMessengerSendIntegration:
         activity_entries = [json.loads(line) for line in activity_file.read_text(encoding="utf-8").strip().splitlines()]
         message_sent_entries = [e for e in activity_entries if e.get("type") == "message_sent"]
         assert len(message_sent_entries) >= 1
-
-        # dm_logs is no longer written
-        dm_log = shared / "dm_logs" / "alice-bob.jsonl"
-        assert not dm_log.exists(), "dm_logs should NOT be written (abolished)"
 
     def test_send_does_not_fail_if_anima_dir_missing(self, tmp_path: Path):
         """Verify send() succeeds even if animas/ directory doesn't exist."""

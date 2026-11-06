@@ -1003,8 +1003,6 @@ def cmd_anima_rename(args: argparse.Namespace) -> None:
             print(f"  Renamed directory: animas/{old_name} → animas/{new_name}")
             if result.get("status_files_updated"):
                 print(f"  Updated status.json for {result['status_files_updated']} anima(s)")
-            if result.get("dm_logs_renamed"):
-                print(f"  Renamed {result['dm_logs_renamed']} DM log file(s)")
             print(f"Anima renamed successfully: {old_name} → {new_name}")
             return
         except Exception as exc:
@@ -1024,11 +1022,6 @@ def cmd_anima_rename(args: argparse.Namespace) -> None:
             new_inbox = shared_dir / "inbox" / new_name
             old_inbox.rename(new_inbox)
             print(f"  Renamed inbox: shared/inbox/{old_name} → shared/inbox/{new_name}")
-
-        # ── Filesystem: rename DM logs ──
-        dm_count = _rename_dm_logs(shared_dir, old_name, new_name)
-        if dm_count:
-            print(f"  Renamed {dm_count} DM log file(s)")
 
         # ── Filesystem: clean up stale socket/pid ──
         run_dir = data_dir / "run"
@@ -1093,13 +1086,6 @@ def cmd_anima_rename(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     print(f"Anima renamed successfully: {old_name} → {new_name}")
-
-
-def _rename_dm_logs(shared_dir: Path, old_name: str, new_name: str) -> int:
-    """Backward-compatible wrapper for the shared root/CLI helper."""
-    from core.anima.admin import rename_dm_logs
-
-    return rename_dm_logs(shared_dir, old_name, new_name)
 
 
 def _cleanup_rag_collections(anima_dir: Path, old_name: str) -> bool:

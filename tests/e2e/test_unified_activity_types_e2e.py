@@ -188,7 +188,7 @@ class TestDmReceivedSummary:
     """
 
     @pytest.mark.asyncio
-    async def test_inbox_with_dm_logs_summary(self, data_dir, make_anima) -> None:
+    async def test_inbox_with_message_summary(self, data_dir, make_anima) -> None:
         """process_inbox_message processing DMs should log message_received with from_type=anima and summary."""
         anima_dir = make_anima("carol")
         shared_dir = data_dir / "shared"

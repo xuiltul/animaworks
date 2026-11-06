@@ -75,7 +75,6 @@ Chat 与 Heartbeat（以及 cron / TaskExec 等后台处理）以 **不同的锁
 - **经由 CLI（`animaworks-tool submit`）**：命令型工具也会作为 `task_type="command"` 注册到 TaskStore。`PendingTaskExecutor` 从 TaskStore 获取尝试，由 BackgroundTaskManager 执行。结果状态为兼容性也会保存到 `state/background_tasks/{task_id}.json`，可从完成通知中确认。
 - **整理**：`cleanup_old_tasks(max_age_hours=24)` 会删除通过 `completed` / `failed` 从 `completed_at` 超过指定时间的 JSON，以及保持 `running` 状态、从 `created_at` 起经过 **超过 48 小时** 的文件（进程崩溃等产生的孤儿）。保留时间由调用方通过参数 `max_age_hours` 指定，没有配置键。
 
-同一模块的 **`rotate_dm_logs`** 会将 `shared/dm_logs/*.jsonl` 中早于 `max_age_days`（默认 7 天）的行追加归档到 `{元ファイル名}.{YYYYMMDD}.archive.jsonl`，并将活动文件重写为仅保留最近的行（防止 DM 历史膨胀）。
 
 ### 4. 成长
 

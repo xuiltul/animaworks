@@ -14,7 +14,7 @@ cron의 **파싱**은 `core/runtime/schedule_parser.py`（`parse_cron_md` / `par
 
 ### `core/tasks/background.py` (cron과는 다른 계열)
 
-이 모듈은 **cron 스케줄링을 하지 않는다**. 장시간 도구 호출의 백그라운드 실행과 DM 로그의 로테이션을 담당한다. cron과 혼동하지 말 것.
+이 모듈은 **cron 스케줄링을 하지 않는다**. 장시간 도구 호출의 백그라운드 실행을 담당한다. cron과 혼동하지 말 것.
 
 **`BackgroundTaskManager`**
 
@@ -32,10 +32,6 @@ cron의 **파싱**은 `core/runtime/schedule_parser.py`（`parse_cron_md` / `par
 - **`is_eligible(tool_name)`**: 다음 두 이름 중 어느 것으로도 매칭 가능 — 스키마 이름(예: `generate_3d_model`), 프로필 키(예: `image_gen:3d`).
 - **기본적으로 `_DEFAULT_ELIGIBLE_TOOLS`에 포함되는 예**(값은 대략적인 초): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations`(각 30), `local_llm` / `run_command`(각 60).
 - **완료 훅**: `on_complete`에 `Callable[[BackgroundTask], Awaitable[None]]`을 설정 가능. 앱 측에서 여기서 `state/background_notifications/`로의 Markdown 알림 등을 작성한다(`background.py` 자체는 알림 디렉터리를 건드리지 않는다).
-
-**`rotate_dm_logs`**
-
-- `shared/dm_logs/*.jsonl`의 엔트리를 `max_age_days`(기본 **7일**)로 잘라, 오래된 줄을 `{stem}.{YYYYMMDD}.archive.jsonl`에 추가 아카이브한다. cron 작업은 아니지만, 백그라운드 계열 유지보수와 같은 파일에 정의되어 있어 참조용으로 기재.
 
 ---
 

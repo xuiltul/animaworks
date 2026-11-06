@@ -147,15 +147,6 @@ class TestSend:
         assert len(entries) >= 1
         assert entries[-1].meta.get("intent") == "report"
 
-    def test_send_no_dm_logs_written(self, shared_dir, messenger):
-        messenger.send("bob", "Hello")
-        log_path = shared_dir / "dm_logs"
-        if log_path.exists():
-            files = list(log_path.glob("*.jsonl"))
-            for f in files:
-                content = f.read_text(encoding="utf-8").strip()
-                assert content == ""
-
     def test_self_addressed_message_is_delivered_by_programmatic_messenger(self, shared_dir, messenger):
         msg = messenger.send("alice", "note to self", intent="report")
 
@@ -561,35 +552,6 @@ class TestUnread:
 
 
 # ── send_async ────────────────────────────────────────────
-
-
-# ── send() no longer writes DM log ────────────────────
-
-
-class TestSendNoDmLog:
-    """send() no longer writes to dm_logs/ (dm_logs write abolished)."""
-
-    def test_send_does_not_create_dm_log(self, shared_dir, messenger):
-        messenger.send("bob", "Hello Bob!")
-        dm_log_dir = shared_dir / "dm_logs"
-        if dm_log_dir.exists():
-            files = list(dm_log_dir.glob("*.jsonl"))
-            for f in files:
-                assert f.read_text(encoding="utf-8").strip() == ""
-
-    def test_reply_does_not_create_dm_log(self, shared_dir, messenger):
-        original = Message(
-            from_person="bob",
-            to_person="alice",
-            content="original",
-            thread_id="thread-abc",
-        )
-        messenger.reply(original, "Got it!")
-        dm_log_dir = shared_dir / "dm_logs"
-        if dm_log_dir.exists():
-            files = list(dm_log_dir.glob("*.jsonl"))
-            for f in files:
-                assert f.read_text(encoding="utf-8").strip() == ""
 
 
 # ── receive_with_paths ───────────────────────────────────

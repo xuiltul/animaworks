@@ -150,7 +150,6 @@ Inbox 처리에서 자동으로 인식되므로 명시적으로 채널을 검색
 read_dm_history(peer="aoi", limit=10)
 ```
 
-- **데이터 소스**: 통합 활동 로그(activity_log)를 우선, 부족하면 레거시 `shared/dm_logs/`로 폴백
 - **대상**: Anima 간의 `message_sent` / `message_received`만(30일 이내). `message_received` 중 `from_type != "anima"`(인간으로부터의 채팅 등)는 제외
 - `limit`의 기본값은 20
 

@@ -301,8 +301,7 @@ def create_channels_router() -> APIRouter:
     def list_dm_pairs(request: Request):
         """List all DM conversation pairs with metadata.
 
-        Primary source: per-Anima activity_log/ (message_sent/message_received).
-        Fallback: legacy shared/dm_logs/ for historical data.
+        Source: per-Anima activity_log/ (message_sent/message_received).
         Uses a TTL cache to avoid scanning all activity logs on every request.
         """
         shared_dir: Path = request.app.state.shared_dir
@@ -354,22 +353,6 @@ def create_channels_router() -> APIRouter:
                         exc_info=True,
                     )
 
-        # ── Fallback: legacy dm_logs/ ─────────────────────────
-        dm_logs_dir = shared_dir / "dm_logs"
-        if dm_logs_dir.exists():
-            for f in dm_logs_dir.glob("*.jsonl"):
-                pair_name = f.stem
-                meta = _get_channel_meta(f)
-                count = meta["count"]
-                last_ts = meta["last_ts"]
-
-                if pair_name in pair_map:
-                    pair_map[pair_name]["count"] += count
-                    if last_ts > pair_map[pair_name]["last_ts"]:
-                        pair_map[pair_name]["last_ts"] = last_ts
-                else:
-                    pair_map[pair_name] = {"count": count, "last_ts": last_ts}
-
         # ── Build response: filter + sort by last_message_ts desc ─
         pairs: list[dict] = []
         for pair_key, info in pair_map.items():
@@ -402,9 +385,8 @@ def create_channels_router() -> APIRouter:
         """Get DM history for a specific pair.
 
         Reads only ``message_sent`` (+ alias ``dm_sent``) from each
-        participant's activity_log.  Because each DM is recorded once on
+        participant's activity_log. Because each DM is recorded once on
         the sender side, duplicates are structurally impossible.
-        Falls back to legacy shared/dm_logs/ for historical data.
         """
         if err := _validate_name(pair):
             return err
@@ -418,8 +400,6 @@ def create_channels_router() -> APIRouter:
             )
 
         messages: list[dict] = []
-        seen: set[str] = set()
-
         # ── Primary: read message_sent from each participant ──
         for name in participants:
             other = participants[1] if name == participants[0] else participants[0]
@@ -449,31 +429,6 @@ def create_channels_router() -> APIRouter:
                     name,
                     exc_info=True,
                 )
-
-        # Track activity_log messages for legacy dedup
-        for m in messages:
-            seen.add(f"{m['ts']}|{m['text']}")
-
-        # ── Fallback: legacy dm_logs/ ─────────────────────────
-        dm_file = shared_dir / "dm_logs" / f"{pair}.jsonl"
-        if dm_file.exists():
-            try:
-                lines = dm_file.read_text(encoding="utf-8").strip().splitlines()
-            except OSError:
-                lines = []
-
-            for line in lines:
-                if not line.strip():
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                dedup_key = f"{entry.get('ts', '')}|{entry.get('text', entry.get('content', ''))}"
-                if dedup_key in seen:
-                    continue
-                seen.add(dedup_key)
-                messages.append(entry)
 
         if not messages:
             return JSONResponse(

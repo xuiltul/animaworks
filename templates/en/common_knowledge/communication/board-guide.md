@@ -150,7 +150,6 @@ When you want to review past DM exchanges between Anima:
 read_dm_history(peer="aoi", limit=10)
 ```
 
-- **Data source**: The unified activity log (activity_log) is preferred; if insufficient, fall back to the legacy `shared/dm_logs/`
 - **Scope**: Only `message_sent` / `message_received` between Anima (within 30 days). Among `message_received`, `from_type != "anima"` (such as chats from humans) is excluded
 - The default for `limit` is 20
 

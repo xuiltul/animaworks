@@ -73,7 +73,6 @@ class _SchedulerMixinHost(Protocol):
     _run_activity_log_rotation: Any
     _run_daily_consolidation: Any
     _run_daily_indexing: Any
-    _run_dm_log_rotation: Any
     _run_housekeeping: Any
     _run_housekeeping_impl: Any
     _run_project_archive_consolidations: Any

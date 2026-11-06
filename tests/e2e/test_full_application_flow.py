@@ -588,7 +588,6 @@ async def test_system_cron_integration(tmp_path: Path, data_dir: Path, mock_llm,
 
         assert "system_daily_consolidation" in job_ids
         assert ("system_weekly_integration" in job_ids) is weekly_enabled
-        assert "system_dm_log_rotation" in job_ids
 
         # Verify cron schedules
         daily_job = supervisor.scheduler.get_job("system_daily_consolidation")

@@ -150,7 +150,6 @@ read_channel(channel="general", human_only=true)
 read_dm_history(peer="aoi", limit=10)
 ```
 
-- **数据源**: 优先使用统一活动日志（activity_log），不足时回退到遗留 `shared/dm_logs/`
 - **对象**: 仅 Anima 之间的 `message_sent` / `message_received`（30天以内）。`message_received` 中排除 `from_type != "anima"`（来自人类的聊天等）
 - `limit` 的默认值为 20
 
