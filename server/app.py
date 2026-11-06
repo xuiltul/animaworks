@@ -970,7 +970,9 @@ def _enclave_usage_summary(anima_dir: Path, days: int) -> dict[str, object]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from core.tasks.board.tasks import ensure_task_store_schema
+    from server.board_hooks import register_board_post_hooks, unregister_board_post_hooks
 
+    register_board_post_hooks(app)
     loop_watchdog = LoopLagWatchdog()
     loop_watchdog.start()
 
@@ -1018,6 +1020,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown
+    unregister_board_post_hooks()
     if feed_prewarm_task is not None and not feed_prewarm_task.done():
         feed_prewarm_task.cancel()
         try:

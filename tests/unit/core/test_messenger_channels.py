@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,6 +34,9 @@ def _ensure_channel(shared_dir: Path, name: str) -> Path:
 def shared_dir(tmp_path: Path) -> Path:
     d = tmp_path / "shared"
     d.mkdir()
+    anima_dir = tmp_path / "animas" / "alice"
+    anima_dir.mkdir(parents=True)
+    (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     return d
 
 
@@ -126,14 +130,15 @@ class TestPostChannel:
         assert "ts" in entry
 
     def test_existing_channel_entry_format_unchanged(self, shared_dir, messenger):
-        """Existing channel post keeps ts/from/text/source entry shape."""
+        """Existing channel posts include stable identity and kind fields."""
         _ensure_channel(shared_dir, "general")
         messenger.post_channel("general", "format check")
         entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8").strip())
-        assert set(entry.keys()) == {"ts", "from", "text", "source"}
+        assert set(entry.keys()) == {"ts", "from", "text", "source", "id", "kind"}
         assert entry["from"] == "alice"
         assert entry["text"] == "format check"
         assert entry["source"] == "anima"
+        assert entry["kind"] == "anima"
 
     def test_unknown_poster_raises_instead_of_silently_returning(self, shared_dir, messenger, monkeypatch):
         _ensure_channel(shared_dir, "general")
@@ -338,8 +343,9 @@ class TestReadDmHistory:
 
 
 class TestReceiveExternalChannelMirroring:
-    def test_human_at_all_mirrors_to_general(self, shared_dir, messenger):
+    def test_human_at_all_mirrors_to_general(self, shared_dir, messenger, monkeypatch):
         _ensure_channel(shared_dir, "general")
+        monkeypatch.setattr("core.platform.pid.read_server_pid", lambda _data_dir: os.getpid())
         messenger.receive_external(
             "@all Server error is resolved",
             source="human",
@@ -353,11 +359,36 @@ class TestReceiveExternalChannelMirroring:
         assert "@all" in entry["text"]
 
     def test_unknown_human_name_does_not_abort_external_message(self, shared_dir, messenger, monkeypatch):
+        from core.messaging.board import human_principal, post_to_board
+
         _ensure_channel(shared_dir, "general")
         monkeypatch.setattr(
             "core.config.models.load_config",
             lambda: SimpleNamespace(animas={"alice": object()}),
         )
+
+        def post_direct(
+            channel: str,
+            text: str,
+            *,
+            from_anima: str,
+            source: str = "anima",
+            from_name: str | None = None,
+            request_id: str | None = None,
+            suppress_mentions: bool = False,
+        ) -> dict:
+            result = post_to_board(
+                channel,
+                text,
+                human_principal(from_name or "human"),
+                request_id=request_id,
+                origin="mirror",
+                notify=not suppress_mentions,
+                shared_dir=shared_dir,
+            )
+            return {"post": result.to_dict()}
+
+        monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
 
         message = messenger.receive_external(
             "@all announcement",
@@ -368,7 +399,10 @@ class TestReceiveExternalChannelMirroring:
         assert message is not None
         assert messenger.receive()
         channel_file = shared_dir / "channels" / "general.jsonl"
-        assert channel_file.read_text(encoding="utf-8") == ""
+        entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+        assert entry["from"] == "external-user"
+        assert entry["source"] == "human"
+        assert entry["text"] == "@all announcement"
 
     def test_human_without_at_all_no_mirror(self, shared_dir, messenger):
         messenger.receive_external(

@@ -326,7 +326,8 @@ class InteractionRouter:
         from core.messaging.messenger import Messenger
 
         messenger = Messenger(get_shared_dir(), req.anima_name)
-        messenger.receive_external(
+        await asyncio.to_thread(
+            messenger.receive_external,
             content=content,
             source=source,
             source_message_id=f"interaction:{callback_id}",

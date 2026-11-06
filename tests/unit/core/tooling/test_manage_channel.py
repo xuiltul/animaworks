@@ -9,12 +9,44 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from core.messaging.messenger import (
     ChannelMeta,
     Messenger,
     load_channel_meta,
     save_channel_meta,
 )
+
+
+@pytest.fixture(autouse=True)
+def _direct_board_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.messaging.board import anima_principal, post_to_board
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        shared_dir = tmp_path / "shared"
+        result = post_to_board(
+            channel,
+            text,
+            anima_principal(from_anima, animas_dir=tmp_path / "animas"),
+            request_id=request_id,
+            origin="internal",
+            notify=not suppress_mentions,
+            shared_dir=shared_dir,
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
+
 
 # ── Helpers ──────────────────────────────────────────────
 

@@ -98,18 +98,12 @@ class TestPraiseLoopPrevention:
         assert len(inbox_files) == 1
 
 
-# ── Test 2: _suppress_board_fanout flag in handler ────────────────
+# ── Test 2: centralized Board notification suppression ────────────
 
 
 @pytest.mark.unit
 class TestSuppressBoardFanout:
-    """Verify that _suppress_board_fanout flag controls fanout in _handle_post_channel."""
-
-    @pytest.fixture(autouse=True)
-    def _bypass_acl(self):
-        """Bypass channel ACL checks — these tests use MagicMock messenger."""
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            yield
+    """Verify that the handler passes notification suppression to the writer."""
 
     @pytest.fixture
     def anima_dir(self, tmp_path: Path) -> Path:
@@ -139,6 +133,22 @@ class TestSuppressBoardFanout:
         return m
 
     @pytest.fixture
+    def post_api(self, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+        api = MagicMock(
+            return_value={
+                "post": {
+                    "committed": True,
+                    "duplicate": False,
+                    "id": "post-1",
+                    "notified": [],
+                    "not_notified": {},
+                }
+            }
+        )
+        monkeypatch.setattr("core.messaging.board_client.post_via_server", api)
+        return api
+
+    @pytest.fixture
     def handler(
         self,
         anima_dir: Path,
@@ -157,52 +167,45 @@ class TestSuppressBoardFanout:
     def test_post_channel_calls_fanout_when_flag_not_set(
         self,
         handler: ToolHandler,
-        messenger: MagicMock,
+        post_api: MagicMock,
     ) -> None:
-        """Without _suppress_board_fanout, _fanout_board_mentions should be called."""
-        with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
-            handler._handle_post_channel({"channel": "general", "text": "@all hello"})
-
-        mock_fanout.assert_called_once_with("general", "@all hello")
+        handler._handle_post_channel({"channel": "general", "text": "@all hello"})
+        assert post_api.call_args.kwargs["suppress_mentions"] is False
 
     def test_post_channel_calls_fanout_when_flag_explicitly_false(
         self,
         handler: ToolHandler,
-        messenger: MagicMock,
+        post_api: MagicMock,
     ) -> None:
-        """suppress_board_fanout=False should still call fanout normally."""
+        """suppress_board_fanout=False keeps notifications enabled."""
         from core.tooling.handler import suppress_board_fanout
 
         token = suppress_board_fanout.set(False)
         try:
-            with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
-                handler._handle_post_channel({"channel": "dev", "text": "@bob check"})
-
-            mock_fanout.assert_called_once_with("dev", "@bob check")
+            handler._handle_post_channel({"channel": "dev", "text": "@bob check"})
         finally:
             suppress_board_fanout.reset(token)
+        assert post_api.call_args.kwargs["suppress_mentions"] is False
 
     def test_post_channel_suppresses_fanout_when_flag_true(
         self,
         handler: ToolHandler,
-        messenger: MagicMock,
+        post_api: MagicMock,
     ) -> None:
-        """suppress_board_fanout=True should skip _fanout_board_mentions."""
+        """suppress_board_fanout=True disables server-side mention delivery."""
         from core.tooling.handler import suppress_board_fanout
 
         token = suppress_board_fanout.set(True)
         try:
-            with patch.object(handler, "_fanout_board_mentions") as mock_fanout:
-                handler._handle_post_channel({"channel": "general", "text": "@all thanks"})
-
-            mock_fanout.assert_not_called()
+            handler._handle_post_channel({"channel": "general", "text": "@all thanks"})
         finally:
             suppress_board_fanout.reset(token)
+        assert post_api.call_args.kwargs["suppress_mentions"] is True
 
     def test_post_channel_still_posts_when_fanout_suppressed(
         self,
         handler: ToolHandler,
-        messenger: MagicMock,
+        post_api: MagicMock,
     ) -> None:
         """Even with fanout suppressed, the channel post itself should still succeed."""
         from core.tooling.handler import suppress_board_fanout
@@ -211,31 +214,13 @@ class TestSuppressBoardFanout:
         try:
             result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
-            messenger.post_channel.assert_called_once_with("general", "hello")
-            assert "Posted to #general" in result
+            from core.i18n import t
+
+            assert result == t("handler.channel_post_success", channel="general")
         finally:
             suppress_board_fanout.reset(token)
-
-    def test_post_channel_logs_suppression(
-        self,
-        handler: ToolHandler,
-        messenger: MagicMock,
-    ) -> None:
-        """Suppressed fanout should be logged."""
-        from core.tooling.handler import suppress_board_fanout
-
-        token = suppress_board_fanout.set(True)
-        try:
-            with patch("core.tooling.handler_comms.logger") as mock_logger:
-                handler._handle_post_channel({"channel": "ops", "text": "@all acknowledged"})
-
-            # Look for the suppression log message
-            log_messages = [call.args[0] if call.args else "" for call in mock_logger.info.call_args_list]
-            assert any("Suppressed board fanout" in msg for msg in log_messages), (
-                f"Expected suppression log message, got: {log_messages}"
-            )
-        finally:
-            suppress_board_fanout.reset(token)
+        post_api.assert_called_once()
+        assert post_api.call_args.kwargs["suppress_mentions"] is True
 
     def test_suppress_flag_defaults_to_false_via_contextvar(
         self,

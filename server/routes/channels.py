@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from core.platform.env import get_env
-
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
 """Board (shared channel) and DM history API routes."""
 
+import asyncio
 import json
 import logging
 import re
@@ -20,8 +19,6 @@ from pydantic import BaseModel, Field
 
 from core.activity.logger import ActivityLogger
 from core.messaging.messenger import Messenger
-from core.time_utils import now_iso
-from server.events import emit
 
 logger = logging.getLogger("animaworks.routes.channels")
 
@@ -222,60 +219,33 @@ def create_channels_router() -> APIRouter:
             body.from_name = "human"
         shared_dir: Path = request.app.state.shared_dir
 
-        # Existence/ACL enforced by Messenger.post_channel (no implicit create)
-        from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
+        from core.messaging.board import human_principal, post_to_board
 
-        messenger = _get_messenger(shared_dir)
-        try:
-            messenger.post_channel(
-                name,
-                body.text,
-                source="human",
-                from_name=body.from_name,
-            )
-        except ChannelNotFoundError:
+        post = await asyncio.to_thread(
+            post_to_board,
+            name,
+            body.text,
+            human_principal(body.from_name),
+            origin="http",
+            shared_dir=shared_dir,
+        )
+        if post.error == "not_found":
             return JSONResponse(
                 status_code=404,
                 content={"detail": f"Channel '{name}' not found"},
             )
-        except ChannelAccessDeniedError:
+        if post.error and post.error.startswith("denied:"):
             return JSONResponse(
                 status_code=403,
                 content={"detail": f"Access denied to channel '{name}'"},
             )
-        except ValueError as exc:
-            return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-        # Broadcast WebSocket event
-        event_data = {
-            "channel": name,
-            "from": body.from_name,
-            "text": body.text,
-            "source": "human",
-            "ts": now_iso(),
-        }
-        await emit(request, "board.post", event_data)
-
-        # Sync to mapped Slack channel unless tests or embedded apps disable external side effects.
-        sync_disabled = get_env("ANIMAWORKS_DISABLE_EXTERNAL_SYNC") == "1" or bool(
-            getattr(request.app.state, "disable_external_sync", False)
-        )
-        if not sync_disabled:
-            try:
-                from core.messaging.outbound_auto import BoardSlackSync
-
-                sync = BoardSlackSync()
-                await sync.sync_board_post(
-                    board_name=name,
-                    text=body.text,
-                    from_person=body.from_name,
-                    source="human",
-                )
-            except Exception:
-                logger.debug("Board→Slack sync failed for #%s", name, exc_info=True)
+        if post.error == "invalid_name":
+            return JSONResponse(status_code=400, content={"detail": f"Invalid name: {name!r}"})
+        if post.error:
+            return JSONResponse(status_code=500, content={"detail": post.error})
 
         logger.info("Human posted to #%s: %s", name, body.text[:80])
-        return {"status": "ok", "channel": name}
+        return {"status": "ok", "channel": name, "post": post.to_dict()}
 
     @router.get("/channels/{name}/mentions/{anima}")
     async def get_channel_mentions(

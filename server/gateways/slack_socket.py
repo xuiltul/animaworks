@@ -22,7 +22,6 @@ from typing import Any
 from core.anima.workspace_files import IDENTITY_FILE
 from core.config.models import load_config
 from core.credentials import _lookup_shared_credentials, _lookup_vault_credential, get_credential
-from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
 from core.messaging.messenger import Messenger
 from core.notification.slack_names import (
     cache_user_name,
@@ -390,7 +389,14 @@ _board_dedup_ts: collections.OrderedDict[str, float] = collections.OrderedDict()
 _BOARD_DEDUP_TTL_SEC = 10
 
 
-def _route_to_board(channel_id: str, text: str, user_name: str, *, ts: str = "") -> None:
+def _route_to_board(
+    channel_id: str,
+    text: str,
+    user_name: str,
+    *,
+    ts: str = "",
+    external_kind: str = "user",
+) -> None:
     """Post a Slack message to the mapped AnimaWorks board (if any).
 
     Looks up the board_mapping from config.  If the channel has a
@@ -415,12 +421,17 @@ def _route_to_board(channel_id: str, text: str, user_name: str, *, ts: str = "")
         board_name = cfg.external_messaging.slack.board_mapping.get(channel_id)
         if not board_name:
             return
-        shared_dir = get_data_dir() / "shared"
-        messenger = Messenger(shared_dir, user_name or "slack")
-        messenger.post_channel(board_name, text, source="slack", from_name=user_name or "slack")
-    except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
-        # Mapped board is missing or closed: the message is dropped, so make it visible
-        logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, exc)
+        from core.messaging.board import external_principal, post_to_board
+
+        result = post_to_board(
+            board_name,
+            text,
+            external_principal(user_name or "slack", external_kind="bot" if external_kind == "bot" else "user"),
+            request_id=f"slack:{ts}" if ts else None,
+            origin="slack",
+        )
+        if result.error:
+            logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, result.error)
     except Exception:
         logger.debug("Board routing failed for channel %s", channel_id, exc_info=True)
 
@@ -704,7 +715,14 @@ class SlackSocketModeManager:
                     token_for_resolve = self._get_per_anima_credential("SLACK_BOT_TOKEN", anima_name) or ""
                     raw_text = event.get("text", "")
                     text = await asyncio.to_thread(resolve_slack_mentions, raw_text, token_for_resolve)
-                    await asyncio.to_thread(_route_to_board, channel_id, text, bot_name, ts=ts)
+                    await asyncio.to_thread(
+                        _route_to_board,
+                        channel_id,
+                        text,
+                        bot_name,
+                        ts=ts,
+                        external_kind="bot",
+                    )
                 return
 
             if _is_duplicate_ts(ts, anima_name):
@@ -771,7 +789,14 @@ class SlackSocketModeManager:
             # This prevents N handlers from each posting the same message.
             if not is_dm and (bool(mention_intent) or is_default):
                 user_name = get_cached_user_name(sender) or sender
-                await asyncio.to_thread(_route_to_board, channel_id, text, user_name, ts=ts)
+                await asyncio.to_thread(
+                    _route_to_board,
+                    channel_id,
+                    text,
+                    user_name,
+                    ts=ts,
+                    external_kind="bot" if event.get("bot_id") else "user",
+                )
 
             if should_deliver:
                 has_mention = bool(mention_intent)
@@ -965,7 +990,14 @@ class SlackSocketModeManager:
 
             # Route to AnimaWorks board BEFORE adding inbox annotations
             user_name = get_cached_user_name(event.get("user", "")) or event.get("user", "")
-            await asyncio.to_thread(_route_to_board, channel_id, text, user_name, ts=ts)
+            await asyncio.to_thread(
+                _route_to_board,
+                channel_id,
+                text,
+                user_name,
+                ts=ts,
+                external_kind="bot" if event.get("bot_id") else "user",
+            )
 
             shared_dir = get_data_dir() / "shared"
 

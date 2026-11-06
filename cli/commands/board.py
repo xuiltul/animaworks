@@ -9,8 +9,6 @@ import json
 import sys
 
 from cli._anima_tool import current_anima_dir, run_and_print
-from core.messaging.board_fanout import fanout_board_mentions
-from core.tooling.standalone import notify_server_message_sent
 
 
 def _refuse_impersonation(anima_name: str, requested_name: str) -> None:
@@ -59,6 +57,8 @@ def cmd_board_read(args: argparse.Namespace) -> None:
 
 def cmd_board_post(args: argparse.Namespace) -> None:
     """Post a message to a shared channel."""
+    from core.i18n import t
+
     anima_dir = current_anima_dir()
     if anima_dir is not None:
         if args.from_anima != anima_dir.name:
@@ -72,27 +72,33 @@ def cmd_board_post(args: argparse.Namespace) -> None:
         )
         return
 
-    from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
     from core.infra.runtime_init import ensure_runtime_dir
-    from core.messaging.messenger import Messenger
-    from core.paths import get_shared_dir
 
     ensure_runtime_dir()
-    messenger = Messenger(get_shared_dir(), args.from_anima)
     try:
-        messenger.post_channel(args.channel, args.text)
-    except (ChannelNotFoundError, ValueError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    except ChannelAccessDeniedError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    print(f"Posted to #{args.channel}")
+        from core.messaging.board_client import BoardPostClientError, post_via_server
 
-    # Operator posts use the same ACL/company-filtered mention fan-out as the
-    # ToolHandler path; there is only one implementation of this behavior.
-    fanout_board_mentions(messenger, args.from_anima, args.channel, args.text)
-    _notify_server_board_posted(args.from_anima, args.channel, args.text)
+        response = post_via_server(
+            args.channel,
+            args.text,
+            from_anima=args.from_anima,
+            source="operator",
+            from_name=args.from_anima,
+        )
+    except BoardPostClientError as exc:
+        print(t("cli.board_post_failed", detail=str(exc)), file=sys.stderr)
+        raise SystemExit(1) from exc
+    except Exception as exc:
+        print(t("cli.board_post_failed", detail=str(exc)), file=sys.stderr)
+        raise SystemExit(1) from exc
+    post = response.get("post", response)
+    if hasattr(post, "to_dict"):
+        post = post.to_dict()
+    if not isinstance(post, dict) or not (post.get("committed") or post.get("duplicate")):
+        error = post.get("error", "Board post failed") if isinstance(post, dict) else "Invalid Board post response"
+        print(t("cli.board_post_failed", detail=error), file=sys.stderr)
+        raise SystemExit(1)
+    print(t("cli.board_post_success", channel=args.channel))
 
 
 # ── Board DM History ──────────────────────────────────────
@@ -133,12 +139,3 @@ def cmd_board_dm_history(args: argparse.Namespace) -> None:
         print(f"No DM history with {args.peer}")
         return
     print(json.dumps(messages, ensure_ascii=False, indent=2))
-
-
-def _notify_server_board_posted(
-    from_anima: str,
-    channel: str,
-    text: str,
-) -> None:
-    """Keep operator Board posts on the shared server-notification path."""
-    notify_server_message_sent(from_anima, f"#channel:{channel}", text)
