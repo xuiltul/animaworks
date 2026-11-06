@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 8e11644815d925b2acded841375b8abc8a3cf25518fdf4e880c01adf3526f24c -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: fbfe87c99fffcd4bf7a4c4dce89bc222fde29ce4c9e86bd09a58d821bfc5bfe7 -->
 
 # 設定リファレンス
 
@@ -479,7 +479,7 @@
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 
@@ -717,6 +717,7 @@
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
+| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |

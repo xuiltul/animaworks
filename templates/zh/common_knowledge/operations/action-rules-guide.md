@@ -21,11 +21,11 @@ keywords: メール, 下書き, 重複確認
 | `keywords` | 可选 | 用于提高搜索精度的词 |
 | 正文 | 必填 | 停止时显示的确认内容。必读文件写作 `read_memory_file(path="...")` |
 
-## ToolHandler 的目标工具名
+## ToolHandler 的目标工具名称
 
 - `call_human`
 - `send_message`
-- `post_channel`
+- `animaworks-tool board post`
 - `write_memory_file`
 - `gmail_draft`
 - `gmail_send`

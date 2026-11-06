@@ -39,6 +39,17 @@ def _make_embed_app():
     return app
 
 
+@pytest.fixture(autouse=True)
+def _skip_internal_api_auth(monkeypatch):
+    """These tests cover the embed round trip, not caller verification."""
+    import server.internal_auth as _internal_auth
+
+    def _noop_internal_caller() -> None:
+        return None
+
+    monkeypatch.setattr(_internal_auth, "require_internal_caller", _noop_internal_caller)
+
+
 class TestEmbedCentralizationE2E:
     """End-to-end: generate_embeddings() → HTTP → server endpoint → result."""
 

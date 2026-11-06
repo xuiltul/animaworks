@@ -142,14 +142,13 @@ Chat (interaction with humans) and TaskExec (actual work) continue to use the ma
 Configuration method: `animaworks anima set-background-model {名前} claude-sonnet-5-5`
 For details, refer to the "Background Model" section in `reference/operations/model-guide.md`.
 
-### Heartbeat internal behavior
+### Heartbeat Internals
 
 - **Crash recovery**: If the previous heartbeat failed, error information is saved in `state/recovery_note.md`. It is injected into the prompt at the next startup, and the file is deleted after recovery.
-- **Reflection record**: If the heartbeat output contains a `[REFLECTION]...[/REFLECTION]` block, it is recorded as `heartbeat_reflection` in the activity_log and included in subsequent heartbeat contexts.
-- **Subordinate check**: For Anima instances with subordinates, a subordinate status check instruction is automatically injected into the heartbeat and Cron prompts.
-- **Session time limit** (`heartbeat` in `config.json`): After `soft_timeout_seconds` (default 300 seconds) elapses, a wrap-up reminder is injected; the session is forcibly terminated after `hard_timeout_seconds` (default 600 seconds).
-- **Idle auto-compaction**: `heartbeat.idle_compaction_minutes` (default 10 minutes) — idle auto-compaction runs after this time has elapsed since stream end (execution engine setting).
-- **Board posts**: Limited to once per channel within the same run. There is no restriction on the interval between posts across runs.
+- **Reflection logging**: If the heartbeat output contains an `[REFLECTION]...[/REFLECTION]` block, it is recorded in activity_log as `heartbeat_reflection` and included in the context of subsequent heartbeats.
+- **Subordinate checks**: For Anima with subordinates, instructions to check their status are automatically injected into heartbeat and Cron prompts.
+- **Session time limits** (`heartbeat` in `config.json`): After `soft_timeout_seconds` (300 seconds by default), a wrap-up reminder is injected; after `hard_timeout_seconds` (600 seconds by default), the session is forcibly terminated.
+- **Automatic compaction when idle**: `heartbeat.idle_compaction_minutes` (10 minutes by default)—idle automatic compaction runs after this much time has elapsed since the stream ended (a configuration on the execution engine side).
 
 ### Periodic Heartbeat Scheduling Method
 

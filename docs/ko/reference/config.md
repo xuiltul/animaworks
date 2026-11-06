@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=5429c66cca5c44ab82ea89dd281f09f555fd168679770eadf9ef3dfc3393a11b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=5ca788f017ac39ec604d5bef837cd61bd91063812e85dfc087681abb48e75a20 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -479,7 +479,7 @@
 | `server.media_proxy.rate_limit_requests` | `int` | `30` | — |
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
-| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"log"` | /api/internal/* caller verification |
+| `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
 
 ### `llm_rate_guard`
 
@@ -708,7 +708,7 @@
 
 | 키 | 유형 | 기본값 | 설명 |
 |---|---|---|---|
-| `housekeeping` | `HousekeepingConfig` | `{HousekeepingConfig}` | 런타임 데이터의 정기 정리. |
+| `housekeeping` | `HousekeepingConfig` | `{HousekeepingConfig}` | 런타임 데이터 정기 정리. |
 | `housekeeping.enabled` | `bool` | `true` | — |
 | `housekeeping.run_time` | `str` | `"05:30"` | — |
 | `housekeeping.prompt_log_retention_days` | `int` | `3` | — |
@@ -717,6 +717,7 @@
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
+| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |

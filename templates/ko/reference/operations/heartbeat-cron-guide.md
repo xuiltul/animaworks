@@ -142,14 +142,13 @@ Chat(인간과의 대화)과 TaskExec(실작업)은 메인 모델을 유지한�
 설정 방법: `animaworks anima set-background-model {名前} claude-sonnet-5-5`
 자세한 내용은 `reference/operations/model-guide.md`의 "백그라운드 모델" 섹션을 참조.
 
-### 하트비트 내부 동작
+### 하트비트의 내부 동작
 
-- **크래시 복구**: 이전 하트비트가 실패한 경우, `state/recovery_note.md`에 오류 정보가 저장된다. 다음 시작 시 프롬프트에 주입되며, 복구 후 파일은 삭제된다.
-- **회고 기록**: 하트비트 출력에 `[REFLECTION]...[/REFLECTION]` 블록이 있으면 activity_log에 `heartbeat_reflection`로 기록되며, 이후 하트비트 컨텍스트에 포함된다.
-- **부하 확인**: 부하를 가진 Anima에는 하트비트·Cron 프롬프트에 부하의 상태 확인 지침이 자동 주입된다.
-- **세션 시간 제한**(`config.json`의 `heartbeat`): `soft_timeout_seconds`(기본 300초) 경과 시 랩업용 리마인더를 주입하고, `hard_timeout_seconds`(기본 600초)에서 세션을 강제 종료한다.
-- **유휴 시 자동 컴팩트**: `heartbeat.idle_compaction_minutes`(기본 10분) — 스트림 종료 후 이 시간이 지나면 유휴 자동 컴팩션이 실행된다(실행 엔진 측 설정).
-- **Board 게시**: 동일 run에서는 같은 채널에 1회까지. run을 넘는 게시 간격 제한은 없다.
+- **충돌 복구**: 이전 하트비트가 실패한 경우, `state/recovery_note.md`에 오류 정보가 저장됩니다. 다음 시작 시 프롬프트에 주입되며, 복구 후 파일이 삭제됩니다.
+- **회고 기록**: 하트비트 출력에 `[REFLECTION]...[/REFLECTION]` 블록이 있으면 activity_log에 `heartbeat_reflection`로 기록되고, 이후 하트비트 컨텍스트에 포함됩니다.
+- **부하 확인**: 부하가 있는 Anima에는 하트비트·Cron 프롬프트에 부하 상태 확인 지침이 자동으로 주입됩니다.
+- **세션 시간 제한**（`config.json`의 `heartbeat`）: `soft_timeout_seconds`（기본값 300초）이 지나면 마무리 리마인더가 주입되고, `hard_timeout_seconds`（기본값 600초）이 지나면 세션이 강제 종료됩니다.
+- **유휴 시 자동 컴팩트**: `heartbeat.idle_compaction_minutes`（기본값 10분）— 스트림 종료 후 이 시간이 지나면 유휴 자동 컴팩션이 실행됩니다（실행 엔진 측 설정）.
 
 ### 정기 하트비트의 스케줄 방식
 

@@ -1657,7 +1657,10 @@ class TestMemoryWriteSecurity:
         )
         parsed = json.loads(result)
         assert parsed["error_type"] == "PermissionDenied"
-        assert "resolves outside your directory" in parsed["message"]
+        message = parsed["message"]
+        assert "resolves outside your directory" in message or "自分のディレクトリ外" in message
+        assert "`animaworks-tool board read`" in message
+        assert "`animaworks-tool board post`" in message
 
     def test_read_memory_file_normal_access_allowed(
         self,

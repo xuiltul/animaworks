@@ -272,7 +272,7 @@ EXECUTION_PROFILE: dict[str, dict[str, object]] = {
 
 1. `core/integrations/{name}.py` を追加（`_` 始まりはスキャン対象外）。
 2. `TOOL_MODULES` は `discover_core_tools()` で自動登録。`core/integrations/__init__.py` の手動リストは不要。
-3. MCP の厳選許可リストは `core/tooling/surface.py` の `MCP_TOOL_NAMES`。`resolve_tool_surface` が MCP 利用モード（S / C / D / G / X）でトリガーと役割に応じた絞り込みを行う。例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `post_channel`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
+3. MCP の厳選許可リストは `core/tooling/surface.py` の `MCP_TOOL_NAMES`。`resolve_tool_surface` が MCP 利用モード（S / C / D / G / X）でトリガーと役割に応じた絞り込みを行う。例: `search_memory`, `read_memory_file`, `write_memory_file`, `archive_memory_file`, `send_message`, `call_human`, `delegate_task`, `submit_tasks`, `update_task`, `create_skill`。Board の読み出し・投稿は Bash（`animaworks-tool board read/post`）経由で行う。**Slack / Gmail / `web_search` 等の外部サービス系コアツールは MCP に出ない** — 通常は **`use_tool` / Bash（`animaworks-tool`）/ スキル** 経路。
 4. テストを `tests/` に追加。スキーマやリファレンス文書を自動生成している場合は `scripts/generate_reference.py` の対象も確認。
 5. 破壊的操作は `gated: True` と permissions 側の説明更新を検討。
 
