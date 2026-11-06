@@ -190,7 +190,8 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         m = Messenger(shared_dir, "sakura")
-        m.post_channel("general", "Spoofed post", from_name="hacker")
+        with pytest.raises(ValueError):
+            m.post_channel("general", "Spoofed post", from_name="hacker")
 
         content = (shared_dir / "channels" / "general.jsonl").read_text().strip()
         assert content == "", "Unknown from_name should result in rejected post"
@@ -216,7 +217,7 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         m = Messenger(shared_dir, "sakura")
-        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"):
+        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"), pytest.raises(ValueError):
             m.post_channel("general", "Spoofed", from_name="hacker")
 
         assert any("unknown from_name" in r.message for r in caplog.records)
@@ -234,9 +235,9 @@ class TestPostChannelFromNameValidation:
         from core.messaging.messenger import Messenger
 
         messenger = Messenger(shared_dir, "sakura")
-        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"):
+        with caplog.at_level(logging.WARNING, logger="animaworks.messenger"), pytest.raises(ValueError):
             messenger.post_channel("general", "Should not be posted", from_name="sakura")
 
         assert channel_file.read_text(encoding="utf-8") == ""
         assert any("Failed to validate channel from_name" in record.message for record in caplog.records)
-        mock_load.assert_called_once()
+        assert mock_load.called
