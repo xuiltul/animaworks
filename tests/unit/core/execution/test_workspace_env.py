@@ -76,7 +76,7 @@ def test_build_workspace_env_omits_cache_variables_without_cache_root(tmp_path: 
 
     env = build_workspace_env(tmp_path / "data" / "animas" / "alice")
 
-    assert set(env) == {"ANIMAWORKS_SCRATCH_DIR"}
+    assert set(env) == {"ANIMAWORKS_SCRATCH_DIR", "ANIMAWORKS_BOARD_REPLY_CHANNELS"}
 
 
 def test_update_workspace_env_drops_inherited_caches_without_cache_root(tmp_path: Path, monkeypatch) -> None:
@@ -85,7 +85,7 @@ def test_update_workspace_env_drops_inherited_caches_without_cache_root(tmp_path
 
     update_workspace_env(env, tmp_path / "data" / "animas" / "alice")
 
-    assert set(env) == {"ANIMAWORKS_SCRATCH_DIR"}
+    assert set(env) == {"ANIMAWORKS_SCRATCH_DIR", "ANIMAWORKS_BOARD_REPLY_CHANNELS"}
 
 
 def test_command_env_overrides_host_package_cache(tmp_path: Path, monkeypatch) -> None:

@@ -5,22 +5,22 @@
 상급자에게 보고하는 것은 조직 운영의 생명선이다.
 적절한 시기와 형식으로 보고함으로써 문제의 조기 발견과 신속한 의사결정을 지원한다.
 
-## 도구의 구분
+## 도구 사용 구분
 
 보고에는 `send_message` 도구를 사용한다. 다음 제약을 지킬 것.
 
 | 도구 | 용도 | 비고 |
 |--------|------|------|
-| `send_message` | 상급자·동료에게 1:1 보고·질문 | 보고·진행 상황·판단 요청은 `intent="report"`, 질문은 `intent="question"`. Anima 이름·별칭·`slack:`/`chatwork:` 등(아래 참조) |
-| `post_channel` | 팀 전체 공지(Board) | acknowledgments·감사·FYI는 Board 사용. 동일 채널 1 run 1회. run 간 cooldown 없음 |
-| `call_human` | 인간에게 긴급 알림 | 서비스 종료·보안 인시던트 등 |
+| `send_message` | 상급자·동료에게 보내는 일대일 보고·질문 | 보고·진행 상황·판단 요청은 `intent="report"`, 질문은 `intent="question"`. Anima 이름·별칭·`slack:`/`chatwork:` 등(아래 참조) |
+| `animaworks-tool board post <channel> <text>` | 팀 전체에 알림(Board) | 확인 응답·감사·참고 사항은 Board 사용 |
+| `call_human` | 사람에게 보내는 긴급 알림 | 서비스 종료·보안 사고 등 |
 
-**send_message 제약**:
-- `intent`는 필수이며, 값은 **`report` 또는 `question`만** (보고·진행 상황은 `report`, 질문은 `question`). **`delegation`는 `send_message`에서는 사용할 수 없음**(도구가 거부함). 작업 위임은 `delegate_task` 사용
-- 동일 run에서 동일 수신자에게 보낼 수 있는 DM은 1통까지. 수신자 수의 상한은 없음
-- 추가 연락은 Board(post_channel) 사용
-- **수신자**는 아래 「수신자 해결」 참조(Anima 이름·인간 별칭·`slack:` / `chatwork:` 직접 지정 등)
-- **주의**: 채팅 세션 중에는 인간에게 send_message를 사용할 수 없음. 직접 텍스트로 답변할 것
+**send_message 제약 사항**:
+- `intent`은 필수이며, 값은 **`report` 또는 `question`만 가능**(보고·진행 상황은 `report`, 질문은 `question`). **`delegation`은 `send_message`에서 사용할 수 없다**(도구가 거부함). 작업 위임에는 `delegate_task`를 사용한다
+- 동일한 실행에서 동일한 수신 대상에게 보낼 수 있는 DM은 1건까지다. 수신 대상 수에는 제한이 없다
+- 추가 연락에는 `animaworks-tool board post <channel> <text>`을 사용한다
+- **수신 대상**은 아래의 ‘수신 대상 확인’을 참조(Anima 이름·사람의 별칭·`slack:` / `chatwork:` 직접 지정 등)
+- **참고**: 채팅 세션 중에는 사람에게 send_message를 사용할 수 없다. 텍스트로 직접 답변한다.
 
 ### 수신자 해결과 외부 배송(`core/messaging/outbound.py`)
 

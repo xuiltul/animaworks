@@ -168,10 +168,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "handler.board_mention_content": {
         "ja": (
-            '{from_name}さんがボード #{channel} であなたをメンションしました:\n\n{text}\n\n返信するには post_channel(channel="{channel}", text="返信内容") を使ってください。'
+            "{from_name}さんがボード #{channel} であなたをメンションしました:\n\n{text}\n\n返信するには `animaworks-tool board post {channel} -` を実行し、本文を標準入力で渡してください。"
         ),
         "en": (
-            '{from_name} mentioned you on board #{channel}:\n\n{text}\n\nTo reply, use post_channel(channel="{channel}", text="your reply").'
+            "{from_name} mentioned you on board #{channel}:\n\n{text}\n\nTo reply, run `animaworks-tool board post {channel} -` and pass the body through stdin."
         ),
     },
     "handler.body_param_required": {
@@ -180,10 +180,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "handler.channel_acl_denied": {
         "ja": (
-            'Error: #{channel} へのアクセス権がありません。manage_channel(action="info", channel="{channel}") でメンバーを確認してください。'
+            "Error: #{channel} へのアクセス権がありません。`animaworks-tool internal manage-channel info {channel}` でメンバーを確認してください。"
         ),
         "en": (
-            'Error: You do not have access to #{channel}. Use manage_channel(action="info", channel="{channel}") to check members.'
+            "Error: You do not have access to #{channel}. Use `animaworks-tool internal manage-channel info {channel}` to check members."
         ),
     },
     "handler.channel_acl_not_member": {
@@ -192,10 +192,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "handler.channel_add_member_open_denied": {
         "ja": (
-            'Error: #{channel} はオープンチャネルです。add_memberするには、まず manage_channel(action="create") で制限チャネルとして再作成してください。'
+            "Error: #{channel} はオープンチャネルです。制限チャネルを新規作成するには `animaworks-tool internal manage-channel create <channel> --member <name>` を使ってください。"
         ),
         "en": (
-            'Error: #{channel} is an open channel. To add members, first recreate it as a restricted channel with manage_channel(action="create").'
+            "Error: #{channel} is an open channel. Create a restricted channel with `animaworks-tool internal manage-channel create <channel> --member <name>`."
         ),
     },
     "handler.channel_already_exists": {
@@ -221,12 +221,36 @@ STRINGS: dict[str, dict[str, str]] = {
     "handler.channel_not_found": {
         "ja": (
             "Error: チャネル #{channel} が見つかりません。"
-            'manage_channel(action="create", channel="{channel}") で明示的に作成してください。'
+            "`animaworks-tool internal manage-channel create {channel}` で明示的に作成してください。"
         ),
         "en": (
             "Error: Channel #{channel} not found. "
-            'Create it explicitly with manage_channel(action="create", channel="{channel}").'
+            "Create it explicitly with `animaworks-tool internal manage-channel create {channel}`."
         ),
+    },
+    "handler.channel_empty": {
+        "ja": "#{channel} にはまだ投稿がありません。",
+        "en": "There are no posts in #{channel} yet.",
+    },
+    "handler.channel_inbox_cli": {
+        "ja": "'{channel}' はチャネルではありません。Inbox は自動処理されます。Inbox を読むには `animaworks-tool board read` を使わないでください。",
+        "en": "'{channel}' is not a channel. Inbox messages are processed automatically; do not use `animaworks-tool board read` for inbox.",
+    },
+    "handler.memory_read_outside_cli": {
+        "ja": "パス '{path}' は自分のディレクトリ外です。'knowledge/foo.md' のような相対パスを使ってください。共有チャネルは `animaworks-tool board read` または `animaworks-tool board post` を使ってください。",
+        "en": "Path '{path}' resolves outside your directory. Use relative paths like 'knowledge/foo.md'. For shared channels, use `animaworks-tool board read` or `animaworks-tool board post`.",
+    },
+    "handler.dm_history_empty": {
+        "ja": "{peer} とのDM履歴はありません。",
+        "en": "There is no DM history with {peer}.",
+    },
+    "handler.memory_channel_read_cli": {
+        "ja": "共有チャネルはこの方法では読めません。`animaworks-tool board read {channel}` を使ってください。",
+        "en": "Shared channels cannot be read this way. Use `animaworks-tool board read {channel}`.",
+    },
+    "handler.memory_channel_write_cli": {
+        "ja": "共有チャネルへこの方法では書き込めません。`animaworks-tool board post {channel} -` を実行し、本文を標準入力で渡してください。",
+        "en": "Shared channels cannot be written this way. Run `animaworks-tool board post {channel} -` and pass the body through stdin.",
     },
     "handler.channel_post_invalid_poster": {
         "ja": "Error: 投稿者名が既知の Anima ではありません: {poster}",
@@ -256,6 +280,38 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "#{channel} に投稿しました",
         "en": "Posted to #{channel}",
     },
+    "cli.board_post_empty": {
+        "ja": "Error: 投稿本文が空です。本文を指定するか、標準入力から渡してください。",
+        "en": "Error: Post text is empty. Provide text or pass it through stdin.",
+    },
+    "cli.board_impersonation_refused": {
+        "ja": "Error: anima '{anima}' は '{requested}' として操作できません",
+        "en": "Error: anima '{anima}' cannot act as '{requested}'",
+    },
+    "cli.board_post_invalid_args": {
+        "ja": "Error: 投稿の引数が多すぎます。board post <channel> [<text> | -] を使ってください。",
+        "en": "Error: Too many post arguments. Use board post <channel> [<text> | -].",
+    },
+    "cli.board_read_invalid_channel": {
+        "ja": "Error: チャネル名が不正です: {detail}",
+        "en": "Error: Invalid channel name: {detail}",
+    },
+    "cli.board_post_parser_help": {
+        "ja": "チャネルに投稿",
+        "en": "Post to a channel",
+    },
+    "cli.board_post_parser_description": {
+        "ja": "チャネルに投稿します。形式: board post <channel> [<text> | -]。本文を省略するか '-' を指定すると標準入力から読みます。旧形式: board post <from> <channel> <text>。",
+        "en": "Post to a channel. Use: board post <channel> [<text> | -]. Omit text or use '-' to read it from stdin. Legacy form: board post <from> <channel> <text>.",
+    },
+    "cli.board_post_parser_args_help": {
+        "ja": "<channel> [<text> | -]、または旧形式 <from> <channel> <text>",
+        "en": "<channel> [<text> | -], or legacy <from> <channel> <text>",
+    },
+    "cli.board_post_as_help": {
+        "ja": "投稿者名（ホストからの投稿）",
+        "en": "Operator poster name",
+    },
     "cli.board_post_failed": {
         "ja": "Error: ボードへの投稿に失敗しました: {detail}",
         "en": "Error: Board post failed: {detail}",
@@ -271,16 +327,18 @@ STRINGS: dict[str, dict[str, str]] = {
     "handler.channel_company_unset": {
         "ja": (
             "Error: チャネル #{channel} は会社帰属が未設定です。"
-            "manage_channelで会社帰属を設定するか、自社チャンネルを利用してください。"
+            "管理者に会社帰属の設定を依頼してください。チャネル情報は `animaworks-tool internal manage-channel info {channel}` で確認できます。"
         ),
         "en": (
             "Error: Channel #{channel} has no company attribution set. "
-            "Set company attribution via manage_channel or use a company-scoped channel."
+            "Ask an administrator to set it, or use a company-scoped channel. Inspect it with `animaworks-tool internal manage-channel info {channel}`."
         ),
-        "zh": ("错误：频道 #{channel} 尚未设置公司归属。请通过 manage_channel 设置公司归属，或使用本公司频道。"),
+        "zh": (
+            "错误：频道 #{channel} 尚未设置公司归属。请联系管理员设置，或使用本公司频道。可通过 `animaworks-tool internal manage-channel info {channel}` 查看频道信息。"
+        ),
         "ko": (
-            "오류: 채널 #{channel} 에 회사 귀속이 설정되어 있지 않습니다. "
-            "manage_channel로 회사 귀속을 설정하거나 자사 채널을 이용하세요."
+            "오류: 채널 #{channel} 에 회사 귀속이 설정되어 있지 않습니다. 관리자에게 설정을 요청하거나 자사 채널을 이용하세요. "
+            "`animaworks-tool internal manage-channel info {channel}` 로 채널 정보를 확인할 수 있습니다."
         ),
     },
     "handler.cmd_denied": {
@@ -428,10 +486,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "handler.dm_intent_error": {
         "ja": (
-            "Error: DMのintentは 'report', 'question' のみ許可されています。acknowledgment・感謝・FYIはBoardを使用してください（post_channel ツール）。"
+            "Error: DMのintentは 'report', 'question' のみ許可されています。acknowledgment・感謝・FYIは `animaworks-tool board post <channel> <text>` でBoardに投稿してください。"
         ),
         "en": (
-            "Error: DM intent must be 'report' or 'question' only. Use Board (post_channel tool) for acknowledgments, thanks, or FYI."
+            "Error: DM intent must be 'report' or 'question' only. Post acknowledgments, thanks, or FYI with `animaworks-tool board post <channel> <text>`."
         ),
     },
     "handler.dm_self_addressed_error": {

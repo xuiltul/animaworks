@@ -25,7 +25,7 @@ keywords: メール, 下書き, 重複確認
 
 - `call_human`
 - `send_message`
-- `post_channel`
+- `animaworks-tool board post`
 - `write_memory_file`
 - `gmail_draft`
 - `gmail_send`

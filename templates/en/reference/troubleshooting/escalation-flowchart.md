@@ -73,57 +73,58 @@ Attempt to resolve the problem on your own using the following steps. If the pro
 - Conditions for MUST report to supervisor: operational judgment is needed, other departments are involved, or urgency is high
 - Do not contact Anima instances in other departments directly (MUST: go through the supervisor)
 
-### Step 5: Execute Escalation
+### Step 5: Execute the Escalation
 
-The report message MUST include the following elements:
+The report message MUST include the following:
 
 1. **Situation**: What is happening
-2. **Cause**: What is considered the likely cause (if unknown, "cause under investigation")
-3. **Attempts**: What you have tried yourself
-4. **Request**: What you need from the supervisor (decision, permission grant, mediation, etc.)
+2. **Cause**: What is believed to be causing it (if unknown, say “Investigating the cause”)
+3. **Attempts**: What you tried yourself
+4. **Request**: What you want your supervisor to do (make a decision, grant permission, mediate, etc.)
 
 **send_message constraints (implementation-compliant)**:
-- `intent` is MUST: either `report` (report) or `question` (question). Cannot be omitted. `intent="delegation"` is **rejected** (task delegation is only via `delegate_task`)
-- Acknowledgment, thanks, and FYI cannot be sent via DM. Use Board (post_channel)
-- Only one DM can be sent to the same recipient per run. There is no limit on the number of recipients
-- There is no send budget by time or day, nor send rejection based on conversation depth. See `communication/sending-limits.md` for details
-- **Recipient**: Anima name, or human alias (if configured in config, external delivery to Slack/Chatwork etc.)
-- **During chat**: Replies to human users are done directly as text. `send_message` is used only for other Animas (or externally via configured aliases)
-- **Contacting humans** (destinations not reachable via `send_message`, such as when no alias is set): If top-level Anima and notification settings exist, use `call_human` (below)
-- When replying in a thread, specify `reply_to` and `thread_id` to maintain context
-- If urgency is "high" and immediate human response is needed, consider `call_human` (`subject`, `body`, `priority`)
+- `intent` is MUST: either `report` (report) or `question` (question). It cannot be omitted. `intent="delegation"` is **rejected** (task delegation is only `delegate_task`)
+- Acknowledgments, thanks, and FYIs cannot be sent by DM. Share them on the Board using `animaworks-tool board post <channel> <text>`
+- Only one DM can be sent to the same recipient in the same run. There is no limit on the number of recipients
+- There are no send rejections based on hourly or daily sending budgets or conversation depth. See `communication/sending-limits.md` for details
+- **Recipient**: Anima name or human alias (if configured, messages are delivered externally to Slack/Chatwork, etc.)
+- **During chat**: Reply to human users directly in text. Use `send_message` only for other Anima (or external recipients via configured aliases)
+- **Contacting humans** (recipients unreachable through `send_message`, such as when no alias is configured): If you are a top-level Anima and notification settings are configured, use `call_human` (see below)
+- When replying in a thread, specify `reply_to` and `thread_id` to preserve context
+- If urgency is “high” and immediate human action is required, consider `call_human` (`subject`, `body`, `priority`)
 
-**post_channel (Board) constraints** (used for sharing with the whole team):
-- Channels without metadata (general, ops, etc.) are available to everyone. Member-only channels allow posting only by members (ACL). If you lack access, check members via `manage_channel(action="info", channel="チャネル名")`
-- Only one post per channel per run. There is no cooldown between runs
-- You can mention users in the body with `@名前`. Mentioned users receive a DM notification
+**Board posting constraints** (for sharing with the entire team):
+- Channels without configured metadata (general, ops, etc.) are available to everyone. Only members can post in member-only channels (ACL). If you lack access, you can check the members using `animaworks-tool internal manage-channel info <channel>`
+- You can mention users in the message body using `@名前`. Mentioned users receive DM notifications
 
-**call_human and human notification infrastructure (`core/notification/` implementation-compliant)**:
+**call_human and the human notification infrastructure (compliant with `core/notification/` implementation)**:
 
-- **Tool activation condition**: `human_notification.enabled` of `config.json` is true, and `HumanNotifier.from_config` has **actually built one or more send channels** (only `enabled: true` and registered `type` among `channels[]` are targeted. `enabled: false` is skipped, unregistered `type` is skipped with a warning log)
-- **Top-level only (supervisor gate)**: If `config.animas` has **an entry for that Anima name** and `supervisor` is non-null, `HumanNotifier` is not granted and `call_human` cannot be used (subordinates escalate to their supervisor via `send_message`). **Animas not registered in `animas` do not pass this gate**, so theoretically `call_human` could be applied with only notification channels. For operational safety, explicitly list all Animas in `animas` and ensure only `supervisor: null` has human notifications
-- **Send method**: **Parallel send** to each channel where `HumanNotifier.notify` is valid (`asyncio.gather(..., return_exceptions=True)`). Each channel returns a success string or a failure string containing `ERROR`; **exceptions are swallowed per channel and others continue**
-- **Supported channel types** (`human_notification.channels[].type`): `slack`, `chatwork`, `line`, `telegram`, `ntfy` (corresponding to `@register_channel` of `core/notification/channels/*.py`). Multiple channels can be defined in parallel
-- **Parameters**: `subject` and `body` are required. `priority` is optional. Enumeration is `low` / `normal` / `high` / `urgent` (default `normal` when omitted). **Strings outside `PRIORITY_LEVELS` are normalized to `normal` within `HumanNotifier.notify`**
-- **Priority display**:
-  - **Slack / Chatwork / LINE / Telegram**: When `high` / `urgent`, prepend **`[HIGH]` / `[URGENT]`** (`priority.upper()`). Not applied for `low` / `normal`
-  - **ntfy**: Set `low=2`, `normal=3`, `high=4`, `urgent=5` in HTTP header `Priority`. Body is the request body (max ~4096 characters), with subject in `Title` header plus `(from Anima名)` if needed
+- **Conditions for tool availability**: `config.json`’s `human_notification.enabled` must be true, and `HumanNotifier.from_config` must be able to construct **at least one actual delivery channel** (of `channels[]`, only `enabled: true` and registered `type` are eligible. `enabled: false` is skipped, and unregistered `type` is skipped with a warning logged)
+- **Top-level only (supervisor gate)**: If `config.animas` contains an entry for **that Anima name** and `supervisor` is non-null, `HumanNotifier` is not granted and `call_human` cannot be used (subordinates escalate to their supervisor using `send_message`). **Anima not registered in `animas` do not pass through this gate**, so in theory, they may be granted `call_human` solely through notification channels. For safe operation, explicitly list all Anima in `animas` and ensure that only `supervisor: null` has human notifications enabled
+- **Delivery method**: Send **in parallel** to each channel enabled in `HumanNotifier.notify` (`asyncio.gather(..., return_exceptions=True)`). Each channel returns either a success string or a failure string containing `ERROR`, and **an exception is caught for one channel while the others continue**
+- **Supported channel types** (`human_notification.channels[].type`): `slack`, `chatwork`, `line`, `telegram`, `ntfy` (supports `@register_channel` in `core/notification/channels/*.py`). Multiple channels can be configured in parallel
+- **Parameters**: `subject` and `body` are required. `priority` is optional. Allowed values are `low` / `normal` / `high` / `urgent` (defaults to `normal` if omitted). **Strings outside `PRIORITY_LEVELS` are normalized to `normal` within `HumanNotifier.notify`**
+- **How priority appears**:
+  - **Slack / Chatwork / LINE / Telegram**: For `high` / `urgent`, **`[HIGH]` / `[URGENT]`** are prepended (`priority.upper()`). They are not added for `low` / `normal`
+  - **ntfy**: Set `low=2`, `normal=3`, `high=4`, and `urgent=5` in the HTTP `Priority` header. The body is the request body (up to approximately 4096 characters); the `Title` header contains the subject plus `(from Anima名)` if needed
 - **Slack** (`channels/slack.py`):
-  - **Bot Token + `channel`** (`chat.postMessage`) or **Incoming Webhook**. Body is formatted for Slack via `md_to_slack_mrkdwn`
-  - **If Bot and `anima_name` exists**: Pass the Anima name to the API's `username`, so **do not add `(from Anima名)` on the body side** (in Webhook mode, add `(from Anima名)` to the body). If configuration and assets are ready, `icon_url` can also be added
-  - **Thread reply routing** (`reply_routing.py`): Only when posting via Bot, `anima_name` is non-empty, and the API response contains `ts`, save to `notification_map.json`. Path is `{data_dir}/run/notification_map.json` (usually `~/.animaworks/run/`). Entries are discarded **after a maximum of 7 days** from creation. Webhook cannot obtain `ts` and cannot be mapped
-  - When routing, fetch the thread summary via Slack API if possible; fall back to the saved notification text summary on failure. External messages to Inbox are `intent="question"`
-- **Chatwork**: `room_id` allows **numeric only**. Body is converted via `md_to_chatwork` and formatted as `[info][title]…[/title]…[/info]`
+  - **Bot Token + `channel`** (`chat.postMessage`) or **Incoming Webhook**. The body is formatted for Slack using `md_to_slack_mrkdwn`
+  - **When using a Bot and `anima_name` is present**: The Anima name is passed to the API’s `username`, so **`(from Anima名)` is not added to the body** (in Webhook mode, `(from Anima名)` is added to the body). `icon_url` can also be added if the configuration and assets are in place
+  - **Thread reply routing** (`reply_routing.py`): Saved to `notification_map.json` only when posted by a Bot, `anima_name` is non-empty, and the API response contains `ts`. The path is `{data_dir}/run/notification_map.json` (typically `~/.animaworks/run/`). Entries are discarded **no later than 7 days after creation**. Webhooks cannot be mapped because `ts` cannot be obtained
+  - When routing, retrieve a thread summary through the Slack API if possible; if that fails, fall back to a summary of the saved notification text. External messages to the Inbox are `intent="question"`
+- **Chatwork**: `room_id` accepts **numeric values only**. The body is converted using `md_to_chatwork` and formatted as `[info][title]…[/title]…[/info]`
 - **LINE**: Push API. Text is truncated to a maximum of 5000 characters
-- **Telegram**: `parse_mode=HTML`. Subject is `<b>…</b>`, adjust total to within 4096 characters (truncate after escaping)
-- **Credentials**: Base `NotificationChannel._resolve_credential_with_vault` is **config key env → `{キー}__{anima_name}` (vault/shared）→ raw key** order. Slack Bot additionally has a fallback to `get_credential("slack", "notification", …)` (see each `channels/*.py`)
-- **Chat UI**: Streaming responses send **`notification_sent`** events (via `core/anima/messaging.py`. Separate path from external channels)
-- **Logging**: When `call_human` executes, **`human_notify`** is written to the unified activity log (`via` is fixed in implementation as `configured_channels`). Additionally, `tool_result` is also recorded. Priming's "Pending Human Notifications" aggregates **up to 10 `human_notify` from the past 24 hours** (`core/memory/priming/outbound.py`)
-- **Other HumanNotifier usage**: Background tool completion, etc., has a path where the framework sends to humans via the **same `HumanNotifier`** (other than `call_human` tools. Same restriction to top-level Anima)
-- **Mode S (CLI)**: `animaworks-tool call_human "件名" "本文" [--priority …]` can also send similar notifications
+- **Telegram**: `parse_mode=HTML`. The subject is `<b>…</b>`; the total is adjusted to fit within 4096 characters (truncated after escaping)
+- **Credentials**: The base `NotificationChannel._resolve_credential_with_vault` is resolved in this order: the setting key’s env → `{キー}__{anima_name}` (vault/shared）→ plain key). Slack Bot also has a fallback to `get_credential("slack", "notification", …)` (see each `channels/*.py`)
+- **Chat UI**: A streaming response sends the **`notification_sent`** event (via `core/anima/messaging.py`; this uses a separate route from external channels)
+- **Logging**: When `call_human` runs, the unified activity log records **`human_notify`** (`via` is fixed in the implementation as `configured_channels`). `tool_result` is also retained. Priming’s “Pending Human Notifications” aggregates `human_notify` from the past 24 hours, up to 10 entries (`core/memory/priming/outbound.py`)
+- **Other uses of HumanNotifier**: The framework has routes for notifying humans using the **same `HumanNotifier`**, such as when background tools complete (other than the `call_human` tool; the top-level Anima restriction still applies)
+- **Mode S (CLI)**: The same type of notification can also be sent through `animaworks-tool call_human "件名" "本文" [--priority …]`
 
 **call_human parameters (summary)**:
-- `subject` and `body` are required. `priority` is optional (`low` / `normal` / `high` / `urgent`, default `normal`. Invalid values are treated as `normal`)
+- `subject` and `body` are required. `priority` is optional (`low` / `normal` / `high` / `urgent`; defaults to `normal`. Invalid values are treated as `normal`)
+
+---
 
 ## Escalation Message Templates
 

@@ -9,20 +9,19 @@
 
 | 工具 | 用途 | 备注 |
 |--------|------|------|
-| `delegate_task` | 向直属部下委派任务 | 添加到任务队列＋发送DM。可通过 `task_tracker` 跟踪进度。仅可用于直属部下 |
-| `send_message` | 一对一请求、报告、提问 | `intent` 必填：`report` / `question` 之一。向下属委派任务请使用 `delegate_task`。发往人类别名将投递到外部频道（Slack/Chatwork等） |
-| `post_channel` | 全员共享（通知、解决报告） | acknowledgments、感谢、FYI 请使用 Board。可通过 `@名前` 提及（向被提及者发送DM通知）。详情参见 `board-guide.md` |
-| `manage_channel` | 频道ACL管理 | 频道的创建、成员添加、删除、信息确认。在受限频道运营时使用。详情参见 `board-guide.md` |
+| `delegate_task` | 委派任务给直属部下 | 添加到任务队列并发送 DM。可通过 `task_tracker` 跟踪进度。仅可用于直属部下 |
+| `send_message` | 一对一请求、报告、提问 | 必须指定 `intent`：`report` / `question` 二选一。委派任务给下属请使用 `delegate_task`。发送给人类别名时，会投递到外部频道（如 Slack/Chatwork） |
+| `animaworks-tool board post <channel> <text>` | 全员共享（通知、问题解决报告） | 确认回复、致谢、FYI 请使用 Board。可通过 `@名前` 提及他人（被提及者会收到 DM 通知）。详情请参阅 `board-guide.md` |
+| `animaworks-tool internal manage-channel <action> <channel>` | 频道 ACL 管理 | 创建频道、添加或删除成员、查看信息。管理受限频道时使用。详情请参阅 `board-guide.md` |
 
-**send_message 的约束**：
-- `intent` 为必填。仅允许 `report` / `question`。acknowledgment、感谢、FYI 请使用 Board（`post_channel`）。向下属委派任务请使用 `delegate_task`
-- 同一 run 中向同一收件人可发送的 DM 最多 1 条。收件人数量无上限
-- 可选：`thread_id`（线程ID）、`reply_to`（回复目标消息ID）可维持对话线程
+**send_message 的限制**:
+- 必须指定 `intent`。仅允许使用 `report` / `question`。确认回复、致谢、FYI 请通过 `animaworks-tool board post <channel> <text>` 分享到 Board。委派任务给下属请使用 `delegate_task`
+- 同一 run 中，向同一收件人最多只能发送 1 条 DM。收件人数量没有上限
+- 可选参数：`thread_id`（线程 ID）、`reply_to`（回复目标消息 ID），用于保持对话线程
 
-**post_channel 的约束**：
-- 必须是频道成员（ACL）。若为受限频道，非成员不可发布
-- 同一 run 内对同一频道仅可发布 1 次
-- 没有 run 之间的重新发布冷却时间，也没有 DM / Board 共用的发送预算
+**Board 发帖 CLI 的限制**:
+- 必须是频道成员（ACL）。在受限频道中，非成员无法发帖
+- 没有重复发帖冷却时间，也没有 DM / Board 共用的发送额度
 
 ## 清晰指令的5要素
 

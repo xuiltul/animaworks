@@ -75,7 +75,7 @@ send_message(
     thread_id="thread-xyz789"  # 任意: スレッドID
 )
 
-# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら post_channel（Board）を使用
+# 確認・お礼・称賛だけのメッセージには返信しない。全体共有が必要なら `animaworks-tool board post <channel> <text>` を使用
 ```
 
 ---
@@ -376,7 +376,6 @@ send_message(
 
 - `RecipientResolutionError`、外部チャネルの `DeliveryFailed`、権限・会社境界エラーなど、実際の配送エラーが返る
 - `send_message` で同一 run 内に同じ宛先へ2通目を送ろうとすると拒否される（重複防止）。宛先数の上限はない
-- `post_channel` で同じ run 内に同じチャネルへ2回目を投稿しようとすると拒否される。run 間の投稿 cooldown はない
 - 時間・日単位の送信予算や会話深度による送信拒否はない。内部 Anima 間の深度は診断ログに記録される場合がある
 
 ### 対処手順
@@ -460,10 +459,10 @@ send_message(
 - **対処**: Mode S では `Glob`、それ以外は `search_memory` や既知パスの `read_memory_file` で当たる
 - **注意**: `read_memory_file` は Anima ディレクトリ相対（例: `knowledge/xxx.md`）に加え、`common_knowledge/`・`reference/`・`common_skills/` プレフィックスで共有ディレクトリを読める。`Read`（エージェント組み込み）は別ルールでパスが決まる
 
-### read_channel で inbox を指定できない
+### Board read で inbox を指定できない
 
-- **原因**: `read_channel` は Board の共有チャネル用。inbox（受信箱）はチャネルではない
-- **対処**: inbox のメッセージはシステムが自動処理する。`read_channel` に `inbox` や `inbox/` を指定するとエラーになる
+- **原因**: `animaworks-tool board read` は共有チャネル用。inbox（受信箱）はチャネルではない
+- **対処**: inbox のメッセージはシステムが自動処理する。`animaworks-tool board read inbox` や `inbox/` を指定するとエラーになる
 
 ### コマンドがタイムアウトする
 

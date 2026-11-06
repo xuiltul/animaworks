@@ -11,24 +11,32 @@ def _tool_names(tools: list[dict]) -> set[str]:
 
 
 class TestCompactToolFilter:
-    """Verify compact mode returns exactly the expected 11-tool subset."""
+    """Verify compact mode returns exactly the expected 10-tool subset."""
 
     def test_compact_returns_11_tools(self):
         tools = build_unified_tool_list(compact=True, include_create_skill=False)
-        assert len(tools) == 11
+        assert len(tools) == 10
 
     def test_compact_tool_names_match(self):
         tools = build_unified_tool_list(compact=True, include_create_skill=False)
         names = _tool_names(tools)
         assert names == COMPACT_TOOL_NAMES
+        assert "post_channel" not in COMPACT_TOOL_NAMES
 
     def test_compact_includes_all_expected(self):
         tools = build_unified_tool_list(compact=True, include_create_skill=False)
         names = _tool_names(tools)
         for expected in [
-            "Read", "Write", "Edit", "Bash", "Grep", "Glob",
-            "search_memory", "read_memory_file", "write_memory_file",
-            "send_message", "post_channel",
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Grep",
+            "Glob",
+            "search_memory",
+            "read_memory_file",
+            "write_memory_file",
+            "send_message",
         ]:
             assert expected in names, f"{expected} missing from compact tools"
 
@@ -54,7 +62,9 @@ class TestCompactToolFilter:
     def test_compact_with_consolidation_trigger(self):
         """compact + consolidation: both filters apply."""
         tools = build_unified_tool_list(
-            compact=True, include_create_skill=False, trigger="consolidation:daily",
+            compact=True,
+            include_create_skill=False,
+            trigger="consolidation:daily",
         )
         names = _tool_names(tools)
         assert "send_message" not in names
@@ -69,9 +79,11 @@ class TestCompactToolFilter:
     def test_compact_with_supervisor_still_filters(self):
         """Supervisor tools should be excluded by compact filter."""
         tools = build_unified_tool_list(
-            compact=True, include_supervisor_tools=True, include_create_skill=False,
+            compact=True,
+            include_supervisor_tools=True,
+            include_create_skill=False,
         )
         names = _tool_names(tools)
         assert "delegate_task" not in names
         assert "ping_subordinate" not in names
-        assert len(names) == 11
+        assert len(names) == 10

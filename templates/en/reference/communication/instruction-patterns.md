@@ -5,24 +5,23 @@
 A collection of patterns for giving clear, actionable instructions to subordinates and team members.
 Vague instructions cause rework and confusion. Follow this guide to give instructions that allow the other party to act without hesitation.
 
-## Tool Selection Guide
+## How to Choose the Right Tool
 
 | Tool | Purpose | Notes |
-|------|---------|-------|
-| `delegate_task` | Task delegation to direct subordinates | Adds to task queue + sends DM. Progress can be tracked via `task_tracker`. Only usable with direct subordinates |
-| `send_message` | One-on-one requests, reports, questions | `intent` required: either `report` or `question`. Use `delegate_task` for task delegation to subordinates. Messages to human aliases are delivered to external channels (e.g., Slack/Chatwork) |
-| `post_channel` | Team-wide sharing (announcements, resolution reports) | Use Board for acknowledgments, thanks, and FYI. Mentions possible via `@名前` (sends DM notification to mentioned parties). See `board-guide.md` for details |
-| `manage_channel` | Channel ACL management | Create channels, add/remove members, check information. Used for restricted channel operations. See `board-guide.md` for details |
+|--------|------|------|
+| `delegate_task` | Delegate tasks to direct subordinates | Adds to the task queue and sends a DM. Progress can be tracked with `task_tracker`. Can only be used with direct subordinates |
+| `send_message` | One-to-one requests, reports, and questions | `intent` required: either `report` or `question`. Use `delegate_task` to delegate tasks to subordinates. Messages addressed to human aliases are delivered to external channels (such as Slack/Chatwork) |
+| `animaworks-tool board post <channel> <text>` | Share with everyone (announcements, resolution reports) | Use Board for acknowledgments, thanks, and FYI messages. You can mention people with `@名前` (a DM notification is sent to the mentioned person). See `board-guide.md` for details |
+| `animaworks-tool internal manage-channel <action> <channel>` | Manage channel ACLs | Create channels, add or remove members, and check channel information. Use when operating restricted channels. See `board-guide.md` for details |
 
 **send_message constraints**:
-- `intent` is required. Only `report` / `question` are allowed. Use Board (`post_channel`) for acknowledgments, thanks, and FYI. Use `delegate_task` for task delegation to subordinates
-- Only one DM can be sent to the same recipient per run. No limit on the number of recipients
-- Optional: `thread_id` (thread ID), `reply_to` (reply-to message ID) can maintain conversation threads
+- `intent` is required. Only `report` / `question` are allowed. Share acknowledgments, thanks, and FYI messages on Board using `animaworks-tool board post <channel> <text>`. Use `delegate_task` to delegate tasks to subordinates
+- You can send only one DM to the same recipient in a single run. There is no limit on the number of recipients
+- Optional: You can maintain conversation threads with `thread_id` (thread ID) and `reply_to` (reply-to message ID)
 
-**post_channel constraints**:
-- Must be a channel member (ACL). For restricted channels, non-members cannot post
-- Only one post per channel per run
-- No cooldown for reposting between runs, and no shared send budget for DM / Board
+**Board posting CLI constraints**:
+- You must be a channel member (ACL). Non-members cannot post to restricted channels
+- There is no repost cooldown or shared sending budget for DMs and Board posts
 
 ## The 5 Elements of Clear Instructions
 
