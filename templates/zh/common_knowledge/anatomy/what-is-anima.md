@@ -62,18 +62,18 @@ Chat 与 Heartbeat（以及 cron / TaskExec 等后台处理）以 **不同的锁
 
 #### 后台工具执行（BackgroundTaskManager）
 
-`core/tasks/background.py` 的 `BackgroundTaskManager` 会**在后台执行通常耗时较长的外部工具调用**，并将状态和结果保存在磁盘上，以便之后查询。`config.json` 的 `background_task.enabled` 为 `false` 时，管理器本身会被禁用，也不会通过智能体提交后台任务。
+`core/tasks/background.py` 中的 `BackgroundTaskManager` 会**在后台执行通常耗时较长的外部工具调用**，并将状态和结果保存到磁盘，以便之后查询。`config.json` 的 `background_task.enabled` 为 `false` 时，管理器本身会被禁用，代理也不会通过它提交后台任务。
 
-- **持久化**：每个任务都会将 `TaskStatus`（如 `running` / `completed` / `failed`）和结果字符串保存到 `state/background_tasks/{task_id}.json`。可以从内存缓存和磁盘中通过 `get_task` / `list_tasks` 查询。
-- **提交 API**：`submit` 会立即返回 `task_id`，由经 `asyncio.create_task` 封装的 `_run_task` 执行实际任务。同步工具实现会通过 `run_in_executor` 在线程池中运行。面向异步工具也提供 `submit_async`。任务完成时会调用可选的 `on_complete` 回调 `await`（回调中的异常会记录到日志中，不影响任务结果）。
-- **如何确定目标工具**（`BackgroundTaskManager.from_profiles`，**后者优先**）：
-  1. `_DEFAULT_ELIGIBLE_TOOLS`（代码默认值，面向 Mode A 的架构名称。例如：`generate_character_assets`、`generate_fullbody`、`generate_bustup`、`generate_icon`、`generate_chibi`、`generate_3d_model`、`generate_rigged_model`、`generate_animations`、`local_llm`、`run_command` 等）
-  2. 通过 `load_execution_profiles(TOOL_MODULES)` 加载的各个模块的 `EXECUTION_PROFILE` 中，`background_eligible: true` 条目。键的格式为 **`tool:subcmd`**，值为 `expected_seconds`（未配置时为 60）
+- **持久化**：每个任务都会将 `TaskStatus`（如 `running` / `completed` / `failed`）和结果字符串保存到 `state/background_tasks/{task_id}.json`。可通过 `get_task` / `list_tasks` 从内存缓存或磁盘中查询。
+- **提交 API**：`submit` 会立即返回 `task_id`，由封装在 `asyncio.create_task` 中的 `_run_task` 执行实际任务。同步工具实现会通过 `run_in_executor` 在线程池中运行。也支持面向异步工具的 `submit_async`。任务完成时，会调用可选的 `on_complete` 回调 `await`（回调中的异常会记入日志，不会影响任务结果）。
+- **目标工具的判定方式**（`BackgroundTaskManager.from_profiles`，**后面的优先级更高**）：
+  1. `_DEFAULT_ELIGIBLE_TOOLS`（代码默认值，面向 Mode A 的 schema 名称。例如：`generate_character_assets`、`generate_fullbody`、`generate_bustup`、`generate_icon`、`generate_chibi`、`generate_3d_model`、`generate_rigged_model`、`generate_animations`、`local_llm`、`run_command` 等）
+  2. 通过 `load_execution_profiles(TOOL_MODULES)` 加载的各个模块中，`EXECUTION_PROFILE` 里属于 `background_eligible: true` 的条目。键的格式为 **`tool:subcmd`**，值为 `expected_seconds`（未配置时为 60）
   3. `config.json` 的 `background_task.eligible_tools`（各工具的 `threshold_s` 会覆盖同一映射中的值）
-  `is_eligible(name)` 只检查**名称是否包含在映射中**（值会作为参考秒数保留，不用于阈值比较）。
-- **通过智能体调用**：`ToolHandler` 对未注册工具进行外部调度时，如果名称在上述映射中，就会交由 `BackgroundTaskManager.submit` 处理，并立即返回包含 `task_id` 的 JSON。可通过 `check_background_task` / `list_background_tasks` 等工具查询结果。
-- **通过 CLI 调用（`animaworks-tool submit`）**：命令型工具也会作为 `task_type="command"` 注册到 TaskStore。`PendingTaskExecutor` 从 TaskStore 获取尝试任务，再由 BackgroundTaskManager 执行。为保证兼容性，结果状态也会保存到 `state/background_tasks/{task_id}.json`，并可通过完成通知查看。
-- **清理**：`cleanup_old_tasks(max_age_hours=24)` 会删除从 `completed` / `failed` 起在 `completed_at` 中存放时间超过指定期限的 JSON 文件，以及状态仍为 `running`、从 `created_at` 起已超过 **48 小时**的文件（例如进程崩溃等情况遗留的孤立文件）。保留时长由调用方通过参数 `max_age_hours` 指定，没有对应的配置键。
+  `is_eligible(name)` 只会检查名称是否包含在映射中（值会作为估算秒数保留，但不会用于阈值比较）。
+- **通过代理执行**：`ToolHandler` 通过外部调度分发未注册的工具时，如果名称存在于上述映射中，就会将其交给 `BackgroundTaskManager.submit` 处理，并立即返回包含 `task_id` 的 JSON。可通过 `check_background_task` / `list_background_tasks` 等工具查询结果。
+- **通过 CLI 执行（`animaworks-tool submit`）**：命令型工具也会作为 `task_type="command"` 注册到 TaskStore。`PendingTaskExecutor` 从 TaskStore 获取尝试记录，再由 BackgroundTaskManager 执行。为保持兼容，结果状态也会保存到 `state/background_tasks/{task_id}.json` 中，可通过完成通知查询。
+- **清理**：`cleanup_old_tasks(max_age_hours=24)` 会删除自 `completed` / `failed` 起在 `completed_at` 中存放时间超过指定时长的 JSON 文件，以及仍处于 `running` 状态、且自 `created_at` 起已超过 **48 小时**的文件（例如进程崩溃后遗留的孤立文件）。保留时长由调用方通过参数 `max_age_hours` 指定，没有对应的配置键。
 
 
 ### 4. 成长

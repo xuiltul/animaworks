@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=51f65b0eb515ebdf3e52f7c5bb38d5caac8f1b7b15e0222c8777f42ed5302467 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=b0cbbd6a56a7bbe194b3267fff1593e98d4c0eff4dc2195fb7d856e316542374 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -29,7 +29,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
 | `cli.commands.anima_export_cmd` | 67 | — |
-| `cli.commands.anima_mgmt` | 1174 | CLI commands for anima process management. |
+| `cli.commands.anima_mgmt` | 1160 | CLI commands for anima process management. |
 | `cli.commands.board` | 215 | — |
 | `cli.commands.company_cmd` | 272 | — |
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
@@ -148,7 +148,7 @@ Digital Anima lifecycle and runtime objects.
 |---|---:|---|
 | `core.anima` | 23 | — |
 | `core.anima._mixin_protocols（非公開）` | 130 | Structural host protocols for the compositional mixins. |
-| `core.anima.admin` | 170 | — |
+| `core.anima.admin` | 144 | — |
 | `core.anima.asset_reconciler` | 787 | — |
 | `core.anima.bootstrap_state` | 592 | — |
 | `core.anima.chat_attachments` | 253 | — |
@@ -212,7 +212,7 @@ Application configuration schemas, loading, validation, and migration.
 | `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1566 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1565 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -421,9 +421,9 @@ Translation catalog and language selection.
 
 ## `core.infra`
 
-Foundation features such as logging, databases, and caching.
+Core infrastructure features such as logs, databases, and caches.
 
-| Module | Lines | docstring first line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `core.infra` | 6 | — |
 | `core.infra.event_export` | 389 | — |
@@ -432,7 +432,7 @@ Foundation features such as logging, databases, and caching.
 | `core.infra.inference` | 127 | — |
 | `core.infra.log_queue` | 394 | Non-blocking log delivery for the server process. |
 | `core.infra.logging_config` | 542 | Centralized logging configuration for AnimaWorks. |
-| `core.infra.runtime_init` | 451 | First-launch initialization: copy templates to runtime data directory. |
+| `core.infra.runtime_init` | 445 | First-launch initialization: copy templates to runtime data directory. |
 | `core.infra.startup_progress` | 191 | — |
 | `core.infra.tmp_cleanup` | 254 | — |
 
@@ -588,7 +588,7 @@ Storage, search, and organization of conversation and episode memories.
 | `core.memory.maintenance.cron_noop` | 241 | — |
 | `core.memory.maintenance.distillation` | 548 | — |
 | `core.memory.maintenance.forgetting` | 588 | — |
-| `core.memory.maintenance.housekeeping` | 1964 | — |
+| `core.memory.maintenance.housekeeping` | 1952 | — |
 | `core.memory.maintenance.hygiene` | 75 | — |
 | `core.memory.maintenance.reconsolidation` | 669 | — |
 | `core.memory.maintenance.resolution_tracker` | 60 | — |
@@ -714,7 +714,7 @@ Storage, search, and organization of conversation and episode memories.
 
 ## `core.messaging`
 
-Message delivery between animas and to external parties.
+Message delivery between anima and to external parties.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -726,7 +726,7 @@ Message delivery between animas and to external parties.
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.meeting_room_store` | 130 | — |
 | `core.messaging.mentions` | 32 | — |
-| `core.messaging.messenger` | 1099 | — |
+| `core.messaging.messenger` | 1051 | — |
 | `core.messaging.outbound` | 408 | — |
 | `core.messaging.outbound_auto` | 380 | — |
 | `core.messaging.recipient_status` | 79 | — |
@@ -934,7 +934,7 @@ Task registration, status management, and execution control.
 |---|---:|---|
 | `core.tasks` | 1 | Task queue, task board, delegated/background task execution and external task sources. |
 | `core.tasks.autonomy_report` | 475 | — |
-| `core.tasks.background` | 618 | — |
+| `core.tasks.background` | 521 | — |
 | `core.tasks.board.board_actions` | 260 | — |
 | `core.tasks.board.housekeeping` | 188 | — |
 | `core.tasks.board.models` | 39 | Pydantic models for the single TaskBoard view (read straight from TaskStore). |
@@ -1135,12 +1135,12 @@ Voice input/output and voice dialogue.
 | Module | Lines | First line of docstring |
 |---|---:|---|
 | `server.routes` | 63 | — |
-| `server.routes.animas` | 1271 | — |
+| `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 478 | — |
+| `server.routes.channels` | 433 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1184,14 +1184,14 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | First line of docstring |
 |---|---:|---|
 | `server.supervisor` | 23 | Server-level supervision APIs for managing Anima processes. |
-| `server.supervisor._manager_protocols（非公開）` | 86 | Structural host protocols for the compositional mixins. |
+| `server.supervisor._manager_protocols（非公開）` | 85 | Structural host protocols for the compositional mixins. |
 | `server.supervisor._mgr_health（非公開）` | 470 | Health check mixin for ProcessSupervisor. |
 | `server.supervisor._mgr_rag_repair（非公開）` | 278 | Supervised RAG repair mixin for ProcessSupervisor. |
 | `server.supervisor._mgr_reconcile（非公開）` | 335 | Reconciliation mixin for ProcessSupervisor. |
-| `server.supervisor._mgr_scheduler（非公開）` | 1317 | System scheduler mixin for ProcessSupervisor. |
+| `server.supervisor._mgr_scheduler（非公開）` | 1291 | System scheduler mixin for ProcessSupervisor. |
 | `server.supervisor.activity_schedule` | 100 | — |
 | `server.supervisor.auto_updater` | 198 | — |
 | `server.supervisor.manager` | 1308 | Process Supervisor - Manages lifecycle of Anima child processes. |

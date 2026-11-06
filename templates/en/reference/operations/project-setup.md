@@ -21,7 +21,7 @@ During initial setup, initialize from the template using `animaworks init`.
 
 **Recommended flow**: After running `animaworks init`, start the server with `animaworks start` and add Anima via the web UI setup wizard.
 
-### Directories Created During Initialization
+### Directories Created at Initialization
 
 The following are created by `ensure_runtime_dir` (`core/infra/runtime_init.py`):
 
@@ -32,10 +32,10 @@ The following are created by `ensure_runtime_dir` (`core/infra/runtime_init.py`)
 - `tmp/attachments/` — Temporary attachment storage
 - `common_skills/` / `common_knowledge/` — Shared skills and knowledge
 - `prompts/` / `company/` — Prompt and organization templates
-- `tool_prompts.sqlite3` — Tool prompt database
-- `models.json` — Model name-to-execution mode mapping (copied from `config_defaults/`)
+- `tool_prompts.sqlite3` — Tool prompt DB
+- `models.json` — Model name → execution mode mapping (copied from `config_defaults/`)
 
-At each startup, `common_skills` and `common_knowledge` are incrementally synchronized from the templates, adding only new entries (existing files are preserved).
+At each startup, `common_skills` and `common_knowledge` are incrementally synchronized from the templates, adding only new entries (existing files are retained).
 
 ## Overall Structure of config.json
 

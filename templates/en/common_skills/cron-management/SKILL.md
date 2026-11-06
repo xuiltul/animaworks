@@ -14,24 +14,24 @@ Parsing of cron is handled by `core/runtime/schedule_parser.py` (`parse_cron_md`
 
 ### `core/tasks/background.py` (separate from cron)
 
-This module **does not handle cron scheduling**. It handles background execution of long-running tool calls. Do not confuse it with cron.
+This module does **not** schedule cron jobs. It handles background execution of long-running tool calls. Do not confuse it with cron.
 
 **`BackgroundTaskManager`**
 
-- **Role**: Run the target tool asynchronously on `asyncio` and save its status to disk.
+- **Role**: Executes target tools asynchronously on `asyncio` and saves their status to disk.
 - **Persistence location**: `state/background_tasks/{task_id}.json` (`pending` / `running` / `completed` / `failed`, result strings, errors, and timestamps).
 - **Public API (overview)**:
-  - `submit(tool_name, tool_args, execute_fn)` — Run a synchronous execution function in a thread pool.
+  - `submit(tool_name, tool_args, execute_fn)` — Runs a synchronous execution function in a thread pool.
   - `submit_async(...)` — Asynchronous `execute_fn` version.
-  - `get_task` / `list_tasks` / `active_count` — Query.
-  - `cleanup_old_tasks(max_age_hours=24)` — Delete completed and failed tasks older than **24 hours**. Also delete JSON files that have remained in `running` status for over **48 hours** (crash orphans).
-- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: The set of tools eligible for background execution is determined by a **three-layer merge** (later entries take precedence).
-  1. In-code defaults `_DEFAULT_ELIGIBLE_TOOLS` (a fixed list compatible with Mode A)
-  2. Entries for `background_eligible: true` from each tool module’s `EXECUTION_PROFILE` (`core.integrations._base.get_eligible_tools_from_profiles`). Keys use the `"{tool}:{subcommand}"` format (consistent with Mode S’s `submit`)
-  3. `config_eligible` passed in from `config.json` and similar sources (explicit overrides)
-- **`is_eligible(tool_name)`**: Matching works with either name — the schema name (e.g., `generate_3d_model`) or the profile key (e.g., `image_gen:3d`).
-- **Examples included in `_DEFAULT_ELIGIBLE_TOOLS` by default** (values are approximate seconds): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations` (30 each), `local_llm` / `run_command` (60 each).
-- **Completion hook**: You can set `Callable[[BackgroundTask], Awaitable[None]]` on `on_complete`. The application can use this to send Markdown notifications to `state/background_notifications/`, for example (`background.py` itself does not interact with the notification directory).
+  - `get_task` / `list_tasks` / `active_count` — Queries.
+  - `cleanup_old_tasks(max_age_hours=24)` — Deletes completed and failed tasks older than **24 hours**. Also deletes JSON files that have remained in `running` for over **48 hours** (orphaned by a crash).
+- **`from_profiles(anima_dir, ..., profiles, config_eligible)`**: The set of tools eligible for background execution is formed by a **three-layer merge** (later layers take precedence).
+  1. In-code default `_DEFAULT_ELIGIBLE_TOOLS` (a fixed list compatible with Mode A)
+  2. Entries from `EXECUTION_PROFILE` in each tool module to `background_eligible: true` (`core.integrations._base.get_eligible_tools_from_profiles`). Keys use the `"{tool}:{subcommand}"` format (consistent with Mode S's `submit`)
+  3. `config.json` and other sources provide `config_eligible` (explicit overrides)
+- **`is_eligible(tool_name)`**: Matching is possible using either name — the schema name (e.g., `generate_3d_model`) or the profile key (e.g., `image_gen:3d`).
+- Examples included in `_DEFAULT_ELIGIBLE_TOOLS` by default (values are approximate seconds): `generate_character_assets` / `generate_fullbody` / `generate_bustup` / `generate_icon` / `generate_chibi` / `generate_3d_model` / `generate_rigged_model` / `generate_animations` (30 each), `local_llm` / `run_command` (60 each).
+- **Completion hook**: You can set `Callable[[BackgroundTask], Awaitable[None]]` on `on_complete`. The application can use it to write Markdown notifications to `state/background_notifications/`, for example (`background.py` itself does not access the notification directory).
 
 ---
 

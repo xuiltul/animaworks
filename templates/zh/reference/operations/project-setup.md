@@ -23,17 +23,17 @@ AnimaWorks 的配置结构与 Anima 添加步骤的参考。
 
 ### 初始化时创建的目录
 
-通过 `ensure_runtime_dir`（`core/infra/runtime_init.py`）创建以下目录：
+`ensure_runtime_dir`（`core/infra/runtime_init.py`）会创建以下目录:
 
 - `animas/` — Anima 目录
 - `shared/inbox/` — 接收消息队列
-- `shared/users/` — 用户资料
-- `shared/channels/` — 共享频道（包含 general、ops 的初始文件）
+- `shared/users/` — 用户配置文件
+- `shared/channels/` — 共享频道（general、ops 的初始文件）
 - `tmp/attachments/` — 附件临时存储
 - `common_skills/` / `common_knowledge/` — 通用技能与知识
 - `prompts/` / `company/` — 提示词与组织模板
 - `tool_prompts.sqlite3` — 工具提示词数据库
-- `models.json` — 模型名称→执行模式映射（从 `config_defaults/` 复制）
+- `models.json` — 模型名称→运行模式映射（从 `config_defaults/` 复制）
 
 每次启动时，`common_skills` 和 `common_knowledge` 都会从模板增量同步，仅添加新条目（保留现有文件）。
 

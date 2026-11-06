@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=5ca788f017ac39ec604d5bef837cd61bd91063812e85dfc087681abb48e75a20 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=e240ec3368a047652b9bdffd20ca902b80c2a0e8542d3a125f6c5e6be5278eb4 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 설정 참조
 
@@ -717,7 +717,6 @@
 | `housekeeping.anima_log_retention_days` | `int` | `30` | — |
 | `housekeeping.anima_log_total_max_size_mb` | `int` | `200` | — |
 | `housekeeping.frontend_log_backup_count` | `int` | `7` | — |
-| `housekeeping.dm_log_archive_retention_days` | `int` | `30` | — |
 | `housekeeping.cron_log_retention_days` | `int` | `14` | — |
 | `housekeeping.shortterm_retention_days` | `int` | `7` | — |
 | `housekeeping.shortterm_archive_retention_days` | `int` | `30` | — |
