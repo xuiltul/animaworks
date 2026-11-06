@@ -56,7 +56,7 @@ def test_send_message_keeps_related_tool_guidance() -> None:
     en = _desc("en", "send_message")
     assert "delegate_task" in ja and "animaworks-tool board post" in ja
     # English template generation is handled separately from the ja source.
-    assert "delegate_task" in en and "post_channel" in en
+    assert "delegate_task" in en and "animaworks-tool board post" in en
 
 
 def test_delegate_task_preserves_self_contained_constraint() -> None:

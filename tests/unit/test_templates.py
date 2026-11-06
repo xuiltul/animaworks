@@ -104,10 +104,7 @@ class TestActionRulesGuideTemplate:
             assert "slack_post" not in content
             for tool in required_tools:
                 assert f"`{tool}`" in content, f"{locale} action-rules-guide missing {tool}"
-            if locale == "ja":
-                assert "`animaworks-tool board post`" in content, f"{locale} action-rules-guide missing Board CLI"
-            else:
-                assert "`post_channel`" in content, f"{locale} action-rules-guide missing post_channel"
+            assert "`animaworks-tool board post`" in content, f"{locale} action-rules-guide missing Board CLI"
             for cli in cli_mappings:
                 assert cli in content, f"{locale} action-rules-guide missing {cli}"
 
