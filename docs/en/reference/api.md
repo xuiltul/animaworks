@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=88fc3d8a49e0e876d688423f2072fcc267799d945f9cb7947d005d5b111035a3 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=da6b6598bbdd8a1b8ee943d564db97f6475ad200d098bdd0b86845487686ac7b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API Reference
 
@@ -150,7 +150,7 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 | POST | `/api/internal/notification-mapping` | Internal | — | `server/routes/internal.py:internal_notification_mapping` |
 | POST | `/api/internal/notify-web` | Internal | Push a call_human notification into connected Web UI clients. | `server/routes/internal.py:internal_notify_web` |
 | POST | `/api/internal/phone/alert` | Internal | Start an urgent phone alert for the configured Anima. | `server/routes/internal.py:internal_phone_alert` |
-| POST | `/api/internal/post-channel` | Internal | Append a channel post outside sandbox EROFS constraints. | `server/routes/internal.py:internal_post_channel` |
+| POST | `/api/internal/post-channel` | Internal | Post to a shared channel through the centralized Board writer. | `server/routes/internal.py:internal_post_channel` |
 | POST | `/api/internal/rerank` | Internal | Centralized cross-encoder reranking for child processes. | `server/routes/internal.py:internal_rerank` |
 | POST | `/api/internal/send-message` | Internal | Persist a DM outside sandbox EROFS constraints. | `server/routes/internal.py:internal_send_message` |
 | POST | `/api/internal/settings/anima-icon-template` | Internal | Persist icon-template defaults on behalf of an authenticated worker. | `server/routes/internal.py:internal_persist_anima_icon_template` |
@@ -166,11 +166,11 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 | POST | `/api/internal/vector/get-by-ids` | Internal | — | `server/routes/internal.py:vector_get_by_ids` |
 | POST | `/api/internal/vector/get-by-metadata` | Internal | — | `server/routes/internal.py:vector_get_by_metadata` |
 | POST | `/api/internal/vector/list-collections` | Internal | — | `server/routes/internal.py:vector_list_collections` |
-| POST | `/api/internal/vector/query` | Internal | Run a vector search for internal services. | `server/routes/internal.py:vector_query` |
+| POST | `/api/internal/vector/query` | Internal | Perform vector search for internal services. | `server/routes/internal.py:vector_query` |
 | POST | `/api/internal/vector/update-metadata` | Internal | — | `server/routes/internal.py:vector_update_metadata` |
 | POST | `/api/internal/vector/upsert` | Internal | — | `server/routes/internal.py:vector_upsert` |
 | POST | `/api/internal/workspace/grant` | Internal | Apply a human-origin workspace grant through root-owned writers. | `server/routes/internal.py:internal_workspace_grant` |
-| GET | `/api/messages/{message_id}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
+| GET | `/api/messages/{message_id}` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return the full JSON of a stored message by its ID. | `server/routes/internal.py:get_message` |
 
 ## `server/routes/logs_routes.py`
 

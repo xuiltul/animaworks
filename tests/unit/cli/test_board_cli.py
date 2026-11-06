@@ -76,66 +76,77 @@ class TestCmdBoardRead:
 
 
 class TestCmdBoardPost:
-    @patch("cli.commands.board._notify_server_board_posted")
-    @patch("cli.commands.board.fanout_board_mentions")
-    @patch("core.messaging.messenger.Messenger")
-    @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
-    @patch("core.infra.runtime_init.ensure_runtime_dir")
-    @patch("cli.commands.board.current_anima_dir", return_value=None)
-    def test_operator_post_keeps_messenger_and_shared_fanout(
+    @pytest.fixture
+    def operator_board(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        from core.messaging.board import operator_principal, post_to_board
+
+        shared_dir = tmp_path / "shared"
+        channels_dir = shared_dir / "channels"
+        channels_dir.mkdir(parents=True)
+        (channels_dir / "general.jsonl").touch()
+
+        def post_direct(
+            channel: str,
+            text: str,
+            *,
+            from_anima: str,
+            source: str = "anima",
+            from_name: str | None = None,
+            request_id: str | None = None,
+            suppress_mentions: bool = False,
+        ) -> dict:
+            result = post_to_board(
+                channel,
+                text,
+                operator_principal(from_name or from_anima),
+                request_id=request_id,
+                origin="internal",
+                notify=not suppress_mentions,
+                shared_dir=shared_dir,
+            )
+            return {"post": result.to_dict()}
+
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: None)
+        monkeypatch.setattr("core.infra.runtime_init.ensure_runtime_dir", lambda: None)
+        monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
+        return shared_dir
+
+    def test_operator_post_uses_internal_board_client(
         self,
-        mock_context,
-        mock_ensure,
-        mock_shared,
-        mock_messenger_cls,
-        mock_fanout,
-        mock_notify,
+        operator_board: Path,
         capsys,
     ) -> None:
         from cli.commands.board import cmd_board_post
 
-        mock_messenger = MagicMock()
-        mock_messenger_cls.return_value = mock_messenger
         args = argparse.Namespace(from_anima="alice", channel="general", text="Hello @bob")
 
         cmd_board_post(args)
 
-        mock_messenger.post_channel.assert_called_once_with("general", "Hello @bob")
-        mock_fanout.assert_called_once_with(mock_messenger, "alice", "general", "Hello @bob")
-        mock_notify.assert_called_once_with("alice", "general", "Hello @bob")
-        assert capsys.readouterr().out.strip() == "Posted to #general"
+        row = json.loads((operator_board / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert row["from"] == "alice"
+        assert row["source"] == "human"
+        assert row["kind"] == "operator"
+        from core.i18n import t
+
+        assert capsys.readouterr().out.strip() == t("cli.board_post_success", channel="general")
 
     def test_anima_post_uses_handler_fanout_once(
         self,
         tmp_path: Path,
-        data_dir_at_tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys,
     ) -> None:
         from cli.commands.board import cmd_board_post
 
-        anima_dir = data_dir_at_tmp_path / "animas" / "alice"
+        anima_dir = tmp_path / "animas" / "alice"
         anima_dir.mkdir(parents=True)
-        (anima_dir / "status.json").write_text("{}", encoding="utf-8")
-        shared_dir = data_dir_at_tmp_path / "shared"
-        (shared_dir / "channels").mkdir(parents=True, exist_ok=True)
-        handler, messenger = _make_handler(anima_dir, shared_dir)
-        messenger.shared_dir = shared_dir
-        monkeypatch.setenv("ANIMAWORKS_ANIMA_DIR", str(anima_dir))
         args = argparse.Namespace(from_anima="alice", channel="general", text="Hello @bob")
+        run_tool = MagicMock()
+        monkeypatch.setattr("cli.commands.board.current_anima_dir", lambda: anima_dir)
+        monkeypatch.setattr("cli.commands.board.run_and_print", run_tool)
 
-        with (
-            patch("core.tooling.standalone._standalone_handler", return_value=handler),
-            patch("core.messaging.board_fanout.fanout_board_mentions") as fanout,
-            patch("cli.commands.board._notify_server_board_posted") as notify,
-            patch.object(handler, "_fire_board_slack_sync"),
-        ):
-            cmd_board_post(args)
+        cmd_board_post(args)
 
-        messenger.post_channel.assert_called_once_with("general", "Hello @bob")
-        fanout.assert_called_once()
-        notify.assert_not_called()
-        assert capsys.readouterr().out.strip() == "Posted to #general"
+        run_tool.assert_called_once_with("post_channel", {"channel": "general", "text": "Hello @bob"})
 
     def test_anima_post_refuses_impersonation(self, tmp_path: Path, capsys) -> None:
         from cli.commands.board import cmd_board_post
@@ -152,37 +163,46 @@ class TestCmdBoardPost:
         assert "alice" in capsys.readouterr().err
         run_tool.assert_not_called()
 
-    @patch("cli.commands.board._notify_server_board_posted")
-    @patch("cli.commands.board.fanout_board_mentions")
-    @patch("core.messaging.messenger.Messenger")
-    @patch("core.paths.get_shared_dir", return_value=Path("/tmp/shared"))
-    @patch("core.infra.runtime_init.ensure_runtime_dir")
-    @patch("cli.commands.board.current_anima_dir", return_value=None)
-    def test_operator_post_denied_channel_exits_without_fanout(
+    def test_operator_post_missing_channel_exits_with_error(
         self,
-        mock_context,
-        mock_ensure,
-        mock_shared,
-        mock_messenger_cls,
-        mock_fanout,
-        mock_notify,
+        operator_board: Path,
+        monkeypatch: pytest.MonkeyPatch,
         capsys,
     ) -> None:
         from cli.commands.board import cmd_board_post
-        from core.exceptions import ChannelNotFoundError
+        from core.messaging.board import operator_principal, post_to_board
 
-        mock_messenger = MagicMock()
-        mock_messenger.post_channel.side_effect = ChannelNotFoundError("missing")
-        mock_messenger_cls.return_value = mock_messenger
+        def post_missing(
+            channel: str,
+            text: str,
+            *,
+            from_anima: str,
+            source: str = "anima",
+            from_name: str | None = None,
+            request_id: str | None = None,
+            suppress_mentions: bool = False,
+        ) -> dict:
+            result = post_to_board(
+                channel,
+                text,
+                operator_principal(from_name or from_anima),
+                request_id=request_id,
+                origin="internal",
+                notify=not suppress_mentions,
+                shared_dir=operator_board,
+            )
+            return {"post": result.to_dict()}
+
+        monkeypatch.setattr("core.messaging.board_client.post_via_server", post_missing)
         args = argparse.Namespace(from_anima="alice", channel="missing", text="hello")
 
         with pytest.raises(SystemExit) as exc_info:
             cmd_board_post(args)
 
         assert exc_info.value.code == 1
-        assert "Error:" in capsys.readouterr().err
-        mock_fanout.assert_not_called()
-        mock_notify.assert_not_called()
+        from core.i18n import t
+
+        assert capsys.readouterr().err.strip() == t("cli.board_post_failed", detail="not_found")
 
 
 # ── DM history ───────────────────────────────────────────
@@ -274,12 +294,3 @@ def test_board_dm_history_parser_exposes_schema_filters() -> None:
     assert args.direction == "sent"
     assert args.hours == 24
     assert args.keyword == "deploy"
-
-
-def test_operator_board_notification_uses_shared_core_path() -> None:
-    from cli.commands.board import _notify_server_board_posted
-
-    with patch("cli.commands.board.notify_server_message_sent") as notify:
-        _notify_server_board_posted("alice", "general", "hello")
-
-    notify.assert_called_once_with("alice", "#channel:general", "hello")

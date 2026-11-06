@@ -87,6 +87,9 @@ def authz_client(tmp_path, monkeypatch):
     )
     monkeypatch.setattr("core.anima.factory.create_from_md", lambda *_a, **_k: animas_dir / "created")
     monkeypatch.setattr("core.messaging.messenger.Messenger.post_channel", lambda *_a, **_k: None)
+    from core.messaging.board import PostResult
+
+    monkeypatch.setattr("core.messaging.board.post_to_board", lambda *_a, **_k: PostResult(committed=True, id="post-1"))
     monkeypatch.setattr("core.tasks.dispatch.publish_tasks", lambda *_a, **_k: [])
     monkeypatch.setattr(
         "core.tasks.dispatch.publish_delegation",

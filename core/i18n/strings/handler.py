@@ -232,6 +232,34 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Error: 投稿者名が既知の Anima ではありません: {poster}",
         "en": "Error: The channel poster is not a known Anima: {poster}",
     },
+    "handler.channel_post_success": {
+        "ja": "#{channel} に投稿しました",
+        "en": "Posted to #{channel}",
+    },
+    "handler.channel_post_duplicate": {
+        "ja": "#{channel} への投稿は既に登録済みです",
+        "en": "The post to #{channel} was already recorded",
+    },
+    "handler.channel_post_notified": {
+        "ja": "通知しました: {names}",
+        "en": "Notified: {names}",
+    },
+    "handler.channel_post_not_notified": {
+        "ja": "通知しませんでした: {details}",
+        "en": "Not notified: {details}",
+    },
+    "handler.channel_post_failed": {
+        "ja": "Error: ボードへの投稿に失敗しました: {detail}",
+        "en": "Error: Board post failed: {detail}",
+    },
+    "cli.board_post_success": {
+        "ja": "#{channel} に投稿しました",
+        "en": "Posted to #{channel}",
+    },
+    "cli.board_post_failed": {
+        "ja": "Error: ボードへの投稿に失敗しました: {detail}",
+        "en": "Error: Board post failed: {detail}",
+    },
     "handler.channel_post_validation_failed": {
         "ja": "Error: 投稿者名を検証できないため投稿を中止しました",
         "en": "Error: Could not validate the channel poster, so the post was refused",

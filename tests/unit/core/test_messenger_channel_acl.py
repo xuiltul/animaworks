@@ -35,6 +35,10 @@ def shared_dir(tmp_path: Path) -> Path:
     d = tmp_path / "shared"
     d.mkdir()
     (d / "channels").mkdir()
+    for name in ("alice", "bob", "charlie"):
+        anima_dir = tmp_path / "animas" / name
+        anima_dir.mkdir(parents=True)
+        (anima_dir / "status.json").write_text("{}", encoding="utf-8")
     return d
 
 

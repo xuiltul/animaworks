@@ -34,7 +34,8 @@ core.memory.rag.vector_client -> core.internal_api
 core.messaging.discord_webhooks -> core.integrations._anima_icon_url
 core.messaging.discord_webhooks -> core.integrations._discord_markdown
 core.messaging.messenger -> core.internal_api
-core.messaging.messenger -> core.internal_api
+core.messaging.board_client -> core.host_api
+core.messaging.board_client -> core.internal_api
 core.messaging.outbound -> core.integrations._anima_icon_url
 core.messaging.outbound -> core.integrations._chatwork_identity
 core.messaging.outbound -> core.integrations._discord_markdown

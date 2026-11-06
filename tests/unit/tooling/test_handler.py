@@ -433,19 +433,25 @@ class TestHandleRouting:
     def test_post_channel_notifies_server_with_channel_target(
         self,
         handler_with_messenger: ToolHandler,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         callback = MagicMock()
         handler_with_messenger.on_message_sent = callback
-        handler_with_messenger._channel_company_boundary_error = MagicMock(return_value=None)
-        handler_with_messenger._fire_board_slack_sync = MagicMock()
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            result = handler_with_messenger.handle(
-                "post_channel",
-                {"channel": "general", "text": "hello"},
-            )
+        monkeypatch.setattr(
+            "core.messaging.board_client.post_via_server",
+            lambda *_args, **_kwargs: {
+                "post": {"committed": True, "duplicate": False, "id": "post-1", "notified": [], "not_notified": {}}
+            },
+        )
+        result = handler_with_messenger.handle(
+            "post_channel",
+            {"channel": "general", "text": "hello"},
+        )
 
-        assert result == "Posted to #general"
-        callback.assert_called_once_with("test-anima", "#channel:general", "hello", message_id="")
+        from core.i18n import t
+
+        assert result == t("handler.channel_post_success", channel="general")
+        callback.assert_not_called()
 
     def test_send_message_on_message_sent_error_swallowed(
         self,

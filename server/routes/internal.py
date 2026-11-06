@@ -229,6 +229,8 @@ class InternalPostChannelRequest(BaseModel):
     text: str
     source: str = "anima"
     from_name: str | None = None
+    request_id: str | None = None
+    suppress_mentions: bool = False
 
 
 class InternalNotifyWebRequest(BaseModel):
@@ -1213,15 +1215,18 @@ def create_internal_router() -> APIRouter:
 
     @internal.post("/internal/post-channel")
     def internal_post_channel(body: InternalPostChannelRequest, request: Request):
-        """Append a channel post outside sandbox EROFS constraints."""
+        """Post to a shared channel through the centralized Board writer."""
         caller = getattr(request.state, "internal_caller", None)
         denied = ensure_self(caller, body.from_anima, path=request.url.path)
         if denied is not None:
             return denied
         from core.anima.factory import validate_anima_name
-        from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
-        from core.messaging.messenger import Messenger
-        from core.paths import get_shared_dir
+        from core.messaging.board import (
+            anima_principal,
+            human_principal,
+            operator_principal,
+            post_to_board,
+        )
 
         if caller is None and body.source != "anima":
             from core.i18n import t
@@ -1231,31 +1236,43 @@ def create_internal_router() -> APIRouter:
         if validate_anima_name(body.from_anima):
             return JSONResponse(status_code=400, content={"detail": "Invalid anima name"})
 
-        if caller is not None and caller.kind != "operator":
-            post_anima = caller.name
-            post_source = "anima"
-            from_name = None
-        else:
-            post_anima = body.from_anima
-            post_source = body.source
-            from_name = body.from_name
+        from core.paths import get_animas_dir, get_shared_dir
 
-        messenger = Messenger(get_shared_dir(), post_anima)
-        try:
-            messenger.post_channel(
-                body.channel,
-                body.text,
-                source=post_source,
-                from_name=from_name,
-            )
-        except ChannelNotFoundError as exc:
-            return JSONResponse(status_code=404, content={"detail": str(exc)})
-        except ChannelAccessDeniedError as exc:
-            return JSONResponse(status_code=403, content={"detail": str(exc)})
-        except ValueError as exc:
-            return JSONResponse(status_code=400, content={"detail": str(exc)})
+        animas_dir = Path(getattr(request.app.state, "animas_dir", None) or get_animas_dir())
+        shared_dir = Path(getattr(request.app.state, "shared_dir", None) or get_shared_dir())
+        if caller is not None and caller.kind == "anima":
+            principal = anima_principal(caller.name, animas_dir=animas_dir)
+        elif caller is not None and caller.kind == "operator":
+            if body.source == "anima":
+                principal = anima_principal(body.from_anima, animas_dir=animas_dir)
+            elif body.source == "human":
+                principal = human_principal(body.from_name or "human")
+            elif body.source == "operator":
+                principal = operator_principal(body.from_name or "operator")
+            else:
+                return JSONResponse(status_code=400, content={"detail": "Invalid post source"})
+        else:
+            principal = anima_principal(body.from_anima, animas_dir=animas_dir)
+
+        post = post_to_board(
+            body.channel,
+            body.text,
+            principal,
+            request_id=body.request_id,
+            origin="mirror" if body.source == "human" and body.suppress_mentions else "internal",
+            notify=not body.suppress_mentions,
+            shared_dir=shared_dir,
+        )
+        if post.error == "not_found":
+            return JSONResponse(status_code=404, content={"detail": "Channel not found"})
+        if post.error and post.error.startswith("denied:"):
+            return JSONResponse(status_code=403, content={"detail": post.error})
+        if post.error == "invalid_name":
+            return JSONResponse(status_code=400, content={"detail": "Invalid channel name"})
+        if post.error:
+            return JSONResponse(status_code=500, content={"detail": post.error})
         logger.info("internal post-channel: %s -> #%s", body.from_anima, body.channel)
-        return {"ok": True}
+        return {"ok": True, "post": post.to_dict()}
 
     @internal.post("/internal/notify-web")
     async def internal_notify_web(body: InternalNotifyWebRequest, request: Request):

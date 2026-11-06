@@ -88,15 +88,14 @@ def _tree_intersects_deny(path: Path, denied_roots: tuple[Path, ...]) -> bool:
 
 
 def _is_channel_member_from_resolved_meta(meta_path: Path, anima_name: str) -> bool:
-    """Evaluate channel ACL without reopening an unresolved path."""
-    if not meta_path.exists():
-        return True
-    try:
-        data = json.loads(meta_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    members = data.get("members", []) if isinstance(data, dict) else []
-    return not members or anima_name in members
+    """Evaluate Board read access without reopening an unresolved path."""
+    from core.messaging.board import anima_principal, board_access
+
+    channels_dir = meta_path.parent
+    shared_dir = channels_dir.parent
+    channel_name = meta_path.name.removesuffix(".meta.json")
+    principal = anima_principal(anima_name, animas_dir=shared_dir.parent / "animas")
+    return board_access(shared_dir, channel_name, principal, "read").allowed
 
 
 async def channel_b_recent_activity(
@@ -233,7 +232,9 @@ def read_shared_channels(
     result: list[ActivityEntry] = []
 
     try:
-        from core.messaging.messenger import is_channel_member
+        from core.messaging.board import anima_principal, board_access
+
+        principal = anima_principal(anima_name, animas_dir=anima_dir.parent)
 
         for unresolved_channel_file in sorted(resolved_channels_dir.glob("*.jsonl")):
             channel_file = _resolved_readable_path(unresolved_channel_file, effective_denied_roots)
@@ -249,7 +250,7 @@ def read_shared_channels(
                 continue
 
             is_member = (
-                is_channel_member(shared_dir, channel_name, anima_name)
+                board_access(shared_dir, channel_name, principal, "read").allowed
                 if not effective_denied_roots
                 else _is_channel_member_from_resolved_meta(meta_path, anima_name)
             )
@@ -450,7 +451,10 @@ async def read_old_channels(
 
     anima_name = anima_dir.name
     mention_tag = f"@{anima_name}"
-    from core.messaging.messenger import is_channel_member
+    from core.messaging.board import anima_principal, board_access
+
+    principal = anima_principal(anima_name, animas_dir=anima_dir.parent)
+    resolved_shared_dir = channels_dir.parent
 
     now = now_local()
     cutoff_24h = now - timedelta(hours=24)
@@ -474,7 +478,7 @@ async def read_old_channels(
         ):
             continue
 
-        if not is_channel_member(shared_dir, channel_name, anima_name):
+        if not board_access(resolved_shared_dir, channel_name, principal, "read").allowed:
             continue
 
         try:

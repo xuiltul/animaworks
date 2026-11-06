@@ -60,14 +60,16 @@ def _collect_accessible_board_channels(anima_dir: Path) -> tuple[list[str], list
     if not channels_dir.is_dir():
         return [], []
 
-    from core.messaging.messenger import is_channel_member, load_channel_meta
+    from core.messaging.board import anima_principal, board_access
+    from core.messaging.messenger import load_channel_meta
 
     restricted: list[str] = []
     open_channels: list[str] = []
+    principal = anima_principal(anima_dir.name, animas_dir=anima_dir.parent)
 
     for channel_file in sorted(channels_dir.glob("*.jsonl")):
         channel_name = channel_file.stem
-        if not is_channel_member(shared_dir, channel_name, anima_dir.name):
+        if not board_access(shared_dir, channel_name, principal, "read").allowed:
             continue
         meta = load_channel_meta(shared_dir, channel_name)
         if meta is not None and meta.members:

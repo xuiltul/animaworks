@@ -755,11 +755,13 @@ class TestSlackBoardRouting:
                     channel_discovery=False,
                     board_mapping={"C_MANUAL": "general"},
                 ),
+                discord=SimpleNamespace(board_mapping={}),
             ),
         )
         monkeypatch.setattr("server.gateways.slack_socket.load_config", lambda: config)
         monkeypatch.setattr("core.config.models.load_config", lambda: config)
         monkeypatch.setattr("server.gateways.slack_socket.get_data_dir", lambda: tmp_path)
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: tmp_path / "shared")
 
         _route_to_board("C_MANUAL", "A manual mapping still works", "alice")
 

@@ -6,10 +6,12 @@
 Tests the full flow through the FastAPI app with real filesystem
 operations (no mocks for Messenger).
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
@@ -101,19 +103,29 @@ class TestE2EChannelFlow:
             general = next(c for c in channels if c["name"] == "general")
             assert general["message_count"] == 3
 
-    async def test_websocket_broadcast_on_post(self, tmp_path: Path):
+    async def test_websocket_broadcast_on_post(self, tmp_path: Path, monkeypatch):
         """Verify that posting triggers WebSocket broadcast."""
+        from server.board_hooks import register_board_post_hooks, unregister_board_post_hooks
+
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()
         _seed_channels(shared_dir)
 
         app = _create_app(shared_dir)
+        monkeypatch.setattr(
+            "core.config.models.load_config",
+            lambda: SimpleNamespace(external_messaging=SimpleNamespace(slack=SimpleNamespace(enabled=False))),
+        )
+        register_board_post_hooks(app)
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            await client.post(
-                "/api/channels/general",
-                json={"text": "WS test message", "from_name": "owner"},
-            )
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                await client.post(
+                    "/api/channels/general",
+                    json={"text": "WS test message", "from_name": "owner"},
+                )
+        finally:
+            unregister_board_post_hooks()
 
         ws = app.state.ws_manager
         ws.broadcast.assert_awaited_once()
@@ -122,6 +134,8 @@ class TestE2EChannelFlow:
         assert event["data"]["channel"] == "general"
         assert event["data"]["text"] == "WS test message"
         assert event["data"]["source"] == "human"
+        assert event["data"]["kind"] == "human"
+        assert event["data"]["id"]
         # Unauthenticated requests get from_name overridden to "human"
         assert event["data"]["from"] == "human"
 
@@ -238,15 +252,15 @@ class TestE2EReversePagination:
 
         channel_file = shared_dir / "channels" / "general.jsonl"
         entries = [
-            json.dumps({
-                "ts": f"2026-02-25T{h:02d}:{m:02d}:00",
-                "from": "sakura",
-                "text": f"msg-{i}",
-                "source": "anima",
-            })
-            for i, (h, m) in enumerate(
-                [(h, m) for h in range(24) for m in range(0, 60, 1)][:75]
+            json.dumps(
+                {
+                    "ts": f"2026-02-25T{h:02d}:{m:02d}:00",
+                    "from": "sakura",
+                    "text": f"msg-{i}",
+                    "source": "anima",
+                }
             )
+            for i, (h, m) in enumerate([(h, m) for h in range(24) for m in range(0, 60, 1)][:75])
         ]
         channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
 
@@ -256,9 +270,7 @@ class TestE2EReversePagination:
         offset = 0
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             while True:
-                resp = await client.get(
-                    f"/api/channels/general?limit=50&offset={offset}"
-                )
+                resp = await client.get(f"/api/channels/general?limit=50&offset={offset}")
                 data = resp.json()
                 page_texts = [m["text"] for m in data["messages"]]
                 all_texts = page_texts + all_texts
@@ -277,12 +289,14 @@ class TestE2EReversePagination:
 
         channel_file = shared_dir / "channels" / "general.jsonl"
         entries = [
-            json.dumps({
-                "ts": f"2026-02-25T{i // 60:02d}:{i % 60:02d}:00",
-                "from": "sakura",
-                "text": f"msg-{i}",
-                "source": "anima",
-            })
+            json.dumps(
+                {
+                    "ts": f"2026-02-25T{i // 60:02d}:{i % 60:02d}:00",
+                    "from": "sakura",
+                    "text": f"msg-{i}",
+                    "source": "anima",
+                }
+            )
             for i in range(125)
         ]
         channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
@@ -294,9 +308,7 @@ class TestE2EReversePagination:
         pages = 0
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             while True:
-                resp = await client.get(
-                    f"/api/channels/general?limit=50&offset={offset}"
-                )
+                resp = await client.get(f"/api/channels/general?limit=50&offset={offset}")
                 data = resp.json()
                 page_texts = [m["text"] for m in data["messages"]]
                 all_texts = page_texts + all_texts
@@ -341,12 +353,14 @@ class TestE2EReversePagination:
 
         channel_file = shared_dir / "channels" / "general.jsonl"
         entries = [
-            json.dumps({
-                "ts": f"2026-02-25T{i:02d}:00:00",
-                "from": "sakura",
-                "text": f"msg-{i}",
-                "source": "anima",
-            })
+            json.dumps(
+                {
+                    "ts": f"2026-02-25T{i:02d}:00:00",
+                    "from": "sakura",
+                    "text": f"msg-{i}",
+                    "source": "anima",
+                }
+            )
             for i in range(20)
         ]
         channel_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
