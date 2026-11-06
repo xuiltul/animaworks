@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=da6b6598bbdd8a1b8ee943d564db97f6475ad200d098bdd0b86845487686ac7b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=ece72b6ea81b040a07a1382950b083f8aaab1b9db1a91f0967cb1e3a93c0f9d6 generated=2026-11-06 engine=luna model=gpt-6-luna translator=2 -->
 
 # API Reference
 
@@ -206,16 +206,6 @@ Generated from FastAPI's OpenAPI definitions, WebSocket, and `server/app.py`'s d
 ## `server/routes/phone_stream.py`
 
 | WS | `/api/webhooks/twilio/stream` | No (exclusion list) | — | `server/routes/phone_stream.py:phone_media_stream` |
-
-## `server/routes/room.py`
-
-| GET | `/api/rooms` | Session required (optional in local_trust mode, or if localhost trust is enabled) | List meeting rooms. | `server/routes/room.py:list_rooms` |
-| POST | `/api/rooms` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Create a new meeting room. | `server/routes/room.py:create_room` |
-| GET | `/api/rooms/{room_id}` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Get room details including conversation. | `server/routes/room.py:get_room` |
-| POST | `/api/rooms/{room_id}/chat/stream` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Main SSE streaming endpoint for meeting chat. | `server/routes/room.py:meeting_chat_stream` |
-| POST | `/api/rooms/{room_id}/close` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Close room and generate minutes. | `server/routes/room.py:close_room` |
-| POST | `/api/rooms/{room_id}/participants` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Add a participant to the room. | `server/routes/room.py:add_participant` |
-| DELETE | `/api/rooms/{room_id}/participants/{name}` | Session required (optional in local_trust mode, or if localhost trust is enabled) | Remove a participant from the room. | `server/routes/room.py:remove_participant` |
 
 ## `server/routes/sessions.py`
 

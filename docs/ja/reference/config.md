@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 9b89c3025be17c0cd1a2ada623aea9e7c041c0c11ce1f4900525c7e62a1319ea -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 35c538246468d5040221b087d672b01198d2b832e94a57503ee3ec66e096cb69 -->
 
 # 設定リファレンス
 
@@ -239,14 +239,6 @@
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
 | `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
-| `helper_models.meeting_summary` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.meeting_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
-| `helper_models.meeting_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
-| `helper_models.meeting_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
-| `helper_models.meeting_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
-| `helper_models.meeting_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.meeting_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
-| `helper_models.meeting_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
 | `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |

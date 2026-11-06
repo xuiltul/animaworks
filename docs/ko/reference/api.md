@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=da6b6598bbdd8a1b8ee943d564db97f6475ad200d098bdd0b86845487686ac7b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=ece72b6ea81b040a07a1382950b083f8aaab1b9db1a91f0967cb1e3a93c0f9d6 generated=2026-11-06 engine=luna model=gpt-6-luna translator=2 -->
 
 # API 참조
 
@@ -206,16 +206,6 @@ FastAPI의 OpenAPI 정의, WebSocket, `server/app.py` 직접 작성 라우트에
 ## `server/routes/phone_stream.py`
 
 | WS | `/api/webhooks/twilio/stream` | 불필요(제외 목록) | — | `server/routes/phone_stream.py:phone_media_stream` |
-
-## `server/routes/room.py`
-
-| GET | `/api/rooms` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회의실 목록을 표시합니다. | `server/routes/room.py:list_rooms` |
-| POST | `/api/rooms` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 새 회의실을 만듭니다. | `server/routes/room.py:create_room` |
-| GET | `/api/rooms/{room_id}` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 대화 내용을 포함한 회의실 세부 정보를 가져옵니다. | `server/routes/room.py:get_room` |
-| POST | `/api/rooms/{room_id}/chat/stream` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회의 채팅의 주요 SSE 스트리밍 엔드포인트입니다. | `server/routes/room.py:meeting_chat_stream` |
-| POST | `/api/rooms/{room_id}/close` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회의실을 닫고 회의록을 생성합니다. | `server/routes/room.py:close_room` |
-| POST | `/api/rooms/{room_id}/participants` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회의실에 참가자를 추가합니다. | `server/routes/room.py:add_participant` |
-| DELETE | `/api/rooms/{room_id}/participants/{name}` | 세션 필수 (local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회의실에서 참가자를 제거합니다. | `server/routes/room.py:remove_participant` |
 
 ## `server/routes/sessions.py`
 

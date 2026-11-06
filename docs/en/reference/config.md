@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=2d0c336014450a74e74398208f0cdaf110308cc0add681c50dba1bea68c70e26 generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=0648b0f3224be2d4b0b58344af1045e8137d10520dd00c523a84884f9b55fd8e generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Configuration Reference
 
@@ -166,7 +166,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `helper_models` | `HelperModelsConfig` | `{HelperModelsConfig}` | Model, authentication credentials, explicit fallback candidates, and one-shot policy for each auxiliary LLM call. |
+| `helper_models` | `HelperModelsConfig` | `{HelperModelsConfig}` | Model, authentication credentials, explicit fallback candidates, and one-shot policy for each helper LLM call. |
 | `helper_models.episode_summary` | `HelperModelRole \| None` | `null` | — |
 | `helper_models.episode_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.episode_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
@@ -239,14 +239,6 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
 | `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
-| `helper_models.meeting_summary` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.meeting_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
-| `helper_models.meeting_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
-| `helper_models.meeting_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
-| `helper_models.meeting_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
-| `helper_models.meeting_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.meeting_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
-| `helper_models.meeting_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
 | `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |
