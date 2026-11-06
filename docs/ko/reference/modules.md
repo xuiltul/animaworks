@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=8c7baf6741d5a0c56e76949bc1e8e5f2bbbf75c568282f1b44129e68d1888289 generated=2026-11-05 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=e57c923a28041a370ea56e5ebebcdedae1d658a54fb768d00dca1308a0798ceb generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -384,30 +384,30 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 번역 카탈로그와 언어 선택.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
-| `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
-| `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
-| `core.i18n.strings.company` | 14 | Localized strings for company management. |
-| `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
+| `core.i18n` | 135 | 런타임 문자열을 위한 경량 국제화 지원. |
+| `core.i18n.strings.communication` | 46 | 도메인별 국제화 문자열. |
+| `core.i18n.strings.company` | 14 | 회사 관리를 위한 현지화 문자열. |
+| `core.i18n.strings.config` | 840 | 도메인별 국제화 문자열. |
 | `core.i18n.strings.discord` | 28 | — |
-| `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 426 | Domain-specific i18n strings (handler part 1). |
-| `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
-| `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
-| `core.i18n.strings.memory` | 418 | Domain-specific i18n strings. |
+| `core.i18n.strings.execution` | 221 | 도메인별 국제화 문자열. |
+| `core.i18n.strings.handler` | 434 | 도메인별 국제화 문자열(핸들러 파트 1). |
+| `core.i18n.strings.handler_ext` | 393 | 도메인별 국제화 문자열(핸들러 파트 2). |
+| `core.i18n.strings.lifecycle` | 104 | 도메인별 국제화 문자열. |
+| `core.i18n.strings.memory` | 418 | 도메인별 국제화 문자열. |
 | `core.i18n.strings.migrate` | 124 | — |
-| `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
-| `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
-| `core.i18n.strings.models` | 70 | Localized CLI messages for model inspection. |
+| `core.i18n.strings.misc` | 542 | 도메인별 국제화 문자열. |
+| `core.i18n.strings.misc_routes` | 21 | 도메인별 국제화 문자열(레거시 라우트 모듈). |
+| `core.i18n.strings.models` | 70 | 모델 검사를 위한 현지화된 CLI 메시지. |
 | `core.i18n.strings.phone` | 127 | — |
-| `core.i18n.strings.room_manager` | 29 | i18n strings for meeting room manager. |
-| `core.i18n.strings.server` | 341 | Domain-specific i18n strings. |
-| `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
+| `core.i18n.strings.room_manager` | 29 | 회의실 관리자용 국제화 문자열. |
+| `core.i18n.strings.server` | 341 | 도메인별 국제화 문자열. |
+| `core.i18n.strings.supervisor` | 140 | 도메인별 국제화 문자열. |
 | `core.i18n.strings.tmp` | 74 | — |
-| `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
-| `core.i18n.strings.tooling_schema` | 540 | Domain-specific i18n strings (schema.*). |
-| `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
+| `core.i18n.strings.tooling` | 175 | 도메인별 국제화 문자열(도구 프롬프트 및 도구 기능). |
+| `core.i18n.strings.tooling_schema` | 540 | 도메인별 국제화 문자열(schema.*). |
+| `core.i18n.strings.tooling_schema_ext` | 167 | 도메인별 국제화 문자열(schema.* 파트 2). |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -551,32 +551,32 @@ Model Context Protocol 서버 및 클라이언트.
 
 대화·에피소드 기억의 저장, 검색, 정리.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `core.memory` | 20 | — |
-| `core.memory._llm_parse（非公開）` | 185 | 기억 파이프라인을 위한 공유 LLM 출력 파싱 헬퍼. |
+| `core.memory._llm_parse（非公開）` | 185 | 메모리 파이프라인을 위한 공용 LLM 출력 파싱 도우미. |
 | `core.memory.config_reader` | 31 | — |
-| `core.memory.conversation.compression` | 322 | 대화 기억을 위한 압축 로직. |
-| `core.memory.conversation.finalize` | 493 | 대화 기억을 위한 세션 종료 처리. |
-| `core.memory.conversation.memory` | 349 | 대화 기억(会話記憶 / 워킹 메모리) 관리. |
+| `core.memory.conversation.compression` | 322 | 대화 기억 압축 로직. |
+| `core.memory.conversation.finalize` | 493 | 대화 기억 세션 마무리. |
+| `core.memory.conversation.memory` | 349 | 대화 기억(대화 기억 / 작업 메모리) 관리. |
 | `core.memory.conversation.models` | 149 | 대화 기억을 위한 데이터 클래스와 상수. |
-| `core.memory.conversation.prompt` | 270 | 대화 기억을 위한 프롬프트 빌드 함수. |
-| `core.memory.conversation.shortterm` | 313 | 단기 기억(短期記憶) 관리. |
-| `core.memory.conversation.state_update` | 49 | 대화 기억 종료 처리를 위한 상태 업데이트 함수. |
+| `core.memory.conversation.prompt` | 270 | 대화 기억용 프롬프트 생성 함수. |
+| `core.memory.conversation.shortterm` | 313 | 단기 기억 관리. |
+| `core.memory.conversation.state_update` | 49 | 대화 기억 마무리를 위한 상태 업데이트 함수. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
 | `core.memory.facts.config` | 85 | — |
 | `core.memory.facts.connections` | 544 | — |
 | `core.memory.facts.entity_index` | 452 | — |
 | `core.memory.facts.extraction` | 529 | — |
-| `core.memory.facts.extractor` | 431 | LLM 기반 엔티티 및 팩트 추출 파이프라인. |
+| `core.memory.facts.extractor` | 431 | LLM 기반 엔터티 및 사실 추출 파이프라인. |
 | `core.memory.facts.invalidation` | 515 | — |
 | `core.memory.facts.invalidation_llm` | 154 | — |
 | `core.memory.facts.live` | 578 | — |
 | `core.memory.facts.observability` | 41 | — |
-| `core.memory.facts.ontology` | 247 | 엔티티 / 팩트 추출 결과를 위한 Pydantic 모델. |
-| `core.memory.facts.prompts.en` | 133 | 엔티티 / 팩트 추출을 위한 영어 프롬프트. |
-| `core.memory.facts.prompts.ja` | 135 | 엔티티 / 팩트 추출을 위한 일본어 프롬프트. |
+| `core.memory.facts.ontology` | 247 | 엔터티/사실 추출 결과용 Pydantic 모델. |
+| `core.memory.facts.prompts.en` | 133 | 엔터티/사실 추출을 위한 영어 프롬프트. |
+| `core.memory.facts.prompts.ja` | 135 | 엔터티/사실 추출을 위한 일본어 프롬프트. |
 | `core.memory.facts.store` | 460 | — |
 | `core.memory.frontmatter` | 430 | — |
 | `core.memory.io` | 59 | — |
@@ -594,7 +594,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 534 | — |
+| `core.memory.priming.channel_b` | 539 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -607,7 +607,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
-| `core.memory.rag.cli_access` | 228 | 활성 소유자 또는 서버를 통한 phase3 벡터 스토어의 CLI 접근. |
+| `core.memory.rag.cli_access` | 228 | 활성 소유자 또는 서버를 통해 phase3 벡터 저장소에 접근하는 CLI. |
 | `core.memory.rag.contextual_header` | 163 | — |
 | `core.memory.rag.direct_access` | 24 | — |
 | `core.memory.rag.embedding` | 432 | — |
@@ -615,13 +615,13 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.rag.episode_time` | 46 | — |
 | `core.memory.rag.exclusion` | 38 | — |
 | `core.memory.rag.facts_chunker` | 100 | — |
-| `core.memory.rag.index_signature` | 27 | 기존 임베딩 인덱스 시그니처에 대한 호환성 진단. |
+| `core.memory.rag.index_signature` | 27 | 기존 임베딩 인덱스 서명에 대한 호환성 진단. |
 | `core.memory.rag.indexer` | 1593 | — |
 | `core.memory.rag.indexer_delete` | 135 | — |
-| `core.memory.rag.owner_lock` | 84 | anima의 네이티브 벡터 데이터베이스를 위한 배타적 소유권 잠금. |
+| `core.memory.rag.owner_lock` | 84 | anima의 네이티브 벡터 데이터베이스 전용 소유권 잠금. |
 | `core.memory.rag.repair.detect` | 744 | — |
 | `core.memory.rag.repair.rebuild` | 401 | — |
-| `core.memory.rag.repair.state` | 191 | RAG 자동 복구를 위한 영구 복구 상태 헬퍼. |
+| `core.memory.rag.repair.state` | 191 | RAG 자동 복구를 위한 지속형 복구 상태 도우미. |
 | `core.memory.rag.repair.types` | 27 | — |
 | `core.memory.rag.retriever` | 809 | — |
 | `core.memory.rag.shared_check_registry` | 140 | — |
@@ -629,7 +629,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.rag.sqlite_health` | 359 | — |
 | `core.memory.rag.store` | 808 | — |
 | `core.memory.rag.vector_client` | 497 | — |
-| `core.memory.rag.vector_ops` | 88 | 벡터 API 요청과 MemoryService 와이어 포맷 간의 변환. |
+| `core.memory.rag.vector_ops` | 88 | 벡터 API 요청과 MemoryService 와이어 형식 간의 변환. |
 | `core.memory.rag.vector_registry` | 160 | — |
 | `core.memory.retrieval.bm25` | 1325 | — |
 | `core.memory.retrieval.code_index` | 221 | — |
@@ -715,14 +715,15 @@ Model Context Protocol 서버 및 클라이언트.
 
 anima 간 및 외부와의 메시지 전달.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | 독스트링 첫 줄 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board_fanout` | 95 | — |
+| `core.messaging.board_fanout` | 96 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.meeting_room_store` | 130 | — |
-| `core.messaging.messenger` | 1082 | — |
+| `core.messaging.mentions` | 32 | — |
+| `core.messaging.messenger` | 1098 | — |
 | `core.messaging.outbound` | 408 | — |
 | `core.messaging.outbound_auto` | 377 | — |
 | `core.messaging.recipient_status` | 79 | — |
@@ -986,18 +987,18 @@ anima 메인의 런타임 컴포넌트, 프로세스 간 통신, 작업 실행.
 
 ## `core.tooling`
 
-도구의 스키마, 권한, 실행 기반.
+도구의 스키마, 권한, 실행 환경.
 
 | 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
-| `core.tooling` | 1 | 도구 패키지; 즉시 핸들러 로딩을 피하려면 특정 모듈을 임포트하세요. |
-| `core.tooling._handler_protocols（非公開）` | 233 | 구성형 믹스인을 위한 구조적 호스트 프로토콜. |
+| `core.tooling` | 1 | 도구 패키지. 핸들러가 조기에 로드되는 것을 방지하려면 특정 모듈을 가져오세요. |
+| `core.tooling._handler_protocols（非公開）` | 234 | 조합형 믹스인을 위한 구조적 호스트 프로토콜. |
 | `core.tooling.codex_command_hook` | 31 | Codex의 PreToolUse 훅을 위한 핵심 명령 정책 결정. |
 | `core.tooling.dispatch` | 256 | — |
-| `core.tooling.handler` | 912 | — |
+| `core.tooling.handler` | 917 | — |
 | `core.tooling.handler_base` | 335 | — |
 | `core.tooling.handler_chat_files` | 87 | — |
-| `core.tooling.handler_comms` | 1027 | — |
+| `core.tooling.handler_comms` | 1036 | — |
 | `core.tooling.handler_create_anima` | 101 | — |
 | `core.tooling.handler_delegation` | 310 | — |
 | `core.tooling.handler_exec` | 374 | — |
@@ -1033,7 +1034,7 @@ anima 메인의 런타임 컴포넌트, 프로세스 간 통신, 작업 실행.
 | `core.tooling.skill_creator` | 120 | — |
 | `core.tooling.skill_promotion_tool` | 176 | — |
 | `core.tooling.standalone` | 322 | — |
-| `core.tooling.tool_context` | 17 | ToolHandler 믹스인 델리게이트에 전달되는 공유 런타임 상태. |
+| `core.tooling.tool_context` | 17 | ToolHandler 믹스인 위임 객체에 전달되는 공유 런타임 상태. |
 
 ## `core.tooling.policy`
 
@@ -1135,7 +1136,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 496 | — |
+| `server.routes.channels` | 498 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 289 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1148,13 +1149,13 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.internal` | 1562 | — |
+| `server.routes.internal` | 1580 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
-| `server.routes.room` | 443 | SSE 스트리밍을 지원하는 회의실 API 라우트. |
+| `server.routes.room` | 443 | SSE 스트리밍을 지원하는 회의실 API 경로. |
 | `server.routes.sessions` | 949 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
@@ -1162,7 +1163,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
-| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용합니다. |
+| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트. Anima별 status.json 설정은 공유 헬퍼를 사용합니다. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |
 

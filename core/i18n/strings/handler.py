@@ -228,6 +228,14 @@ STRINGS: dict[str, dict[str, str]] = {
             'Create it explicitly with manage_channel(action="create", channel="{channel}").'
         ),
     },
+    "handler.channel_post_invalid_poster": {
+        "ja": "Error: 投稿者名が既知の Anima ではありません: {poster}",
+        "en": "Error: The channel poster is not a known Anima: {poster}",
+    },
+    "handler.channel_post_validation_failed": {
+        "ja": "Error: 投稿者名を検証できないため投稿を中止しました",
+        "en": "Error: Could not validate the channel poster, so the post was refused",
+    },
     "handler.channel_open": {
         "ja": "#{channel} はオープンチャネルです（全Animaがアクセス可能）",
         "en": "#{channel} is an open channel (all Animas can access)",

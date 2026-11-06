@@ -224,6 +224,8 @@ class TestToolHandlerActivityLogging:
         anima_dir = tmp_path / "animas" / "test"
         anima_dir.mkdir(parents=True)
         handler = self._make_handler(anima_dir)
+        # Only posts that were appended are recorded.
+        handler._last_post_channel_succeeded = True
 
         handler._log_tool_activity(
             "post_channel",
