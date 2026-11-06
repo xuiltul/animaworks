@@ -70,7 +70,7 @@ class TestBoardSlackSync:
         ):
             result = await BoardSlackSync().sync_board_post("general", "hello", "sakura")
 
-        assert result is None
+        assert result == "skipped"
         mock_token.assert_not_called()
         mock_client.assert_not_called()
 
@@ -87,7 +87,7 @@ class TestBoardSlackSync:
         ):
             result = await BoardSlackSync().sync_board_post("general", "hello", "sakura")
 
-        assert result == "123.456"
+        assert result == "sent"
         assert client.posts[0]["json"]["channel"] == "CGENERAL"
 
     @pytest.mark.asyncio
@@ -103,7 +103,7 @@ class TestBoardSlackSync:
         ):
             result = await BoardSlackSync().sync_board_post("ops", "hello", "sakura")
 
-        assert result == "123.456"
+        assert result == "sent"
         assert client.posts[0]["json"]["channel"] == "COPS"
 
     @pytest.mark.asyncio
@@ -117,7 +117,7 @@ class TestBoardSlackSync:
         ):
             result = await BoardSlackSync().sync_board_post("general", "hello", "sakura")
 
-        assert result is None
+        assert result == "skipped"
         mock_token.assert_not_called()
         mock_client.assert_not_called()
 
@@ -136,6 +136,6 @@ class TestBoardSlackSync:
                 source="slack",
             )
 
-        assert result is None
+        assert result == "skipped"
         mock_config.assert_not_called()
         mock_token.assert_not_called()

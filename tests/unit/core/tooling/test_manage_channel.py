@@ -6,8 +6,14 @@
 from __future__ import annotations
 
 import json
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from core.messaging.messenger import (
     ChannelMeta,
@@ -15,6 +21,36 @@ from core.messaging.messenger import (
     load_channel_meta,
     save_channel_meta,
 )
+
+
+@pytest.fixture(autouse=True)
+def _direct_board_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.messaging.board import anima_principal, post_to_board
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        shared_dir = tmp_path / "shared"
+        result = post_to_board(
+            channel,
+            text,
+            anima_principal(from_anima, animas_dir=tmp_path / "animas"),
+            request_id=request_id,
+            origin="internal",
+            notify=not suppress_mentions,
+            shared_dir=shared_dir,
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
+
 
 # ── Helpers ──────────────────────────────────────────────
 
@@ -114,6 +150,89 @@ class TestManageChannelCreate:
             }
         )
         assert "Error" in result or "既に存在" in result
+
+    def test_create_rejects_archived_channel_name(self, tmp_path: Path):
+        handler = _make_handler(tmp_path)
+        shared_dir = tmp_path / "shared"
+        channel_file = shared_dir / "channels" / "team-chat.jsonl"
+        channel_file.write_text('{"text":"archived"}\n', encoding="utf-8")
+
+        archived = json.loads(
+            handler._handle_manage_channel({"action": "archive", "channel": "team-chat"}),
+        )
+        assert archived["archived"] is True
+        archived_file = shared_dir / archived["to"]
+        assert archived_file.exists()
+        assert not channel_file.exists()
+        assert load_channel_meta(shared_dir, "team-chat").closed is True
+
+        result = handler._handle_manage_channel({"action": "create", "channel": "team-chat"})
+
+        assert "team-chat" in result
+        assert "別の名前" in result or "different name" in result.lower()
+        assert not channel_file.exists()
+
+    def test_archive_holds_jsonl_lock_while_moving_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.platform.locks import locked_path
+
+        handler = _make_handler(tmp_path)
+        shared_dir = tmp_path / "shared"
+        channel_file = shared_dir / "channels" / "team-chat.jsonl"
+        channel_file.touch()
+        lock_path = channel_file.with_name(f"{channel_file.name}.lock")
+        waiting_for_lock = threading.Event()
+        archive_done = threading.Event()
+        result: list[str] = []
+        errors: list[Exception] = []
+
+        @contextmanager
+        def _tracking_locked_path(
+            path: Path,
+            *,
+            exclusive: bool = True,
+            blocking: bool = True,
+            thread_lock: bool = False,
+            best_effort: bool = False,
+        ) -> Iterator[Any]:
+            if path == lock_path:
+                waiting_for_lock.set()
+            with locked_path(
+                path,
+                exclusive=exclusive,
+                blocking=blocking,
+                thread_lock=thread_lock,
+                best_effort=best_effort,
+            ) as lock_file:
+                yield lock_file
+
+        monkeypatch.setattr("core.platform.locks.locked_path", _tracking_locked_path)
+
+        def _archive() -> None:
+            try:
+                result.append(handler._handle_manage_channel({"action": "archive", "channel": "team-chat"}))
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                archive_done.set()
+
+        with locked_path(lock_path, exclusive=True, thread_lock=True):
+            worker = threading.Thread(target=_archive)
+            worker.start()
+            assert waiting_for_lock.wait(timeout=2)
+            assert not archive_done.is_set()
+            channel_file.write_text('{"text":"posted before archive"}\n', encoding="utf-8")
+
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        assert errors == []
+        archived = json.loads(result[0])
+        archived_file = shared_dir / archived["to"]
+        records = [json.loads(line) for line in archived_file.read_text(encoding="utf-8").splitlines()]
+        assert records == [{"text": "posted before archive"}]
 
     def test_create_with_no_members_includes_self(self, tmp_path: Path):
         handler = _make_handler(tmp_path)

@@ -24,7 +24,6 @@ from typing import Any
 
 from core.config.models import load_config
 from core.credentials import get_credential
-from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
 from core.i18n import t
 from core.integrations._discord_markdown import clean_discord_markup
 from core.messaging.messenger import Messenger
@@ -83,6 +82,7 @@ def _route_to_board(
     *,
     message_id: str = "",
     board_mapping: dict[str, str] | None = None,
+    external_kind: str = "user",
 ) -> None:
     """Post a Discord message to the mapped AnimaWorks board (if any)."""
     if message_id:
@@ -100,11 +100,17 @@ def _route_to_board(
         board_name = board_mapping.get(channel_id)
         if not board_name:
             return
-        messenger = Messenger(get_shared_dir(), user_name or "discord")
-        messenger.post_channel(board_name, text, source="discord", from_name=user_name or "discord")
-    except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
-        # Mapped board is missing or closed: the message is dropped, so make it visible
-        logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, exc)
+        from core.messaging.board import external_principal, post_to_board
+
+        result = post_to_board(
+            board_name,
+            text,
+            external_principal(user_name or "discord", external_kind="bot" if external_kind == "bot" else "user"),
+            request_id=f"discord:{message_id}" if message_id else None,
+            origin="discord",
+        )
+        if result.error:
+            logger.warning("Board routing dropped for channel %s -> #%s: %s", channel_id, board_name, result.error)
     except Exception:
         logger.debug("Board routing failed for channel %s", channel_id, exc_info=True)
 
@@ -684,6 +690,9 @@ class DiscordGatewayManager:
                 author_display,
                 message_id=msg_id,
                 board_mapping=discord_cfg.board_mapping,
+                external_kind="bot"
+                if getattr(message.author, "bot", False) or message.webhook_id is not None
+                else "user",
             )
 
         # Deliver to Anima inbox if we have a target

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+import pytest
+
+from core.i18n import t
 from core.messaging.messenger import (
     ChannelMeta,
     Messenger,
@@ -14,6 +17,41 @@ from core.messaging.messenger import (
     save_channel_meta,
 )
 from core.tooling.handler import ToolHandler
+
+
+@pytest.fixture(autouse=True)
+def _direct_board_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from core.config import invalidate_cache
+    from core.messaging.board import anima_principal, post_to_board
+    from core.paths import get_animas_dir, get_shared_dir
+
+    monkeypatch.setenv("ANIMAWORKS_DATA_DIR", str(tmp_path))
+    invalidate_cache()
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        result = post_to_board(
+            channel,
+            text,
+            anima_principal(from_anima, animas_dir=get_animas_dir()),
+            request_id=request_id,
+            origin="internal",
+            notify=not suppress_mentions,
+            shared_dir=get_shared_dir(),
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
+    yield
+    invalidate_cache()
 
 
 def _make_anima(data_dir: Path, name: str, company: str | None) -> Path:
@@ -46,7 +84,6 @@ def _make_handler(data_dir: Path, anima_name: str = "alice") -> ToolHandler:
         messenger=messenger,
         tool_registry=[],
     )
-    handler._fire_board_slack_sync = MagicMock()
     return handler
 
 
@@ -81,7 +118,7 @@ def test_post_rejects_mixed_company_channel_then_observes_status_change(tmp_path
     )
     allowed = handler._handle_post_channel({"channel": "team", "text": "hello"})
 
-    assert allowed == "Posted to #team"
+    assert allowed == t("handler.channel_post_success", channel="team")
     assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 2
 
 
@@ -129,7 +166,7 @@ def test_company_scoped_open_channel_same_company_allows_post(tmp_path: Path) ->
 
     result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
-    assert result == "Posted to #general"
+    assert result == t("handler.channel_post_success", channel="general")
     assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
 
 
@@ -161,7 +198,7 @@ def test_company_scoped_open_channel_unassigned_legacy_allows(tmp_path: Path) ->
 
     result = handler._handle_post_channel({"channel": "ops", "text": "hello"})
 
-    assert result == "Posted to #ops"
+    assert result == t("handler.channel_post_success", channel="ops")
     assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
 
 
@@ -175,7 +212,7 @@ def test_unassigned_open_channel_allows_unassigned_anima(tmp_path: Path) -> None
 
     result = handler._handle_post_channel({"channel": "general", "text": "hello"})
 
-    assert result == "Posted to #general"
+    assert result == t("handler.channel_post_success", channel="general")
     assert len(channel_file.read_text(encoding="utf-8").splitlines()) == 1
 
 
@@ -212,6 +249,40 @@ def test_company_scoped_open_channel_read_other_company_rejects(tmp_path: Path) 
     result = handler._handle_read_channel({"channel": "general"})
 
     assert "Beta Corporation" in result
+    assert "secret" not in result
+
+
+def test_read_channel_rejects_unreadable_company(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    (tmp_path / "animas" / "alice" / "status.json").write_text("{broken", encoding="utf-8")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "general.jsonl").write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "other", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "general"})
+
+    assert result == t("handler.company_boundary_unverifiable")
+    assert "secret" not in result
+
+
+def test_read_channel_rejects_closed_channel_for_anima(tmp_path: Path) -> None:
+    _make_anima(tmp_path, "alice", "alpha")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "old-board.jsonl").write_text(
+        json.dumps({"ts": "2026-07-20T00:00:00+09:00", "from": "other", "text": "secret"}) + "\n",
+        encoding="utf-8",
+    )
+    save_channel_meta(tmp_path / "shared", "old-board", ChannelMeta(members=["alice"], closed=True))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_read_channel({"channel": "old-board"})
+
+    assert result == t("handler.channel_acl_denied", channel="old-board")
     assert "secret" not in result
 
 
@@ -408,18 +479,20 @@ def test_mention_fanout_only_notifies_same_company_targets(tmp_path: Path) -> No
     _make_anima(tmp_path, "alice", "alpha")
     _make_anima(tmp_path, "same", "alpha")
     _make_anima(tmp_path, "other", "beta")
-    _make_channel(tmp_path, "team", ["alice", "same", "other"])
-    sockets_dir = tmp_path / "run" / "sockets"
-    sockets_dir.mkdir(parents=True)
-    (sockets_dir / "same.sock").touch()
-    (sockets_dir / "other.sock").touch()
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True, exist_ok=True)
+    (channels_dir / "team.jsonl").write_text("", encoding="utf-8")
+    save_channel_meta(tmp_path / "shared", "team", ChannelMeta(members=[], company="alpha"))
     handler = _make_handler(tmp_path)
-    handler._messenger.send = MagicMock()
 
-    with patch("core.paths.get_data_dir", return_value=tmp_path):
-        handler._fanout_board_mentions("team", "@same @other please review")
+    handler._handle_post_channel({"channel": "team", "text": "@same @other please review"})
 
-    assert [call.kwargs["to"] for call in handler._messenger.send.call_args_list] == ["same"]
+    inbox = list((tmp_path / "shared" / "inbox" / "same").glob("*.json"))
+    assert len(inbox) == 1
+    message = json.loads(inbox[0].read_text(encoding="utf-8"))
+    assert message["type"] == "board_mention"
+    assert message["meta"]["board_channel"] == "team"
+    assert not (tmp_path / "shared" / "inbox" / "other").exists()
 
 
 def test_explicitly_closed_empty_channel_denies_animas(tmp_path: Path) -> None:

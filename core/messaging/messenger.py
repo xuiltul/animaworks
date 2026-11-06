@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from core.exceptions import (
     ChannelAccessDeniedError,
@@ -28,6 +28,9 @@ from core.i18n import t
 from core.platform.atomic_io import append_jsonl_locked, atomic_write_json, update_json
 from core.schemas import EXTERNAL_PLATFORM_SOURCES, Message
 from core.time_utils import ensure_aware, now_iso, now_local
+
+if TYPE_CHECKING:
+    from core.messaging.board import Principal
 
 logger = logging.getLogger("animaworks.messenger")
 
@@ -147,15 +150,24 @@ def load_channel_meta(shared_dir: Path, channel: str) -> ChannelMeta | None:
 
     Returns ``None`` when no meta file exists (channel is open / legacy).
     """
+    state, meta = load_channel_meta_state(shared_dir, channel)
+    return meta if state == "ok" else None
+
+
+def load_channel_meta_state(
+    shared_dir: Path,
+    channel: str,
+) -> tuple[Literal["missing", "ok", "unreadable"], ChannelMeta | None]:
+    """Load channel metadata while distinguishing absent and unreadable files."""
     meta_path = shared_dir / "channels" / f"{channel}.meta.json"
-    if not meta_path.exists():
-        return None
     try:
         data = json.loads(meta_path.read_text(encoding="utf-8"))
-        return _channel_meta_from_data(data)
-    except (json.JSONDecodeError, OSError) as exc:
+        return "ok", _channel_meta_from_data(data)
+    except FileNotFoundError:
+        return "missing", None
+    except (json.JSONDecodeError, OSError, UnicodeError, AttributeError, TypeError) as exc:
         logger.warning("Failed to load channel meta for %s: %s", channel, exc)
-        return None
+        return "unreadable", None
 
 
 def save_channel_meta(shared_dir: Path, channel: str, meta: ChannelMeta) -> None:
@@ -202,12 +214,37 @@ def is_channel_member(
     """
     if source == "human":
         return True
-    meta = load_channel_meta(shared_dir, channel)
-    if meta is None or (not meta.members and not meta.closed):
+    state, meta = load_channel_meta_state(shared_dir, channel)
+    if state == "unreadable":
+        return False
+    if state == "missing" or meta is None or (not meta.members and not meta.closed):
         return True
     if meta.closed:
         return False
     return anima_name in meta.members
+
+
+def _read_principal(shared_dir: Path, name: str, source: str) -> Principal:
+    """Build the Board principal for a read-side caller."""
+    from core.messaging.board import anima_principal, human_principal, operator_principal
+
+    if source == "human":
+        return human_principal(name)
+    if source == "operator":
+        return operator_principal(name)
+    animas_dir = shared_dir.parent / "animas"
+    if (animas_dir / name).is_dir():
+        return anima_principal(name, animas_dir=animas_dir)
+    # Host CLI callers (``Messenger(shared_dir, "cli")``) are operators, not Animas.
+    return operator_principal(name)
+
+
+def _is_human_board_entry(entry: dict[str, Any]) -> bool:
+    """Return whether a Board row originated from a human or external user."""
+    kind = entry.get("kind")
+    if kind is not None:
+        return kind in {"human", "external_user"}
+    return entry.get("source") == "human"
 
 
 @dataclass
@@ -251,6 +288,7 @@ class Messenger:
         meta: dict[str, Any] | None = None,
         source: str = "anima",
         delivery_id: str = "",
+        from_person: str | None = None,
     ) -> Message:
         if delivery_id:
             import re
@@ -271,7 +309,7 @@ class Messenger:
                 _log_conversation_depth(self.anima_name, to, sender_dir)
 
         msg = Message(
-            from_person=self.anima_name,
+            from_person=from_person or self.anima_name,
             to_person=to,
             type=msg_type,
             content=content,
@@ -353,86 +391,58 @@ class Messenger:
         source: str = "anima",
         from_name: str | None = None,
     ) -> None:
-        """Post a message to a shared channel (append-only JSONL).
-
-        Raises:
-            ChannelNotFoundError: Neither jsonl nor open meta exists for *channel*.
-            ChannelAccessDeniedError: ACL denied (closed tombstone or non-member).
-            RecipientNotFoundError: Invalid channel name.
-        """
-        _validate_name(channel, "channel name")
-
+        """Compatibility wrapper around the centralized Board writer."""
         poster = from_name or self.anima_name
-        channels_dir = self.shared_dir / "channels"
-        filepath = channels_dir / f"{channel}.jsonl"
-        meta = load_channel_meta(self.shared_dir, channel)
-        jsonl_exists = filepath.exists()
+        if source == "human" or (source == "anima" and poster == "human"):
+            from core.messaging.board import human_principal
 
-        # ── Existence check (no silent auto-create of new channels) ──
-        if not jsonl_exists:
-            if meta is None:
-                logger.warning(
-                    "Channel not found: #%s (no jsonl/meta); refusing implicit create",
-                    channel,
-                )
-                raise ChannelNotFoundError(
-                    f"Channel '{channel}' not found. Create it with manage_channel action=create first."
-                )
-            if meta.closed:
-                # Tombstone: refuse without resurrecting jsonl
-                logger.warning(
-                    "ACL denied (closed tombstone): %s cannot post to #%s",
-                    self.anima_name,
-                    channel,
-                )
-                raise ChannelAccessDeniedError(f"Channel '{channel}' is closed")
-            # meta-only, closed=false: allow post and create jsonl
+            principal = human_principal(poster)
+            origin = "http"
+        elif source == "operator":
+            from core.messaging.board import operator_principal
 
-        # ── ACL check ──
-        if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
-            logger.warning(
-                "ACL denied: %s cannot post to #%s",
-                self.anima_name,
-                channel,
-            )
-            raise ChannelAccessDeniedError(f"Access denied to channel '{channel}'")
+            principal = operator_principal(poster)
+            origin = "cli"
+        elif source in {"slack", "discord"}:
+            from core.messaging.board import external_principal
 
-        # Validate from_name: must be a known anima or "human"
-        if poster != "human":
+            principal = external_principal(poster)
+            origin = source
+        else:
+            from core.messaging.board import anima_principal
+
             try:
                 from core.config.models import load_config
 
                 known_animas = set(load_config().animas.keys())
-                if known_animas and self.anima_name in known_animas and poster not in known_animas:
-                    logger.warning(
-                        "Rejecting channel post with unknown from_name=%r to #%s",
-                        poster,
-                        channel,
-                    )
-                    return
-            except Exception:
-                logger.warning(
-                    "Failed to validate channel from_name=%r for #%s; refusing post",
-                    poster,
-                    channel,
-                    exc_info=True,
-                )
-                return
-        channels_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            append_jsonl_locked(
-                filepath,
-                {
-                    "ts": now_iso(),
-                    "from": poster,
-                    "text": text,
-                    "source": source,
-                },
+            except Exception as exc:
+                logger.warning("Failed to validate channel from_name=%r for #%s", poster, channel, exc_info=True)
+                raise ValueError(t("handler.channel_post_validation_failed")) from exc
+            if (
+                poster != self.anima_name
+                and known_animas
+                and self.anima_name in known_animas
+                and poster not in known_animas
+            ):
+                logger.warning("Rejected channel post with unknown from_name=%r for #%s", poster, channel)
+                raise ValueError(t("handler.channel_post_invalid_poster", poster=poster))
+            principal = anima_principal(self.anima_name, animas_dir=self.shared_dir.parent / "animas")
+            origin = "anima"
+
+        from core.messaging.board import post_to_board_in_shared_dir
+
+        result = post_to_board_in_shared_dir(self.shared_dir, channel, text, principal, origin=origin)
+        if result.committed or result.duplicate:
+            return
+        if result.error == "not_found":
+            raise ChannelNotFoundError(
+                f"Channel '{channel}' not found. Create it with manage_channel action=create first."
             )
-            logger.info("Channel post: %s -> #%s", poster, channel)
-        except OSError as exc:
-            # Sandbox EROFS: append via the host server (write-access charter).
-            self._post_channel_via_server(channel, text, source, poster, exc)
+        if result.error == "invalid_name":
+            _validate_name(channel, "channel name")
+        if result.error and result.error.startswith("denied:"):
+            raise ChannelAccessDeniedError(f"Access denied to channel '{channel}' ({result.error[7:]})")
+        raise ValueError(result.error or "Board post failed")
 
     def _deliver_via_server(self, msg: Message, cause: OSError) -> None:
         """Persist *msg* through the internal server API (sandbox EROFS path)."""
@@ -459,31 +469,6 @@ class Messenger:
                 f"({self.anima_name} -> {msg.to_person})"
             ) from fb_exc
 
-    def _post_channel_via_server(self, channel: str, text: str, source: str, poster: str, cause: OSError) -> None:
-        """Append a channel post through the internal server API (sandbox EROFS path)."""
-        try:
-            import httpx
-
-            from core.internal_api import host_api
-
-            resp = host_api.post(
-                "/api/internal/post-channel",
-                json={
-                    "from_anima": self.anima_name,
-                    "channel": channel,
-                    "text": text,
-                    "source": source,
-                    "from_name": poster,
-                },
-                timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
-            )
-            resp.raise_for_status()
-            logger.info("Channel post via server fallback: %s -> #%s", poster, channel)
-        except Exception as fb_exc:
-            raise DeliveryError(
-                f"Channel post failed: local write ({cause}); server fallback ({fb_exc}) ({poster} -> #{channel})"
-            ) from fb_exc
-
     def read_channel(
         self,
         channel: str,
@@ -496,7 +481,10 @@ class Messenger:
         _validate_name(channel, "channel name")
 
         # ── ACL check ──
-        if not is_channel_member(self.shared_dir, channel, self.anima_name, source=source):
+        from core.messaging.board import board_access
+
+        principal = _read_principal(self.shared_dir, self.anima_name, source)
+        if not board_access(self.shared_dir, channel, principal, "read").allowed:
             logger.warning(
                 "ACL denied: %s cannot read #%s",
                 self.anima_name,
@@ -520,7 +508,7 @@ class Messenger:
                 entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if human_only and entry.get("source") != "human":
+            if human_only and not _is_human_board_entry(entry):
                 continue
             entries.append(entry)
             if len(entries) >= limit:
@@ -539,9 +527,14 @@ class Messenger:
         """Read messages mentioning @name from a shared channel."""
         _validate_name(channel, "channel name")
         target = name or self.anima_name
-        mention_tag = f"@{target}"
+        from core.messaging.mentions import extract_mentions
+
         all_msgs = self.read_channel(channel, limit=1000, source=source)
-        mentions = [m for m in all_msgs if mention_tag in m.get("text", "")]
+        mentions = [
+            m
+            for m in all_msgs
+            if any(mention.lower() == target.lower() for mention in extract_mentions(m.get("text", ""), {target}))
+        ]
         return mentions[-limit:]
 
     def read_dm_history(
@@ -1025,10 +1018,34 @@ class Messenger:
         if source == "human" and "@all" in content:
             human_name = external_user_id or "human"
             try:
-                self.post_channel("general", content, source="human", from_name=human_name)
-            except (ChannelNotFoundError, ChannelAccessDeniedError) as exc:
-                logger.warning(
-                    "Skipping @all mirror to #general: %s",
-                    exc,
-                )
+                import os
+
+                from core.platform.pid import read_server_pid
+
+                if read_server_pid(self.shared_dir.parent) == os.getpid():
+                    from core.messaging.board import human_principal, post_to_board_in_shared_dir
+
+                    result = post_to_board_in_shared_dir(
+                        self.shared_dir,
+                        "general",
+                        content,
+                        human_principal(human_name),
+                        origin="mirror",
+                        notify=False,
+                    )
+                    if result.error:
+                        logger.warning("Skipping @all mirror to #general: %s", result.error)
+                else:
+                    from core.messaging.board_client import post_via_server
+
+                    post_via_server(
+                        "general",
+                        content,
+                        from_anima=self.anima_name,
+                        source="human",
+                        from_name=human_name,
+                        suppress_mentions=True,
+                    )
+            except Exception as exc:
+                logger.warning("Skipping @all mirror to #general: %s", exc)
         return msg

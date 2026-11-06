@@ -26,10 +26,16 @@ from core.time_utils import now_iso  # noqa: F401
 logger = logging.getLogger("animaworks.tool_handler")
 
 # ── Board fanout suppression (context-scoped for background tasks) ──
-suppress_board_fanout: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "suppress_board_fanout",
-    default=False,
+# Only posts to the channels that triggered an inbox board_mention reply are
+# suppressed.  Keeping the set (rather than a boolean) leaves every other
+# channel's mention delivery intact.
+suppress_board_fanout_channels: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "suppress_board_fanout_channels",
+    default=frozenset(),
 )
+
+# Backward-compatible alias for callers that imported the previous name.
+suppress_board_fanout = suppress_board_fanout_channels
 
 # ── Active session type (context-scoped for concurrent HB+conversation) ──
 active_session_type: contextvars.ContextVar[str] = contextvars.ContextVar(

@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -731,3 +734,38 @@ class TestExternalMessagingChannelConfigMode:
         restored = ExternalMessagingChannelConfig.model_validate(data)
         assert restored.mode == "socket"
         assert restored.anima_mapping == {"C1": "sakura"}
+
+
+class TestSlackBoardRouting:
+    def test_manual_board_mapping_posts_when_discovery_is_disabled(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from server.gateways.slack_socket import _route_to_board
+
+        channels_dir = tmp_path / "shared" / "channels"
+        channels_dir.mkdir(parents=True)
+        board_file = channels_dir / "general.jsonl"
+        board_file.touch()
+        config = SimpleNamespace(
+            animas={"alice": object()},
+            external_messaging=SimpleNamespace(
+                slack=SimpleNamespace(
+                    channel_discovery=False,
+                    board_mapping={"C_MANUAL": "general"},
+                ),
+                discord=SimpleNamespace(board_mapping={}),
+            ),
+        )
+        monkeypatch.setattr("server.gateways.slack_socket.load_config", lambda: config)
+        monkeypatch.setattr("core.config.models.load_config", lambda: config)
+        monkeypatch.setattr("server.gateways.slack_socket.get_data_dir", lambda: tmp_path)
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: tmp_path / "shared")
+
+        _route_to_board("C_MANUAL", "A manual mapping still works", "alice")
+
+        records = [json.loads(line) for line in board_file.read_text(encoding="utf-8").splitlines()]
+        assert len(records) == 1
+        assert records[0]["text"] == "A manual mapping still works"
+        assert records[0]["source"] == "slack"

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
@@ -103,19 +104,29 @@ class TestE2EChannelFlow:
             general = next(c for c in channels if c["name"] == "general")
             assert general["message_count"] == 3
 
-    async def test_websocket_broadcast_on_post(self, tmp_path: Path):
+    async def test_websocket_broadcast_on_post(self, tmp_path: Path, monkeypatch):
         """Verify that posting triggers WebSocket broadcast."""
+        from server.board_hooks import register_board_post_hooks, unregister_board_post_hooks
+
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()
         _seed_channels(shared_dir)
 
         app = _create_app(shared_dir)
+        monkeypatch.setattr(
+            "core.config.models.load_config",
+            lambda: SimpleNamespace(external_messaging=SimpleNamespace(slack=SimpleNamespace(enabled=False))),
+        )
+        register_board_post_hooks(app)
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            await client.post(
-                "/api/channels/general",
-                json={"text": "WS test message", "from_name": "owner"},
-            )
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                await client.post(
+                    "/api/channels/general",
+                    json={"text": "WS test message", "from_name": "owner"},
+                )
+        finally:
+            unregister_board_post_hooks()
 
         ws = app.state.ws_manager
         ws.broadcast.assert_awaited_once()
@@ -124,6 +135,8 @@ class TestE2EChannelFlow:
         assert event["data"]["channel"] == "general"
         assert event["data"]["text"] == "WS test message"
         assert event["data"]["source"] == "human"
+        assert event["data"]["kind"] == "human"
+        assert event["data"]["id"]
         # Unauthenticated requests get from_name overridden to "human"
         assert event["data"]["from"] == "human"
 

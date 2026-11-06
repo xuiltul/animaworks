@@ -467,7 +467,7 @@ async def test_board_slack_sync_request_golden(
 
     result = await BoardSlackSync().sync_board_post("general", "Board update", "sakura")
 
-    assert result == "1710000000.000001"
+    assert result == "sent"
     assert len(http_capture) == 1
     _assert_http_request(
         http_capture[0],

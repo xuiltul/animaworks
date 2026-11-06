@@ -24,7 +24,7 @@ from core.tooling.handler_base import (
     meeting_context,
     meeting_mode,
     record_meeting_redirect,
-    suppress_board_fanout,
+    suppress_board_fanout_channels,
 )
 
 if TYPE_CHECKING:
@@ -393,48 +393,31 @@ class CommsToolsMixin:
         return None
 
     def _channel_company_boundary_error(self: _CommsToolsHost, channel: str) -> str | None:
-        """Enforce company scope for channel post/read access.
-
-        Decision order:
-        1. Restricted channels (non-empty members) → pair-check against members
-        2. Company-scoped open channels (meta.company set) → same-company only
-        3. Legacy open channels (no meta / empty members & company) → deny
-           company-assigned animas until company is configured; unassigned
-           animas keep legacy unrestricted access
-        """
+        """Return the existing read-side company error for *channel*."""
         if not self._messenger:
             return None
-
+        from core.messaging.board import anima_principal, board_access
         from core.messaging.messenger import load_channel_meta
-        from core.org.company import get_company, get_company_display_name
+        from core.org.company import get_company_display_name
 
-        meta = load_channel_meta(self._messenger.shared_dir, channel)
+        shared_dir = self._messenger.shared_dir
         animas_dir = self._anima_dir.parent
-        data_dir = animas_dir.parent
+        principal = anima_principal(self._anima_name, animas_dir=animas_dir)
+        decision = board_access(shared_dir, channel, principal, "read")
+        if decision.allowed:
+            return None
+        if decision.reason == "company_unreadable":
+            return t("handler.company_boundary_unverifiable")
+        if decision.reason not in {"cross_company", "company_mismatch", "company_assigned_legacy"}:
+            return None
 
-        # Restricted channel: keep existing member pair-check.
-        if meta is not None and meta.members:
+        meta = load_channel_meta(shared_dir, channel)
+        if decision.reason == "cross_company" and meta is not None and meta.members:
             return self._cross_company_communication_error(meta.members)
-
-        # Company-scoped open channel.
         company = (meta.company if meta is not None else "") or ""
         if company:
-            poster_company = get_company(self._anima_name, animas_dir=animas_dir)
-            if poster_company is None:
-                return None  # unassigned anima: legacy unrestricted
-            if poster_company == company:
-                return None
-            display_name = get_company_display_name(company, data_dir=data_dir)
-            return t(
-                "handler.cross_company_message_blocked",
-                display_name=display_name,
-            )
-
-        # Legacy open channel without company attribution.
-        # closed channels are already denied by ACL; leave boundary alone.
-        poster_company = get_company(self._anima_name, animas_dir=animas_dir)
-        if poster_company is None:
-            return None  # unassigned anima: legacy unrestricted
+            display_name = get_company_display_name(company, data_dir=animas_dir.parent)
+            return t("handler.cross_company_message_blocked", display_name=display_name)
         return t("handler.channel_company_unset", channel=channel)
 
     # ── Channel tool handlers ────────────────────────────────
@@ -446,15 +429,12 @@ class CommsToolsMixin:
         text = args.get("text", "")
         if not channel or not text:
             return _error_result("InvalidArguments", "channel and text are required")
+        from core.messaging.messenger import _validate_name
 
-        # ── ACL gate ──
-        from core.messaging.messenger import is_channel_member
-
-        if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
-            return t("handler.channel_acl_denied", channel=channel)
-        company_error = self._channel_company_boundary_error(channel)
-        if company_error is not None:
-            return company_error
+        try:
+            _validate_name(channel, "channel name")
+        except Exception as exc:
+            return _error_result("InvalidArguments", str(exc))
 
         session_type = active_session_type.get()
         current_posted = self.posted_channels_for(session_type)
@@ -472,102 +452,68 @@ class CommsToolsMixin:
                 alt_hint=alt_hint,
             )
 
-        from core.exceptions import ChannelAccessDeniedError, ChannelNotFoundError
-
         try:
-            self._messenger.post_channel(channel, text)
-        except ChannelNotFoundError:
-            return t("handler.channel_not_found", channel=channel)
-        except ChannelAccessDeniedError:
-            return t("handler.channel_acl_denied", channel=channel)
+            from core.messaging.board_client import BoardPostClientError, post_via_server
+
+            response = post_via_server(
+                channel,
+                text,
+                from_anima=self._anima_name,
+                source="anima",
+                suppress_mentions=channel in suppress_board_fanout_channels.get(),
+            )
+        except BoardPostClientError as exc:
+            if exc.status_code == 404:
+                return t("handler.channel_not_found", channel=channel)
+            if exc.status_code == 403:
+                return t("handler.channel_acl_denied", channel=channel)
+            if exc.status_code == 400:
+                return _error_result("InvalidArguments", exc.detail)
+            return t("handler.channel_post_failed", detail=exc.detail)
+        except Exception as exc:
+            logger.warning("Internal Board post request failed", exc_info=True)
+            return t("handler.channel_post_failed", detail=str(exc))
+
+        if hasattr(response, "to_dict"):
+            post = response.to_dict()
+        elif isinstance(response, dict):
+            post = response.get("post", response)
+        else:
+            post = response
+        if hasattr(post, "to_dict"):
+            post = post.to_dict()
+        if not isinstance(post, dict):
+            return t("handler.channel_post_failed", detail="Invalid Board post response")
+        if not post.get("committed") and not post.get("duplicate"):
+            error = str(post.get("error") or "")
+            if error == "not_found":
+                return t("handler.channel_not_found", channel=channel)
+            if error.startswith("denied:"):
+                reason = error.partition(":")[2]
+                if reason == "company_unreadable":
+                    return t("handler.company_boundary_unverifiable")
+                if reason in {"cross_company", "company_mismatch", "company_assigned_legacy"}:
+                    company_error = self._channel_company_boundary_error(channel)
+                    if company_error:
+                        return company_error
+                return t("handler.channel_acl_denied", channel=channel)
+            return t("handler.channel_post_failed", detail=error or "Board post failed")
 
         self._posted_channels.setdefault(session_type, set()).add(channel)
         logger.info("post_channel channel=%s anima=%s", channel, self._anima_name)
 
-        if not suppress_board_fanout.get():
-            self._fanout_board_mentions(channel, text)
+        if post.get("duplicate"):
+            posted_text = t("handler.channel_post_duplicate", channel=channel)
         else:
-            logger.info(
-                "Suppressed board fanout for board_mention reply: channel=%s anima=%s",
-                channel,
-                self._anima_name,
-            )
-
-        # Sync board post to mapped Slack channel (fire-and-forget)
-        self._fire_board_slack_sync(channel, text)
-
-        try:
-            _notify_message_sent(
-                self._on_message_sent,
-                self._messenger.anima_name,
-                f"#channel:{channel}",
-                text,
-            )
-        except Exception:
-            logger.exception("on_message_sent callback failed for board post")
-
-        return f"Posted to #{channel}"
-
-    def _fanout_board_mentions(self: _CommsToolsHost, channel: str, text: str) -> None:
-        """Delegate mention delivery to the shared Board fan-out implementation."""
-        if not self._messenger:
-            return
-
-        from core.messaging.board_fanout import fanout_board_mentions
-
-        fanout_board_mentions(
-            self._messenger,
-            self._anima_name,
-            channel,
-            text,
-            origin_chain=build_outgoing_origin_chain(
-                self._session_origin,
-                self._session_origin_chain,
-            ),
-            animas_dir=Path(self._anima_dir).parent,
-        )
-
-    def _fire_board_slack_sync(self: _CommsToolsHost, channel: str, text: str) -> None:
-        """Sync a board post to the mapped Slack channel.
-
-        The MCP tool handler dispatches ``handle()`` via
-        ``asyncio.to_thread()``, so this method runs in a thread-pool
-        worker with no running event loop.  We therefore create a
-        short-lived loop via ``asyncio.run()`` to execute the async
-        HTTP call.  The ~1 s blocking is acceptable because we are
-        already off the main event loop.
-        """
-        try:
-            import asyncio
-
-            from core.messaging.outbound_auto import BoardSlackSync
-
-            sync = BoardSlackSync()
-            coro = sync.sync_board_post(
-                board_name=channel,
-                text=text,
-                from_person=self._anima_name,
-                source="anima",
-            )
-
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop is not None and loop.is_running():
-                # Inside an async context — schedule as task. Cycle-context
-                # inheritance is intentional: this is the outbound delivery of a
-                # board post the agent just made this cycle, so the sync (and its
-                # failure logs) belong to that cycle. It is a short-lived one-shot,
-                # not detached later maintenance.
-                loop.create_task(coro)
-            else:
-                # Sync context (MCP tool handler thread pool) —
-                # create a short-lived event loop to run the coroutine.
-                asyncio.run(coro)
-        except Exception:
-            logger.warning("Board→Slack sync failed for #%s", channel, exc_info=True)
+            posted_text = t("handler.channel_post_success", channel=channel)
+        notified = post.get("notified") or []
+        not_notified = post.get("not_notified") or {}
+        if notified:
+            posted_text += "\n" + t("handler.channel_post_notified", names=", ".join(notified))
+        if not_notified:
+            details = ", ".join(f"{name} ({reason})" for name, reason in sorted(not_notified.items()))
+            posted_text += "\n" + t("handler.channel_post_not_notified", details=details)
+        return posted_text
 
     def _handle_read_channel(self: _CommsToolsHost, args: dict[str, Any]) -> str:
         if not self._messenger:
@@ -585,17 +531,23 @@ class CommsToolsMixin:
 
         # ── ACL gate ──
         from core.exceptions import RecipientNotFoundError
-        from core.messaging.messenger import _validate_name, is_channel_member
+        from core.messaging.board import anima_principal, board_access
+        from core.messaging.messenger import _validate_name
 
         try:
             _validate_name(channel, "channel name")
         except RecipientNotFoundError:
             return _error_result("InvalidArguments", f"Invalid channel name: {channel!r}")
-        if not is_channel_member(self._messenger.shared_dir, channel, self._anima_name):
+        principal = anima_principal(self._anima_name, animas_dir=self._anima_dir.parent)
+        decision = board_access(self._messenger.shared_dir, channel, principal, "read")
+        if not decision.allowed:
+            if decision.reason == "company_unreadable":
+                return t("handler.company_boundary_unverifiable")
+            if decision.reason in {"cross_company", "company_mismatch", "company_assigned_legacy"}:
+                company_error = self._channel_company_boundary_error(channel)
+                if company_error is not None:
+                    return company_error
             return t("handler.channel_acl_denied", channel=channel)
-        company_error = self._channel_company_boundary_error(channel)
-        if company_error is not None:
-            return company_error
 
         limit = args.get("limit", 20)
         human_only = args.get("human_only", False)
@@ -658,6 +610,9 @@ class CommsToolsMixin:
 
         if action == "create":
             channel_file = shared_dir / "channels" / f"{channel}.jsonl"
+            meta = load_channel_meta(shared_dir, channel)
+            if meta is not None and meta.closed:
+                return t("handler.channel_archived_name_reserved", channel=channel)
             if channel_file.exists():
                 return t("handler.channel_already_exists", channel=channel)
             members = args.get("members", [])
@@ -742,58 +697,62 @@ class CommsToolsMixin:
 
         elif action == "archive":
             channel_file = shared_dir / "channels" / f"{channel}.jsonl"
-            meta = load_channel_meta(shared_dir, channel)
-            if not channel_file.exists() and meta is None:
-                return t("handler.channel_not_found", channel=channel)
-            company_error = self._channel_company_boundary_error(channel)
-            if company_error is not None:
-                return company_error
-            if meta is not None and meta.members and self._anima_name not in meta.members:
-                return t("handler.channel_acl_not_member", channel=channel)
-            if meta is not None and meta.closed and not channel_file.exists():
-                return _json.dumps(
-                    {
-                        "action": "archive",
-                        "channel": channel,
-                        "archived": False,
-                        "already_archived": True,
-                        "closed": True,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+            from core.platform.locks import locked_path
 
-            def _close_channel(current: ChannelMeta | None) -> ChannelMeta:
-                if current is None:
-                    from core.org.company import get_company
-
-                    return ChannelMeta(
-                        members=[],
-                        created_by=self._anima_name,
-                        created_at=now_iso(),
-                        closed=True,
-                        company=get_company(self._anima_name, animas_dir=self._anima_dir.parent) or "",
-                    )
-                current.closed = True
-                return current
-
+            lock_path = channel_file.with_name(f"{channel_file.name}.lock")
             try:
-                closed_meta = update_channel_meta(shared_dir, channel, _close_channel, create_if_missing=True)
-                if closed_meta is None:
-                    return _error_result("ArchiveFailed", f"Could not write channel tombstone for #{channel}")
+                with locked_path(lock_path, exclusive=True, thread_lock=True):
+                    meta = load_channel_meta(shared_dir, channel)
+                    if not channel_file.exists() and meta is None:
+                        return t("handler.channel_not_found", channel=channel)
+                    company_error = self._channel_company_boundary_error(channel)
+                    if company_error is not None:
+                        return company_error
+                    if meta is not None and meta.members and self._anima_name not in meta.members:
+                        return t("handler.channel_acl_not_member", channel=channel)
+                    if meta is not None and meta.closed and not channel_file.exists():
+                        return _json.dumps(
+                            {
+                                "action": "archive",
+                                "channel": channel,
+                                "archived": False,
+                                "already_archived": True,
+                                "closed": True,
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        )
 
-                archived_path = None
-                if channel_file.exists():
-                    archive_dir = shared_dir / "channels" / "archive"
-                    archive_dir.mkdir(parents=True, exist_ok=True)
-                    archived_path = archive_dir / channel_file.name
-                    if archived_path.exists():
-                        stem, suffix = channel_file.stem, channel_file.suffix
-                        counter = 1
-                        while archived_path.exists():
-                            archived_path = archive_dir / f"{stem}_{counter}{suffix}"
-                            counter += 1
-                    channel_file.rename(archived_path)
+                    def _close_channel(current: ChannelMeta | None) -> ChannelMeta:
+                        if current is None:
+                            from core.org.company import get_company
+
+                            return ChannelMeta(
+                                members=[],
+                                created_by=self._anima_name,
+                                created_at=now_iso(),
+                                closed=True,
+                                company=get_company(self._anima_name, animas_dir=self._anima_dir.parent) or "",
+                            )
+                        current.closed = True
+                        return current
+
+                    closed_meta = update_channel_meta(shared_dir, channel, _close_channel, create_if_missing=True)
+                    if closed_meta is None:
+                        return _error_result("ArchiveFailed", f"Could not write channel tombstone for #{channel}")
+
+                    archived_path = None
+                    if channel_file.exists():
+                        archive_dir = shared_dir / "channels" / "archive"
+                        archive_dir.mkdir(parents=True, exist_ok=True)
+                        archived_path = archive_dir / channel_file.name
+                        if archived_path.exists():
+                            stem, suffix = channel_file.stem, channel_file.suffix
+                            counter = 1
+                            while archived_path.exists():
+                                archived_path = archive_dir / f"{stem}_{counter}{suffix}"
+                                counter += 1
+                        channel_file.rename(archived_path)
             except OSError as exc:
                 logger.warning("manage_channel archive failed: #%s: %s", channel, exc)
                 return _error_result("ArchiveFailed", f"Failed to archive channel #{channel}: {exc}")

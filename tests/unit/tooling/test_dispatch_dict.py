@@ -214,11 +214,8 @@ class TestActivityTypeMap:
 
     def test_expected_entries(self):
         """_ACTIVITY_TYPE_MAP should contain the 4 special-case tools."""
-        expected = {"post_channel", "read_channel", "read_dm_history", "call_human"}
+        expected = {"read_channel", "read_dm_history", "call_human"}
         assert set(ToolHandler._ACTIVITY_TYPE_MAP.keys()) == expected
-
-    def test_post_channel_maps_to_channel_post(self):
-        assert ToolHandler._ACTIVITY_TYPE_MAP["post_channel"] == "channel_post"
 
     def test_read_channel_maps_to_channel_read(self):
         assert ToolHandler._ACTIVITY_TYPE_MAP["read_channel"] == "channel_read"

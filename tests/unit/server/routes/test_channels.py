@@ -368,7 +368,7 @@ class TestPostToChannel:
         # Unauthenticated requests force from_name to "human"
         assert last["from"] == "human"
 
-    async def test_post_broadcasts_websocket_event(self, tmp_path: Path):
+    async def test_post_returns_post_result_without_emitting_directly(self, tmp_path: Path):
         shared_dir = tmp_path / "shared"
         shared_dir.mkdir()
         _write_channel(shared_dir, "general", [])
@@ -376,18 +376,17 @@ class TestPostToChannel:
         app = _make_test_app(shared_dir)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            await client.post(
+            response = await client.post(
                 "/api/channels/general",
                 json={"text": "broadcast test"},
             )
 
+        assert response.status_code == 200
+        post = response.json()["post"]
+        assert post["committed"] is True
+        assert post["id"]
         ws = app.state.ws_manager
-        ws.broadcast.assert_awaited_once()
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["type"] == "board.post"
-        assert call_data["data"]["channel"] == "general"
-        assert call_data["data"]["text"] == "broadcast test"
-        assert call_data["data"]["source"] == "human"
+        ws.broadcast.assert_not_awaited()
 
     async def test_post_to_nonexistent_channel_returns_404(self, tmp_path: Path):
         shared_dir = tmp_path / "shared"
@@ -441,10 +440,8 @@ class TestPostToChannel:
                 json={"text": "no from_name"},
             )
         assert resp.status_code == 200
-
-        ws = app.state.ws_manager
-        call_data = ws.broadcast.call_args[0][0]
-        assert call_data["data"]["from"] == "human"
+        entry = json.loads((shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8"))
+        assert entry["from"] == "human"
 
     async def test_post_missing_text_returns_422(self, tmp_path: Path):
         shared_dir = tmp_path / "shared"
@@ -1001,3 +998,39 @@ class TestGetDMHistory:
             # Dots and uppercase violate the safe name regex
             resp = await client.get("/api/dm/..secret")
         assert resp.status_code == 400
+
+
+# ── Board read access ───────────────────────────────────
+
+
+class TestChannelReadBoardAccess:
+    async def test_get_denies_channel_with_unreadable_meta(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human"}],
+        )
+        (shared_dir / "channels" / "general.meta.json").write_text("{not json", encoding="utf-8")
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general")
+        assert resp.status_code == 403
+
+    async def test_list_skips_channel_with_unreadable_meta(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human"}],
+        )
+        (shared_dir / "channels" / "general.meta.json").write_text("{not json", encoding="utf-8")
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels")
+        assert resp.status_code == 200
+        assert resp.json() == []

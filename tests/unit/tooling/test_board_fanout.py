@@ -1,12 +1,13 @@
-"""Tests for board mention fanout in ToolHandler._handle_post_channel / _fanout_board_mentions."""
+"""Tests for centralized board mention fanout through ToolHandler._handle_post_channel."""
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -22,7 +23,7 @@ def anima_dir(tmp_path: Path) -> Path:
     for name in ("test-anima", "alice", "bob", "charlie"):
         candidate = animas_dir / name
         candidate.mkdir()
-        (candidate / "status.json").write_text("{}", encoding="utf-8")
+        (candidate / "status.json").write_text('{"enabled": true}', encoding="utf-8")
     d = animas_dir / "test-anima"
     (d / "permissions.md").write_text("", encoding="utf-8")
     return d
@@ -37,7 +38,7 @@ def memory(anima_dir: Path) -> MagicMock:
 
 
 @pytest.fixture
-def messenger(tmp_path: Path) -> MagicMock:
+def messenger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     m = MagicMock()
     m.anima_name = "test-anima"
     m.shared_dir = tmp_path / "shared"
@@ -46,6 +47,33 @@ def messenger(tmp_path: Path) -> MagicMock:
     msg.id = "msg_001"
     msg.thread_id = "thread_001"
     m.send.return_value = msg
+
+    from core.messaging.board import anima_principal, post_to_board
+
+    def post_direct(
+        channel: str,
+        text: str,
+        *,
+        from_anima: str,
+        source: str = "anima",
+        from_name: str | None = None,
+        request_id: str | None = None,
+        suppress_mentions: bool = False,
+    ) -> dict:
+        channel_path = m.shared_dir / "channels" / f"{channel}.jsonl"
+        channel_path.touch(exist_ok=True)
+        result = post_to_board(
+            channel,
+            text,
+            anima_principal(from_anima, animas_dir=m.shared_dir.parent / "animas"),
+            request_id=request_id,
+            origin="internal",
+            notify=not suppress_mentions,
+            shared_dir=m.shared_dir,
+        )
+        return {"post": result.to_dict()}
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", post_direct)
     return m
 
 
@@ -63,152 +91,106 @@ def handler_with_messenger(
     )
 
 
-@pytest.fixture
-def sockets_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "run" / "sockets"
-    d.mkdir(parents=True)
-    return d
-
-
 # ── Board mention fanout tests ───────────────────────────────
 
 
 @pytest.mark.unit
 class TestBoardMentionFanout:
-    """Tests for _handle_post_channel() and _fanout_board_mentions()."""
+    """Tests for the centralized post path and inbox mention delivery."""
 
-    @pytest.fixture(autouse=True)
-    def _bypass_acl(self, data_dir_at_tmp_path: Path):
-        """Bypass channel ACL checks — these tests use MagicMock messenger."""
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            yield
+    @staticmethod
+    def _mentions(messenger: MagicMock) -> list[tuple[str, dict]]:
+        messages: list[tuple[str, dict]] = []
+        for path in (messenger.shared_dir / "inbox").glob("*/*.json"):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("type") == "board_mention":
+                messages.append((path.parent.name, data))
+        return messages
 
-    def test_fanout_at_all_sends_to_running_animas(
+    def test_fanout_at_all_sends_to_enabled_animas(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
-        """@all mention posts DM to all running Animas except the poster."""
-        (sockets_dir / "alice.sock").touch()
-        (sockets_dir / "bob.sock").touch()
-
+        """@all reaches every enabled Anima without checking runtime sockets."""
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "general", "text": "Hello @all!"},
         )
 
-        # messenger.send is called for post_channel internals + fanout DMs.
-        # Fanout targets: alice and bob (test-anima excluded as poster).
-        fanout_calls = [
-            c
-            for c in messenger.send.call_args_list
-            if c.kwargs.get("msg_type") == "board_mention"
-            or (len(c.args) == 0 and c.kwargs.get("msg_type") == "board_mention")
-        ]
-        targets = {c.kwargs["to"] for c in fanout_calls}
-        assert targets == {"alice", "bob"}
+        targets = {target for target, _ in self._mentions(messenger)}
+        assert targets == {"alice", "bob", "charlie"}
 
     def test_fanout_at_name_sends_to_specific_anima(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """@bob mention sends DM only to bob."""
-        (sockets_dir / "alice.sock").touch()
-        (sockets_dir / "bob.sock").touch()
-
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "dev", "text": "Hey @bob, check this"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
-        targets = {c.kwargs["to"] for c in fanout_calls}
+        targets = {target for target, _ in self._mentions(messenger)}
         assert targets == {"bob"}
 
     def test_fanout_no_mention_no_dm(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """Text without any @mention should not trigger any fanout DM."""
-        (sockets_dir / "alice.sock").touch()
-        (sockets_dir / "bob.sock").touch()
-
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "general", "text": "No mentions here"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
-        assert len(fanout_calls) == 0
+        assert self._mentions(messenger) == []
 
     def test_fanout_excludes_self(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """@all should not send a DM to the posting Anima itself (test-anima)."""
-        # Include the poster's own socket
-        (sockets_dir / "test-anima.sock").touch()
-        (sockets_dir / "alice.sock").touch()
-
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "general", "text": "@all standup time"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
-        targets = {c.kwargs["to"] for c in fanout_calls}
+        targets = {target for target, _ in self._mentions(messenger)}
         assert "test-anima" not in targets
         assert "alice" in targets
 
-    def test_fanout_only_running_animas(
+    def test_fanout_includes_stopped_animas(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
-        """@bob when bob has no socket file should not send any DM."""
-        # Only alice is running; bob is not
-        (sockets_dir / "alice.sock").touch()
-
+        """@bob is delivered to inbox even without a socket file."""
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "dev", "text": "Hey @bob, are you there?"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
-        assert len(fanout_calls) == 0
+        assert {target for target, _ in self._mentions(messenger)} == {"bob"}
 
     def test_fanout_dm_content_format(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """Fanout DM content should contain board_reply tag, original text, and reply instructions."""
-        (sockets_dir / "bob.sock").touch()
-
         original_text = "Hey @bob, please review the PR"
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "dev", "text": original_text},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
+        fanout_calls = self._mentions(messenger)
         assert len(fanout_calls) == 1
-        content = fanout_calls[0].kwargs["content"]
+        content = fanout_calls[0][1]["content"]
 
         # Check board_reply tag with channel and from fields
         assert "[board_reply:channel=dev,from=test-anima]" in content
@@ -222,72 +204,50 @@ class TestBoardMentionFanout:
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """Fanout DM must use msg_type='board_mention'."""
-        (sockets_dir / "alice.sock").touch()
-
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "general", "text": "@all hello"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
+        fanout_calls = self._mentions(messenger)
         assert len(fanout_calls) >= 1
-        for call in fanout_calls:
-            assert call.kwargs["msg_type"] == "board_mention"
+        for _, message in fanout_calls:
+            assert message["type"] == "board_mention"
 
     def test_fanout_multiple_named_mentions(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
         """@bob @charlie should send DM to both bob and charlie."""
-        (sockets_dir / "alice.sock").touch()
-        (sockets_dir / "bob.sock").touch()
-        (sockets_dir / "charlie.sock").touch()
-
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "project", "text": "@bob @charlie please review"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
-        targets = {c.kwargs["to"] for c in fanout_calls}
+        targets = {target for target, _ in self._mentions(messenger)}
         assert targets == {"bob", "charlie"}
         # alice should NOT receive a DM (not mentioned)
         assert "alice" not in targets
 
-    def test_fanout_passes_origin_chain(
+    def test_fanout_message_includes_board_post_meta(
         self,
         handler_with_messenger: ToolHandler,
         messenger: MagicMock,
-        sockets_dir: Path,
-        tmp_path: Path,
     ):
-        """Fanout DMs must include origin_chain for provenance tracking."""
-        (sockets_dir / "bob.sock").touch()
-
-        # Set session origin to simulate an external-originated message
-        handler_with_messenger.set_session_origin(
-            "external_platform",
-            ["external_platform"],
-        )
-
+        """Fanout DMs include the channel and source post ID in metadata."""
         handler_with_messenger.handle(
             "post_channel",
             {"channel": "dev", "text": "Hey @bob"},
         )
 
-        fanout_calls = [c for c in messenger.send.call_args_list if c.kwargs.get("msg_type") == "board_mention"]
+        fanout_calls = self._mentions(messenger)
         assert len(fanout_calls) == 1
-        chain = fanout_calls[0].kwargs.get("origin_chain")
-        assert chain is not None
-        assert "external_platform" in chain
-        assert "anima" in chain
+        channel_path = messenger.shared_dir / "channels" / "dev.jsonl"
+        post_id = json.loads(channel_path.read_text(encoding="utf-8").splitlines()[-1])["id"]
+        assert fanout_calls[0][1]["meta"] == {"board_channel": "dev", "board_post_id": post_id}
 
     def test_posted_channel_guard_is_per_handler_with_runtime_context(
         self,
@@ -303,8 +263,6 @@ class TestBoardMentionFanout:
         second = ToolHandler(anima_dir, memory, messenger, tool_registry=[])
         first.bind_runtime_session(ctx)
         second.bind_runtime_session(ctx)
-        first._fire_board_slack_sync = MagicMock()
-        second._fire_board_slack_sync = MagicMock()
 
         first_token = first.set_active_session_type(ctx.session_type)
         try:
@@ -321,9 +279,11 @@ class TestBoardMentionFanout:
             active_session_type.reset(second_token)
 
         # The guard is per run (per handler); nothing is carried over from files.
-        assert first_result == "Posted to #general"
-        assert second_result == "Posted to #general"
-        assert messenger.post_channel.call_count == 2
+        from core.i18n import t
+
+        assert first_result == t("handler.channel_post_success", channel="general")
+        assert second_result == t("handler.channel_post_success", channel="general")
+        assert len((messenger.shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8").splitlines()) == 2
 
     def test_posted_channel_guard_is_per_handler_without_runtime_context(
         self,
@@ -335,8 +295,6 @@ class TestBoardMentionFanout:
 
         first = ToolHandler(anima_dir, memory, messenger, tool_registry=[])
         second = ToolHandler(anima_dir, memory, messenger, tool_registry=[])
-        first._fire_board_slack_sync = MagicMock()
-        second._fire_board_slack_sync = MagicMock()
 
         token = active_session_type.set("unknown")
         try:
@@ -346,6 +304,8 @@ class TestBoardMentionFanout:
             active_session_type.reset(token)
 
         # The guard is per run (per handler); nothing is carried over from files.
-        assert first_result == "Posted to #general"
-        assert second_result == "Posted to #general"
-        assert messenger.post_channel.call_count == 2
+        from core.i18n import t
+
+        assert first_result == t("handler.channel_post_success", channel="general")
+        assert second_result == t("handler.channel_post_success", channel="general")
+        assert len((messenger.shared_dir / "channels" / "general.jsonl").read_text(encoding="utf-8").splitlines()) == 2

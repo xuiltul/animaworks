@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from core.config.schemas import ExternalMessagingChannelConfig
 from core.messaging.messenger import ChannelMeta, load_channel_meta, save_channel_meta
 from server.gateways.slack_channel_sync import SlackChannelSync, _ensure_board
 
@@ -18,6 +20,7 @@ def _mock_config() -> SimpleNamespace:
     return SimpleNamespace(
         external_messaging=SimpleNamespace(
             slack=SimpleNamespace(
+                channel_discovery=True,
                 default_anima="sakura",
                 board_mapping={},
                 default_channel_company="",
@@ -181,7 +184,7 @@ async def test_sync_falls_back_to_available_bot_when_default_missing(
 
     cfg = SimpleNamespace(
         external_messaging=SimpleNamespace(
-            slack=SimpleNamespace(default_anima="kotoha", board_mapping={}),
+            slack=SimpleNamespace(channel_discovery=True, default_anima="kotoha", board_mapping={}),
         ),
     )
 
@@ -263,6 +266,7 @@ async def test_sync_returns_empty_when_no_bots_available(
     cfg = SimpleNamespace(
         external_messaging=SimpleNamespace(
             slack=SimpleNamespace(
+                channel_discovery=True,
                 default_anima="kotoha",
                 board_mapping={},
                 default_channel_company="",
@@ -282,3 +286,45 @@ async def test_sync_returns_empty_when_no_bots_available(
 
     assert result == {}
     assert "no Slack bots available for channel discovery" in caplog.text
+
+
+def test_slack_channel_discovery_defaults_to_disabled() -> None:
+    assert ExternalMessagingChannelConfig().channel_discovery is False
+
+
+@pytest.mark.asyncio
+async def test_startup_and_periodic_sync_skip_when_discovery_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.app import _slack_channel_resync, _sync_slack_channels_if_enabled
+
+    config = SimpleNamespace(
+        external_messaging=SimpleNamespace(slack=ExternalMessagingChannelConfig()),
+    )
+    monkeypatch.setattr("server.app.load_config", lambda: config)
+    sync = AsyncMock()
+    monkeypatch.setattr(SlackChannelSync, "sync", sync)
+
+    startup_app = SimpleNamespace(
+        state=SimpleNamespace(slack_socket_manager=_FakeSlackManager({}), slack_channel_sync=None),
+    )
+    await _sync_slack_channels_if_enabled(startup_app)
+    sync.assert_not_awaited()
+
+    periodic_app = SimpleNamespace(
+        state=SimpleNamespace(slack_socket_manager=_FakeSlackManager({}), slack_channel_sync=None),
+    )
+    await _slack_channel_resync(periodic_app)
+    sync.assert_not_awaited()
+    assert startup_app.state.slack_channel_sync is None
+    assert periodic_app.state.slack_channel_sync is None
+
+
+def test_ensure_board_skips_closed_name(
+    tmp_path: Path,
+) -> None:
+    shared_dir = tmp_path / "shared"
+    save_channel_meta(shared_dir, "general", ChannelMeta(members=[], closed=True))
+
+    assert _ensure_board(shared_dir, "general", "general") is False
+    assert not (shared_dir / "channels" / "general.jsonl").exists()

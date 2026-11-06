@@ -16,7 +16,7 @@ activity log recording quality, and fix priming data loss:
 2.  priming.py — _channel_b_recent_activity() integration (no limit, post-score limit)
 3.  messenger.py — send() records dm_sent in activity log
 5.  (removed — Section 9 deleted per Arch-1 hippocampus model)
-6.  handler.py — _fanout_board_mentions() includes stopped Animas
+6.  messaging/board.py — centralized mention delivery (covered in test_board.py)
 7.  anima.py — DM receive limit 50
 8.  activity.py — format_for_priming() with content_trim parameter
 9.  messenger.py — read_dm_history() type filter
@@ -26,7 +26,7 @@ activity log recording quality, and fix priming data loss:
 import json
 from datetime import timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -42,6 +42,7 @@ def anima_dir(tmp_path: Path) -> Path:
     """Create a temporary anima directory with required subdirectories."""
     d = tmp_path / "animas" / "test-anima"
     d.mkdir(parents=True)
+    (d / "status.json").write_text("{}", encoding="utf-8")
     (d / "activity_log").mkdir()
     (d / "episodes").mkdir()
     (d / "knowledge").mkdir()
@@ -332,153 +333,7 @@ class TestMessengerSendActivityLog:
 # PrimingEngine Channel B is now the sole activity reader.
 
 
-# ── 6. handler.py — _fanout_board_mentions() includes stopped Animas
-
-
-class TestFanoutBoardMentionsStoppedAnimas:
-    """Tests for ToolHandler._fanout_board_mentions() including stopped Animas."""
-
-    @pytest.fixture(autouse=True)
-    def _bypass_acl(self, data_dir_at_tmp_path: Path):
-        """Bypass channel ACL checks — these tests use MagicMock messenger."""
-        from unittest.mock import patch
-
-        with patch("core.messaging.messenger.is_channel_member", return_value=True):
-            yield
-
-    def test_mentions_sent_to_stopped_animas(self, tmp_path: Path):
-        """Verify mentions are delivered to both running and stopped Animas."""
-        from core.tooling.handler import ToolHandler
-
-        # Setup directories
-        data_dir = tmp_path
-        sockets_dir = data_dir / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        animas_dir = data_dir / "animas"
-
-        # Create running anima (has socket)
-        (sockets_dir / "running-anima.sock").touch()
-        (animas_dir / "running-anima").mkdir(parents=True)
-
-        # Create stopped anima (no socket, but directory exists)
-        (animas_dir / "stopped-anima").mkdir(parents=True)
-
-        # Self anima
-        (animas_dir / "self-anima").mkdir(parents=True)
-        for name in ("running-anima", "stopped-anima", "self-anima"):
-            (animas_dir / name / "status.json").write_text("{}", encoding="utf-8")
-
-        # Create shared dir for messenger
-        shared_dir = tmp_path / "shared"
-        (shared_dir / "inbox" / "self-anima").mkdir(parents=True)
-
-        # Use MagicMock for messenger and memory
-        mock_messenger = MagicMock()
-        mock_memory = MagicMock()
-        mock_memory.read_permissions.return_value = ""
-
-        handler = ToolHandler(
-            anima_dir=animas_dir / "self-anima",
-            memory=mock_memory,
-            messenger=mock_messenger,
-        )
-
-        handler._fanout_board_mentions("general", "Hey @all check this out")
-
-        # Verify both running and stopped animas received mentions
-        sent_targets = set()
-        for call in mock_messenger.send.call_args_list:
-            if call.kwargs.get("to"):
-                sent_targets.add(call.kwargs["to"])
-            elif len(call.args) >= 1:
-                sent_targets.add(call.args[0])
-        # Note: @(\w+) regex won't match names with hyphens, but "all"
-        # triggers the @all path which uses directory listing.
-        # running_anima and stopped_anima use underscores so the test
-        # covers the actual code path.
-
-    def test_all_mention_excludes_stopped_animas(self, tmp_path: Path):
-        """Verify @all mentions only reach running Animas (Fix 8)."""
-        from core.tooling.handler import ToolHandler
-
-        data_dir = tmp_path
-        sockets_dir = data_dir / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        animas_dir = data_dir / "animas"
-
-        # running_anima has a socket file
-        (sockets_dir / "running_anima.sock").touch()
-        (animas_dir / "running_anima").mkdir(parents=True)
-
-        # stopped_anima has no socket but exists on disk
-        (animas_dir / "stopped_anima").mkdir(parents=True)
-
-        # self_anima
-        (animas_dir / "self_anima").mkdir(parents=True)
-        for name in ("running_anima", "stopped_anima", "self_anima"):
-            (animas_dir / name / "status.json").write_text("{}", encoding="utf-8")
-
-        shared_dir = tmp_path / "shared"
-        (shared_dir / "inbox" / "self_anima").mkdir(parents=True)
-
-        mock_messenger = MagicMock()
-        mock_memory = MagicMock()
-        mock_memory.read_permissions.return_value = ""
-
-        handler = ToolHandler(
-            anima_dir=animas_dir / "self_anima",
-            memory=mock_memory,
-            messenger=mock_messenger,
-        )
-
-        handler._fanout_board_mentions("general", "Hey @all check this out")
-
-        sent_targets = set()
-        for call in mock_messenger.send.call_args_list:
-            if call.kwargs.get("to"):
-                sent_targets.add(call.kwargs["to"])
-            elif len(call.args) >= 1:
-                sent_targets.add(call.args[0])
-        assert "running_anima" in sent_targets, "Running anima should receive @all mention"
-        assert "stopped_anima" not in sent_targets, "Stopped anima should NOT receive @all mention"
-        assert "self_anima" not in sent_targets, "Self should be excluded from @all"
-
-    def test_named_mention_underscore_name_stopped_not_sent(self, tmp_path: Path):
-        """Verify named @mentions do NOT reach stopped Animas (Fix 8: running only)."""
-        from core.tooling.handler import ToolHandler
-
-        data_dir = tmp_path
-        sockets_dir = data_dir / "run" / "sockets"
-        sockets_dir.mkdir(parents=True)
-        animas_dir = data_dir / "animas"
-
-        (animas_dir / "stopped_target").mkdir(parents=True)
-        (animas_dir / "self_anima").mkdir(parents=True)
-        for name in ("stopped_target", "self_anima"):
-            (animas_dir / name / "status.json").write_text("{}", encoding="utf-8")
-
-        shared_dir = tmp_path / "shared"
-        (shared_dir / "inbox" / "self_anima").mkdir(parents=True)
-
-        mock_messenger = MagicMock()
-        mock_memory = MagicMock()
-        mock_memory.read_permissions.return_value = ""
-
-        handler = ToolHandler(
-            anima_dir=animas_dir / "self_anima",
-            memory=mock_memory,
-            messenger=mock_messenger,
-        )
-
-        handler._fanout_board_mentions("ops", "Hey @stopped_target please review")
-
-        sent_targets = set()
-        for call in mock_messenger.send.call_args_list:
-            if call.kwargs.get("to"):
-                sent_targets.add(call.kwargs["to"])
-            elif len(call.args) >= 1:
-                sent_targets.add(call.args[0])
-        assert "stopped_target" not in sent_targets, "Stopped Anima should NOT receive named mention"
+# ── 6. Board mention delivery is covered in core/messaging/test_board.py
 
 
 # ── 7. anima.py — DM receive limit 50 ──────────────────────────────
