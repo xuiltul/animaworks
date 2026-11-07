@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.config.file_access_policy import find_denied_root, load_denied_roots
+from core.i18n import t
 from core.integrations._async_compat import run_sync
 from core.memory.priming.items import ItemizedMemory, MemoryItem, render_items
 from core.time_utils import ensure_aware, now_local, today_local
@@ -98,6 +99,53 @@ def _is_channel_member_from_resolved_meta(meta_path: Path, anima_name: str) -> b
     return board_access(shared_dir, channel_name, principal, "read").allowed
 
 
+def _unread_board_lines(
+    anima_dir: Path,
+    shared_dir: Path | None,
+    denied_roots: tuple[Path, ...],
+) -> list[str]:
+    """Return one unread-count line for each accessible Board with unread posts."""
+    if not shared_dir:
+        return []
+    from core.messaging.board import anima_principal, board_access
+    from core.messaging.board_reads import unread_summary
+
+    channels_dir = _resolved_readable_path(shared_dir / "channels", denied_roots)
+    if channels_dir is None or not channels_dir.is_dir():
+        return []
+
+    anima_name = anima_dir.name
+    reader = f"anima:{anima_name}"
+    principal = anima_principal(anima_name, animas_dir=anima_dir.parent)
+    lines: list[str] = []
+    for unresolved_channel_file in sorted(channels_dir.glob("*.jsonl")):
+        channel_file = _resolved_readable_path(unresolved_channel_file, denied_roots)
+        if channel_file is None:
+            continue
+        channel_name = channel_file.stem
+        meta_path = _resolved_readable_path(channels_dir / f"{channel_name}.meta.json", denied_roots)
+        if meta_path is None:
+            continue
+        is_member = (
+            board_access(shared_dir, channel_name, principal, "read").allowed
+            if not denied_roots
+            else _is_channel_member_from_resolved_meta(meta_path, anima_name)
+        )
+        if not is_member:
+            continue
+        summary = unread_summary(shared_dir, channel_name, reader, self_name=anima_name)
+        if summary["unread"] > 0:
+            lines.append(
+                t(
+                    "priming.board_unread",
+                    channel=channel_name,
+                    unread=summary["unread"],
+                    to_me=summary["to_me"],
+                )
+            )
+    return lines
+
+
 async def channel_b_recent_activity(
     anima_dir: Path,
     shared_dir: Path | None,
@@ -121,6 +169,22 @@ async def channel_b_recent_activity(
     from core.activity.logger import ActivityLogger
 
     denied_roots = load_denied_roots(anima_dir)
+    try:
+        unread_lines = _unread_board_lines(anima_dir, shared_dir, denied_roots)
+    except Exception:
+        logger.warning("Failed to collect Board unread counts", exc_info=True)
+        unread_lines = []
+    unread_updated = now_local().isoformat()
+    unread_items = tuple(
+        MemoryItem(
+            source="board_unread",
+            key=line,
+            text=line,
+            updated=unread_updated,
+            rank=1000.0,
+        )
+        for line in unread_lines
+    )
     activity = ActivityLogger(anima_dir)
     entries = (
         [] if _tree_intersects_deny(anima_dir / "activity_log", denied_roots) else activity.recent(days=2, limit=100)
@@ -157,15 +221,16 @@ async def channel_b_recent_activity(
                         rank=rank,
                     )
                 )
-        items = tuple(item_list)
+        items = (*unread_items, *item_list)
         return ItemizedMemory(render_items(items, ""), items)
 
     # Fallback: read old episodes if no activity log exists yet
     fallback = await fallback_episodes_and_channels(anima_dir, shared_dir, denied_roots=denied_roots)
-    if not fallback:
+    fallback_items = (MemoryItem(source="recent_activity", key="", text=fallback),) if fallback else ()
+    items = (*unread_items, *fallback_items)
+    if not items:
         return ""
-    item = MemoryItem(source="recent_activity", key="", text=fallback)
-    return ItemizedMemory(fallback, (item,))
+    return ItemizedMemory(render_items(items, ""), items)
 
 
 def _format_entry_at_sentence_boundary(activity, entry, *, content_trim: int) -> str:

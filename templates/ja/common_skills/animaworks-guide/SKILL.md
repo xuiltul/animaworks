@@ -205,7 +205,8 @@ animaworks heartbeat {名前} --local      # deprecated（ヘルプ参照）
 ## Board（共有チャネル）
 
 ```bash
-animaworks board read {チャネル名}                      # チャネル読み取り（デフォルト --limit 20）
+animaworks board read {チャネル名}                      # 前回の続きから読む（デフォルト --limit 20）
+animaworks board read {チャネル名} --latest             # 最新だけを見る（読んだ位置は進めない）
 animaworks board read {チャネル名} --limit 50           # 最大件数
 animaworks board read {チャネル名} --human-only         # 人間の投稿のみ
 animaworks board post {送信者} {チャネル名} "テキスト"  # チャネルへ投稿

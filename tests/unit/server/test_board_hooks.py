@@ -16,6 +16,7 @@ from core.messaging.board import (
     human_principal,
     post_to_board,
 )
+from core.messaging.board_reads import add_picked, advance_upto, clear_read_hooks
 from core.messaging.messenger import ChannelMeta, save_channel_meta
 from server.board_hooks import register_board_post_hooks, unregister_board_post_hooks
 
@@ -66,9 +67,11 @@ def _config(*, whitelist: list[str], all_boards: bool = False):
 @pytest.fixture(autouse=True)
 def _clean_hooks():
     clear_post_hooks()
+    clear_read_hooks()
     yield
     unregister_board_post_hooks()
     clear_post_hooks()
+    clear_read_hooks()
 
 
 @pytest.mark.asyncio
@@ -172,3 +175,36 @@ async def test_slack_hook_requires_explicit_members_whitelist_and_skips_echo(
     )
     assert closed.error == "denied:closed"
     assert calls == ["general"]
+
+
+@pytest.mark.asyncio
+async def test_read_hook_emits_board_read(shared_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app = _app(shared_dir)
+    monkeypatch.setattr(
+        "core.config.models.load_config",
+        lambda: SimpleNamespace(external_messaging=SimpleNamespace(slack=SimpleNamespace(enabled=False))),
+    )
+    register_board_post_hooks(app)
+
+    await asyncio.to_thread(
+        advance_upto,
+        shared_dir,
+        "general",
+        "anima:alice",
+        post_id="p1",
+        post_ts="2026-01-01T10:00:00+09:00",
+    )
+    await asyncio.to_thread(add_picked, shared_dir, "general", "anima:alice", "p1")
+
+    events = app.state.ws_manager.events
+    assert [event["type"] for event in events] == ["board.read", "board.read"]
+    assert set(events[0]["data"]) == {"channel", "reader", "upto_id", "upto_ts", "picked_id"}
+    assert events[0]["data"] == {
+        "channel": "general",
+        "reader": "anima:alice",
+        "upto_id": "p1",
+        "upto_ts": "2026-01-01T10:00:00+09:00",
+        "picked_id": "",
+    }
+    assert events[1]["data"]["picked_id"] == "p1"
+    assert events[1]["data"]["upto_id"] == "p1"

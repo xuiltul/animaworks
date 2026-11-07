@@ -93,6 +93,33 @@ def _board_mention_suppression_channels(items: list[InboxItem]) -> frozenset[str
     return frozenset(channel for item in items if (channel := _board_mention_channel(item)))
 
 
+def _record_board_mention_picks(shared_dir: Any, anima_name: str, items: list[InboxItem]) -> None:
+    """Mark board mentions processed in this batch as individually read."""
+    if shared_dir is None:
+        return
+    from core.messaging.board_reads import add_picked
+
+    reader = f"anima:{anima_name}"
+    for item in items:
+        msg = item.msg
+        if msg.type != "board_mention" or not isinstance(msg.meta, dict):
+            continue
+        channel = msg.meta.get("board_channel")
+        post_id = msg.meta.get("board_post_id")
+        if not (isinstance(channel, str) and channel and isinstance(post_id, str) and post_id):
+            continue
+        try:
+            add_picked(Path(shared_dir), channel, reader, post_id)
+        except Exception as exc:
+            logger.warning(
+                "[%s] Failed to record Board mention read position for #%s: %s",
+                anima_name,
+                channel,
+                exc,
+                exc_info=True,
+            )
+
+
 async def _append_episode_off_loop(memory: Any, episode: str, *, origin: str) -> None:
     """Append an episode without blocking the async inbox event loop."""
     await asyncio.to_thread(memory.append_episode, episode, origin=origin)
@@ -416,6 +443,11 @@ class InboxMixin:
                     live_session_started_at = getattr(inbox_start_activity, "ts", started_at.isoformat())
 
                     inbox_result = await self._process_inbox_messages(track_retries=budget_result is None)
+                    _record_board_mention_picks(
+                        getattr(self, "shared_dir", None),
+                        self.name,
+                        inbox_result.inbox_items,
+                    )
 
                     if inbox_result.unread_count == 0:
                         if inbox_result.inbox_items:

@@ -85,6 +85,17 @@ class ChannelPostRequest(BaseModel):
     from_name: str = Field(default="human", min_length=1)
 
 
+class ChannelReadRequest(BaseModel):
+    upto_id: str = ""
+
+
+def _human_username(request: Request) -> str:
+    """Return the authenticated username, falling back to the anonymous human."""
+    user = getattr(request.state, "user", None)
+    username = getattr(user, "username", "") if user is not None else ""
+    return username or "human"
+
+
 def _get_messenger(shared_dir: Path) -> Messenger:
     """Create a Messenger instance for human-originated operations."""
     return Messenger(shared_dir, anima_name="human")
@@ -211,6 +222,67 @@ def create_channels_router() -> APIRouter:
             "offset": offset,
             "limit": limit,
             "has_more": has_more,
+        }
+
+    @router.get("/channels/{name}/reads")
+    def get_channel_reads(request: Request, name: str):
+        """Return the stored read positions for one Board channel."""
+        if err := _validate_name(name):
+            return err
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
+            )
+        if not board_access(shared_dir, name, human_principal(_human_username(request)), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
+
+        from core.messaging.board_reads import load_reads
+
+        reads = load_reads(shared_dir, name)
+        return {"channel": name, "readers": reads["readers"], "picked": reads["picked"]}
+
+    @router.post("/channels/{name}/read")
+    def mark_channel_read(request: Request, name: str, body: ChannelReadRequest):
+        """Advance the requesting human's stored read position in one channel."""
+        if err := _validate_name(name):
+            return err
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
+            )
+        if not board_access(shared_dir, name, human_principal(_human_username(request)), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
+
+        from core.messaging.board_reads import advance_upto, find_post_ts, load_reads
+
+        post_ts = find_post_ts(shared_dir, name, body.upto_id)
+        if post_ts is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Post '{body.upto_id}' not found in channel '{name}'"},
+            )
+
+        user = getattr(request.state, "user", None)
+        username = getattr(user, "username", "") if user is not None else ""
+        reader = f"human:{username}" if username else "human"
+        changed = advance_upto(shared_dir, name, reader, post_id=body.upto_id, post_ts=post_ts)
+        current = load_reads(shared_dir, name)["readers"].get(reader, {})
+        return {
+            "changed": changed,
+            "upto_id": current.get("upto_id", body.upto_id),
+            "upto_ts": current.get("upto_ts", post_ts),
         }
 
     @router.post("/channels/{name}")

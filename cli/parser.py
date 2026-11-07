@@ -208,6 +208,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show human messages only",
     )
+    p_board_read.add_argument(
+        "--latest",
+        action="store_true",
+        help="Show only the latest messages and keep the read position unchanged",
+    )
     p_board_read.set_defaults(func=_lazy_board_read)
 
     # board post

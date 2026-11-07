@@ -39,7 +39,7 @@ class TestCmdBoardRead:
     def test_anima_read_routes_through_read_channel(self, tmp_path: Path, capsys) -> None:
         from cli.commands.board import cmd_board_read
 
-        args = argparse.Namespace(channel="general", limit=7, human_only=True)
+        args = argparse.Namespace(channel="general", limit=7, human_only=True, latest=True)
         with (
             patch("cli.commands.board.current_anima_dir", return_value=tmp_path / "alice"),
             patch("cli._anima_tool.run_anima_tool", return_value='[{"text":"hi"}]') as run_tool,
@@ -48,7 +48,7 @@ class TestCmdBoardRead:
 
         run_tool.assert_called_once_with(
             "read_channel",
-            {"channel": "general", "limit": 7, "human_only": True},
+            {"channel": "general", "limit": 7, "human_only": True, "latest": True},
         )
         output = capsys.readouterr().out
         assert '<tool_result tool="animaworks-tool board read" trust="untrusted">' in output
