@@ -870,14 +870,20 @@ def create_channels_router() -> APIRouter:
                     involving=other,
                 )
                 for e in entries:
-                    messages.append(
-                        {
-                            "ts": e.ts,
-                            "from": e.from_person or name,
-                            "text": e.content,
-                            "source": "activity_log",
-                        }
-                    )
+                    meta = e.meta if isinstance(e.meta, dict) else {}
+                    row = {
+                        "ts": e.ts,
+                        "from": e.from_person or name,
+                        "text": e.content,
+                        "source": "activity_log",
+                    }
+                    # Keep DM rows jumpable to the original message. These are
+                    # additive fields only; existing clients ignore them.
+                    if meta.get("message_id"):
+                        row["message_id"] = str(meta["message_id"])
+                    if meta.get("reply_to"):
+                        row["reply_to"] = str(meta["reply_to"])
+                    messages.append(row)
             except Exception:
                 logger.debug(
                     "Failed to read DM activity_log for %s",

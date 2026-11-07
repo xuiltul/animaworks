@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 46bf5e9970013b8db490fea851128cd9c7481d5eeb6a1c7b845f046bacb4ec74 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 6da2c991f27e9af92e6ca1b929bdeb3b05d4ac30f4acda2f218042f0ff5aead7 -->
 
 # モジュール一覧
 
@@ -1140,7 +1140,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 906 | — |
+| `server.routes.channels` | 912 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

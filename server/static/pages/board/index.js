@@ -14,7 +14,7 @@ import { createHomeView } from "./home.js";
 import { createFlowsView } from "./flows.js";
 import { createPalette } from "./palette.js";
 
-export function createBoardPage(container) {
+export function createBoardPage(container, options = {}) {
   const store = createBoardStore();
   const mentionCard = createMentionCard();
   const abort = new AbortController();
@@ -137,6 +137,17 @@ export function createBoardPage(container) {
       ? "older"
       : (reason === "selection" || reason === "loading" ? "initial" : "update");
     stream.render({ reason: streamReason });
+
+    // Opening a board (or returning to the bottom while a live post arrives)
+    // advances the read position after a short pause.
+    if (
+      reason === "messages" &&
+      store.state.selectedType === "channel" &&
+      store.state.messages.length > 0 &&
+      stream.isNearBottom()
+    ) {
+      store.scheduleMarkRead();
+    }
   }
 
   function onRailClick(event) {
@@ -207,6 +218,24 @@ export function createBoardPage(container) {
   }
 
   async function onStreamClick(event) {
+    const pill = event.target.closest("[data-board-new-pill]");
+    if (pill) {
+      stream.scrollToBottom();
+      return;
+    }
+
+    const jump = event.target.closest("[data-board-jump]");
+    if (jump) {
+      void store.jumpTo(jump.dataset.boardJump);
+      return;
+    }
+
+    const seen = event.target.closest("[data-board-seen]");
+    if (seen) {
+      seen.classList.toggle("board-is-open");
+      return;
+    }
+
     const mention = event.target.closest("[data-board-mention]");
     if (mention) {
       const name = mention.dataset.boardMention;
@@ -267,6 +296,10 @@ export function createBoardPage(container) {
 
   function onScroll() {
     if (messagesElement.scrollTop < 48) void store.loadOlder();
+    if (stream.isNearBottom()) {
+      stream.clearNewPill();
+      store.scheduleMarkRead();
+    }
   }
 
   function onHeaderClick(event) {
@@ -321,6 +354,9 @@ export function createBoardPage(container) {
   unsubscribeStore = store.subscribe((reason) => {
     if (reason === "status") {
       stream.updateStatusDots();
+      // Delivery chips depend on the anima's current work status ("考え中…"),
+      // so a status change must reconcile the affected posts as well.
+      stream.render({ reason: "update" });
       mentionCard.update(store);
       composer.refresh();
       return;
@@ -337,15 +373,49 @@ export function createBoardPage(container) {
   });
 
   unsubscribeStatus = onEvent("anima.status", (data) => store.handleAnimaStatus(data));
-  unsubscribeRead = onEvent("board.read", (data) => store.handleBoardRead(data));
   window.__boardWsHandler = (data) => {
-    if (data && data.reader) store.handleBoardRead(data);
-    else void store.handleBoardPost(data);
+    if (
+      data &&
+      data.text === undefined &&
+      data.status !== undefined &&
+      (data.name !== undefined || data.anima !== undefined)
+    ) {
+      store.handleAnimaStatus(data);
+    } else if (data && data.text === undefined && (data.reader !== undefined || data.upto_id !== undefined)) {
+      void store.handleBoardRead(data);
+    } else {
+      void store.handleBoardPost(data);
+    }
   };
-  window.__boardReadHandler = (data) => store.handleBoardRead(data);
+  window.__boardReadWsHandler = (data) => {
+    void store.handleBoardRead(data);
+  };
+
+  function parseSubPath(subPath) {
+    const text = String(subPath || "").replace(/^\/+|\/+$/g, "");
+    if (!text) return null;
+    const slash = text.indexOf("/");
+    const rawName = slash >= 0 ? text.slice(0, slash) : text;
+    const rawId = slash >= 0 ? text.slice(slash + 1) : "";
+    if (!rawName) return null;
+    try {
+      return {
+        channel: decodeURIComponent(rawName),
+        id: rawId ? decodeURIComponent(rawId) : "",
+      };
+    } catch {
+      return { channel: rawName, id: rawId };
+    }
+  }
 
   function render() {
-    refresh("selection");
+    const target = parseSubPath(options.subPath);
+    if (target) {
+      store.select("channel", target.channel);
+      if (target.id) void store.jumpTo(target.id);
+    } else {
+      refresh("selection");
+    }
     store.start();
   }
 
@@ -356,7 +426,7 @@ export function createBoardPage(container) {
     if (unsubscribeStatus) unsubscribeStatus();
     if (unsubscribeRead) unsubscribeRead();
     if (window.__boardWsHandler) window.__boardWsHandler = null;
-    if (window.__boardReadHandler) window.__boardReadHandler = null;
+    if (window.__boardReadWsHandler) window.__boardReadWsHandler = null;
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();

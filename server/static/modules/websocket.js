@@ -344,6 +344,17 @@ function handleWsMessage(raw) {
       break;
     }
 
+    case "board.read": {
+      // Read-position updates are forwarded to the board page so faces and
+      // chips update live without waiting for the next poll.
+      if (typeof window.__boardReadWsHandler === "function") {
+        window.__boardReadWsHandler(data);
+      } else if (typeof window.__boardWsHandler === "function") {
+        window.__boardWsHandler(data);
+      }
+      break;
+    }
+
     case "ping":
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "pong" }));
