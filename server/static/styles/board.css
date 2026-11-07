@@ -2534,8 +2534,9 @@
 }
 
 .board-flow-tile.is-warn {
-  border-color: var(--aw-color-error-border);
-  background: var(--aw-color-error-bg-alt);
+  /* Derived from the theme's error colour so dark themes stay dark. */
+  border-color: color-mix(in srgb, var(--aw-color-error) 40%, var(--aw-color-border));
+  background: color-mix(in srgb, var(--aw-color-error) 9%, var(--aw-color-bg-primary));
 }
 
 .board-flow-tile-label {
@@ -2552,7 +2553,7 @@
 }
 
 .board-flow-tile.is-warn .board-flow-tile-value {
-  color: var(--aw-color-error-text);
+  color: var(--aw-color-error);
 }
 
 .board-flow-tile small {
@@ -3610,5 +3611,13 @@
   .board-filter-search {
     flex-basis: 100%;
     max-width: none;
+  }
+}
+
+/* Phone: keep page titles clear of the floating board-list button. */
+@media (max-width: 760px) {
+  .board-home-head,
+  .board-flow-head {
+    margin-top: 34px;
   }
 }
