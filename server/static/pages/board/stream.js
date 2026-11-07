@@ -36,6 +36,15 @@ export function createStream({ element, store }) {
     avatarUrl: (name) => store.avatarUrl(name),
     statusOf: (name) => store.statusOf(name),
     statusLabel: (name) => t(`board.mention_status_${store.statusOf(name)}`),
+    // Post actions belong to channel boards. Quoting needs a writable board.
+    get actions() {
+      return store.state.selectedType === "channel";
+    },
+    get canQuote() {
+      if (store.state.selectedType !== "channel") return false;
+      const channel = store.channel(store.state.selectedName);
+      return !channel || channel.writable !== false;
+    },
   };
 
   function _reset(html) {
@@ -170,6 +179,8 @@ export function createStream({ element, store }) {
         message.id ?? "",
         message.text || "",
         avatarSignature(message),
+        JSON.stringify(message.delivery || {}),
+        JSON.stringify(message.hooks || {}),
       ].join("|");
 
       items.push({

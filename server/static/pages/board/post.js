@@ -1,12 +1,27 @@
 // ── Board post rendering ─────────────────────
+import { t } from "/shared/i18n.js";
 import { escapeHtml, renderMarkdown } from "../../modules/state.js";
 import { avatarMarkup, kindGroup, kindLabel } from "./avatar.js";
+import { deliveryMarkup } from "./delivery.js";
 import { decorateMarkdown } from "./markdown.js";
 import { clockTime } from "./time.js";
 
 function _isTitled(text) {
   const first = String(text || "").split("\n").find((line) => line.trim() !== "");
   return Boolean(first && /^\s*#{1,3}\s+/.test(first));
+}
+
+function _actionsMarkup(message, ctx) {
+  if (!ctx.actions) return "";
+  const hasId = message.id !== undefined && message.id !== null && message.id !== "";
+  const quote = ctx.canQuote
+    ? `<button type="button" class="board-post-action" data-board-action="quote">${escapeHtml(t("board.action_quote"))}</button>`
+    : "";
+  const link = hasId
+    ? `<button type="button" class="board-post-action" data-board-action="link">${escapeHtml(t("board.action_link"))}</button>`
+    : "";
+  if (!quote && !link) return "";
+  return `<div class="board-post-actions" role="toolbar" aria-label="${escapeHtml(t("board.post_actions"))}">${quote}${link}</div>`;
 }
 
 /**
@@ -20,6 +35,8 @@ export function buildPostElement(message, ctx) {
   const text = String(message.text || "");
   const titled = _isTitled(text);
   const badge = kindLabel(kind);
+  const delivery = deliveryMarkup(message);
+  const actions = _actionsMarkup(message, ctx);
 
   const element = document.createElement("article");
   element.className = [
@@ -42,7 +59,9 @@ export function buildPostElement(message, ctx) {
       <div class="board-post-gutter"><time class="board-post-compact-time" datetime="${escapeHtml(message.ts || "")}">${escapeHtml(clockTime(message.ts))}</time></div>
       <div class="board-post-main">
         <div class="board-post-text board-markdown${titled ? " board-markdown-titled" : ""}">${decorated}</div>
-      </div>`;
+        ${delivery}
+      </div>
+      ${actions}`;
     return element;
   }
 
@@ -62,6 +81,8 @@ export function buildPostElement(message, ctx) {
         <time class="board-post-time" datetime="${escapeHtml(message.ts || "")}">${escapeHtml(clockTime(message.ts))}</time>
       </div>
       <div class="board-post-text board-markdown${titled ? " board-markdown-titled" : ""}">${decorated}</div>
-    </div>`;
+      ${delivery}
+    </div>
+    ${actions}`;
   return element;
 }

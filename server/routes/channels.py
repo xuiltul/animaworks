@@ -13,7 +13,7 @@ import re
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
@@ -21,9 +21,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from core.activity.logger import ActivityLogger
-from core.messaging.board import board_access, human_principal
+from core.i18n import t
+from core.messaging.board import Principal, board_access, human_principal, operator_principal, post_to_board
 from core.messaging.board_deliveries import attach_deliveries
-from core.messaging.messenger import Messenger
+from core.messaging.messenger import ChannelMeta, Messenger, load_channel_meta, save_channel_meta
+from core.time_utils import now_iso
 
 logger = logging.getLogger("animaworks.routes.channels")
 
@@ -131,6 +133,40 @@ def _get_channel_meta(f: Path) -> dict:
     return entry
 
 
+def _channel_entry(
+    shared_dir: Path,
+    name: str,
+    channel_file: Path,
+    principal: Principal,
+    slack_flags: dict[str, dict[str, bool]],
+) -> dict:
+    """Build one Board entry in the same shape as ``GET /api/channels``."""
+    meta_info = _get_channel_meta(channel_file)
+    meta = load_channel_meta(shared_dir, name)
+    members = list(meta.members) if meta is not None and meta.members else []
+    if meta is not None and meta.closed:
+        access = "closed"
+    elif members:
+        access = "members"
+    else:
+        access = "open"
+
+    return {
+        "name": name,
+        "message_count": meta_info["count"],
+        "last_post_ts": meta_info["last_ts"],
+        "last_from": meta_info["last_from"],
+        "access": access,
+        "writable": board_access(shared_dir, name, principal, "write").allowed,
+        "company": (meta.company if meta is not None else "") or "",
+        "members": members,
+        "description": (meta.description if meta is not None else "") or "",
+        "slack": slack_flags.get(name, {"inbound": False, "outbound": False}),
+        "activity_14d": meta_info["activity_14d"],
+        "unread": _human_unread(shared_dir, name, principal.name),
+    }
+
+
 def _request_username(request: Request) -> str:
     """Return the authenticated username, falling back to "human"."""
     user = getattr(request.state, "user", None)
@@ -201,6 +237,59 @@ class ChannelPostRequest(BaseModel):
     reply_to: str | None = None
 
 
+class ChannelSettingsRequest(BaseModel):
+    description: str | None = None
+    access: Literal["open", "members", "closed"] | None = None
+    members: list[str] | None = None
+
+
+def _access_of(meta: ChannelMeta | None) -> str:
+    """Return the public access label for *meta*."""
+    if meta is not None and meta.closed:
+        return "closed"
+    if meta is not None and meta.members:
+        return "members"
+    return "open"
+
+
+def _settings_record_lines(old_meta: ChannelMeta | None, new_meta: ChannelMeta) -> list[str]:
+    """Describe the changed settings as one line per changed item."""
+    lines: list[str] = []
+    old_members = list(old_meta.members) if old_meta is not None else []
+    new_members = list(new_meta.members)
+    if new_members != old_members:
+        added = [member for member in new_members if member not in old_members]
+        removed = [member for member in old_members if member not in new_members]
+        if added:
+            lines.append(t("server.channel_settings_members_added", names=", ".join(added)))
+        if removed:
+            lines.append(t("server.channel_settings_members_removed", names=", ".join(removed)))
+
+    old_access = _access_of(old_meta)
+    new_access = _access_of(new_meta)
+    if new_access != old_access:
+        lines.append(t(f"server.channel_settings_access_{new_access}"))
+
+    old_description = old_meta.description if old_meta is not None else ""
+    if new_meta.description != old_description:
+        lines.append(t("server.channel_settings_description_changed"))
+    return lines
+
+
+def _record_settings_post(shared_dir: Path, name: str, username: str, lines: list[str]) -> None:
+    """Append the settings-change record to the Board as an operator post."""
+    result = post_to_board(
+        name,
+        "\n".join(lines),
+        operator_principal(username),
+        origin="settings",
+        shared_dir=shared_dir,
+        notify=False,
+    )
+    if result.error:
+        logger.warning("Could not record board settings change on #%s: %s", name, result.error)
+
+
 def _channel_has_post(channel_file: Path, post_id: str) -> bool:
     """Return whether *post_id* exists in the channel log."""
     try:
@@ -257,8 +346,6 @@ def create_channels_router() -> APIRouter:
         if not channels_dir.exists():
             return []
 
-        from core.messaging.messenger import load_channel_meta
-
         principal = human_principal(_request_username(request))
         board_files: list[tuple[str, Path]] = []
         for f in sorted(channels_dir.glob("*.jsonl")):
@@ -268,37 +355,93 @@ def create_channels_router() -> APIRouter:
             board_files.append((name, f))
 
         slack_flags = _slack_sync_flags([name for name, _ in board_files])
+        return [_channel_entry(shared_dir, name, f, principal, slack_flags) for name, f in board_files]
 
-        channels: list[dict] = []
-        for name, f in board_files:
-            meta_info = _get_channel_meta(f)
-            meta = load_channel_meta(shared_dir, name)
-            members = list(meta.members) if meta is not None and meta.members else []
-            if meta is not None and meta.closed:
-                access = "closed"
-            elif members:
-                access = "members"
-            else:
-                access = "open"
+    @router.put("/channels/{name}/settings")
+    def update_channel_settings(request: Request, name: str, body: ChannelSettingsRequest):
+        """Update a Board's description, visibility, and members (owner/admin only)."""
+        if err := _validate_name(name):
+            return err
 
-            channels.append(
-                {
-                    "name": name,
-                    "message_count": meta_info["count"],
-                    "last_post_ts": meta_info["last_ts"],
-                    "last_from": meta_info["last_from"],
-                    "access": access,
-                    "writable": board_access(shared_dir, name, principal, "write").allowed,
-                    "company": (meta.company if meta is not None else "") or "",
-                    "members": members,
-                    "description": (meta.description if meta is not None else "") or "",
-                    "slack": slack_flags.get(name, {"inbound": False, "outbound": False}),
-                    "activity_14d": meta_info["activity_14d"],
-                    "unread": _human_unread(shared_dir, name, principal.name),
-                }
+        caller = getattr(request.state, "user", None)
+        role = getattr(caller, "role", None) if caller is not None else None
+        if role not in {"owner", "admin"}:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": t("server.channel_settings_forbidden")},
+            )
+        username = str(getattr(caller, "username", "") or "human")
+
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
             )
 
-        return channels
+        old_meta = load_channel_meta(shared_dir, name)
+
+        if body.description is not None and len(body.description) > 500:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": t("server.channel_settings_description_too_long")},
+            )
+        if body.members is not None:
+            animas_dir = shared_dir.parent / "animas"
+            for member in body.members:
+                if not _SAFE_NAME_RE.match(member) or not (animas_dir / member).is_dir():
+                    return JSONResponse(
+                        status_code=400,
+                        content={"detail": t("server.channel_settings_member_not_found", name=member)},
+                    )
+
+        new_members = list(old_meta.members) if old_meta is not None else []
+        if body.members is not None:
+            new_members = list(body.members)
+        new_description = old_meta.description if old_meta is not None else ""
+        if body.description is not None:
+            new_description = body.description
+        new_closed = bool(old_meta.closed) if old_meta is not None else False
+        if body.access == "open":
+            new_members = []
+            new_closed = False
+        elif body.access == "members":
+            new_closed = False
+        elif body.access == "closed":
+            new_closed = True
+
+        if body.access == "members" and not new_members:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": t("server.channel_settings_members_required")},
+            )
+
+        new_meta = ChannelMeta(
+            members=new_members,
+            created_by=old_meta.created_by if old_meta is not None else username,
+            created_at=old_meta.created_at if old_meta is not None else now_iso(),
+            description=new_description,
+            closed=new_closed,
+            slack_sync_disabled=old_meta.slack_sync_disabled if old_meta is not None else False,
+            slack_deleted_at=old_meta.slack_deleted_at if old_meta is not None else "",
+            company=old_meta.company if old_meta is not None else "",
+        )
+
+        lines = _settings_record_lines(old_meta, new_meta)
+        if lines:
+            # A closed Board cannot accept posts, so close (and stay-closed)
+            # changes are recorded before the metadata write. Opening is
+            # recorded afterwards, once writes are allowed again.
+            if new_closed:
+                _record_settings_post(shared_dir, name, username, lines)
+            save_channel_meta(shared_dir, name, new_meta)
+            if not new_closed:
+                _record_settings_post(shared_dir, name, username, lines)
+
+        principal = human_principal(_request_username(request))
+        slack_flags = _slack_sync_flags([name])
+        return _channel_entry(shared_dir, name, channel_file, principal, slack_flags)
 
     @router.get("/channels/{name}")
     def get_channel_messages(
