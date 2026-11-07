@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 5aeadb501d9cb13f586a8ee523a03db5296ee2859d3f5b55e929d6af8aa4ede7 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 46bf5e9970013b8db490fea851128cd9c7481d5eeb6a1c7b845f046bacb4ec74 -->
 
 # モジュール一覧
 
@@ -158,7 +158,7 @@ Digital Anima のライフサイクルと実行時オブジェクト。
 | `core.anima.factory` | 876 | Anima creation factory: create new Digital Animas from templates, blank, or MD files. |
 | `core.anima.heartbeat` | 1022 | — |
 | `core.anima.image_artifacts` | 219 | — |
-| `core.anima.inbox` | 1081 | — |
+| `core.anima.inbox` | 1089 | — |
 | `core.anima.inbox_overflow` | 100 | — |
 | `core.anima.lifecycle` | 1662 | — |
 | `core.anima.messaging` | 1332 | — |
@@ -724,6 +724,7 @@ anima 間および外部とのメッセージ配送。
 | `core.messaging.board_fanout` | 102 | — |
 | `core.messaging.board_reads` | 290 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
+| `core.messaging.flows` | 676 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1070 | — |
@@ -1139,7 +1140,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 865 | — |
+| `server.routes.channels` | 906 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |
