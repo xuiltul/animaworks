@@ -100,6 +100,32 @@ class _BoardApi:
         self.posts: list[dict[str, object]] = []
         self.settings_calls: list[dict[str, object]] = []
         self.settings_error: tuple[int, str] | None = None
+        self.read_calls: list[dict[str, object]] = []
+        self.reads = {
+            "readers": {
+                "anima:alice": {
+                    "upto_id": "m2",
+                    "upto_ts": _iso(TODAY_AM + timedelta(minutes=10)),
+                    "updated_at": _iso(TODAY_AM + timedelta(minutes=11)),
+                },
+                "anima:bob": {
+                    "upto_id": "m2",
+                    "upto_ts": _iso(TODAY_AM + timedelta(minutes=10)),
+                    "updated_at": _iso(TODAY_AM + timedelta(minutes=11)),
+                },
+                "anima:carol": {
+                    "upto_id": "m2",
+                    "upto_ts": _iso(TODAY_AM + timedelta(minutes=10)),
+                    "updated_at": _iso(TODAY_AM + timedelta(minutes=11)),
+                },
+                "human:human": {
+                    "upto_id": "m1b",
+                    "upto_ts": _iso(TODAY_AM + timedelta(minutes=5)),
+                    "updated_at": _iso(TODAY_AM + timedelta(minutes=6)),
+                },
+            },
+            "picked": {},
+        }
         self.messages: list[dict[str, object]] = [
             {
                 "id": "m5",
@@ -124,6 +150,7 @@ class _BoardApi:
                 "text": "続けての短い投稿です。",
                 "source": "anima",
                 "kind": "anima",
+                "reply_to": "m1",
             },
             {
                 "id": "m2",
@@ -137,6 +164,15 @@ class _BoardApi:
                     "not_notified": {"bob": "メンバーではないので届きません"},
                 },
                 "hooks": {"slack_outbound": "failed"},
+            },
+            {
+                "id": "m2r",
+                "ts": _iso(TODAY_AM + timedelta(minutes=11)),
+                "from": "alice",
+                "text": "人の投稿への返事です。",
+                "source": "anima",
+                "kind": "anima",
+                "reply_to": "m2",
             },
             {
                 "id": "m3",
@@ -171,6 +207,7 @@ class _BoardApi:
                 "text": "確認しました。",
                 "source": "anima",
                 "kind": "anima",
+                "reply_to": "d1",
             },
         ]
         self.animas = [
@@ -184,7 +221,8 @@ class _BoardApi:
         self.channels = [
             {
                 "name": "general",
-                "message_count": 6,
+                "message_count": 7,
+                "unread": 2,
                 "last_post_ts": _iso(TODAY_AM + timedelta(minutes=14)),
                 "last_from": "system",
                 "access": "open",
@@ -283,6 +321,43 @@ class _BoardApi:
             self._json(route, {"error": "not found"}, status=404)
             return
 
+        if path.startswith("/api/channels/") and path.endswith("/reads"):
+            name = unquote(path[len("/api/channels/") : -len("/reads")])
+            if method != "GET":
+                self._json(route, {"error": "method not allowed"}, status=405)
+                return
+            self._json(route, {"channel": name, **self.reads})
+            return
+
+        if path.startswith("/api/channels/") and path.endswith("/read"):
+            name = unquote(path[len("/api/channels/") : -len("/read")])
+            if method != "POST":
+                self._json(route, {"error": "method not allowed"}, status=405)
+                return
+            body = json.loads(request.post_data or "{}")
+            upto_id = str(body.get("upto_id", ""))
+            self.read_calls.append({"channel": name, **body})
+            message = next((row for row in self.messages if str(row.get("id")) == upto_id), None)
+            upto_ts = str(message.get("ts")) if message else ""
+            self.reads["readers"]["human:human"] = {
+                "upto_id": upto_id,
+                "upto_ts": upto_ts,
+                "updated_at": _iso(TODAY_AM + timedelta(minutes=40)),
+            }
+            channel = next((row for row in self.channels if row["name"] == name), None)
+            if channel is not None:
+                channel["unread"] = 0
+            self._json(
+                route,
+                {
+                    "channel": name,
+                    "reader": "human:human",
+                    "upto_id": upto_id,
+                    "upto_ts": upto_ts,
+                },
+            )
+            return
+
         if path.startswith("/api/channels/") and path.endswith("/settings"):
             name = unquote(path[len("/api/channels/") : -len("/settings")])
             if method != "PUT":
@@ -348,6 +423,30 @@ class _BoardApi:
             limit = int(query.get("limit", ["50"])[0])
             offset = int(query.get("offset", ["0"])[0])
             since = query.get("since", [""])[0]
+            around = query.get("around", [""])[0]
+            if around:
+                index = next(
+                    (i for i, row in enumerate(self.messages) if str(row.get("id")) == around),
+                    None,
+                )
+                if index is None:
+                    self._json(route, {"detail": "post not found"}, status=404)
+                    return
+                start = max(0, index - 2)
+                rows = self.messages[start : start + limit]
+                self._json(
+                    route,
+                    {
+                        "channel": name,
+                        "messages": rows,
+                        "total": len(self.messages),
+                        "offset": start,
+                        "limit": limit,
+                        "has_more": start > 0,
+                        "has_newer": start + len(rows) < len(self.messages),
+                    },
+                )
+                return
             if since:
                 rows = [row for row in self.messages if str(row["ts"]) > since]
                 self._json(
@@ -360,14 +459,19 @@ class _BoardApi:
                     },
                 )
                 return
-            rows = self.messages[offset : offset + limit]
+            total = len(self.messages)
+            start = max(0, total - offset - limit)
+            end = max(0, total - offset)
+            rows = self.messages[start:end]
             self._json(
                 route,
                 {
                     "channel": name,
                     "messages": rows,
-                    "total": len(self.messages),
-                    "has_more": offset + limit < len(self.messages),
+                    "total": total,
+                    "offset": offset,
+                    "limit": limit,
+                    "has_more": start > 0,
                 },
             )
             return
@@ -609,14 +713,14 @@ def test_kind_shapes_and_badges(board_page: Page) -> None:
     _wait_for_messages(board_page)
 
     anima_post = board_page.locator('[data-board-id="m1"]')
-    assert anima_post.locator(".board-avatar-anima").count() == 1
+    assert anima_post.locator(".board-post-gutter .board-avatar-anima").count() == 1
 
     human_post = board_page.locator('[data-board-id="m2"]')
-    assert human_post.locator(".board-avatar-human .board-avatar-icon").count() == 1
+    assert human_post.locator(".board-post-gutter .board-avatar-human .board-avatar-icon").count() == 1
     assert "人" in human_post.locator(".board-kind-badge-human").inner_text()
 
     external_post = board_page.locator('[data-board-id="m3"]')
-    assert external_post.locator(".board-avatar-external").count() == 1
+    assert external_post.locator(".board-post-gutter .board-avatar-external").count() == 1
     assert "Slack bot" in external_post.locator(".board-kind-badge-external").inner_text()
 
     operator_post = board_page.locator('[data-board-id="m4"]')
@@ -846,3 +950,275 @@ def test_settings_member_chips_can_remove_and_add(board_page: Page) -> None:
     drawer.locator(".board-drawer-flash").wait_for(timeout=5000)
     assert api.settings_calls[-1]["access"] == "members"
     assert set(api.settings_calls[-1]["members"]) == {"alice", "bob", "system", "carol"}
+
+
+def test_new_post_shows_pill_without_moving_scroll(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    messages = board_page.locator("#boardMessages")
+    messages.evaluate("element => element.scrollTo({ top: 0, behavior: 'instant' })")
+    board_page.wait_for_function(
+        "() => document.getElementById('boardMessages').scrollTop < 10",
+        timeout=5000,
+    )
+
+    new_message = {
+        "id": "m9",
+        "ts": _iso(TODAY_AM + timedelta(minutes=30)),
+        "from": "bob",
+        "text": "新着の投稿です。",
+        "source": "anima",
+        "kind": "anima",
+        "channel": "general",
+    }
+    api.messages.append(new_message)
+    board_page.evaluate("(message) => window.__boardWsHandler(message)", new_message)
+
+    post = board_page.locator('[data-board-id="m9"]')
+    post.wait_for(timeout=5000)
+    assert "board-post-arrive" in (post.get_attribute("class") or "")
+
+    pill = board_page.locator("[data-board-new-pill]")
+    pill.wait_for(timeout=5000)
+    assert pill.is_visible()
+    assert "新着 1 件" in pill.inner_text()
+
+    assert messages.evaluate("element => element.scrollTop") < 100
+
+    pill.click()
+    board_page.wait_for_timeout(150)
+    assert not pill.is_visible()
+    distance = messages.evaluate("element => element.scrollHeight - element.scrollTop - element.clientHeight")
+    assert distance < 80
+
+
+def test_delivery_stages_and_reply_jumps(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    post = board_page.locator('[data-board-id="m2"]')
+    call = post.locator(".board-delivery-call").filter(has_text="alice")
+    assert call.count() == 1
+    call_text = call.inner_text()
+    assert "届いた" in call_text
+    assert "返事" in call_text
+
+    replied = post.locator(".board-delivery-replied")
+    assert replied.count() == 1
+    assert replied.get_attribute("data-board-jump") == "m2r"
+    replied.click()
+    board_page.locator('[data-board-id="m2r"].board-post-focus').wait_for(timeout=5000)
+
+    stage_message = {
+        "id": "m10",
+        "ts": _iso(TODAY_AM + timedelta(minutes=31)),
+        "from": "human",
+        "text": "配信段階の確認です。",
+        "source": "human",
+        "kind": "human",
+        "channel": "general",
+        "notified": ["bob"],
+        "not_notified": {},
+    }
+    api = board_page.api  # type: ignore[attr-defined]
+    api.messages.append(stage_message)
+    board_page.evaluate("(message) => window.__boardWsHandler(message)", stage_message)
+    stage_post = board_page.locator('[data-board-id="m10"]')
+    stage_post.wait_for(timeout=5000)
+    stage_call = stage_post.locator(".board-delivery-call").filter(has_text="bob")
+    assert "未読" in stage_call.inner_text()
+
+    board_page.evaluate(
+        """(status) => window.__boardWsHandler(status)""",
+        {"name": "bob", "status": "busy"},
+    )
+    board_page.wait_for_function(
+        """() => {
+          const post = document.querySelector('[data-board-id="m10"]');
+          return post && post.textContent.includes('考え中');
+        }""",
+        timeout=5000,
+    )
+
+    board_page.evaluate(
+        """(data) => window.__boardWsHandler(data)""",
+        {
+            "channel": "general",
+            "reader": "anima:bob",
+            "upto_id": "m10",
+            "upto_ts": _iso(TODAY_AM + timedelta(minutes=31)),
+            "picked_id": "m10",
+        },
+    )
+    board_page.wait_for_function(
+        """() => {
+          const post = document.querySelector('[data-board-id="m10"]');
+          return post && post.textContent.includes('読んだ') && post.textContent.includes('返事待ち');
+        }""",
+        timeout=5000,
+    )
+
+    reply_link = board_page.locator('[data-board-id="m1b"] .board-reply-link')
+    assert reply_link.count() == 1
+    assert "投稿への返事" in reply_link.inner_text()
+    reply_link.click()
+    board_page.locator('[data-board-id="m1"].board-post-focus').wait_for(timeout=5000)
+
+
+def test_read_faces_count_names_and_live_drop(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    seen = board_page.locator('[data-board-id="m1"] .board-seen')
+    seen.wait_for(timeout=5000)
+    assert seen.locator(".board-seen-face").count() == 2
+    assert "全員が読んだ" in seen.inner_text()
+
+    seen.hover()
+    names = seen.locator(".board-seen-names")
+    names.wait_for(timeout=5000)
+    assert names.is_visible()
+    names_text = names.inner_text()
+    assert "bob" in names_text
+    assert "carol" in names_text
+
+    board_page.evaluate(
+        """(data) => window.__boardReadWsHandler(data)""",
+        {
+            "channel": "general",
+            "reader": "anima:alice",
+            "upto_id": "m4",
+            "upto_ts": _iso(TODAY_AM + timedelta(minutes=14)),
+            "picked_id": "m4",
+        },
+    )
+    seen_m4 = board_page.locator('[data-board-id="m4"] .board-seen')
+    seen_m4.wait_for(timeout=5000)
+    assert seen_m4.locator(".board-seen-face").count() == 1
+    assert seen_m4.locator(".board-seen-face.board-is-new").count() == 1
+    assert "1人が読んだ" in seen_m4.inner_text()
+
+
+def test_read_line_stays_and_read_advances(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    line = board_page.locator('[data-board-id="m1b"] + .board-newline')
+    line.wait_for(timeout=5000)
+    text = line.inner_text()
+    assert "ここから新着" in text
+    assert "前回は alice" in text
+    assert "投稿まで読みました" in text
+
+    board_page.wait_for_timeout(1400)
+    assert api.read_calls
+    assert api.read_calls[-1]["upto_id"] == "m4"
+    assert api.reads["readers"]["human:human"]["upto_id"] == "m4"
+    # The line is fixed for this visit even though the read position moved.
+    assert line.count() == 1
+    assert "ここから新着" in line.inner_text()
+    assert board_page.locator(".board-rail-unread").count() == 0
+
+
+def test_read_line_fetches_old_position_with_around(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    base = TODAY_AM + timedelta(minutes=40)
+    for index in range(55):
+        api.messages.append(
+            {
+                "id": f"y{index}",
+                "ts": _iso(base + timedelta(minutes=index)),
+                "from": "bob",
+                "text": f"追加の投稿 {index}",
+                "source": "anima",
+                "kind": "anima",
+            }
+        )
+    # m2 is well outside the newest-50 window.
+    api.reads["readers"]["human:human"] = {
+        "upto_id": "m2",
+        "upto_ts": api.messages[2]["ts"],
+        "updated_at": api.messages[2]["ts"],
+    }
+
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+    line = board_page.locator('[data-board-newline="m2"]')
+    line.wait_for(timeout=5000)
+    assert "ここから新着" in line.inner_text()
+    assert "human" in line.inner_text()
+
+
+def test_deep_link_opens_channel_and_focuses_post(board_page: Page) -> None:
+    board_page.evaluate(
+        """async () => {
+          const mod = await import('/pages/board.js');
+          mod.render(document.getElementById('boardApp'), { subPath: 'general/m5' });
+        }"""
+    )
+    board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
+    board_page.locator('[data-board-id="m5"].board-post-focus').wait_for(timeout=5000)
+
+
+def test_reply_to_unloaded_post_fetches_around(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    base = TODAY_AM + timedelta(minutes=40)
+    for index in range(55):
+        api.messages.append(
+            {
+                "id": f"x{index}",
+                "ts": _iso(base + timedelta(minutes=index)),
+                "from": "bob",
+                "text": f"追加の投稿 {index}",
+                "source": "anima",
+                "kind": "anima",
+            }
+        )
+    last_ts = base + timedelta(minutes=54)
+    api.messages.append(
+        {
+            "id": "x55",
+            "ts": _iso(base + timedelta(minutes=60)),
+            "from": "alice",
+            "text": "古い投稿への返事です。",
+            "source": "anima",
+            "kind": "anima",
+            "reply_to": "m5",
+        }
+    )
+    api.reads["readers"]["human:human"] = {
+        "upto_id": "x54",
+        "upto_ts": _iso(last_ts),
+        "updated_at": _iso(last_ts),
+    }
+
+    _open_channel(board_page, "general")
+    board_page.locator('[data-board-id="x55"]').wait_for(timeout=5000)
+    assert board_page.locator('[data-board-id="m5"]').count() == 0
+
+    reply = board_page.locator('[data-board-id="x55"] .board-reply-link')
+    reply.wait_for(timeout=5000)
+    # The target is not loaded yet, so the label falls back to a generic one.
+    assert "元の投稿への返事" in reply.inner_text()
+    reply.click()
+
+    board_page.locator('[data-board-id="m5"].board-post-focus').wait_for(timeout=5000)
+
+
+def test_dm_reply_link_jumps_to_original_message(board_page: Page) -> None:
+    board_page.locator('[data-board-mode="dm"]').click()
+    dm = board_page.locator('[data-board-type="dm"][data-board-name="alice-bob"]')
+    dm.wait_for(timeout=5000)
+    dm.click()
+
+    reply = board_page.locator('[data-board-id="d2"] .board-reply-link')
+    reply.wait_for(timeout=5000)
+    text = reply.inner_text()
+    assert "alice" in text
+    assert "メッセージへの返事" in text
+
+    reply.click()
+    board_page.locator('[data-board-id="d1"].board-post-focus').wait_for(timeout=5000)

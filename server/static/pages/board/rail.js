@@ -24,6 +24,8 @@ function _sparkline(values) {
 function _channelRow(channel, selectedName) {
   const active = selectedName === channel.name;
   const count = Number(channel.message_count) || 0;
+  const unread = Number(channel.unread) || 0;
+  const unreadLabel = t("board.unread_count", { count: unread });
   const last = channel.last_post_ts
     ? `${escapeHtml(channel.last_from || "?")} · ${escapeHtml(relativeTime(channel.last_post_ts))}`
     : escapeHtml(t("board.rail_no_posts"));
@@ -34,6 +36,7 @@ function _channelRow(channel, selectedName) {
       <span class="board-rail-sub">${last}</span>
     </span>
     <span class="board-rail-side">
+      ${unread > 0 ? `<span class="board-rail-unread" title="${escapeAttr(unreadLabel)}" aria-label="${escapeAttr(unreadLabel)}">${unread}</span>` : ""}
       ${count > 0 ? `<span class="board-rail-count">${count}</span>` : ""}
       ${_sparkline(channel.activity_14d)}
     </span>

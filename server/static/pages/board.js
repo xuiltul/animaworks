@@ -5,9 +5,9 @@ import { createBoardPage } from "./board/index.js";
 
 let _page = null;
 
-export function render(container) {
+export function render(container, options = {}) {
   if (_page) _page.destroy();
-  _page = createBoardPage(container);
+  _page = createBoardPage(container, options);
   _page.render();
 }
 

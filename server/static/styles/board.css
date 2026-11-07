@@ -1795,3 +1795,322 @@
 .board-drawer-save:active {
   background: var(--aw-color-accent-hover);
 }
+
+/* ── New arrivals, read line, reply links, read faces ── */
+
+.board-post-arrive {
+  animation: board-post-arrive 0.9s ease-out;
+}
+
+@keyframes board-post-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(7px);
+    background-color: var(--aw-color-accent-bg);
+  }
+  60% {
+    opacity: 1;
+    background-color: var(--aw-color-accent-bg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+.board-new-pill {
+  position: sticky;
+  bottom: 10px;
+  z-index: 4;
+  display: block;
+  margin: 8px auto 2px;
+  padding: 5px 12px;
+  border: 1px solid var(--aw-color-accent);
+  border-radius: 999px;
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-accent);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--aw-color-text-primary) 14%, transparent);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.board-new-pill[hidden] {
+  display: none;
+}
+
+.board-new-pill:active {
+  background: var(--aw-color-accent-bg);
+}
+
+.board-newline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+  padding: 4px 0;
+  border-top: 1px dashed var(--aw-color-accent);
+  color: var(--aw-color-text-muted);
+  font-size: 0.68rem;
+}
+
+.board-newline-label {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-accent);
+  font-weight: 700;
+}
+
+.board-newline-note {
+  color: var(--aw-color-text-muted);
+}
+
+.board-post-reply {
+  margin: 1px 0 5px;
+}
+
+.board-reply-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border: 1px solid var(--aw-color-border-light);
+  border-radius: 6px;
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-color-text-link);
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.board-reply-link:hover,
+.board-reply-link:active {
+  border-color: var(--aw-color-accent);
+  background: var(--aw-color-accent-bg);
+}
+
+.board-post-focus {
+  border-radius: 8px;
+  background: var(--aw-color-accent-bg);
+  box-shadow: 0 0 0 1px var(--aw-color-accent);
+  animation: board-post-focus 1.8s ease-out;
+}
+
+@keyframes board-post-focus {
+  0% {
+    background: var(--aw-color-accent);
+  }
+  100% {
+    background: var(--aw-color-accent-bg);
+  }
+}
+
+.board-post-foot,
+.board-delivery-call {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-delivery-call {
+  flex-wrap: wrap;
+  padding: 2px 6px 2px 2px;
+  border: 1px solid var(--aw-color-success-border);
+  border-radius: 999px;
+  background: var(--aw-color-success-bg-alt);
+  color: var(--aw-color-success-text);
+}
+
+.board-delivery-name {
+  font-weight: 700;
+}
+
+.board-delivery-stage {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.63rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.board-delivery-delivered,
+.board-delivery-read {
+  gap: 3px;
+}
+
+.board-delivery-delivered::before,
+.board-delivery-read::before {
+  content: "✓";
+  font-weight: 700;
+}
+
+.board-delivery-delivered {
+  color: var(--aw-color-success-text);
+}
+
+.board-delivery-read {
+  background: var(--aw-color-info-bg-alt);
+  color: var(--aw-color-info-text);
+}
+
+.board-delivery-unread {
+  color: var(--aw-color-text-muted);
+}
+
+.board-delivery-waiting {
+  color: var(--aw-color-text-muted);
+}
+
+.board-delivery-thinking {
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-board-status-busy);
+}
+
+.board-delivery-replied {
+  gap: 3px;
+  border: 1px solid var(--aw-color-info-border);
+  background: var(--aw-color-info-bg-alt);
+  color: var(--aw-color-info-text);
+  font: inherit;
+  font-size: 0.63rem;
+  cursor: pointer;
+}
+
+.board-delivery-replied::before {
+  content: "↩";
+  font-weight: 700;
+}
+
+.board-delivery-replied:hover,
+.board-delivery-replied:active {
+  border-color: var(--aw-color-accent);
+  color: var(--aw-color-accent);
+}
+
+.board-seen {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 0 auto;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  font: inherit;
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+.board-seen:hover,
+.board-seen:active,
+.board-seen:focus-visible,
+.board-seen.board-is-open {
+  background: var(--aw-color-bg-subtle);
+}
+
+.board-seen-faces {
+  display: inline-flex;
+  align-items: center;
+}
+
+.board-seen-face {
+  display: inline-flex;
+  margin-left: -4px;
+  border: 1px solid var(--aw-color-bg-primary);
+  border-radius: 50%;
+  background: var(--aw-color-bg-primary);
+}
+
+.board-seen-face:first-child {
+  margin-left: 0;
+}
+
+.board-seen-face.board-is-new {
+  animation: board-face-drop 0.45s ease-out;
+}
+
+@keyframes board-face-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-9px) scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.board-seen-label {
+  white-space: nowrap;
+}
+
+.board-seen-names {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 5px);
+  z-index: 3;
+  display: none;
+  max-width: 18em;
+  padding: 4px 8px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 6px;
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-text-secondary);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--aw-color-text-primary) 12%, transparent);
+  font-size: 0.66rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.board-seen:hover .board-seen-names,
+.board-seen:focus-within .board-seen-names,
+.board-seen.board-is-open .board-seen-names {
+  display: block;
+}
+
+.board-rail-unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--aw-color-accent);
+  color: var(--aw-color-bg-primary);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .board-seen-label {
+    font-size: 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-post-arrive,
+  .board-post-focus,
+  .board-seen-face.board-is-new {
+    animation: none;
+    transition: none;
+  }
+
+  .board-reply-link,
+  .board-delivery-replied,
+  .board-new-pill {
+    transition: none;
+  }
+}

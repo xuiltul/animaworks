@@ -8,6 +8,30 @@ import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-reso
 
 const REFRESH_MS = 30_000;
 const COMPACT_WINDOW_MS = 10 * 60 * 1000;
+const USER_KEY = "animaworks_user";
+
+export function currentUser() {
+  try {
+    return localStorage.getItem(USER_KEY) || "human";
+  } catch {
+    return "human";
+  }
+}
+
+function _parseTs(value) {
+  const time = Date.parse(String(value || ""));
+  return Number.isNaN(time) ? null : time;
+}
+
+/** Whether *candidate* is at or after *reference* (ISO timestamps). */
+export function timestampAtOrAfter(candidate, reference) {
+  if (!reference) return false;
+  if (!candidate) return false;
+  const a = _parseTs(candidate);
+  const b = _parseTs(reference);
+  if (a !== null && b !== null) return a >= b;
+  return String(candidate) >= String(reference);
+}
 
 export function messageKey(message) {
   if (!message) return "";
@@ -58,6 +82,18 @@ export function createBoardStore() {
     archiveOpen: false,
     pollTimer: null,
     loadToken: 0,
+    // Read positions for the selected channel: readers[reader] = {upto_id,
+    // upto_ts, updated_at}; picked[reader] = [post_id, ...].
+    reads: { readers: {}, picked: {} },
+    readsChannel: null,
+    // "ここから新着" is fixed when the channel is opened, so marking read while
+    // the page is open never moves the line until it is reopened.
+    readLine: null,
+    focusId: "",
+    markTimer: null,
+    lastMarkedId: "",
+    // Keys added by a live event (WebSocket / poll) since the last render.
+    liveKeys: new Set(),
   };
 
   const listeners = new Set();
@@ -103,6 +139,267 @@ export function createBoardStore() {
 
   function avatarUrl(name) {
     return state.avatars.get(name) || null;
+  }
+
+  // ── Read positions ─────────────────────────
+  function humanReader() {
+    return `human:${currentUser()}`;
+  }
+
+  function readerName(reader) {
+    const value = String(reader || "");
+    const colon = value.indexOf(":");
+    return colon >= 0 ? value.slice(colon + 1) : value;
+  }
+
+  function isAnimaReader(reader) {
+    return String(reader || "").startsWith("anima:");
+  }
+
+  function _pickedFor(reader) {
+    const values = state.reads.picked?.[reader];
+    return Array.isArray(values) ? values : [];
+  }
+
+  function hasReadReader(reader, message) {
+    if (!reader || !message) return false;
+    if (_pickedFor(reader).includes(String(message.id))) return true;
+    const position = state.reads.readers?.[reader];
+    if (!position) return false;
+    if (position.upto_id && String(position.upto_id) === String(message.id)) return true;
+    if (!position.upto_ts) return false;
+    return timestampAtOrAfter(position.upto_ts, message.ts);
+  }
+
+  function hasReadByName(name, message) {
+    return hasReadReader(`anima:${name}`, message);
+  }
+
+  /** Anima names that have read *message* (author and the viewer excluded). */
+  function readersForMessage(message) {
+    if (!message) return [];
+    return readerPoolForMessage(message).filter((name) => hasReadByName(name, message));
+  }
+
+  /**
+   * Who may appear as a reader face for *message*: the members of a
+   * member-only board, or every Anima with a recorded read position on an open
+   * board. The author and the human viewing the board are never counted.
+   */
+  function readerPoolForMessage(message) {
+    if (!message) return [];
+    const author = String(message.from || "");
+    const self = currentUser();
+    const names = [];
+    const selected = state.selectedType === "channel" ? channel(state.selectedName) : null;
+    if (selected && selected.access === "members") {
+      for (const name of selected.members || []) names.push(String(name));
+    } else {
+      for (const reader of Object.keys(state.reads.readers || {})) {
+        if (isAnimaReader(reader)) names.push(readerName(reader));
+      }
+      for (const reader of Object.keys(state.reads.picked || {})) {
+        if (isAnimaReader(reader)) names.push(readerName(reader));
+      }
+    }
+    return [...new Set(names)].filter((name) => name && name !== author && name !== self);
+  }
+
+  /** The first reply in the loaded board from *name* to *message*. */
+  function replyFor(message, name) {
+    if (!message || message.id === undefined || message.id === null) return null;
+    return state.messages.find(
+      (row) => String(row.reply_to) === String(message.id) && row.from === name,
+    ) || null;
+  }
+
+  function replyTarget(message) {
+    if (!message || !message.reply_to) return null;
+    return messageById(message.reply_to);
+  }
+
+  function _createdAtFromMessage(message, fallback) {
+    const parsed = _parseTs(message?.ts) ?? _parseTs(fallback);
+    if (parsed === null) return "";
+    return new Date(parsed).toISOString();
+  }
+
+  function _computeReadLine() {
+    const reader = humanReader();
+    const position = state.reads.readers?.[reader];
+    if (!position || !position.upto_id) return null;
+    const message = messageById(position.upto_id);
+    return {
+      afterId: String(position.upto_id),
+      name: message ? String(message.from || "") : "",
+      ts: message ? String(message.ts || "") : String(position.upto_ts || ""),
+      reader,
+    };
+  }
+
+  function _applyRead(reader, payload, pickedId = "") {
+    const current = state.reads.readers?.[reader] || {};
+    const next = {
+      upto_id: String(payload?.upto_id || current.upto_id || ""),
+      upto_ts: String(payload?.upto_ts || current.upto_ts || ""),
+      updated_at: _createdAtFromMessage(null, payload?.updated_at) || current.updated_at || "",
+    };
+    state.reads.readers[reader] = next;
+    if (pickedId) {
+      const picked = _pickedFor(reader);
+      if (!picked.includes(String(pickedId))) picked.push(String(pickedId));
+      state.reads.picked[reader] = picked;
+    }
+  }
+
+  function _resetReads() {
+    state.reads = { readers: {}, picked: {} };
+    state.readsChannel = null;
+    state.readLine = null;
+    state.lastMarkedId = "";
+    if (state.markTimer) {
+      clearTimeout(state.markTimer);
+      state.markTimer = null;
+    }
+  }
+
+  async function _loadReads(name, token) {
+    try {
+      const data = await api(`/api/channels/${encodeURIComponent(name)}/reads`);
+      if (token !== state.loadToken) return;
+      state.reads = {
+        readers: data && typeof data.readers === "object" && data.readers ? data.readers : {},
+        picked: data && typeof data.picked === "object" && data.picked ? data.picked : {},
+      };
+      state.readsChannel = name;
+      state.readLine = _computeReadLine();
+    } catch {
+      if (token !== state.loadToken) return;
+      state.reads = { readers: {}, picked: {} };
+      state.readsChannel = name;
+      state.readLine = null;
+    }
+  }
+
+  function handleBoardRead(data) {
+    if (!data || !data.reader) return;
+    if (state.selectedType !== "channel") return;
+    if (data.channel && String(data.channel) !== String(state.selectedName)) return;
+    const reader = String(data.reader);
+    if (!reader.includes(":")) {
+      // Accept both "anima:name" and a bare anima name.
+      _applyRead(`anima:${reader}`, data, data.picked_id);
+    } else {
+      _applyRead(reader, data, data.picked_id);
+    }
+    if (state.selectedType === "channel") emit("reads");
+  }
+
+  function scheduleMarkRead() {
+    if (state.selectedType !== "channel" || !state.selectedName) return;
+    if (state.markTimer) clearTimeout(state.markTimer);
+    const token = state.loadToken;
+    state.markTimer = setTimeout(() => {
+      state.markTimer = null;
+      if (token !== state.loadToken) return;
+      const last = state.messages[state.messages.length - 1];
+      if (last && last.id !== undefined && last.id !== null && last.id !== "") {
+        void markRead(last.id);
+      }
+    }, 500);
+  }
+
+  async function markRead(postId) {
+    if (!postId || state.selectedType !== "channel" || !state.selectedName) return;
+    const reader = humanReader();
+    const current = state.reads.readers?.[reader];
+    if (current && String(current.upto_id) === String(postId)) return;
+    if (state.lastMarkedId === String(postId)) return;
+    state.lastMarkedId = String(postId);
+    const name = state.selectedName;
+    const token = state.loadToken;
+    try {
+      const result = await api(`/api/channels/${encodeURIComponent(name)}/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ upto_id: String(postId) }),
+      });
+      if (token !== state.loadToken) return;
+      if (result && typeof result === "object") {
+        _applyRead(reader, {
+          upto_id: result.upto_id || postId,
+          upto_ts: result.upto_ts || "",
+        });
+      } else {
+        _applyRead(reader, { upto_id: postId, upto_ts: "" });
+      }
+      const info = channel(name);
+      if (info) info.unread = 0;
+      emit("reads");
+      emit("channels");
+    } catch {
+      if (token === state.loadToken) state.lastMarkedId = "";
+    }
+  }
+
+  /** Open a post by id, fetching it with ``around`` when it is not loaded. */
+  async function jumpTo(postId) {
+    if (!postId) return;
+    if (state.selectedType !== "channel" && state.selectedType !== "dm") return;
+    if (state.selectedType === "channel" && !messageById(postId)) await _loadAround(postId);
+    state.focusId = String(postId);
+    emit("messages");
+  }
+
+  async function _loadAround(postId) {
+    const name = state.selectedName;
+    if (!name) return;
+    const token = state.loadToken;
+    try {
+      const data = await api(
+        `/api/channels/${encodeURIComponent(name)}?around=${encodeURIComponent(postId)}&limit=50`,
+      );
+      if (token !== state.loadToken) return;
+      mergeMessages(data.messages || [], { type: "channel" });
+      if (data.total !== undefined) state.total = Number(data.total) || state.total;
+      if (data.has_more !== undefined) state.hasMore = Boolean(data.has_more);
+      await ensureAvatars((data.messages || []).map((message) => message.from));
+    } catch {
+      // The link still points at the id; nothing else to do if it is gone.
+    }
+  }
+
+  function clearFocus() {
+    state.focusId = "";
+  }
+
+  /**
+   * Rendering signature for the read/reply/status dependent parts of a post.
+   * A change rebuilds the node so chips and faces update in place.
+   */
+  function stateSignature(message) {
+    const delivery = message?.delivery || {};
+    const notified = Array.isArray(delivery.notified) ? delivery.notified : [];
+    const calls = notified.map((name) => {
+      const reply = replyFor(message, name);
+      return [
+        name,
+        statusOf(name),
+        hasReadByName(name, message) ? "1" : "0",
+        reply ? `${reply.id || ""}:${reply.ts || ""}` : "",
+      ].join(":");
+    });
+    const readers = readersForMessage(message);
+    const pool = readerPoolForMessage(message);
+    const target = replyTarget(message);
+    return JSON.stringify({
+      delivery,
+      hooks: message?.hooks || {},
+      calls,
+      readers,
+      pool,
+      target: target ? [target.id, target.from, target.ts] : null,
+    });
   }
 
   // ── Anima directory / status ───────────────
@@ -184,8 +481,18 @@ export function createBoardStore() {
     const message = { ...row };
     if (!message.ts) message.ts = new Date().toISOString();
     if (!message.from) message.from = "unknown";
-    if (type === "dm" && !message.kind) {
-      message.kind = String(message.source || "").toLowerCase() === "human" ? "human" : "anima";
+    if (type === "dm") {
+      if (
+        (message.id === undefined || message.id === null || message.id === "") &&
+        message.message_id !== undefined &&
+        message.message_id !== null &&
+        message.message_id !== ""
+      ) {
+        message.id = message.message_id;
+      }
+      if (!message.kind) {
+        message.kind = String(message.source || "").toLowerCase() === "human" ? "human" : "anima";
+      }
     }
     return message;
   }
@@ -202,7 +509,7 @@ export function createBoardStore() {
    * Merge rows into the current list. Returns the number of newly added rows.
    * Every source must call this exactly once per delivery.
    */
-  function mergeMessages(rows, { type = state.selectedType } = {}) {
+  function mergeMessages(rows, { type = state.selectedType, live = false } = {}) {
     let added = 0;
     for (const row of rows || []) {
       if (!row) continue;
@@ -210,6 +517,7 @@ export function createBoardStore() {
       if (!key || state.messageKeys.has(key)) continue;
       state.messageKeys.add(key);
       state.messages.push(_normalize(row, type));
+      if (live) state.liveKeys.add(key);
       added += 1;
     }
     if (added > 0) {
@@ -285,7 +593,11 @@ export function createBoardStore() {
     state.error = "";
     state.lastTs = "";
     state.personFilter = "";
+    state.focusId = "";
+    state.liveKeys = new Set();
+    _resetReads();
     emit("selection");
+    emit("reads");
     if (name) void loadMessages();
   }
 
@@ -311,10 +623,23 @@ export function createBoardStore() {
       state.total = Number(data.total ?? state.messages.length) || 0;
       state.hasMore = Boolean(data.has_more);
 
+      if (type === "channel") {
+        await _loadReads(name, token);
+        // The previous read position may be older than the initial window.
+        // Pull it (and its neighbours) so the "new from here" line can be
+        // drawn, then describe the line from the fetched row.
+        const line = state.readLine;
+        if (line && !messageById(line.afterId)) {
+          await _loadAround(line.afterId);
+          if (token !== state.loadToken) return;
+          state.readLine = _computeReadLine();
+        }
+      }
       await ensureAvatars(state.messages.map((message) => message.from));
       if (token !== state.loadToken) return;
 
       state.loading = false;
+      emit("reads");
       emit("messages");
     } catch (error) {
       if (token !== state.loadToken) return;
@@ -367,7 +692,7 @@ export function createBoardStore() {
       if (token !== state.loadToken) return;
       const rows = data.messages || [];
       if (data.total !== undefined) state.total = Number(data.total) || state.total;
-      const added = mergeMessages(rows, { type: "channel" });
+      const added = mergeMessages(rows, { type: "channel", live: true });
       if (added === 0) return;
       await ensureAvatars(rows.map((message) => message.from));
       if (token !== state.loadToken) return;
@@ -399,7 +724,7 @@ export function createBoardStore() {
       };
     }
     if (data.hooks && typeof data.hooks === "object") row.hooks = data.hooks;
-    const added = mergeMessages([row], { type: "channel" });
+    const added = mergeMessages([row], { type: "channel", live: true });
     if (added === 0) return;
     state.total += added;
 
@@ -422,8 +747,8 @@ export function createBoardStore() {
     }
     const name = state.selectedName;
     const token = state.loadToken;
-    const currentUser = localStorage.getItem("animaworks_user") || "human";
-    const body = { text, from_name: currentUser };
+    const user = currentUser();
+    const body = { text, from_name: user };
     if (replyTo !== undefined && replyTo !== null && replyTo !== "") body.reply_to = replyTo;
     try {
       const result = await api(`/api/channels/${encodeURIComponent(name)}`, {
@@ -444,7 +769,7 @@ export function createBoardStore() {
         const added = mergeMessages([{
           id: post.id,
           ts: new Date().toISOString(),
-          from: currentUser,
+          from: user,
           text,
           source: "human",
           kind: "human",
@@ -459,7 +784,7 @@ export function createBoardStore() {
         }
         if (added) {
           state.total += added;
-          await ensureAvatars([currentUser]);
+          await ensureAvatars([user]);
           emit("messages");
           emit("channels");
         } else if (stored) {
@@ -503,6 +828,10 @@ export function createBoardStore() {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
     }
+    if (state.markTimer) {
+      clearTimeout(state.markTimer);
+      state.markTimer = null;
+    }
     state.loadToken += 1;
   }
 
@@ -543,8 +872,22 @@ export function createBoardStore() {
     loadOlder,
     refresh,
     handleBoardPost,
+    handleBoardRead,
     submit,
     updateSettings,
+    // reads / replies / jump
+    humanReader,
+    readerName,
+    hasReadByName,
+    readersForMessage,
+    readerPoolForMessage,
+    replyFor,
+    replyTarget,
+    stateSignature,
+    markRead,
+    scheduleMarkRead,
+    jumpTo,
+    clearFocus,
   };
 }
 

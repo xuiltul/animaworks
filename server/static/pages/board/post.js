@@ -4,6 +4,8 @@ import { escapeHtml, renderMarkdown } from "../../modules/state.js";
 import { avatarMarkup, kindGroup, kindLabel } from "./avatar.js";
 import { deliveryMarkup } from "./delivery.js";
 import { decorateMarkdown } from "./markdown.js";
+import { replyMarkup } from "./reply.js";
+import { seenMarkup } from "./seen.js";
 import { clockTime } from "./time.js";
 
 function _isTitled(text) {
@@ -35,7 +37,9 @@ export function buildPostElement(message, ctx) {
   const text = String(message.text || "");
   const titled = _isTitled(text);
   const badge = kindLabel(kind);
-  const delivery = deliveryMarkup(message);
+  const delivery = deliveryMarkup(message, ctx);
+  const seen = seenMarkup(message, ctx);
+  const reply = replyMarkup(message, ctx);
   const actions = _actionsMarkup(message, ctx);
 
   const element = document.createElement("article");
@@ -58,8 +62,10 @@ export function buildPostElement(message, ctx) {
     element.innerHTML = `
       <div class="board-post-gutter"><time class="board-post-compact-time" datetime="${escapeHtml(message.ts || "")}">${escapeHtml(clockTime(message.ts))}</time></div>
       <div class="board-post-main">
+        ${reply}
         <div class="board-post-text board-markdown${titled ? " board-markdown-titled" : ""}">${decorated}</div>
         ${delivery}
+        ${seen}
       </div>
       ${actions}`;
     return element;
@@ -80,8 +86,10 @@ export function buildPostElement(message, ctx) {
         ${badge ? `<span class="board-post-kind-badge board-kind-badge-${group}">${escapeHtml(badge)}</span>` : ""}
         <time class="board-post-time" datetime="${escapeHtml(message.ts || "")}">${escapeHtml(clockTime(message.ts))}</time>
       </div>
+      ${reply}
       <div class="board-post-text board-markdown${titled ? " board-markdown-titled" : ""}">${decorated}</div>
       ${delivery}
+      ${seen}
     </div>
     ${actions}`;
   return element;

@@ -808,6 +808,60 @@ class TestGetDMHistory:
         assert "How are you?" in texts
         assert "I am fine" in texts
 
+    async def test_dm_rows_include_message_id_and_reply_to(self, tmp_path: Path):
+        """DM rows expose reply metadata when the activity log has it."""
+        data_dir = tmp_path
+        shared_dir = data_dir / "shared"
+        shared_dir.mkdir()
+        today = _today()
+
+        _write_activity_log(
+            data_dir,
+            "alice",
+            today,
+            [
+                {
+                    "ts": f"{today}T10:00:00",
+                    "type": "dm_sent",
+                    "content": "Hello Bob",
+                    "from": "alice",
+                    "to": "bob",
+                    "meta": {"message_id": "msg-1"},
+                },
+                {
+                    "ts": f"{today}T10:05:00",
+                    "type": "dm_sent",
+                    "content": "Follow up",
+                    "from": "alice",
+                    "to": "bob",
+                    "meta": {"message_id": "msg-2", "reply_to": "msg-1"},
+                },
+                {
+                    "ts": f"{today}T10:10:00",
+                    "type": "dm_sent",
+                    "content": "No metadata",
+                    "from": "alice",
+                    "to": "bob",
+                },
+            ],
+        )
+
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/dm/alice-bob?limit=50")
+        assert resp.status_code == 200
+        rows = resp.json()["messages"]
+        assert len(rows) == 3
+
+        by_text = {row["text"]: row for row in rows}
+        assert by_text["Hello Bob"]["message_id"] == "msg-1"
+        assert "reply_to" not in by_text["Hello Bob"]
+        assert by_text["Follow up"]["message_id"] == "msg-2"
+        assert by_text["Follow up"]["reply_to"] == "msg-1"
+        assert "message_id" not in by_text["No metadata"]
+        assert "reply_to" not in by_text["No metadata"]
+
     async def test_deduplicates_entries(self, tmp_path: Path):
         """Same message in both participants' activity logs appears only once."""
         data_dir = tmp_path
