@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=36d5b678ab5628ceb7c6a2a48f724df76728fd4fd7c66d4bf1718cfada6fe976 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -262,13 +262,15 @@ heartbeat/cron 모델 설정
 
 채널 메시지 읽기
 
-`usage: animaworks board read [-h] [--limit LIMIT] [--human-only] channel`
+`사용법: animaworks board read [-h] [--limit LIMIT] [--human-only] [--latest]
+                             channel`
 
-| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
-| channel | 위치 인자 | — | — | 채널 이름 (예: general, ops) |
+| channel | 위치 인수 | — | — | 채널 이름(예: general, ops) |
 | --limit | 옵션 | 20 | — | 최대 메시지 수 |
 | --human-only | 플래그 | false | — | 사람 메시지만 표시 |
+| --latest | 플래그 | false | — | 최신 메시지만 표시하고 읽기 위치는 변경하지 않음 |
 
 ## `chat`
 

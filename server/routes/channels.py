@@ -233,6 +233,17 @@ def _get_messenger(shared_dir: Path) -> Messenger:
     return Messenger(shared_dir, anima_name="human")
 
 
+def _human_unread(shared_dir: Path, channel: str, username: str) -> int:
+    """Return how many posts the human has not read on *channel* (0 on errors)."""
+    try:
+        from core.messaging.board_reads import unread_summary
+
+        return int(unread_summary(shared_dir, channel, f"human:{username}", self_name=username)["unread"])
+    except Exception:
+        logger.debug("Could not compute unread count for #%s", channel, exc_info=True)
+        return 0
+
+
 def create_channels_router() -> APIRouter:
     router = APIRouter()
 
@@ -283,6 +294,7 @@ def create_channels_router() -> APIRouter:
                     "description": (meta.description if meta is not None else "") or "",
                     "slack": slack_flags.get(name, {"inbound": False, "outbound": False}),
                     "activity_14d": meta_info["activity_14d"],
+                    "unread": _human_unread(shared_dir, name, principal.name),
                 }
             )
 
@@ -377,7 +389,7 @@ def create_channels_router() -> APIRouter:
             end = min(total, start + page_size)
             return {
                 "channel": name,
-                "messages": records[start:end],
+                "messages": attach_deliveries(shared_dir, name, records[start:end]),
                 "total": total,
                 "offset": start,
                 "limit": limit,
@@ -471,9 +483,7 @@ def create_channels_router() -> APIRouter:
                 content={"detail": f"Post '{body.upto_id}' not found in channel '{name}'"},
             )
 
-        user = getattr(request.state, "user", None)
-        username = getattr(user, "username", "") if user is not None else ""
-        reader = f"human:{username}" if username else "human"
+        reader = f"human:{_request_username(request)}"
         changed = advance_upto(shared_dir, name, reader, post_id=body.upto_id, post_ts=post_ts)
         current = load_reads(shared_dir, name)["readers"].get(reader, {})
         return {

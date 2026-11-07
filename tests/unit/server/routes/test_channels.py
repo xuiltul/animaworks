@@ -1104,7 +1104,7 @@ class TestChannelReads:
             reads = await client.get("/api/channels/general/reads")
 
         assert reads.status_code == 200
-        assert reads.json()["readers"]["human"]["upto_id"] == "p2"
+        assert reads.json()["readers"]["human:human"]["upto_id"] == "p2"
 
     async def test_post_never_moves_backwards(self, tmp_path: Path) -> None:
         shared_dir = tmp_path / "shared"
