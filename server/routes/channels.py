@@ -247,6 +247,25 @@ def _human_unread(shared_dir: Path, channel: str, username: str) -> int:
 def create_channels_router() -> APIRouter:
     router = APIRouter()
 
+    # ── Call-flow endpoint ───────────────────────────────────
+
+    @router.get("/flows")
+    def list_flows(request: Request, days: str = "30", via: str = "all"):
+        """Return Board/DM calls and their summary for the flow view."""
+        try:
+            days_value = int(days)
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": f"Invalid days: {days!r}"})
+        if days_value not in (7, 30):
+            return JSONResponse(status_code=400, content={"detail": f"Invalid days: {days!r}"})
+        if via not in ("all", "board", "dm"):
+            return JSONResponse(status_code=400, content={"detail": f"Invalid via: {via!r}"})
+        shared_dir: Path = request.app.state.shared_dir
+
+        from core.messaging.flows import build_flows
+
+        return build_flows(shared_dir, days=days_value, via=via, username=_request_username(request))
+
     # ── Channel endpoints ────────────────────────────────────
 
     @router.get("/channels")
@@ -455,6 +474,28 @@ def create_channels_router() -> APIRouter:
 
         reads = load_reads(shared_dir, name)
         return {"channel": name, "readers": reads["readers"], "picked": reads["picked"]}
+
+    @router.get("/channels/{name}/info")
+    def get_channel_info(request: Request, name: str):
+        """Return the informational panel for one Board channel."""
+        if err := _validate_name(name):
+            return err
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
+            )
+        if not board_access(shared_dir, name, human_principal(_human_username(request)), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
+
+        from core.messaging.flows import channel_info
+
+        return channel_info(shared_dir, name)
 
     @router.post("/channels/{name}/read")
     def mark_channel_read(request: Request, name: str, body: ChannelReadRequest):

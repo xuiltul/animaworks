@@ -365,6 +365,7 @@ async def _handle_delegation_dms(anima_mixin: Any, delegation_items: list[InboxI
             channel="inbox",
             meta={
                 "from_type": msg.source,
+                "message_id": msg.id,
                 "delegation_state": state,
                 "task_id": task_id,
                 "trigger": "inbox:delegation",
@@ -1024,6 +1025,18 @@ class InboxMixin:
         for _m in _recordable[:50]:
             _msg_origin = _SOURCE_TO_ORIGIN.get(_m.source, ORIGIN_UNKNOWN)
             _msg_origin_chain = _m.origin_chain if _m.origin_chain else [_msg_origin]
+            _received_meta: dict[str, Any] = {
+                "from_type": _m.source,
+                "message_id": _m.id,
+                "trigger": f"inbox:{_m.from_person}",
+                "session_type": "inbox",
+                "thread_id": _INBOX_THREAD_ID,
+            }
+            if _m.type == "board_mention" and isinstance(_m.meta, dict):
+                for _key in ("board_channel", "board_post_id"):
+                    _value = _m.meta.get(_key)
+                    if isinstance(_value, str) and _value:
+                        _received_meta[_key] = _value
             await self._activity.alog(
                 "message_received",
                 content=_m.content,
@@ -1031,12 +1044,7 @@ class InboxMixin:
                 from_person=_m.from_person,
                 to_person=self.name,
                 channel="inbox",
-                meta={
-                    "from_type": _m.source,
-                    "trigger": f"inbox:{_m.from_person}",
-                    "session_type": "inbox",
-                    "thread_id": _INBOX_THREAD_ID,
-                },
+                meta=_received_meta,
                 origin=_msg_origin,
                 origin_chain=_msg_origin_chain,
             )
