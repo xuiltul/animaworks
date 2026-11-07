@@ -48,6 +48,7 @@ def cmd_board_read(args: argparse.Namespace) -> None:
                 "channel": args.channel,
                 "limit": getattr(args, "limit", 20),
                 "human_only": getattr(args, "human_only", False),
+                "latest": getattr(args, "latest", False),
             },
         )
         return

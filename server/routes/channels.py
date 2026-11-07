@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from core.activity.logger import ActivityLogger
 from core.messaging.board import board_access, human_principal
+from core.messaging.board_deliveries import attach_deliveries
 from core.messaging.messenger import Messenger
 
 logger = logging.getLogger("animaworks.routes.channels")
@@ -197,11 +198,50 @@ def _validate_name(name: str) -> JSONResponse | None:
 class ChannelPostRequest(BaseModel):
     text: str = Field(max_length=10000)
     from_name: str = Field(default="human", min_length=1)
+    reply_to: str | None = None
+
+
+def _channel_has_post(channel_file: Path, post_id: str) -> bool:
+    """Return whether *post_id* exists in the channel log."""
+    try:
+        lines = channel_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict) and record.get("id") == post_id:
+            return True
+    return False
+
+
+class ChannelReadRequest(BaseModel):
+    upto_id: str = ""
+
+
+def _human_username(request: Request) -> str:
+    """Return the authenticated username, falling back to the anonymous human."""
+    user = getattr(request.state, "user", None)
+    username = getattr(user, "username", "") if user is not None else ""
+    return username or "human"
 
 
 def _get_messenger(shared_dir: Path) -> Messenger:
     """Create a Messenger instance for human-originated operations."""
     return Messenger(shared_dir, anima_name="human")
+
+
+def _human_unread(shared_dir: Path, channel: str, username: str) -> int:
+    """Return how many posts the human has not read on *channel* (0 on errors)."""
+    try:
+        from core.messaging.board_reads import unread_summary
+
+        return int(unread_summary(shared_dir, channel, f"human:{username}", self_name=username)["unread"])
+    except Exception:
+        logger.debug("Could not compute unread count for #%s", channel, exc_info=True)
+        return 0
 
 
 def create_channels_router() -> APIRouter:
@@ -254,6 +294,7 @@ def create_channels_router() -> APIRouter:
                     "description": (meta.description if meta is not None else "") or "",
                     "slack": slack_flags.get(name, {"inbound": False, "outbound": False}),
                     "activity_14d": meta_info["activity_14d"],
+                    "unread": _human_unread(shared_dir, name, principal.name),
                 }
             )
 
@@ -323,6 +364,7 @@ def create_channels_router() -> APIRouter:
                     break
                 new_msgs.append(msg)
             new_msgs.reverse()
+            new_msgs = attach_deliveries(shared_dir, name, new_msgs)
             return {
                 "channel": name,
                 "messages": new_msgs,
@@ -347,7 +389,7 @@ def create_channels_router() -> APIRouter:
             end = min(total, start + page_size)
             return {
                 "channel": name,
-                "messages": records[start:end],
+                "messages": attach_deliveries(shared_dir, name, records[start:end]),
                 "total": total,
                 "offset": start,
                 "limit": limit,
@@ -380,6 +422,7 @@ def create_channels_router() -> APIRouter:
         paginated = filtered[start:end] if end > start else []
 
         has_more = start > 0
+        paginated = attach_deliveries(shared_dir, name, paginated)
 
         return {
             "channel": name,
@@ -388,6 +431,65 @@ def create_channels_router() -> APIRouter:
             "offset": offset,
             "limit": limit,
             "has_more": has_more,
+        }
+
+    @router.get("/channels/{name}/reads")
+    def get_channel_reads(request: Request, name: str):
+        """Return the stored read positions for one Board channel."""
+        if err := _validate_name(name):
+            return err
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
+            )
+        if not board_access(shared_dir, name, human_principal(_human_username(request)), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
+
+        from core.messaging.board_reads import load_reads
+
+        reads = load_reads(shared_dir, name)
+        return {"channel": name, "readers": reads["readers"], "picked": reads["picked"]}
+
+    @router.post("/channels/{name}/read")
+    def mark_channel_read(request: Request, name: str, body: ChannelReadRequest):
+        """Advance the requesting human's stored read position in one channel."""
+        if err := _validate_name(name):
+            return err
+        shared_dir: Path = request.app.state.shared_dir
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if not channel_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Channel '{name}' not found"},
+            )
+        if not board_access(shared_dir, name, human_principal(_human_username(request)), "read").allowed:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": f"Access denied to channel '{name}'"},
+            )
+
+        from core.messaging.board_reads import advance_upto, find_post_ts, load_reads
+
+        post_ts = find_post_ts(shared_dir, name, body.upto_id)
+        if post_ts is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Post '{body.upto_id}' not found in channel '{name}'"},
+            )
+
+        reader = f"human:{_request_username(request)}"
+        changed = advance_upto(shared_dir, name, reader, post_id=body.upto_id, post_ts=post_ts)
+        current = load_reads(shared_dir, name)["readers"].get(reader, {})
+        return {
+            "changed": changed,
+            "upto_id": current.get("upto_id", body.upto_id),
+            "upto_ts": current.get("upto_ts", post_ts),
         }
 
     @router.post("/channels/{name}")
@@ -408,6 +510,15 @@ def create_channels_router() -> APIRouter:
 
         from core.messaging.board import human_principal, post_to_board
 
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if body.reply_to is not None and not _channel_has_post(channel_file, body.reply_to):
+            from core.i18n import t
+
+            return JSONResponse(
+                status_code=400,
+                content={"detail": t("server.channel_reply_to_not_found", post_id=body.reply_to)},
+            )
+
         post = await asyncio.to_thread(
             post_to_board,
             name,
@@ -415,6 +526,7 @@ def create_channels_router() -> APIRouter:
             human_principal(body.from_name),
             origin="http",
             shared_dir=shared_dir,
+            reply_to=body.reply_to,
         )
         if post.error == "not_found":
             return JSONResponse(

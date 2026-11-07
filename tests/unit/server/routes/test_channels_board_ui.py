@@ -384,3 +384,25 @@ def test_board_foundation_i18n_keys_exist_in_all_locales():
         data = json.loads((i18n_dir / f"{locale}.json").read_text(encoding="utf-8"))
         for key in keys:
             assert data.get(key), f"Missing or empty i18n key {key!r} in {locale}.json"
+
+
+async def test_list_channels_reports_human_unread_count(tmp_path: Path) -> None:
+    shared_dir = tmp_path / "shared"
+    _write_channel(
+        shared_dir,
+        "general",
+        [
+            {"ts": _ts(0, 9), "from": "alice", "text": "one", "id": "a1", "kind": "anima"},
+            {"ts": _ts(0, 10), "from": "bob", "text": "two", "id": "b2", "kind": "anima"},
+            {"ts": _ts(0, 11), "from": "alice", "text": "three", "id": "c3", "kind": "anima"},
+        ],
+    )
+    app = _make_test_app(shared_dir)
+    with patch("core.config.models.load_config", side_effect=RuntimeError("no config")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            before = (await client.get("/api/channels")).json()
+            assert before[0]["unread"] == 3
+            resp = await client.post("/api/channels/general/read", json={"upto_id": "b2"})
+            assert resp.status_code == 200
+            after = (await client.get("/api/channels")).json()
+    assert after[0]["unread"] == 1

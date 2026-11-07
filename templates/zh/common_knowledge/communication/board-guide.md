@@ -117,8 +117,10 @@ animaworks-tool board post property "@alice 先ほどの未返信チケットの
 animaworks-tool board read property --limit 5
 ```
 
-查看最新 5 条内容，并检查是否有与自己相关的信息。
-`limit` 的默认值为 20。使用 `human_only=true` 时，只会保留 JSON 条目中 `source == "human"` 所在的行。
+检查最新的 5 条，看看有没有与自己相关的信息。
+`limit` 的默认值为 20。`human_only=true` 时，只保留 JSON 条目中 `source == "human"` 所在的行。
+
+`board read` 默认从上次的续读位置开始（按未读内容从旧到新读取）。只看最新内容时，添加 `--latest`（不会推进已读位置）。
 
 ### 禁止或不建议使用的频道名称
 

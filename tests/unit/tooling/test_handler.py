@@ -2802,3 +2802,81 @@ class TestDelegateTaskDmConfig:
         from core.i18n import t
 
         assert t("handler.dm_sent") in result
+
+
+def _send_with_triggers(
+    handler: ToolHandler,
+    anima_dir: Path,
+    triggers: tuple[dict[str, str], ...],
+    args: dict[str, str],
+):
+    from core.execution.session.board_reply import run_triggers
+
+    _make_unassigned_anima(anima_dir.parent, "alice")
+    token = run_triggers.set(triggers)
+    try:
+        with patch("core.paths.get_animas_dir", return_value=anima_dir.parent):
+            return handler.handle("send_message", {"to": "alice", "content": "hello", "intent": "report", **args})
+    finally:
+        run_triggers.reset(token)
+
+
+def test_send_message_auto_reply_uses_last_message_from_recipient(
+    handler_with_messenger: ToolHandler,
+    anima_dir: Path,
+) -> None:
+    triggers = (
+        {"id": "msg-1", "from": "alice", "type": "message", "thread_id": "thread-1"},
+        {"id": "msg-2", "from": "alice", "type": "message", "thread_id": "thread-2"},
+    )
+
+    _send_with_triggers(handler_with_messenger, anima_dir, triggers, {})
+
+    kwargs = handler_with_messenger._messenger.send.call_args.kwargs
+    assert kwargs["reply_to"] == "msg-2"
+    assert kwargs["thread_id"] == "thread-2"
+    assert kwargs["meta"] == {"trigger_id": "msg-2"}
+
+
+def test_send_message_explicit_reply_and_thread_win(
+    handler_with_messenger: ToolHandler,
+    anima_dir: Path,
+) -> None:
+    triggers = ({"id": "msg-1", "from": "alice", "type": "message", "thread_id": "thread-1"},)
+
+    _send_with_triggers(
+        handler_with_messenger,
+        anima_dir,
+        triggers,
+        {"reply_to": "explicit-post", "thread_id": "explicit-thread"},
+    )
+
+    kwargs = handler_with_messenger._messenger.send.call_args.kwargs
+    assert kwargs["reply_to"] == "explicit-post"
+    assert kwargs["thread_id"] == "explicit-thread"
+    assert kwargs["meta"] == {"trigger_id": "msg-1"}
+
+
+def test_send_message_does_not_reply_to_board_mention(
+    handler_with_messenger: ToolHandler,
+    anima_dir: Path,
+) -> None:
+    triggers = ({"id": "mention-1", "from": "alice", "type": "board_mention", "board_post_id": "post-9"},)
+
+    _send_with_triggers(handler_with_messenger, anima_dir, triggers, {})
+
+    kwargs = handler_with_messenger._messenger.send.call_args.kwargs
+    assert kwargs["reply_to"] == ""
+    assert kwargs["meta"] == {"trigger_id": "mention-1"}
+
+
+def test_send_message_without_triggers_has_no_reply_metadata(
+    handler_with_messenger: ToolHandler,
+    anima_dir: Path,
+) -> None:
+    _send_with_triggers(handler_with_messenger, anima_dir, (), {})
+
+    kwargs = handler_with_messenger._messenger.send.call_args.kwargs
+    assert kwargs["reply_to"] == ""
+    assert kwargs["thread_id"] == ""
+    assert kwargs["meta"] is None

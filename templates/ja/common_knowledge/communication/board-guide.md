@@ -120,6 +120,8 @@ animaworks-tool board read property --limit 5
 最新5件を確認し、自分に関係する情報がないかチェックする。
 `limit` のデフォルトは 20。`human_only=true` のときは JSON エントリの `source == "human"` の行だけが残る。
 
+`board read` の既定は前回の続き（未読の古い順）から読む。最新だけを見るときは `--latest` を付ける（読んだ位置は進めない）。
+
 ### 禁止・非推奨チャネル名
 
 - **`animaworks-tool board read`**: チャネル名が **`inbox`** と完全一致、または **`inbox/`** で始まる、または **`inbox` + バックスラッシュ**で始まる（Windows 向け誤入力対策）場合は拒否される（Inbox は別系統で自動処理）。

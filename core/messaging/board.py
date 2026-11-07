@@ -10,7 +10,7 @@ import json
 import logging
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -78,11 +78,50 @@ class BoardPost:
     kind: str
     origin: str
     principal: Principal
+    reply_to: str | None = None
 
 
-PostHook = Callable[[BoardPost], HookStatus]
+PostHook = Callable[[BoardPost, PostResult], HookStatus]
 _post_hooks: dict[str, PostHook] = {}
 _post_hooks_lock = threading.RLock()
+
+
+def reply_metadata_for_post(
+    channel: str,
+    triggers: Sequence[Mapping[str, Any]] | None,
+) -> tuple[str | None, dict[str, str] | None]:
+    """Derive the ``reply_to`` and ``trigger`` fields for a Board post.
+
+    ``reply_to`` points at the last ``board_mention`` that came from the same
+    channel; ``trigger`` points at the last inbox message of the run.
+    """
+    items = [
+        trigger
+        for trigger in (triggers or ())
+        if isinstance(trigger, Mapping) and isinstance(trigger.get("id"), str) and trigger.get("id")
+    ]
+    if not items:
+        return None, None
+
+    reply_to: str | None = None
+    for trigger in reversed(items):
+        if trigger.get("type") == "board_mention" and trigger.get("board_channel") == channel:
+            board_post_id = trigger.get("board_post_id")
+            if isinstance(board_post_id, str) and board_post_id:
+                reply_to = board_post_id
+                break
+
+    last = items[-1]
+    trigger_meta: dict[str, str] | None = None
+    if last.get("type") == "board_mention":
+        board_post_id = last.get("board_post_id")
+        if isinstance(board_post_id, str) and board_post_id:
+            trigger_meta = {"type": "board_mention", "id": board_post_id}
+    else:
+        message_id = last.get("id")
+        if isinstance(message_id, str) and message_id:
+            trigger_meta = {"type": "message", "id": message_id}
+    return reply_to, trigger_meta
 
 
 def anima_principal(name: str, *, animas_dir: Path) -> Principal:
@@ -245,7 +284,7 @@ def _run_post_hooks(post: BoardPost, result: PostResult) -> None:
         hooks = list(_post_hooks.items())
     for name, hook in hooks:
         try:
-            status = hook(post)
+            status = hook(post, result)
             result.hooks[name] = status if status in {"sent", "skipped", "failed"} else "failed"
         except Exception:
             logger.exception("Board post hook %s failed for #%s", name, post.channel)
@@ -261,6 +300,8 @@ def post_to_board(
     origin: str,
     notify: bool = True,
     shared_dir: Path | None = None,
+    reply_to: str | None = None,
+    trigger: dict[str, str] | None = None,
 ) -> PostResult:
     """Authorize and append one Board post, then run best-effort side effects."""
     from core.paths import get_shared_dir
@@ -273,6 +314,8 @@ def post_to_board(
         request_id=request_id,
         origin=origin,
         notify=notify,
+        reply_to=reply_to,
+        trigger=trigger,
     )
 
 
@@ -285,6 +328,8 @@ def post_to_board_in_shared_dir(
     request_id: str | None = None,
     origin: str,
     notify: bool = True,
+    reply_to: str | None = None,
+    trigger: dict[str, str] | None = None,
 ) -> PostResult:
     """Path-explicit implementation used by the runtime entry points and tests."""
     try:
@@ -312,6 +357,10 @@ def post_to_board_in_shared_dir(
     }
     if request_id is not None:
         record["request_id"] = request_id
+    if reply_to is not None:
+        record["reply_to"] = reply_to
+    if trigger is not None:
+        record["trigger"] = trigger
 
     channels_dir.mkdir(parents=True, exist_ok=True)
     lock_path = filepath.with_name(f"{filepath.name}.lock")
@@ -344,6 +393,7 @@ def post_to_board_in_shared_dir(
         kind=kind,
         origin=origin,
         principal=principal,
+        reply_to=reply_to,
     )
 
     if notify:
@@ -353,6 +403,21 @@ def post_to_board_in_shared_dir(
             result.notified, result.not_notified = fanout_board_mentions(shared_dir, post)
         except Exception:
             logger.exception("Board mention fan-out failed for #%s", channel)
+
+    if result.notified or result.not_notified:
+        try:
+            from core.messaging.board_deliveries import append_delivery
+
+            append_delivery(
+                shared_dir,
+                channel,
+                post_id=post_id,
+                ts=ts,
+                notified=result.notified,
+                not_notified=result.not_notified,
+            )
+        except Exception:
+            logger.warning("Failed to record Board delivery for #%s", channel, exc_info=True)
 
     if principal.kind == "anima":
         try:
