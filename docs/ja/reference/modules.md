@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: ed459cfedbb46df388ec9989408241425d77bc41657cb4231ff6ac9ad372d144 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 5aeadb501d9cb13f586a8ee523a03db5296ee2859d3f5b55e929d6af8aa4ede7 -->
 
 # モジュール一覧
 
@@ -402,7 +402,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
 | `core.i18n.strings.models` | 70 | Localized CLI messages for model inspection. |
 | `core.i18n.strings.phone` | 127 | — |
-| `core.i18n.strings.server` | 345 | Domain-specific i18n strings. |
+| `core.i18n.strings.server` | 405 | Domain-specific i18n strings. |
 | `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
 | `core.i18n.strings.tmp` | 74 | — |
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
@@ -1139,7 +1139,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 722 | — |
+| `server.routes.channels` | 865 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

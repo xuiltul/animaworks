@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=1767f6247e3f62a1988e25250278cd726cf62687a30b3f11981faeab3da9b4c2 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a3391e4fb6f8b0d30591aa62137520de6c78a0b711617d206cadee402505cd17 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API 참조
 
@@ -93,14 +93,15 @@ FastAPI의 OpenAPI 정의, WebSocket 및 `server/app.py`에 직접 작성된 라
 
 ## `server/routes/channels.py`
 
-| GET | `/api/channels` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | List all shared channels with metadata including ACL info. | `server/routes/channels.py:list_channels` |
-| GET | `/api/channels/{name}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Get messages from a specific channel. | `server/routes/channels.py:get_channel_messages` |
-| POST | `/api/channels/{name}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Post a message to a channel (human-originated). | `server/routes/channels.py:post_to_channel` |
-| GET | `/api/channels/{name}/mentions/{anima}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Get messages mentioning a specific anima in a channel. | `server/routes/channels.py:get_channel_mentions` |
-| POST | `/api/channels/{name}/read` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Advance the requesting human's stored read position in one channel. | `server/routes/channels.py:mark_channel_read` |
-| GET | `/api/channels/{name}/reads` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Return the stored read positions for one Board channel. | `server/routes/channels.py:get_channel_reads` |
-| GET | `/api/dm` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | List all DM conversation pairs with metadata. | `server/routes/channels.py:list_dm_pairs` |
-| GET | `/api/dm/{pair}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | Get DM history for a specific pair. | `server/routes/channels.py:get_dm_history` |
+| GET | `/api/channels` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | List all shared channels with metadata including ACL info. | `server/routes/channels.py:list_channels` |
+| GET | `/api/channels/{name}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Get messages from a specific channel. | `server/routes/channels.py:get_channel_messages` |
+| POST | `/api/channels/{name}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Post a message to a channel (human-originated). | `server/routes/channels.py:post_to_channel` |
+| GET | `/api/channels/{name}/mentions/{anima}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Get messages mentioning a specific anima in a channel. | `server/routes/channels.py:get_channel_mentions` |
+| POST | `/api/channels/{name}/read` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Advance the requesting human's stored read position in one channel. | `server/routes/channels.py:mark_channel_read` |
+| GET | `/api/channels/{name}/reads` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Return the stored read positions for one Board channel. | `server/routes/channels.py:get_channel_reads` |
+| PUT | `/api/channels/{name}/settings` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Update a Board's description, visibility, and members (owner/admin only). | `server/routes/channels.py:update_channel_settings` |
+| GET | `/api/dm` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | List all DM conversation pairs with metadata. | `server/routes/channels.py:list_dm_pairs` |
+| GET | `/api/dm/{pair}` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | Get DM history for a specific pair. | `server/routes/channels.py:get_dm_history` |
 
 ## `server/routes/chat.py`
 

@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: 7dd704296445fba7a6292612b9c77a82e9cda085d4aaafe0faf25fbad2de32dd -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 2c04b41d4afd27ac3a3c74a819ffff0a872a576489ae82d1d3534f8602755e10 -->
 
 # API リファレンス
 
@@ -99,6 +99,7 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 | GET | `/api/channels/{name}/mentions/{anima}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Get messages mentioning a specific anima in a channel. | `server/routes/channels.py:get_channel_mentions` |
 | POST | `/api/channels/{name}/read` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Advance the requesting human's stored read position in one channel. | `server/routes/channels.py:mark_channel_read` |
 | GET | `/api/channels/{name}/reads` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the stored read positions for one Board channel. | `server/routes/channels.py:get_channel_reads` |
+| PUT | `/api/channels/{name}/settings` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Update a Board's description, visibility, and members (owner/admin only). | `server/routes/channels.py:update_channel_settings` |
 | GET | `/api/dm` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | List all DM conversation pairs with metadata. | `server/routes/channels.py:list_dm_pairs` |
 | GET | `/api/dm/{pair}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Get DM history for a specific pair. | `server/routes/channels.py:get_dm_history` |
 
