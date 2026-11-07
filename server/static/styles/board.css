@@ -160,6 +160,11 @@
   border-radius: 999px;
 }
 
+.board-sidebar-empty {
+  padding: 8px 16px;
+  font-size: 0.82rem;
+}
+
 /* ── Main Panel ─────────────────────────────── */
 
 .board-main {
@@ -193,6 +198,22 @@
   color: var(--aw-color-sidebar-section);
 }
 
+.board-members-label {
+  font-size: 0.75rem;
+  color: var(--aw-color-sidebar-section);
+  margin-right: 0.3rem;
+}
+
+.board-member-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-accent-hover);
+  font-size: 0.75rem;
+}
+
 /* ── Message List ───────────────────────────── */
 
 .board-messages {
@@ -212,6 +233,27 @@
   justify-content: center;
   color: var(--aw-color-sidebar-section);
   font-size: 0.92rem;
+}
+
+.board-messages-loader {
+  text-align: center;
+  padding: 12px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.82rem;
+}
+
+.board-messages-end {
+  text-align: center;
+  padding: 8px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.8rem;
+}
+
+.board-inline-error {
+  color: var(--aw-color-error);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 4px;
 }
 
 /* ── Message Row ────────────────────────────── */
@@ -370,6 +412,16 @@
 }
 
 /* ── Input Bar ──────────────────────────────── */
+
+.board-closed-notice {
+  padding: 10px 20px;
+  border-top: 1px solid var(--aw-color-border);
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-color-text-secondary);
+  font-size: 0.82rem;
+  text-align: center;
+  flex-shrink: 0;
+}
 
 .board-input-bar {
   display: flex;

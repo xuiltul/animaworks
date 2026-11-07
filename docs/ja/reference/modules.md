@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 2c1bc1124b49b23e8282323bfb29f1d4a0573de05237d6f05474200a380531ba -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 7b407f223b8a0a8721f876b28c02384b5e986725ef0afedaf94427965e705e3d -->
 
 # モジュール一覧
 
@@ -726,7 +726,7 @@ anima 間および外部とのメッセージ配送。
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1051 | — |
 | `core.messaging.outbound` | 408 | — |
-| `core.messaging.outbound_auto` | 380 | — |
+| `core.messaging.outbound_auto` | 390 | — |
 | `core.messaging.recipient_status` | 79 | — |
 | `core.messaging.reply_grants` | 253 | — |
 | `core.messaging.sender` | 34 | — |
@@ -1137,7 +1137,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 433 | — |
+| `server.routes.channels` | 610 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

@@ -29,7 +29,7 @@ let _dmFilterAnima = "";     // "" = show all, else filter by participant name
 let _avatarCache = {};       // name -> url | null (null = no avatar)
 let _dmLoaded = false;       // DM list lazy-load flag
 let _lastMessageTs = "";     // newest message timestamp for incremental polling
-let _discordChannels = null; // Discord channel list (lazy-loaded)
+let _messageKeys = new Set(); // dedup keys for the rendered message list
 
 // ── DOM refs (local) ───────────────────────
 
@@ -49,10 +49,10 @@ export function render(container) {
   _sidebarCollapsed = false;
   _loadingMore = false;
   _hasMore = false;
-  _discordChannels = null;
   _currentOffset = 0;
   _dmLoaded = false;
   _lastMessageTs = "";
+  _messageKeys = new Set();
 
   container.innerHTML = `
     <div class="board-layout">
@@ -61,13 +61,13 @@ export function render(container) {
 
       <!-- Left Sidebar -->
       <div class="board-sidebar" id="boardSidebar">
-        <div class="board-sidebar-section">Channels</div>
+        <div class="board-sidebar-section">${t("board.channels")}</div>
         <div id="boardChannelList">
           <div class="loading-placeholder">${t("board.loading")}</div>
         </div>
         <div class="board-sidebar-divider"></div>
         <div class="board-sidebar-section board-dm-section-header">
-          <span>DMs</span>
+          <span>${t("board.dms")}</span>
           <select id="boardDmFilter" class="board-dm-filter" title="${t("board.dm_filter_title")}" aria-label="${escapeHtml(t("board.dm_filter_title"))}">
             <option value="">${t("board.dm_filter_all")}</option>
           </select>
@@ -93,6 +93,7 @@ export function render(container) {
           <div class="board-messages" id="boardMessages">
             <div class="board-messages-empty">${t("board.messages_empty")}</div>
           </div>
+          <div class="board-closed-notice" id="boardClosedNotice" style="display:none;">${t("board.closed_notice")}</div>
           <form class="board-input-bar" id="boardInputBar" style="display:none;">
             <textarea
               id="boardInput"
@@ -148,6 +149,7 @@ export function destroy() {
   _avatarCache = {};
   _dmLoaded = false;
   _lastMessageTs = "";
+  _messageKeys = new Set();
 }
 
 // ── Event Binding ──────────────────────────
@@ -161,6 +163,7 @@ function _bindEvents() {
 
   // Textarea: Enter sends, Ctrl/Cmd+Enter always sends
   _addListener("boardInput", "keydown", (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       _submitMessage();
@@ -271,7 +274,7 @@ function _renderChannelList() {
   if (!el) return;
 
   if (_channels.length === 0) {
-    el.innerHTML = `<div class="loading-placeholder" style="padding:8px 16px; font-size:0.82rem;">${t("board.channel_none")}</div>`;
+    el.innerHTML = `<div class="loading-placeholder board-sidebar-empty">${t("board.channel_none")}</div>`;
     return;
   }
 
@@ -304,7 +307,7 @@ function _renderDmList() {
 
   if (filtered.length === 0) {
     const msg = _dmPairs.length === 0 ? t("board.dm_none") : t("board.dm_none_filtered");
-    el.innerHTML = `<div class="loading-placeholder" style="padding:8px 16px; font-size:0.82rem;">${msg}</div>`;
+    el.innerHTML = `<div class="loading-placeholder board-sidebar-empty">${msg}</div>`;
     return;
   }
 
@@ -398,11 +401,14 @@ function _selectItem(type, name) {
   // Update header
   const titleEl = _$("boardHeaderTitle");
   const metaEl = _$("boardHeaderMeta");
+  let canWrite = false;
   if (type === "channel") {
+    const channelInfo = _channels.find(ch => ch.name === name);
+    canWrite = !channelInfo || channelInfo.writable !== false;
     if (titleEl) titleEl.textContent = `# ${name}`;
     if (metaEl) {
       metaEl.textContent = "";
-      _renderChannelMembers(name, metaEl);
+      _renderChannelMembers(channelInfo, metaEl);
     }
   } else {
     const dmInfo = _dmPairs.find(d => d.pair === name);
@@ -411,9 +417,11 @@ function _selectItem(type, name) {
     if (metaEl) metaEl.textContent = t("board.direct_message");
   }
 
-  // Show/hide input bar (hidden for DMs)
+  // Show the composer only for writable channels (DMs are read-only here).
   const inputBar = _$("boardInputBar");
-  if (inputBar) inputBar.style.display = type === "channel" ? "flex" : "none";
+  if (inputBar) inputBar.style.display = canWrite ? "flex" : "none";
+  const closedNotice = _$("boardClosedNotice");
+  if (closedNotice) closedNotice.style.display = type === "channel" && !canWrite ? "block" : "none";
 
   // Update input placeholder
   const input = _$("boardInput");
@@ -435,101 +443,45 @@ function _selectItem(type, name) {
 
 // ── Channel Members UI ────────────────────
 
-async function _renderChannelMembers(channelName, metaEl) {
-  // Lazy-load Discord channel list
-  if (_discordChannels === null) {
-    try {
-      const dc = await api("/api/discord/channels");
-      _discordChannels = dc.channels || [];
-    } catch {
-      _discordChannels = [];
-    }
+function _renderChannelMembers(channelInfo, metaEl) {
+  const members = channelInfo && Array.isArray(channelInfo.members) ? channelInfo.members : [];
+  if (members.length === 0) {
+    metaEl.textContent = "";
+    return;
   }
-  if (_discordChannels.length === 0) return;
-
-  // Find Discord channel by board mapping
-  const ch = _discordChannels.find(c => c.board === channelName || c.name === channelName);
-  if (!ch) return;
-
-  const members = ch.members || [];
-  const allAnimas = [...new Set(_discordChannels.flatMap(c => c.members || []))].sort();
-
-  function _render() {
-    const tags = members.map((m, i) => {
-      const isLead = i === 0;
-      const bg = isLead ? "var(--color-warning-light,#fff3cd)" : "var(--color-primary-light,#e8f0fe)";
-      const fg = isLead ? "var(--color-warning-dark,#856404)" : "var(--color-primary,#0066cc)";
-      const star = isLead ? "★ " : "";
-      const leadBtn = !isLead ? `<button class="board-member-lead" data-name="${escapeHtml(m)}" title="${t("board.members_set_lead")}" aria-label="${escapeHtml(t("board.members_set_lead_label"))}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#aaa);font-size:0.7rem;padding:0;line-height:1;">☆</button>` : "";
-      return `<span style="display:inline-flex;align-items:center;gap:0.2rem;background:${bg};color:${fg};border-radius:10px;padding:0.1rem 0.5rem;font-size:0.75rem;">` +
-        `${star}${escapeHtml(m)}${leadBtn}<button class="board-member-rm" data-name="${escapeHtml(m)}" aria-label="${escapeHtml(t("board.members_remove", { name: m }))}" style="background:none;border:none;cursor:pointer;color:var(--text-secondary,#666);font-size:0.75rem;padding:0;line-height:1;">✕</button></span>`;
-    }).join(" ");
-
-    // Animas not in this channel
-    const available = allAnimas.filter(a => !members.includes(a));
-    const addDropdown = available.length > 0
-      ? `<select id="boardMemberAdd" aria-label="${escapeHtml(t("board.members_add_select"))}" style="font-size:0.75rem;padding:0.1rem 0.3rem;border:1px solid var(--border,#ddd);border-radius:4px;background:var(--bg-secondary,#f9f9f9);color:var(--text-primary,#333);"><option value="">+ ${t("board.members_add")}</option>${available.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("")}</select>`
-      : "";
-
-    metaEl.innerHTML = `<span style="font-size:0.75rem;color:var(--text-secondary,#888);margin-right:0.3rem;">${t("board.members")}:</span>${tags || `<span style="font-size:0.75rem;color:var(--text-secondary,#888);">${t("board.members_none")}</span>`} ${addDropdown}`;
-
-    // Bind remove buttons
-    metaEl.querySelectorAll(".board-member-rm").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const nm = btn.dataset.name;
-        const idx = members.indexOf(nm);
-        if (idx !== -1) members.splice(idx, 1);
-        ch.members = [...members];
-        await _saveMembership(ch.id, members);
-        _render();
-      });
-    });
-
-    // Bind lead buttons (☆ -> promote to first position)
-    metaEl.querySelectorAll(".board-member-lead").forEach(btn => {
-      btn.addEventListener("click", async () => {
-        const nm = btn.dataset.name;
-        const idx = members.indexOf(nm);
-        if (idx > 0) {
-          members.splice(idx, 1);
-          members.unshift(nm);
-          ch.members = [...members];
-          await _saveMembership(ch.id, members);
-          _render();
-        }
-      });
-    });
-
-    // Bind add dropdown
-    const addSel = document.getElementById("boardMemberAdd");
-    if (addSel) {
-      addSel.addEventListener("change", async () => {
-        const val = addSel.value;
-        if (!val || members.includes(val)) { addSel.value = ""; return; }
-        members.push(val);
-        ch.members = [...members];
-        await _saveMembership(ch.id, members);
-        _render();
-      });
-    }
-  }
-
-  _render();
-}
-
-async function _saveMembership(channelId, members) {
-  try {
-    await api(`/api/discord/channel-members/${encodeURIComponent(channelId)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ members }),
-    });
-  } catch (e) {
-    logger.error("Failed to save channel membership", e);
-  }
+  const chips = members
+    .map(member => `<span class="board-member-chip">${escapeHtml(member)}</span>`)
+    .join(" ");
+  metaEl.innerHTML = `<span class="board-members-label">${t("board.members")}:</span>${chips}`;
 }
 
 // ── Message Loading ────────────────────────
+
+function _messageKey(msg) {
+  if (!msg) return "";
+  if (msg.id) return `id:${msg.id}`;
+  return `ts:${msg.ts || ""}|from:${msg.from || ""}`;
+}
+
+function _mergeMessages(incoming, prepend = false) {
+  const added = [];
+  for (const msg of incoming || []) {
+    const key = _messageKey(msg);
+    if (!key || _messageKeys.has(key)) continue;
+    _messageKeys.add(key);
+    added.push(msg);
+  }
+  if (added.length === 0) return 0;
+  _messages = prepend ? [...added, ..._messages] : [..._messages, ...added];
+  _updateLastTs();
+  return added.length;
+}
+
+function _replaceMessages(incoming) {
+  _messages = [];
+  _messageKeys = new Set();
+  _mergeMessages(incoming);
+}
 
 async function _loadMessages(type, name, isPolling) {
   // Skip if selection changed during load
@@ -542,6 +494,7 @@ async function _loadMessages(type, name, isPolling) {
     _currentOffset = 0;
     _hasMore = false;
     _lastMessageTs = "";
+    _messageKeys = new Set();
     messagesEl.innerHTML = `<div class="board-messages-empty">${t("board.loading")}</div>`;
   }
 
@@ -557,10 +510,14 @@ async function _loadMessages(type, name, isPolling) {
     // Verify selection hasn't changed
     if (type !== _selectedType || name !== _selectedName) return;
 
-    _messages = data.messages || [];
-    _total = data.total || _messages.length;
+    const incoming = data.messages || [];
+    _total = data.total || incoming.length;
     _hasMore = data.has_more || false;
-    _updateLastTs();
+    if (isPolling) {
+      _mergeMessages(incoming);
+    } else {
+      _replaceMessages(incoming);
+    }
 
     // Preload avatars for senders, then render
     const senders = [...new Set(_messages.map(m => m.from || "unknown"))];
@@ -603,8 +560,7 @@ async function _pollNewMessages() {
     if (_selectedType !== "channel" || _selectedName !== data.channel) return;
 
     const wasAtBottom = _isScrolledToBottom(_$("boardMessages"));
-    _messages.push(...newMsgs);
-    _updateLastTs();
+    if (_mergeMessages(newMsgs) === 0) return;
     _renderMessages();
     if (wasAtBottom) _scrollToBottom();
   } catch (err) {
@@ -642,7 +598,8 @@ async function _loadOlderMessages() {
     }
 
     const older = data.messages || [];
-    _messages = [...older, ..._messages];
+    _mergeMessages(older, true);
+    _currentOffset = _messages.length;
     _hasMore = data.has_more || false;
     _renderMessages();
 
@@ -663,6 +620,16 @@ function _onMessagesScroll(e) {
 
 // ── Message Rendering ──────────────────────
 
+function _kindLabel(kind) {
+  const keys = {
+    human: "board.kind_human",
+    external_user: "board.kind_external_user",
+    external_bot: "board.kind_external_bot",
+    operator: "board.kind_operator",
+  };
+  return keys[kind] ? t(keys[kind]) : kind;
+}
+
 function _renderMessages() {
   const messagesEl = _$("boardMessages");
   if (!messagesEl) return;
@@ -675,16 +642,19 @@ function _renderMessages() {
   const wasAtBottom = _isScrolledToBottom(messagesEl);
 
   const loaderHtml = _hasMore
-    ? `<div class="board-messages-loader" style="text-align:center;padding:12px;color:#888;font-size:0.82rem;">${t("board.loading")}</div>`
+    ? `<div class="board-messages-loader">${t("board.loading")}</div>`
     : (_messages.length >= _total && _total > 50
-      ? `<div class="board-messages-end" style="text-align:center;padding:8px;color:#666;font-size:0.8rem;">${t("board.messages_end")}</div>`
+      ? `<div class="board-messages-end">${t("board.messages_end")}</div>`
       : '');
 
   const msgItems = _messages.map(msg => {
     const from = msg.from || "unknown";
-    const isHuman = msg.source === "human";
+    const kind = msg.kind || "";
+    const isHuman = kind === "human";
     const ts = msg.ts ? smartTimestamp(msg.ts) : "";
-    const badge = isHuman ? '<span class="board-msg-badge">human</span>' : "";
+    const badge = kind && kind !== "anima"
+      ? `<span class="board-msg-badge">${escapeHtml(_kindLabel(kind))}</span>`
+      : "";
     const text = msg.text || "";
 
     return `
@@ -740,19 +710,24 @@ async function _submitMessage() {
 
   try {
     const currentUser = localStorage.getItem("animaworks_user") || "human";
-    await api(`/api/channels/${encodeURIComponent(_selectedName)}`, {
+    const result = await api(`/api/channels/${encodeURIComponent(_selectedName)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, from_name: currentUser }),
     });
 
-    // Optimistic: add the message locally
-    _messages.push({
+    // Optimistic row uses the server-assigned id so the matching WebSocket
+    // event (and later polling) does not add a duplicate.
+    const post = result && result.post ? result.post : {};
+    const added = _mergeMessages([{
+      id: post.id || undefined,
       ts: new Date().toISOString(),
       from: currentUser,
       text,
       source: "human",
-    });
+      kind: "human",
+    }]);
+    if (added) _total += added;
     _renderMessages();
     _scrollToBottom();
   } catch (err) {
@@ -761,7 +736,7 @@ async function _submitMessage() {
     const messagesEl = _$("boardMessages");
     if (messagesEl) {
       const errorDiv = document.createElement("div");
-      errorDiv.style.cssText = "color:#ef4444; font-size:0.82rem; text-align:center; padding:4px;";
+      errorDiv.className = "board-inline-error";
       errorDiv.textContent = `${t("board.send_failed")}: ${err.message}`;
       messagesEl.appendChild(errorDiv);
       _scrollToBottom();
@@ -779,15 +754,19 @@ function _handleBoardPost(data) {
 
   // Only update if viewing the matching channel
   if (_selectedType === "channel" && _selectedName === data.channel) {
-    _messages.push({
+    const added = _mergeMessages([{
+      id: data.id || undefined,
       ts: data.ts || new Date().toISOString(),
       from: data.from || "unknown",
       text: data.text || "",
       source: data.source || "",
-    });
-    _total += 1;
-    _renderMessages();
-    _scrollToBottom();
+      kind: data.kind || "",
+    }]);
+    if (added) {
+      _total += added;
+      _renderMessages();
+      _scrollToBottom();
+    }
   }
 
   // Update sidebar counts (channel might have new messages)
