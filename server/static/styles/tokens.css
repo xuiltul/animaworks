@@ -429,3 +429,46 @@
   --aw-color-code-text: #93a1a1;
   --aw-color-code-inline-bg: #eee8d5;
 }
+
+/* ── Board UI tokens ─────────────────────────────────── */
+/* Kind shapes and presence dots. Light themes get the base values; the dark
+   themes below override them with lighter, high-contrast variants. */
+:root,
+.theme-business,
+.theme-graphite,
+.theme-ocean,
+.theme-forest,
+.theme-sunset,
+.theme-rose,
+.theme-lavender,
+.theme-nord,
+.theme-solarized {
+  --aw-board-kind-anima: #4338ca;
+  --aw-board-kind-anima-bg: #eef2ff;
+  --aw-board-kind-human: #0f766e;
+  --aw-board-kind-human-bg: #ecfdf5;
+  --aw-board-kind-external: #b45309;
+  --aw-board-kind-external-bg: #fffbeb;
+  --aw-board-kind-operator: #475569;
+  --aw-board-kind-operator-bg: #f1f5f9;
+  --aw-board-status-idle: #16a34a;
+  --aw-board-status-busy: #d97706;
+  --aw-board-status-sleeping: #64748b;
+  --aw-board-status-stopped: #94a3b8;
+}
+
+.theme-monokai,
+.theme-midnight {
+  --aw-board-kind-anima: #c7d2fe;
+  --aw-board-kind-anima-bg: #312e81;
+  --aw-board-kind-human: #99f6e4;
+  --aw-board-kind-human-bg: #134e4a;
+  --aw-board-kind-external: #fcd34d;
+  --aw-board-kind-external-bg: #451a03;
+  --aw-board-kind-operator: #cbd5e1;
+  --aw-board-kind-operator-bg: #1e293b;
+  --aw-board-status-idle: #4ade80;
+  --aw-board-status-busy: #fbbf24;
+  --aw-board-status-sleeping: #94a3b8;
+  --aw-board-status-stopped: #64748b;
+}
