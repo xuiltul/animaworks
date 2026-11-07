@@ -99,6 +99,7 @@ class _BoardApi:
     def __init__(self) -> None:
         self.posts: list[dict[str, object]] = []
         self.settings_calls: list[dict[str, object]] = []
+        self.channel_requests: list[dict[str, object]] = []
         self.settings_error: tuple[int, str] | None = None
         self.messages: list[dict[str, object]] = [
             {
@@ -142,7 +143,7 @@ class _BoardApi:
                 "id": "m3",
                 "ts": _iso(TODAY_AM + timedelta(minutes=12)),
                 "from": "slackbot",
-                "text": "Slack bot からの通知です。",
+                "text": "Slack bot からの通知です。@alice 確認してください。",
                 "source": "slack",
                 "kind": "external_bot",
             },
@@ -257,6 +258,94 @@ class _BoardApi:
                 "last_from": "bob",
             }
         ]
+        self.flows_requests: list[dict[str, str]] = []
+        self.flows_calls: list[dict[str, object]] = [
+            {
+                "id": "c1",
+                "via": "board",
+                "place": "general",
+                "from": "alice",
+                "to": "bob",
+                "t": _iso(TODAY_AM + timedelta(minutes=30)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=33)),
+                "reply": _iso(TODAY_AM + timedelta(minutes=36)),
+                "reply_id": "c2",
+                "reply_text": "確認します。",
+                "inferred": False,
+                "parent": None,
+                "text": "bob、今日の共有を確認してください。",
+            },
+            {
+                "id": "c2",
+                "via": "dm",
+                "place": "alice-bob",
+                "from": "bob",
+                "to": "alice",
+                "t": _iso(TODAY_AM + timedelta(minutes=35)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=37)),
+                "reply": _iso(TODAY_AM + timedelta(minutes=40)),
+                "reply_id": None,
+                "reply_text": "ありがとう、進めます。",
+                "inferred": True,
+                "parent": "c1",
+                "text": "alice、確認しました。",
+            },
+            {
+                "id": "c3",
+                "via": "board",
+                "place": "ops",
+                "from": "bob",
+                "to": "carol",
+                "t": _iso(YESTERDAY_PM - timedelta(minutes=30)),
+                "delivered": False,
+                "reason": "offline",
+                "read": None,
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "carol、運用の確認をお願いします。",
+            },
+            {
+                "id": "c4",
+                "via": "board",
+                "place": "general",
+                "from": "human",
+                "to": "alice",
+                "t": _iso(TODAY_AM + timedelta(minutes=60)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=62)),
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "alice、方針を確認したいです。",
+            },
+            {
+                "id": "c5",
+                "via": "board",
+                "place": "general",
+                "from": "carol",
+                "to": "bob",
+                "t": _iso(TODAY_AM + timedelta(minutes=70)),
+                "delivered": True,
+                "reason": "",
+                "read": None,
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "bob、こちらも見てください。",
+            },
+        ]
 
     def _json(self, route, payload: object, status: int = 200) -> None:
         route.fulfill(
@@ -279,8 +368,119 @@ class _BoardApi:
         if path == "/api/dm":
             self._json(route, self.dm_pairs)
             return
+        if path == "/api/flows":
+            query = parse_qs(urlparse(request.url).query)
+            days = int(query.get("days", ["30"])[0])
+            via = query.get("via", ["all"])[0]
+            self.flows_requests.append({"days": str(days), "via": via})
+            cutoff = datetime.now().astimezone() - timedelta(days=days)
+            calls = [
+                dict(call)
+                for call in self.flows_calls
+                if (via == "all" or call["via"] == via)
+                and datetime.fromisoformat(str(call["t"])) >= cutoff
+            ]
+            delivered = sum(1 for call in calls if call["delivered"])
+            read = sum(1 for call in calls if call["read"])
+            replied = sum(1 for call in calls if call["reply"])
+            reply_seconds = sorted(
+                max(
+                    0,
+                    int(
+                        (
+                            datetime.fromisoformat(str(call["reply"]))
+                            - datetime.fromisoformat(str(call["t"]))
+                        ).total_seconds()
+                    ),
+                )
+                for call in calls
+                if call["reply"]
+            )
+            median = reply_seconds[len(reply_seconds) // 2] if reply_seconds else None
+            now = datetime.now().astimezone()
+            waiting = sum(
+                1
+                for call in calls
+                if call["delivered"]
+                and not call["reply"]
+                and now - datetime.fromisoformat(str(call["t"])) <= timedelta(days=2)
+            )
+            self._json(
+                route,
+                {
+                    "calls": calls,
+                    "summary": {
+                        "calls": len(calls),
+                        "delivered": delivered,
+                        "read": read,
+                        "replied": replied,
+                        "median_reply_seconds": median,
+                        "waiting": waiting,
+                    },
+                },
+            )
+            return
         if path.startswith("/api/animas/") and "/assets/" in path:
             self._json(route, {"error": "not found"}, status=404)
+            return
+
+        if path.startswith("/api/channels/") and path.endswith("/info"):
+            name = unquote(path[len("/api/channels/") : -len("/info")])
+            channel = next((row for row in self.channels if row["name"] == name), None)
+            self._json(
+                route,
+                {
+                    "members": channel.get("members", []) if channel else [],
+                    "mention_targets": [row["name"] for row in self.animas],
+                    "readers": [
+                        {
+                            "reader": "anima:alice",
+                            "unread": 2,
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=10)),
+                        },
+                        {
+                            "reader": "anima:bob",
+                            "unread": 0,
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=14)),
+                        },
+                        {
+                            "reader": "human:human",
+                            "unread": 0,
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=11)),
+                        },
+                    ],
+                    "mentions_30d": [["alice", 5], ["bob", 3], ["carol", 1]],
+                    "kinds": {"anima": 3, "human": 1, "external": 1, "operator": 1},
+                },
+            )
+            return
+
+        if path.startswith("/api/channels/") and path.endswith("/reads"):
+            name = unquote(path[len("/api/channels/") : -len("/reads")])
+            self._json(
+                route,
+                {
+                    "channel": name,
+                    "readers": {
+                        "anima:alice": {
+                            "upto_id": "m2",
+                            "upto_ts": _iso(TODAY_AM + timedelta(minutes=10)),
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=10)),
+                        },
+                        "anima:bob": {
+                            "upto_id": "m4",
+                            "upto_ts": _iso(TODAY_AM + timedelta(minutes=14)),
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=14)),
+                        },
+                        "human:human": {
+                            "upto_id": "m2",
+                            "upto_ts": _iso(TODAY_AM + timedelta(minutes=10)),
+                            "updated_at": _iso(TODAY_AM + timedelta(minutes=10)),
+                        },
+                    },
+                    "picked": {},
+                },
+            )
             return
 
         if path.startswith("/api/channels/") and path.endswith("/settings"):
@@ -348,6 +548,11 @@ class _BoardApi:
             limit = int(query.get("limit", ["50"])[0])
             offset = int(query.get("offset", ["0"])[0])
             since = query.get("since", [""])[0]
+            q = query.get("q", [""])[0]
+            kind = query.get("kind", [""])[0]
+            self.channel_requests.append(
+                {"name": name, "limit": limit, "offset": offset, "since": since, "q": q, "kind": kind}
+            )
             if since:
                 rows = [row for row in self.messages if str(row["ts"]) > since]
                 self._json(
@@ -360,14 +565,33 @@ class _BoardApi:
                     },
                 )
                 return
-            rows = self.messages[offset : offset + limit]
+            filtered = self.messages
+            if q:
+                needle = q.casefold()
+                filtered = [
+                    row
+                    for row in filtered
+                    if needle in str(row.get("text", "")).casefold()
+                    or needle in str(row.get("from", "")).casefold()
+                ]
+            if kind:
+                allowed = {
+                    "anima": {"anima"},
+                    "human": {"human"},
+                    "external": {"external_user", "external_bot"},
+                    "operator": {"operator"},
+                }.get(kind, set())
+                filtered = [row for row in filtered if row.get("kind") in allowed]
+            rows = filtered[offset : offset + limit]
+            if limit == 1 and offset == 0:
+                rows = sorted(filtered, key=lambda row: str(row["ts"]), reverse=True)[:1]
             self._json(
                 route,
                 {
                     "channel": name,
                     "messages": rows,
-                    "total": len(self.messages),
-                    "has_more": offset + limit < len(self.messages),
+                    "total": len(filtered),
+                    "has_more": offset + limit < len(filtered),
                 },
             )
             return
@@ -681,6 +905,128 @@ def test_dm_mode_lists_pairs_and_is_readonly(board_page: Page) -> None:
     assert board_page.locator('[data-board-id="d2"]').count() == 1
 
 
+# ── Home, flows and palette ──────────────────────────────────
+
+
+def _open_flows(page: Page) -> None:
+    page.locator('[data-board-view="flows"]').click()
+    page.locator('[data-flow-tile="calls"]').wait_for(timeout=5000)
+
+
+def test_home_cards_and_card_opens_board(board_page: Page) -> None:
+    home = board_page.locator("#boardHome")
+    home.wait_for(timeout=5000)
+    assert home.is_visible()
+    assert board_page.locator("#boardPlaceholder").is_hidden()
+
+    cards = board_page.locator("[data-board-home-card]")
+    assert cards.count() == 4
+    names = [cards.nth(i).get_attribute("data-board-home-card") for i in range(cards.count())]
+    assert set(names) == {"general", "ops", "team", "random"}
+    assert board_page.locator('[data-board-home-card="archive"]').count() == 0
+
+    general = board_page.locator('[data-board-home-card="general"]')
+    assert "general" in general.inner_text()
+    assert "team-a" in general.inner_text()
+    general.click()
+    board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
+    assert home.is_hidden()
+    assert board_page.locator("#boardView").is_visible()
+
+
+def test_flow_summary_matches_fixed_data(board_page: Page) -> None:
+    _open_flows(board_page)
+    assert board_page.locator(".board-flow-tiles").is_visible()
+    expected = {
+        "calls": "5",
+        "delivered": "80%",
+        "read": "75%",
+        "replied": "67%",
+        "median": "6分",
+        "waiting": "2",
+    }
+    for tile, value in expected.items():
+        text = board_page.locator(
+            f'[data-flow-tile="{tile}"] .board-flow-tile-value'
+        ).inner_text()
+        assert text == value
+
+
+def test_unread_stage_filters_the_list(board_page: Page) -> None:
+    _open_flows(board_page)
+    sankey = board_page.locator(".board-flow-sankey")
+    unread = sankey.locator('g[data-flow-stage="unread"]')
+    unread.locator(".board-flow-node-rect").click()
+
+    rows = board_page.locator(".board-flow-table tbody tr[data-flow-call]")
+    assert rows.count() == 1
+    assert rows.first.get_attribute("data-flow-call") == "c5"
+    assert board_page.locator(".board-flow-sankey g.is-selected").count() == 1
+
+
+def test_map_person_filters_the_list(board_page: Page) -> None:
+    _open_flows(board_page)
+    alice = board_page.locator('[data-flow-person="alice"]')
+    alice.locator(".board-flow-map-shape").click()
+
+    assert board_page.locator(".board-flow-panel.is-person h3").inner_text() == "alice"
+    rows = board_page.locator(".board-flow-table tbody tr[data-flow-call]")
+    ids = [rows.nth(i).get_attribute("data-flow-call") for i in range(rows.count())]
+    assert ids == ["c4", "c2", "c1"]
+
+
+def test_list_row_shows_root_to_child_trace(board_page: Page) -> None:
+    _open_flows(board_page)
+    row = board_page.locator('.board-flow-table tbody tr[data-flow-call="c2"]')
+    row.click()
+
+    boxes = board_page.locator(".board-flow-trace-box")
+    assert boxes.count() == 2
+    root = board_page.locator('.board-flow-trace-box[data-flow-call="c1"]')
+    child = board_page.locator('.board-flow-trace-box[data-flow-call="c2"]')
+    assert root.count() == 1
+    assert child.count() == 1
+    assert "is-selected" in (child.get_attribute("class") or "")
+    assert "c1" not in (child.inner_text())
+    assert "alice" in root.inner_text()
+
+
+def test_period_and_via_switch_call_the_api(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_flows(board_page)
+    assert api.flows_requests[-1] == {"days": "30", "via": "all"}
+
+    board_page.locator('[data-flow-days="7"]').click()
+    board_page.wait_for_function(
+        "document.querySelectorAll('[data-flow-tile]').length === 6",
+        timeout=5000,
+    )
+    assert api.flows_requests[-1] == {"days": "7", "via": "all"}
+
+    board_page.locator('[data-flow-via="board"]').click()
+    board_page.wait_for_function(
+        "document.querySelectorAll('[data-flow-tile]').length === 6",
+        timeout=5000,
+    )
+    assert api.flows_requests[-1] == {"days": "7", "via": "board"}
+
+
+def test_palette_moves_to_a_board(board_page: Page) -> None:
+    board_page.keyboard.press("Control+k")
+    search = board_page.locator("#boardPaletteInput")
+    search.wait_for(timeout=5000)
+    assert search.is_visible()
+    search.fill("general")
+    item = board_page.locator('[data-board-palette-item="general"]')
+    item.wait_for(timeout=5000)
+    assert "general" in item.inner_text()
+    item.click()
+
+    board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
+    assert board_page.locator("#boardPalette").is_hidden()
+    assert board_page.locator("#boardHome").is_hidden()
+
+
 def test_mention_suggestions_and_target_reasons(board_page: Page) -> None:
     _open_channel(board_page, "team")
     textarea = board_page.locator("#boardComposerInput")
@@ -846,3 +1192,105 @@ def test_settings_member_chips_can_remove_and_add(board_page: Page) -> None:
     drawer.locator(".board-drawer-flash").wait_for(timeout=5000)
     assert api.settings_calls[-1]["access"] == "members"
     assert set(api.settings_calls[-1]["members"]) == {"alice", "bob", "system", "carol"}
+
+
+def test_kind_chips_filter_via_api_and_show_counts(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    anima_chip = board_page.locator('[data-board-kind="anima"]')
+    anima_chip.wait_for(timeout=5000)
+    board_page.wait_for_function(
+        "() => document.querySelector('[data-board-kind=\"anima\"]')?.textContent.includes('3')",
+        timeout=5000,
+    )
+    assert "3" in anima_chip.inner_text()
+    assert board_page.locator('[data-board-kind="human"]').count() == 1
+
+    anima_chip.click()
+    board_page.wait_for_function(
+        "() => !document.querySelector('[data-board-id=\"m2\"]') && document.querySelectorAll('.board-post').length === 3",
+        timeout=5000,
+    )
+    assert board_page.locator('[data-board-id="m5"]').count() == 1
+    assert any(
+        request["kind"] == "anima" and request["limit"] == 50
+        for request in api.channel_requests
+    )
+    assert board_page.locator('[data-board-kind="anima"]').get_attribute("aria-pressed") == "true"
+
+
+def test_search_uses_q_and_shows_result_ratio(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    search = board_page.locator("[data-board-search-input]")
+    search.fill("人の投稿")
+    board_page.wait_for_function(
+        "() => document.querySelectorAll('.board-post').length === 1",
+        timeout=5000,
+    )
+    count = board_page.locator("[data-board-filter-count]").inner_text()
+    assert "1 / 6 件" in count
+    assert any(
+        request["q"] == "人の投稿" and request["limit"] == 50
+        for request in api.channel_requests
+    )
+    assert board_page.locator('[data-board-id="m2"]').count() == 1
+    assert board_page.locator('[data-board-id="m1"]').count() == 0
+
+
+def test_mention_card_filter_narrows_and_chip_clears(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    mention = board_page.locator('[data-board-id="m3"] [data-board-mention="alice"]')
+    mention.wait_for(timeout=5000)
+    mention.click()
+    board_page.locator("[data-board-card-filter]").click()
+
+    board_page.wait_for_function(
+        "() => !document.querySelector('[data-board-id=\"m2\"]') && document.querySelector('[data-board-id=\"m3\"]')",
+        timeout=5000,
+    )
+    chip = board_page.locator("[data-board-clear-filter]").first
+    assert "alice の投稿と呼びかけ" in chip.inner_text()
+
+    chip.click()
+    board_page.wait_for_function(
+        "() => document.querySelector('[data-board-id=\"m2\"]') !== null",
+        timeout=5000,
+    )
+    assert board_page.locator("[data-board-clear-filter]").count() == 0
+
+
+def test_info_drawer_shows_reads_unread_snippet_and_charts(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    board_page.locator("[data-board-info]").click()
+    drawer = board_page.locator("#boardDrawer")
+
+    alice_row = drawer.locator('[data-board-reader="anima:alice"]')
+    alice_row.wait_for(timeout=5000)
+    assert "未読 2" in alice_row.inner_text()
+    assert "最新まで" in drawer.locator('[data-board-reader="anima:bob"]').inner_text()
+    assert "anima から見ると" in drawer.inner_text()
+
+    snippet = drawer.locator("[data-board-read-snippet]")
+    snippet.wait_for(timeout=5000)
+    board_page.wait_for_function(
+        "() => document.querySelector('[data-board-read-snippet]')?.textContent.includes('alice 宛て 1 件')",
+        timeout=5000,
+    )
+    snippet_text = snippet.inner_text()
+    assert "#general 未読 2 件" in snippet_text
+    assert "animaworks-tool board read general" in snippet_text
+    assert "前回の続きから 2 件" in snippet_text
+
+    assert drawer.locator(".board-drawer-bar").count() == 14
+    assert "直近14日の投稿" in drawer.inner_text()
+    assert drawer.locator(".board-drawer-hbar").count() == 3
+    assert "alice" in drawer.locator(".board-drawer-hbars").inner_text()
+    assert drawer.locator(".board-drawer-kind-seg").count() == 4
+    assert "投稿した人の種類" in drawer.inner_text()
