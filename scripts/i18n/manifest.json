@@ -3538,7 +3538,7 @@
     },
     "templates/en/common_knowledge/communication/board-guide.md": {
       "engine": "luna",
-      "generated": "2026-11-06",
+      "generated": "2026-11-07",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
@@ -3552,7 +3552,7 @@
         "5a4c1c98d007a7f5dfba97e83730b06674ae3120c535f58880411c32698bf87a",
         "3cad755cf486cf3d8bf46411d48cdc97b9f07afaf9b50bf25a999ddc1c39483a",
         "1987350365a12eec1ca300e7208c7dd2547b45f1778d96f0a9c0ec3a209c7073",
-        "166f3745a17e29b0b6ed68d58f22b3cafcece8fdaa29fa59019056ea56ed9bba",
+        "f0e66d12d6fccbc41f84174bcbf934e22fb072f5f0b69852a8f96cb8bba800d0",
         "5e31ff91b4961fa3f35c0e5d66eb5aac4a400fc02092d61383b0dd6cf8af930e",
         "f6a8da42396e575b4bee2953e27c28d6b7438025b5637dfcbb92bc56a66ccb07",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
@@ -3567,7 +3567,7 @@
         "4392ddb04495a870522c1f6b6b34d686302716455940c42c0dc481be0a3a9837"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "09cfafdd0193db7a3a6aae90b733bc22b89864d93de0af5f199ce7d36260e097",
+      "source_sha256": "1b19981f4122f14c69fbe05e0e7a5e2ff72db9692dded24871a9ee36c4d1362b",
       "statuses": [
         "translated",
         "translated",
@@ -4080,7 +4080,7 @@
     },
     "templates/en/common_skills/animaworks-guide/SKILL.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-07",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "a4d6885c42dcb040768b4e31c7ed4be138abd34c27688a49f2b03bbe06718886",
@@ -4100,7 +4100,7 @@
         "593276ba7d2339f1de57d41345d8fc9b22cd2b1bb398140a3b37211acf35d2a2",
         "7184242766536eb163354e1db05805ea7f832e5d75019af536e7ac19adf44227",
         "f86e64d33c9d2a1b1b58ba7abdc43c68df8d2170b4128ad25e5656ad1e1081f3",
-        "2bfc36e0824b5cbd3471c216d56e1f97ef4040b5478158ec9466f1a348ad742b",
+        "218f71f57baebeff36ed1738e15d344bab8b2a70eebb6d51953e3709e8d718c6",
         "2040de0c956ea4dddb8501773f27095c001a8b858f2f4ffc4d12c328f43308a1",
         "637aa6e52f75064f2ab384be345a495f069249f49f1b9189bed0baea24c1ebb9",
         "2c9e978e56bbf87dfdac4f7d555e79f0faac7e43039d77066202f1c3b783a559",
@@ -4119,7 +4119,7 @@
         "f1e9168116221277627015aa7bda1eeeaf865add59b4dab60e1b8bddd635161c"
       ],
       "source": "templates/ja/common_skills/animaworks-guide/SKILL.md",
-      "source_sha256": "4184999238ce65129981bfeb7eff8c3c023f25f0f55b40f98ffbc1dba4b7aee9",
+      "source_sha256": "ab1d670b2a0460dea7daa19dfe6a3eeffab25926a399f409c1906c1cf8610bce",
       "statuses": [
         "translated",
         "translated",
@@ -9300,7 +9300,7 @@
     },
     "templates/ko/common_knowledge/communication/board-guide.md": {
       "engine": "luna",
-      "generated": "2026-11-06",
+      "generated": "2026-11-07",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
@@ -9314,7 +9314,7 @@
         "5a4c1c98d007a7f5dfba97e83730b06674ae3120c535f58880411c32698bf87a",
         "3cad755cf486cf3d8bf46411d48cdc97b9f07afaf9b50bf25a999ddc1c39483a",
         "1987350365a12eec1ca300e7208c7dd2547b45f1778d96f0a9c0ec3a209c7073",
-        "166f3745a17e29b0b6ed68d58f22b3cafcece8fdaa29fa59019056ea56ed9bba",
+        "f0e66d12d6fccbc41f84174bcbf934e22fb072f5f0b69852a8f96cb8bba800d0",
         "5e31ff91b4961fa3f35c0e5d66eb5aac4a400fc02092d61383b0dd6cf8af930e",
         "f6a8da42396e575b4bee2953e27c28d6b7438025b5637dfcbb92bc56a66ccb07",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
@@ -9329,7 +9329,7 @@
         "4392ddb04495a870522c1f6b6b34d686302716455940c42c0dc481be0a3a9837"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "09cfafdd0193db7a3a6aae90b733bc22b89864d93de0af5f199ce7d36260e097",
+      "source_sha256": "1b19981f4122f14c69fbe05e0e7a5e2ff72db9692dded24871a9ee36c4d1362b",
       "statuses": [
         "translated",
         "translated",
@@ -9842,7 +9842,7 @@
     },
     "templates/ko/common_skills/animaworks-guide/SKILL.md": {
       "engine": "luna",
-      "generated": "2026-10-31",
+      "generated": "2026-11-07",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "a4d6885c42dcb040768b4e31c7ed4be138abd34c27688a49f2b03bbe06718886",
@@ -9862,7 +9862,7 @@
         "593276ba7d2339f1de57d41345d8fc9b22cd2b1bb398140a3b37211acf35d2a2",
         "7184242766536eb163354e1db05805ea7f832e5d75019af536e7ac19adf44227",
         "f86e64d33c9d2a1b1b58ba7abdc43c68df8d2170b4128ad25e5656ad1e1081f3",
-        "2bfc36e0824b5cbd3471c216d56e1f97ef4040b5478158ec9466f1a348ad742b",
+        "218f71f57baebeff36ed1738e15d344bab8b2a70eebb6d51953e3709e8d718c6",
         "2040de0c956ea4dddb8501773f27095c001a8b858f2f4ffc4d12c328f43308a1",
         "637aa6e52f75064f2ab384be345a495f069249f49f1b9189bed0baea24c1ebb9",
         "2c9e978e56bbf87dfdac4f7d555e79f0faac7e43039d77066202f1c3b783a559",
@@ -9881,7 +9881,7 @@
         "f1e9168116221277627015aa7bda1eeeaf865add59b4dab60e1b8bddd635161c"
       ],
       "source": "templates/ja/common_skills/animaworks-guide/SKILL.md",
-      "source_sha256": "4184999238ce65129981bfeb7eff8c3c023f25f0f55b40f98ffbc1dba4b7aee9",
+      "source_sha256": "ab1d670b2a0460dea7daa19dfe6a3eeffab25926a399f409c1906c1cf8610bce",
       "statuses": [
         "translated",
         "translated",
@@ -15062,7 +15062,7 @@
     },
     "templates/zh/common_knowledge/communication/board-guide.md": {
       "engine": "luna",
-      "generated": "2026-11-06",
+      "generated": "2026-11-07",
       "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "46cf2a896d4d7dcb17a7ca7e9ebbdd7cdc190f9425d3efbc20f8296cf906cc4b",
@@ -15076,7 +15076,7 @@
         "5a4c1c98d007a7f5dfba97e83730b06674ae3120c535f58880411c32698bf87a",
         "3cad755cf486cf3d8bf46411d48cdc97b9f07afaf9b50bf25a999ddc1c39483a",
         "1987350365a12eec1ca300e7208c7dd2547b45f1778d96f0a9c0ec3a209c7073",
-        "166f3745a17e29b0b6ed68d58f22b3cafcece8fdaa29fa59019056ea56ed9bba",
+        "f0e66d12d6fccbc41f84174bcbf934e22fb072f5f0b69852a8f96cb8bba800d0",
         "5e31ff91b4961fa3f35c0e5d66eb5aac4a400fc02092d61383b0dd6cf8af930e",
         "f6a8da42396e575b4bee2953e27c28d6b7438025b5637dfcbb92bc56a66ccb07",
         "843bd84c03670a9c14e43a47509219bbb0f3d56000e54a9d5cd4651632220989",
@@ -15091,7 +15091,7 @@
         "4392ddb04495a870522c1f6b6b34d686302716455940c42c0dc481be0a3a9837"
       ],
       "source": "templates/ja/common_knowledge/communication/board-guide.md",
-      "source_sha256": "09cfafdd0193db7a3a6aae90b733bc22b89864d93de0af5f199ce7d36260e097",
+      "source_sha256": "1b19981f4122f14c69fbe05e0e7a5e2ff72db9692dded24871a9ee36c4d1362b",
       "statuses": [
         "translated",
         "translated",
@@ -15603,9 +15603,9 @@
       "translator_version": "2"
     },
     "templates/zh/common_skills/animaworks-guide/SKILL.md": {
-      "engine": "local",
-      "generated": "2026-11-01",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-07",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "a4d6885c42dcb040768b4e31c7ed4be138abd34c27688a49f2b03bbe06718886",
         "6306add4eeb9cb4e5ebc1cca066153cc2b0f480fe1f161366cb3ca931ee9821a",
@@ -15624,7 +15624,7 @@
         "593276ba7d2339f1de57d41345d8fc9b22cd2b1bb398140a3b37211acf35d2a2",
         "7184242766536eb163354e1db05805ea7f832e5d75019af536e7ac19adf44227",
         "f86e64d33c9d2a1b1b58ba7abdc43c68df8d2170b4128ad25e5656ad1e1081f3",
-        "2bfc36e0824b5cbd3471c216d56e1f97ef4040b5478158ec9466f1a348ad742b",
+        "218f71f57baebeff36ed1738e15d344bab8b2a70eebb6d51953e3709e8d718c6",
         "2040de0c956ea4dddb8501773f27095c001a8b858f2f4ffc4d12c328f43308a1",
         "637aa6e52f75064f2ab384be345a495f069249f49f1b9189bed0baea24c1ebb9",
         "2c9e978e56bbf87dfdac4f7d555e79f0faac7e43039d77066202f1c3b783a559",
@@ -15643,7 +15643,7 @@
         "f1e9168116221277627015aa7bda1eeeaf865add59b4dab60e1b8bddd635161c"
       ],
       "source": "templates/ja/common_skills/animaworks-guide/SKILL.md",
-      "source_sha256": "4184999238ce65129981bfeb7eff8c3c023f25f0f55b40f98ffbc1dba4b7aee9",
+      "source_sha256": "ab1d670b2a0460dea7daa19dfe6a3eeffab25926a399f409c1906c1cf8610bce",
       "statuses": [
         "translated",
         "translated",
