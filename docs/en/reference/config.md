@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=592404a324536200764ecf86f068e6a21b87874392581c42ff9c6e98a18152d3 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=592404a324536200764ecf86f068e6a21b87874392581c42ff9c6e98a18152d3 generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
 
 # Configuration Reference
 

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
 
 # CLI reference: `animaworks`
 
