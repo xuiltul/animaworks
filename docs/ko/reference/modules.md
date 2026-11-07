@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=e8ac25599c000255c1f36430ba8e89a8d7f6cdc223298bd9c43f30e13dad3d53 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a0f07a28ad003a7e1ccab1de4b2d173ce5b8d1828f52d2c3f39aacf2748269f5 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -142,23 +142,23 @@ LLM 에이전트 실행, 대화 제어, 엔진 연동.
 
 ## `core.anima`
 
-Digital Anima의 수명 주기와 런타임 객체.
+디지털 Anima의 수명 주기와 런타임 객체.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.anima` | 23 | — |
-| `core.anima._mixin_protocols（非公開）` | 130 | 컴포지셔널 믹스인을 위한 구조적 호스트 프로토콜. |
+| `core.anima._mixin_protocols（非公開）` | 130 | 조합형 믹스인을 위한 구조적 호스트 프로토콜. |
 | `core.anima.admin` | 144 | — |
 | `core.anima.asset_reconciler` | 787 | — |
 | `core.anima.bootstrap_state` | 592 | — |
 | `core.anima.chat_attachments` | 253 | — |
 | `core.anima.digital_anima` | 702 | — |
 | `core.anima.emotion_tag` | 84 | LLM 응답에서 감정 태그를 추출하는 공통 기능. |
-| `core.anima.export` | 234 | OpenClaw 또는 Hermes Agent 레이아웃으로 Anima 작업 공간을 내보냅니다. |
-| `core.anima.factory` | 876 | Anima 생성 팩토리: 템플릿, 빈 파일 또는 MD 파일에서 새 Digital Anima를 생성합니다. |
+| `core.anima.export` | 234 | Anima 워크스페이스를 OpenClaw 또는 Hermes Agent 레이아웃으로 내보냅니다. |
+| `core.anima.factory` | 876 | Anima 생성 팩터리: 템플릿, 빈 항목 또는 MD 파일에서 새 디지털 Anima를 생성합니다. |
 | `core.anima.heartbeat` | 1022 | — |
 | `core.anima.image_artifacts` | 219 | — |
-| `core.anima.inbox` | 1081 | — |
+| `core.anima.inbox` | 1089 | — |
 | `core.anima.inbox_overflow` | 100 | — |
 | `core.anima.lifecycle` | 1662 | — |
 | `core.anima.messaging` | 1332 | — |
@@ -713,9 +713,9 @@ Model Context Protocol 서버 및 클라이언트.
 
 ## `core.messaging`
 
-anima 간 및 외부로의 메시지 전달.
+Anima 간 및 외부와의 메시지 전달.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 438 | — |
@@ -724,6 +724,7 @@ anima 간 및 외부로의 메시지 전달.
 | `core.messaging.board_fanout` | 102 | — |
 | `core.messaging.board_reads` | 290 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
+| `core.messaging.flows` | 676 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1070 | — |
@@ -1131,7 +1132,7 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 61 | — |
 | `server.routes.animas` | 1268 | — |
@@ -1139,7 +1140,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 865 | — |
+| `server.routes.channels` | 906 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1165,7 +1166,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
-| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공통 헬퍼를 사용합니다. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |
 

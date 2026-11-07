@@ -5,6 +5,7 @@
 // the same post can never be rendered twice.
 import { api } from "../../modules/api.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
+import { kindGroup } from "./avatar.js";
 
 const REFRESH_MS = 30_000;
 const COMPACT_WINDOW_MS = 10 * 60 * 1000;
@@ -32,6 +33,9 @@ export function timestampAtOrAfter(candidate, reference) {
   if (a !== null && b !== null) return a >= b;
   return String(candidate) >= String(reference);
 }
+
+const SEARCH_DEBOUNCE_MS = 300;
+const KIND_FILTERS = ["anima", "human", "external", "operator"];
 
 export function messageKey(message) {
   if (!message) return "";
@@ -66,6 +70,7 @@ export function createBoardStore() {
     statusOverrides: new Map(),
     avatars: new Map(),
     mode: "board", // "board" | "dm"
+    view: "home", // "home" | "flows" (null while a channel/DM is open)
     selectedType: null, // "channel" | "dm"
     selectedName: null,
     messages: [],
@@ -94,6 +99,15 @@ export function createBoardStore() {
     lastMarkedId: "",
     // Keys added by a live event (WebSocket / poll) since the last render.
     liveKeys: new Set(),
+    // 5-1: server-side search / kind filter and the per-kind counts.
+    kindFilter: "all",
+    query: "",
+    filterCounts: { all: 0, anima: 0, human: 0, external: 0, operator: 0 },
+    filterTotal: 0,
+    boardTotal: 0,
+    searchTimer: null,
+    // Bumped when board.read / board.post arrives so the info drawer reloads.
+    detailRevision: 0,
   };
 
   const listeners = new Set();
@@ -292,7 +306,12 @@ export function createBoardStore() {
     } else {
       _applyRead(reader, data, data.picked_id);
     }
-    if (state.selectedType === "channel") emit("reads");
+    if (state.selectedType === "channel") {
+      emit("reads");
+      // The info drawer reloads its read positions on this revision.
+      state.detailRevision += 1;
+      emit("read");
+    }
   }
 
   function scheduleMarkRead() {
@@ -563,6 +582,104 @@ export function createBoardStore() {
     emit("filter");
   }
 
+  // ── 5-1: search / kind filters ─────────────
+  function isFiltered() {
+    return state.kindFilter !== "all" || Boolean(state.query) || Boolean(state.personFilter);
+  }
+
+  function _channelQuery({ limit = 50, offset = 0, since = "" } = {}) {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    params.set("offset", String(offset));
+    if (since) params.set("since", since);
+    if (state.query) params.set("q", state.query);
+    if (state.kindFilter !== "all") params.set("kind", state.kindFilter);
+    return params.toString();
+  }
+
+  function _matchesActiveFilters(row) {
+    if (!row) return false;
+    if (state.kindFilter !== "all" && kindGroup(row.kind) !== state.kindFilter) return false;
+    const needle = state.query.trim().toLowerCase();
+    if (!needle) return true;
+    return String(row.text || "").toLowerCase().includes(needle)
+      || String(row.from || "").toLowerCase().includes(needle);
+  }
+
+  function _resetMessages() {
+    state.messages = [];
+    state.messageKeys = new Set();
+    state.total = 0;
+    state.filterTotal = 0;
+    state.hasMore = false;
+    state.loading = false;
+    state.loadingOlder = false;
+    state.error = "";
+    state.lastTs = "";
+  }
+
+  function reloadFiltered() {
+    if (state.selectedType !== "channel" || !state.selectedName) return;
+    state.loadToken += 1;
+    state.messages = [];
+    state.messageKeys = new Set();
+    state.total = 0;
+    state.filterTotal = 0;
+    state.hasMore = false;
+    state.loading = true;
+    state.loadingOlder = false;
+    state.error = "";
+    state.lastTs = "";
+    emit("filters");
+    void loadMessages();
+    void loadFilterCounts();
+  }
+
+  function setKindFilter(kind) {
+    const next = kind === "all" || KIND_FILTERS.includes(kind) ? kind : "all";
+    if (next === state.kindFilter) return;
+    state.kindFilter = next;
+    reloadFiltered();
+  }
+
+  function setQuery(value) {
+    state.query = String(value || "");
+    if (state.searchTimer) clearTimeout(state.searchTimer);
+    state.searchTimer = setTimeout(() => {
+      state.searchTimer = null;
+      reloadFiltered();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  async function loadFilterCounts() {
+    if (state.selectedType !== "channel" || !state.selectedName) return;
+    const token = state.loadToken;
+    const name = state.selectedName;
+    const q = state.query;
+    const counts = await Promise.all(
+      KIND_FILTERS.map(async (kind) => {
+        const params = new URLSearchParams({ limit: "1", offset: "0", kind });
+        if (q) params.set("q", q);
+        try {
+          const data = await api(`/api/channels/${encodeURIComponent(name)}?${params.toString()}`);
+          return Number(data?.total) || 0;
+        } catch {
+          return 0;
+        }
+      }),
+    );
+    if (token !== state.loadToken || name !== state.selectedName) return;
+    const next = {
+      anima: counts[0],
+      human: counts[1],
+      external: counts[2],
+      operator: counts[3],
+    };
+    next.all = next.anima + next.human + next.external + next.operator;
+    state.filterCounts = next;
+    emit("filters");
+  }
+
   function setDmFilter(name) {
     state.dmFilter = name || "";
     emit("dm-filter");
@@ -577,28 +694,49 @@ export function createBoardStore() {
     emit("mode");
   }
 
+  function setView(view) {
+    if (view !== "home" && view !== "flows") return;
+    state.loadToken += 1;
+    if (state.searchTimer) clearTimeout(state.searchTimer);
+    state.searchTimer = null;
+    state.view = view;
+    state.selectedType = null;
+    state.selectedName = null;
+    state.personFilter = "";
+    state.kindFilter = "all";
+    state.query = "";
+    state.filterTotal = 0;
+    state.boardTotal = 0;
+    state.filterCounts = { all: 0, anima: 0, human: 0, external: 0, operator: 0 };
+    emit("view");
+  }
+
   // ── Selection / loading ────────────────────
   function select(type, name) {
     if (type !== "channel" && type !== "dm") return;
     state.loadToken += 1;
+    if (state.searchTimer) clearTimeout(state.searchTimer);
+    state.searchTimer = null;
+    state.view = null;
     state.selectedType = type;
     state.selectedName = name || null;
     state.mode = type === "dm" ? "dm" : "board";
-    state.messages = [];
-    state.messageKeys = new Set();
-    state.total = 0;
-    state.hasMore = false;
-    state.loading = false;
-    state.loadingOlder = false;
-    state.error = "";
-    state.lastTs = "";
+    _resetMessages();
+    // 5-1: switching boards always drops the previous search / kind filter.
     state.personFilter = "";
     state.focusId = "";
     state.liveKeys = new Set();
     _resetReads();
+    state.kindFilter = "all";
+    state.query = "";
+    state.boardTotal = Number(channel(name)?.message_count) || 0;
+    state.filterCounts = { all: 0, anima: 0, human: 0, external: 0, operator: 0 };
     emit("selection");
     emit("reads");
-    if (name) void loadMessages();
+    if (name) {
+      void loadMessages();
+      if (type === "channel") void loadFilterCounts();
+    }
   }
 
   async function loadMessages() {
@@ -613,7 +751,7 @@ export function createBoardStore() {
 
     try {
       const data = type === "channel"
-        ? await api(`/api/channels/${encodeURIComponent(name)}?limit=50&offset=0`)
+        ? await api(`/api/channels/${encodeURIComponent(name)}?${_channelQuery({ limit: 50, offset: 0 })}`)
         : await api(`/api/dm/${encodeURIComponent(name)}?limit=50`);
       if (token !== state.loadToken) return;
 
@@ -622,6 +760,12 @@ export function createBoardStore() {
       mergeMessages(data.messages || [], { type });
       state.total = Number(data.total ?? state.messages.length) || 0;
       state.hasMore = Boolean(data.has_more);
+      if (type === "channel") {
+        state.filterTotal = state.total;
+        if (state.kindFilter === "all" && !state.query) {
+          state.boardTotal = state.total;
+        }
+      }
 
       if (type === "channel") {
         await _loadReads(name, token);
@@ -629,7 +773,10 @@ export function createBoardStore() {
         // Pull it (and its neighbours) so the "new from here" line can be
         // drawn, then describe the line from the fetched row.
         const line = state.readLine;
-        if (line && !messageById(line.afterId)) {
+        // While a search or kind filter is active the list only holds matching
+        // posts, so do not pull unfiltered neighbours in for the read line.
+        const filtering = state.kindFilter !== "all" || Boolean(state.query);
+        if (line && !filtering && !messageById(line.afterId)) {
           await _loadAround(line.afterId);
           if (token !== state.loadToken) return;
           state.readLine = _computeReadLine();
@@ -656,7 +803,7 @@ export function createBoardStore() {
     state.loadingOlder = true;
     try {
       const data = await api(
-        `/api/channels/${encodeURIComponent(name)}?limit=50&offset=${state.messages.length}`,
+        `/api/channels/${encodeURIComponent(name)}?${_channelQuery({ limit: 50, offset: state.messages.length })}`,
       );
       if (token !== state.loadToken) return;
       const rows = data.messages || [];
@@ -679,6 +826,9 @@ export function createBoardStore() {
   /** Fetch only posts newer than the last rendered one (dedup-safe). */
   async function refresh() {
     if (!state.selectedType || !state.selectedName) return;
+    // While a server-side filter is active, keep the filtered page intact;
+    // board.post events still merge matching rows through handleBoardPost().
+    if (state.selectedType === "channel" && (state.kindFilter !== "all" || state.query)) return;
     if (state.selectedType === "dm" || !state.lastTs) {
       await loadMessages();
       return;
@@ -691,7 +841,10 @@ export function createBoardStore() {
       );
       if (token !== state.loadToken) return;
       const rows = data.messages || [];
-      if (data.total !== undefined) state.total = Number(data.total) || state.total;
+      if (data.total !== undefined) {
+        state.total = Number(data.total) || state.total;
+        state.boardTotal = state.total;
+      }
       const added = mergeMessages(rows, { type: "channel", live: true });
       if (added === 0) return;
       await ensureAvatars(rows.map((message) => message.from));
@@ -724,18 +877,30 @@ export function createBoardStore() {
       };
     }
     if (data.hooks && typeof data.hooks === "object") row.hooks = data.hooks;
-    const added = mergeMessages([row], { type: "channel", live: true });
-    if (added === 0) return;
-    state.total += added;
 
     const channelInfo = channel(data.channel);
+    const filtered = state.kindFilter !== "all" || Boolean(state.query);
+    const matches = !filtered || _matchesActiveFilters(row);
+    const added = matches ? mergeMessages([row], { type: "channel", live: true }) : 0;
+
     if (channelInfo) {
-      channelInfo.message_count = (channelInfo.message_count || 0) + added;
+      channelInfo.message_count = (channelInfo.message_count || 0) + 1;
       if (!channelInfo.last_post_ts || String(data.ts || "") >= channelInfo.last_post_ts) {
         channelInfo.last_post_ts = data.ts;
         channelInfo.last_from = data.from;
       }
+      state.boardTotal = Number(channelInfo.message_count) || state.boardTotal + 1;
+    } else {
+      state.boardTotal += 1;
     }
+    state.detailRevision += 1;
+
+    if (added === 0) {
+      emit("channels");
+      return;
+    }
+    state.total += added;
+    state.filterTotal += added;
     await ensureAvatars([data.from]);
     emit("messages");
     emit("channels");
@@ -766,7 +931,7 @@ export function createBoardStore() {
       if (token !== state.loadToken) return { ok: true, delivery, hooks };
 
       if (post.id !== undefined && post.id !== null && post.id !== "") {
-        const added = mergeMessages([{
+        const row = {
           id: post.id,
           ts: new Date().toISOString(),
           from: user,
@@ -776,19 +941,34 @@ export function createBoardStore() {
           reply_to: replyTo || undefined,
           delivery,
           hooks,
-        }], { type: "channel" });
+        };
+        const filtered = state.kindFilter !== "all" || Boolean(state.query);
+        const added = !filtered || _matchesActiveFilters(row)
+          ? mergeMessages([row], { type: "channel" })
+          : 0;
         const stored = messageById(post.id);
         if (stored) {
           stored.delivery = delivery;
           stored.hooks = hooks;
         }
+        const channelInfo = channel(name);
+        if (channelInfo) {
+          channelInfo.message_count = (channelInfo.message_count || 0) + 1;
+          state.boardTotal = channelInfo.message_count;
+        } else {
+          state.boardTotal += 1;
+        }
+        state.detailRevision += 1;
         if (added) {
           state.total += added;
+          state.filterTotal += added;
           await ensureAvatars([user]);
           emit("messages");
           emit("channels");
         } else if (stored) {
           emit("messages");
+        } else {
+          emit("channels");
         }
       }
       return { ok: true, delivery, hooks };
@@ -858,6 +1038,7 @@ export function createBoardStore() {
     setDmFilter,
     setArchiveOpen,
     setMode,
+    setView,
     // messages
     mergeMessages,
     messageKey,
@@ -867,6 +1048,12 @@ export function createBoardStore() {
     isExpanded,
     toggleExpanded,
     setPersonFilter,
+    // filters
+    isFiltered,
+    setKindFilter,
+    setQuery,
+    loadFilterCounts,
+    // selection / reading
     select,
     loadMessages,
     loadOlder,

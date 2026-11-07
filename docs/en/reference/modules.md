@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=e8ac25599c000255c1f36430ba8e89a8d7f6cdc223298bd9c43f30e13dad3d53 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a0f07a28ad003a7e1ccab1de4b2d173ce5b8d1828f52d2c3f39aacf2748269f5 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -142,7 +142,7 @@ LLM agent execution, conversation control, and engine integration.
 
 ## `core.anima`
 
-Digital Anima lifecycle and runtime objects.
+The lifecycle and runtime objects of Digital Anima.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -158,7 +158,7 @@ Digital Anima lifecycle and runtime objects.
 | `core.anima.factory` | 876 | Anima creation factory: create new Digital Animas from templates, blank, or MD files. |
 | `core.anima.heartbeat` | 1022 | — |
 | `core.anima.image_artifacts` | 219 | — |
-| `core.anima.inbox` | 1081 | — |
+| `core.anima.inbox` | 1089 | — |
 | `core.anima.inbox_overflow` | 100 | — |
 | `core.anima.lifecycle` | 1662 | — |
 | `core.anima.messaging` | 1332 | — |
@@ -713,7 +713,7 @@ Storage, search, and organization of conversation and episode memories.
 
 ## `core.messaging`
 
-Message delivery between animas and to and from external parties.
+Message delivery between Animas and to external parties.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -724,6 +724,7 @@ Message delivery between animas and to and from external parties.
 | `core.messaging.board_fanout` | 102 | — |
 | `core.messaging.board_reads` | 290 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
+| `core.messaging.flows` | 676 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1070 | — |
@@ -1139,7 +1140,7 @@ Voice input/output and voice dialogue.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 865 | — |
+| `server.routes.channels` | 906 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

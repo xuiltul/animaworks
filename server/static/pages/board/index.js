@@ -10,6 +10,9 @@ import { createStream } from "./stream.js";
 import { createComposer } from "./composer.js";
 import { createDrawer } from "./drawer.js";
 import { createMentionCard } from "./mention-card.js";
+import { createHomeView } from "./home.js";
+import { createFlowsView } from "./flows.js";
+import { createPalette } from "./palette.js";
 
 export function createBoardPage(container, options = {}) {
   const store = createBoardStore();
@@ -19,12 +22,16 @@ export function createBoardPage(container, options = {}) {
   let composer = null;
   let unsubscribeStore = null;
   let unsubscribeStatus = null;
+  let unsubscribeRead = null;
+  let composingSearch = false;
 
   container.innerHTML = `
     <div class="board-layout" id="boardLayout">
       <button type="button" class="board-mobile-toggle" id="boardMobileToggle" aria-expanded="false">${escapeHtml(t("board.rail_toggle"))}</button>
       <aside class="board-rail" id="boardRail" aria-label="${escapeHtml(t("board.channels"))}"></aside>
       <section class="board-main">
+        <section class="board-home" id="boardHome" hidden></section>
+        <section class="board-flows" id="boardFlows" hidden></section>
         <div class="board-placeholder" id="boardPlaceholder">
           <div class="board-placeholder-icon" aria-hidden="true">#</div>
           <div class="board-placeholder-text">${escapeHtml(t("board.channel_select"))}</div>
@@ -35,10 +42,13 @@ export function createBoardPage(container, options = {}) {
           <div class="board-readonly" id="boardReadonly" hidden></div>
         </div>
       </section>
+      <div class="board-palette-backdrop" id="boardPalette" hidden></div>
     </div>`;
 
   const layout = container.querySelector("#boardLayout");
   const railElement = container.querySelector("#boardRail");
+  const homeElement = container.querySelector("#boardHome");
+  const flowsElement = container.querySelector("#boardFlows");
   const placeholder = container.querySelector("#boardPlaceholder");
   const view = container.querySelector("#boardView");
   const headerElement = container.querySelector("#boardHeader");
@@ -46,6 +56,7 @@ export function createBoardPage(container, options = {}) {
   const readonlyElement = container.querySelector("#boardReadonly");
   const mainElement = container.querySelector(".board-main");
   const mobileToggle = container.querySelector("#boardMobileToggle");
+  const paletteRoot = container.querySelector("#boardPalette");
   const signal = abort.signal;
 
   composer = createComposer({
@@ -54,6 +65,20 @@ export function createBoardPage(container, options = {}) {
   });
   view.append(composer.element);
   stream = createStream({ element: messagesElement, store });
+  const home = createHomeView({ element: homeElement, store });
+  const flows = createFlowsView({ element: flowsElement, store });
+  const palette = createPalette({
+    root: paletteRoot,
+    store,
+    onSelect: (type, name) => {
+      store.select(type, name);
+      closeRailOnMobile();
+    },
+    onView: (next) => {
+      store.setView(next);
+      closeRailOnMobile();
+    },
+  });
 
   function updateDrawerToggle() {
     const button = headerElement.querySelector("[data-board-info]");
@@ -79,10 +104,15 @@ export function createBoardPage(container, options = {}) {
     renderRail(railElement, store);
 
     const hasSelection = Boolean(store.state.selectedType && store.state.selectedName);
-    placeholder.hidden = hasSelection;
+    const activeView = hasSelection ? null : (store.state.view || "home");
+    placeholder.hidden = hasSelection || activeView === "home" || activeView === "flows";
     view.hidden = !hasSelection;
+    homeElement.hidden = hasSelection || activeView !== "home";
+    flowsElement.hidden = hasSelection || activeView !== "flows";
     if (!hasSelection) {
       drawer.close();
+      if (activeView === "flows") flows.show();
+      else home.render();
       return;
     }
 
@@ -121,6 +151,17 @@ export function createBoardPage(container, options = {}) {
   }
 
   function onRailClick(event) {
+    const viewButton = event.target.closest("[data-board-view]");
+    if (viewButton) {
+      store.setView(viewButton.dataset.boardView);
+      closeRailOnMobile();
+      return;
+    }
+    const searchButton = event.target.closest("[data-board-search]");
+    if (searchButton) {
+      palette.open();
+      return;
+    }
     const modeButton = event.target.closest("[data-board-mode]");
     if (modeButton) {
       store.setMode(modeButton.dataset.boardMode);
@@ -129,6 +170,13 @@ export function createBoardPage(container, options = {}) {
     const item = event.target.closest("[data-board-type][data-board-name]");
     if (!item) return;
     store.select(item.dataset.boardType, item.dataset.boardName);
+    closeRailOnMobile();
+  }
+
+  function onHomeClick(event) {
+    const card = event.target.closest("[data-board-home-card]");
+    if (!card) return;
+    store.select("channel", card.dataset.boardHomeCard);
     closeRailOnMobile();
   }
 
@@ -264,9 +312,39 @@ export function createBoardPage(container, options = {}) {
     updateDrawerToggle();
   }
 
+  function onHeaderFilterClick(event) {
+    const kindChip = event.target.closest("[data-board-kind]");
+    if (kindChip) {
+      store.setKindFilter(kindChip.dataset.boardKind);
+      return;
+    }
+    if (event.target.closest("[data-board-clear-filter]")) {
+      store.setPersonFilter("");
+    }
+  }
+
+  function onHeaderFilterInput(event) {
+    const input = event.target.closest("[data-board-search-input]");
+    if (!input || composingSearch || event.isComposing) return;
+    store.setQuery(input.value);
+  }
+
+  function onHeaderCompositionEnd(event) {
+    composingSearch = false;
+    const input = event.target.closest("[data-board-search-input]");
+    if (input) store.setQuery(input.value);
+  }
+
   railElement.addEventListener("click", onRailClick, { signal });
   railElement.addEventListener("change", onRailChange, { signal });
+  homeElement.addEventListener("click", onHomeClick, { signal });
   headerElement.addEventListener("click", onHeaderClick, { signal });
+  headerElement.addEventListener("click", onHeaderFilterClick, { signal });
+  headerElement.addEventListener("input", onHeaderFilterInput, { signal });
+  headerElement.addEventListener("compositionstart", () => {
+    composingSearch = true;
+  }, { signal });
+  headerElement.addEventListener("compositionend", onHeaderCompositionEnd, { signal });
   messagesElement.addEventListener("click", onStreamClick, { signal });
   messagesElement.addEventListener("scroll", onScroll, { signal });
   mobileToggle.addEventListener("click", () => {
@@ -287,8 +365,8 @@ export function createBoardPage(container, options = {}) {
       renderRail(railElement, store);
       return;
     }
-    if (reason === "filter") {
-      stream.render({ reason: "filter" });
+    if (reason === "filter" || reason === "filters") {
+      refresh(reason);
       return;
     }
     refresh(reason);
@@ -346,11 +424,15 @@ export function createBoardPage(container, options = {}) {
     store.stop();
     if (unsubscribeStore) unsubscribeStore();
     if (unsubscribeStatus) unsubscribeStatus();
+    if (unsubscribeRead) unsubscribeRead();
     if (window.__boardWsHandler) window.__boardWsHandler = null;
     if (window.__boardReadWsHandler) window.__boardReadWsHandler = null;
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();
+    home.destroy();
+    flows.destroy();
+    palette.destroy();
     drawer.destroy();
     container.innerHTML = "";
   }

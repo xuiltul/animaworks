@@ -101,7 +101,7 @@ export function createStream({ element, store }) {
   function _filterBar() {
     const bar = document.createElement("div");
     bar.className = "board-filter-bar";
-    bar.innerHTML = `<span class="board-filter-label">${escapeHtml(t("board.filter_person", { name: store.state.personFilter }))}</span><button type="button" class="board-filter-clear" data-board-clear-filter>${escapeHtml(t("board.filter_clear"))}</button>`;
+    bar.innerHTML = `<button type="button" class="board-filter-chip board-filter-person board-is-active" data-board-clear-filter title="${escapeHtml(t("board.filter_clear"))}">${escapeHtml(t("board.filter_person_chip", { name: store.state.personFilter }))}</button>`;
     return bar;
   }
 
@@ -261,7 +261,9 @@ export function createStream({ element, store }) {
       });
     }
 
-    const line = store.state.readLine;
+    // The "new from here" line describes the whole board, so hide it while filtering.
+    const filtering = store.state.kindFilter !== "all" || Boolean(store.state.query);
+    const line = filtering ? null : store.state.readLine;
     let previous = null;
     let previousDay = "";
     for (const message of visible) {

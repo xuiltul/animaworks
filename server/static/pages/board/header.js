@@ -1,7 +1,57 @@
 // ── Board channel header ─────────────────────
 import { t } from "/shared/i18n.js";
-import { escapeHtml } from "../../modules/state.js";
+import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { avatarMarkup } from "./avatar.js";
+import { numberText } from "./time.js";
+
+const FILTER_KINDS = ["all", "anima", "human", "external", "operator"];
+
+function _kindLabel(kind) {
+  return t(`board.filter_kind_${kind}`);
+}
+
+function _filterChips(store) {
+  const { kindFilter, filterCounts } = store.state;
+  return FILTER_KINDS
+    .filter((kind) => kind === "all" || (Number(filterCounts[kind]) || 0) > 0)
+    .map((kind) => {
+      const count = kind === "all"
+        ? Number(filterCounts.all) || 0
+        : Number(filterCounts[kind]) || 0;
+      const active = kindFilter === kind;
+      return `<button type="button" class="board-filter-chip${active ? " board-is-active" : ""}" data-board-kind="${escapeAttr(kind)}" aria-pressed="${active ? "true" : "false"}">
+        <span class="board-filter-chip-label">${escapeHtml(_kindLabel(kind))}</span>
+        <span class="board-filter-chip-count">${escapeHtml(numberText(count))}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function _filterMarkup(store, channel) {
+  const state = store.state;
+  const serverFiltered = state.kindFilter !== "all" || Boolean(state.query);
+  const total = Number(state.boardTotal) || Number(channel.message_count) || 0;
+  const shown = state.personFilter
+    ? store.visibleMessages().length
+    : serverFiltered
+      ? Number(state.filterTotal) || 0
+      : total;
+  const countText = serverFiltered || state.personFilter
+    ? t("board.filter_count", { shown: numberText(shown), total: numberText(total) })
+    : t("board.filter_count_all", { total: numberText(total) });
+
+  return `<div class="board-header-filters" role="group" aria-label="${escapeAttr(t("board.filter_search_label"))}">
+    ${_filterChips(store)}
+    <label class="board-filter-search" for="boardSearchInput">
+      <span class="board-filter-search-icon" aria-hidden="true">⌕</span>
+      <input id="boardSearchInput" type="search" data-board-search-input
+        placeholder="${escapeAttr(t("board.filter_search_placeholder"))}"
+        aria-label="${escapeAttr(t("board.filter_search_label"))}"
+        value="${escapeAttr(state.query)}" autocomplete="off">
+    </label>
+    <span class="board-filter-total" data-board-filter-count>${escapeHtml(countText)}</span>
+  </div>`;
+}
 
 function _accessBadge(access, memberCount) {
   if (access === "closed") return `<span class="board-badge board-badge-access board-badge-access-closed">${escapeHtml(t("board.access_closed"))}</span>`;
@@ -16,6 +66,10 @@ export function renderChannelHeader(element, channel, store) {
     element.innerHTML = `<div class="board-header-title">${escapeHtml(t("board.loading"))}</div>`;
     return;
   }
+
+  const previousInput = element.querySelector("[data-board-search-input]");
+  const hadFocus = previousInput && document.activeElement === previousInput;
+  const caret = hadFocus ? previousInput.selectionStart : null;
 
   const members = Array.isArray(channel.members) ? channel.members : [];
   const visibleMembers = members.slice(0, 6);
@@ -49,5 +103,15 @@ export function renderChannelHeader(element, channel, store) {
       ${slackBadges}
       ${members.length ? `<span class="board-members">${memberAvatars}${moreMembers}</span>` : ""}
     </div>
-    ${channel.description ? `<div class="board-header-description">${escapeHtml(channel.description)}</div>` : ""}`;
+    ${channel.description ? `<div class="board-header-description">${escapeHtml(channel.description)}</div>` : ""}
+    ${_filterMarkup(store, channel)}`;
+
+  if (hadFocus) {
+    const input = element.querySelector("[data-board-search-input]");
+    if (input) {
+      input.focus();
+      const position = caret === null ? input.value.length : Math.min(caret, input.value.length);
+      input.setSelectionRange(position, position);
+    }
+  }
 }
