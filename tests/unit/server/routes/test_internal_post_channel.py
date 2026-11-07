@@ -141,7 +141,7 @@ def test_suppression_preserves_origin_for_outbound_hook(
 
     client, _channel_file = _setup_post(monkeypatch, tmp_path, caller)
     origins: list[str] = []
-    register_post_hook("origin_capture", lambda post: origins.append(post.origin) or "sent")
+    register_post_hook("origin_capture", lambda post, result: origins.append(post.origin) or "sent")
     try:
         response = client.post(
             "/api/internal/post-channel",
@@ -153,3 +153,67 @@ def test_suppression_preserves_origin_for_outbound_hook(
     assert response.status_code == 200
     assert response.json()["post"]["notified"] == []
     assert origins == [expected_origin]
+
+
+def test_anima_post_records_board_reply_and_trigger(monkeypatch, tmp_path: Path) -> None:
+    client, channel_file = _setup_post(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+    triggers = [
+        {"id": "msg-1", "from": "bob", "type": "message", "thread_id": "thread-1"},
+        {
+            "id": "mention-1",
+            "from": "carol",
+            "type": "board_mention",
+            "board_channel": "general",
+            "board_post_id": "post-9",
+        },
+    ]
+
+    response = client.post("/api/internal/post-channel", json={**_body("anima"), "triggers": triggers})
+
+    assert response.status_code == 200
+    entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+    assert entry["reply_to"] == "post-9"
+    assert entry["trigger"] == {"type": "board_mention", "id": "post-9"}
+
+
+def test_anima_post_has_no_reply_for_other_channel(monkeypatch, tmp_path: Path) -> None:
+    client, channel_file = _setup_post(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+    triggers = [
+        {
+            "id": "mention-1",
+            "from": "carol",
+            "type": "board_mention",
+            "board_channel": "ops",
+            "board_post_id": "post-9",
+        }
+    ]
+
+    response = client.post("/api/internal/post-channel", json={**_body("anima"), "triggers": triggers})
+
+    assert response.status_code == 200
+    entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+    assert "reply_to" not in entry
+    assert entry["trigger"] == {"type": "board_mention", "id": "post-9"}
+
+
+def test_anima_post_without_triggers_has_no_reply_metadata(monkeypatch, tmp_path: Path) -> None:
+    client, channel_file = _setup_post(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+
+    response = client.post("/api/internal/post-channel", json=_body("anima"))
+
+    assert response.status_code == 200
+    entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+    assert "reply_to" not in entry
+    assert "trigger" not in entry
+
+
+def test_message_trigger_records_message_id_without_reply_to(monkeypatch, tmp_path: Path) -> None:
+    client, channel_file = _setup_post(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+    triggers = [{"id": "msg-7", "from": "bob", "type": "message"}]
+
+    response = client.post("/api/internal/post-channel", json={**_body("anima"), "triggers": triggers})
+
+    assert response.status_code == 200
+    entry = json.loads(channel_file.read_text(encoding="utf-8").strip())
+    assert "reply_to" not in entry
+    assert entry["trigger"] == {"type": "message", "id": "msg-7"}

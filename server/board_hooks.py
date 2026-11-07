@@ -11,7 +11,13 @@ import logging
 import threading
 from typing import Any
 
-from core.messaging.board import BoardPost, board_access, register_post_hook, unregister_post_hook
+from core.messaging.board import (
+    BoardPost,
+    PostResult,
+    board_access,
+    register_post_hook,
+    unregister_post_hook,
+)
 from core.messaging.board_reads import register_read_hook, unregister_read_hook
 
 logger = logging.getLogger("animaworks.server.board_hooks")
@@ -35,7 +41,7 @@ def register_board_post_hooks(app: Any) -> None:
         # loop thread must not block it waiting for its own coroutine.
         return threading.get_ident() == loop_thread_id
 
-    def ws_event(post: BoardPost) -> str:
+    def ws_event(post: BoardPost, result: PostResult) -> str:
         ws_manager = getattr(app.state, "ws_manager", None)
         if ws_manager is None:
             return "skipped"
@@ -50,6 +56,11 @@ def register_board_post_hooks(app: Any) -> None:
             "id": post.id,
             "kind": post.kind,
         }
+        if post.reply_to:
+            event["reply_to"] = post.reply_to
+        if result.notified or result.not_notified:
+            event["notified"] = list(result.notified)
+            event["not_notified"] = dict(result.not_notified)
         if _on_loop_thread():
             _spawn(loop, emit_direct(ws_manager, "board.post", event))
             return "sent"
@@ -102,7 +113,7 @@ def register_board_post_hooks(app: Any) -> None:
 
     if slack_enabled:
 
-        def slack_outbound(post: BoardPost) -> str:
+        def slack_outbound(post: BoardPost, _result: PostResult) -> str:
             from core.platform.env import get_env
 
             if post.source in {"slack", "discord"} or post.origin == "mirror":

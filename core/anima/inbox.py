@@ -120,6 +120,27 @@ def _record_board_mention_picks(shared_dir: Any, anima_name: str, items: list[In
             )
 
 
+def _run_trigger_entries(items: list[InboxItem]) -> tuple[dict[str, str], ...]:
+    """Describe the inbox messages that triggered this run.
+
+    The entries are exported to tool subprocesses so Board posts and DMs can
+    record which message they answer without asking the Anima to do anything.
+    """
+    triggers: list[dict[str, str]] = []
+    for item in items:
+        msg = item.msg
+        trigger = {"id": msg.id, "from": msg.from_person, "type": msg.type}
+        if msg.thread_id:
+            trigger["thread_id"] = msg.thread_id
+        meta = msg.meta if isinstance(msg.meta, dict) else {}
+        for key in ("board_channel", "board_post_id"):
+            value = meta.get(key)
+            if isinstance(value, str) and value:
+                trigger[key] = value
+        triggers.append(trigger)
+    return tuple(triggers)
+
+
 async def _append_episode_off_loop(memory: Any, episode: str, *, origin: str) -> None:
     """Append an episode without blocking the async inbox event loop."""
     await asyncio.to_thread(memory.append_episode, episode, origin=origin)
@@ -489,7 +510,12 @@ class InboxMixin:
 
                     # Suppress only the channels that triggered board_mention replies
                     suppression_channels = _board_mention_suppression_channels(inbox_result.inbox_items)
-                    from core.tooling.handler import active_session_type, suppress_board_fanout_channels
+                    run_trigger_entries = _run_trigger_entries(inbox_result.inbox_items)
+                    from core.tooling.handler import (
+                        active_session_type,
+                        run_triggers,
+                        suppress_board_fanout_channels,
+                    )
 
                     agent_session_acquired = False
                     agent_session_lock = None
@@ -508,6 +534,7 @@ class InboxMixin:
                     _fanout_token = (
                         suppress_board_fanout_channels.set(suppression_channels) if suppression_channels else None
                     )
+                    _run_triggers_token = run_triggers.set(run_trigger_entries)
                     _session_token = agent._tool_handler.set_active_session_type("inbox")
                     agent._tool_handler._trigger = trigger
 
@@ -596,6 +623,7 @@ class InboxMixin:
                         await asyncio.to_thread(journal.close)
                         if _fanout_token is not None:
                             suppress_board_fanout_channels.reset(_fanout_token)
+                        run_triggers.reset(_run_triggers_token)
                         active_session_type.reset(_session_token)
                         if agent_session_acquired:
                             if isinstance(agent_session_lock, asyncio.Lock):

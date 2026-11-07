@@ -25,10 +25,16 @@ def post_via_server(
     from_name: str | None = None,
     request_id: str | None = None,
     suppress_mentions: bool = False,
+    triggers: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Post using the authenticated internal API and return its JSON body."""
     from core.host_api import response_detail
     from core.internal_api import host_api
+
+    if triggers is None:
+        from core.execution.session.board_reply import current_run_triggers
+
+        triggers = [dict(trigger) for trigger in current_run_triggers()]
 
     payload: dict[str, Any] = {
         "from_anima": from_anima,
@@ -38,6 +44,7 @@ def post_via_server(
         "from_name": from_name,
         "request_id": request_id,
         "suppress_mentions": suppress_mentions,
+        "triggers": triggers,
     }
     response = host_api.post("/api/internal/post-channel", json=payload, timeout=30.0)
     if response.status_code < 200 or response.status_code >= 300:

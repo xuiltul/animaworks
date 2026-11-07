@@ -103,6 +103,38 @@ async def test_ws_hook_emits_post_id_and_kind(shared_dir: Path, monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_ws_hook_includes_reply_target_and_mention_delivery(
+    shared_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (shared_dir / "channels" / "general.jsonl").touch()
+    bob_dir = shared_dir.parent / "animas" / "bob"
+    (bob_dir / "status.json").write_text('{"enabled": true}', encoding="utf-8")
+    app = _app(shared_dir)
+    monkeypatch.setattr(
+        "core.config.models.load_config",
+        lambda: SimpleNamespace(external_messaging=SimpleNamespace(slack=SimpleNamespace(enabled=False))),
+    )
+    register_board_post_hooks(app)
+
+    result = await asyncio.to_thread(
+        post_to_board,
+        "general",
+        "reply @bob",
+        anima_principal("alice", animas_dir=shared_dir.parent / "animas"),
+        origin="internal",
+        shared_dir=shared_dir,
+        reply_to="post-1",
+    )
+
+    event = app.state.ws_manager.events[0]
+    assert result.hooks == {"ws_event": "sent"}
+    assert event["data"]["reply_to"] == "post-1"
+    assert event["data"]["notified"] == ["bob"]
+    assert event["data"]["not_notified"] == {}
+
+
+@pytest.mark.asyncio
 async def test_slack_hook_requires_explicit_members_whitelist_and_skips_echo(
     shared_dir: Path,
     monkeypatch: pytest.MonkeyPatch,

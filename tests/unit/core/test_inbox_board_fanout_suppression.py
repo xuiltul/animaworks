@@ -164,3 +164,53 @@ def test_engine_environment_exports_the_suppressed_channels(tmp_path: Path) -> N
 
     assert workspace_value == "ops,team-x"
     assert session_value == "ops,team-x"
+
+
+def test_run_trigger_entries_describe_each_inbox_message() -> None:
+    from core.anima.inbox import _run_trigger_entries
+
+    mention = Message(
+        from_person="bob",
+        to_person="alice",
+        type="board_mention",
+        content="reply",
+        thread_id="thread-1",
+        meta={"board_channel": "team-x", "board_post_id": "post-9"},
+    )
+    direct = Message(
+        from_person="carol",
+        to_person="alice",
+        type="message",
+        content="hello",
+        thread_id="thread-2",
+    )
+    items = [
+        InboxItem(msg=mention, path=Path("/tmp/unused-inbox-message.json")),
+        InboxItem(msg=direct, path=Path("/tmp/unused-inbox-message.json")),
+    ]
+
+    assert _run_trigger_entries(items) == (
+        {
+            "id": mention.id,
+            "from": "bob",
+            "type": "board_mention",
+            "thread_id": "thread-1",
+            "board_channel": "team-x",
+            "board_post_id": "post-9",
+        },
+        {
+            "id": direct.id,
+            "from": "carol",
+            "type": "message",
+            "thread_id": "thread-2",
+        },
+    )
+
+
+def test_run_trigger_entries_omit_missing_optional_values() -> None:
+    from core.anima.inbox import _run_trigger_entries
+
+    message = Message(from_person="bob", to_person="alice", type="message", content="hello")
+    items = [InboxItem(msg=message, path=Path("/tmp/unused-inbox-message.json"))]
+
+    assert _run_trigger_entries(items) == ({"id": message.id, "from": "bob", "type": "message"},)

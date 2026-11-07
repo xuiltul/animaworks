@@ -22,6 +22,7 @@ from core.tooling.handler_base import (
     active_session_type,
     board_reply_channels,
     build_outgoing_origin_chain,
+    current_run_triggers,
 )
 
 if TYPE_CHECKING:
@@ -55,6 +56,31 @@ def _notify_message_sent(
         cast(Any, callback)(from_person, to_person, content, message_id=message_id)
     else:
         callback(from_person, to_person, content)
+
+
+def _resolve_dm_reply(
+    to: str,
+    triggers: tuple[dict[str, str], ...],
+    *,
+    reply_to: str,
+    thread_id: str,
+) -> tuple[str, str, dict[str, str] | None]:
+    """Derive an automatic DM reply target and its message metadata."""
+    trigger_id = triggers[-1].get("id", "") if triggers else ""
+    message_meta = {"trigger_id": trigger_id} if trigger_id else None
+    if reply_to or not triggers:
+        return reply_to, thread_id, message_meta
+
+    for trigger in reversed(triggers):
+        if trigger.get("from") != to or trigger.get("type") == "board_mention":
+            continue
+        candidate = trigger.get("id", "")
+        if not candidate:
+            continue
+        if not thread_id:
+            thread_id = trigger.get("thread_id", "")
+        return candidate, thread_id, message_meta
+    return reply_to, thread_id, message_meta
 
 
 def _company_boundary_error(
@@ -215,13 +241,20 @@ class CommsToolsMixin:
 
         # ── Internal messaging ──
         internal_to = resolved.name if resolved else to
+        reply_to, thread_id, message_meta = _resolve_dm_reply(
+            internal_to,
+            current_run_triggers(),
+            reply_to=args.get("reply_to") or "",
+            thread_id=args.get("thread_id") or "",
+        )
         msg = self._messenger.send(
             to=internal_to,
             content=content,
-            thread_id=args.get("thread_id", ""),
-            reply_to=args.get("reply_to", ""),
+            thread_id=thread_id,
+            reply_to=reply_to,
             intent=intent,
             origin_chain=outgoing_chain,
+            meta=message_meta,
         )
 
         if msg.type == "error":
