@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from core.activity.logger import ActivityLogger
 from core.messaging.board import board_access, human_principal
+from core.messaging.board_deliveries import attach_deliveries
 from core.messaging.messenger import Messenger
 
 logger = logging.getLogger("animaworks.routes.channels")
@@ -83,6 +84,23 @@ def _validate_name(name: str) -> JSONResponse | None:
 class ChannelPostRequest(BaseModel):
     text: str = Field(max_length=10000)
     from_name: str = Field(default="human", min_length=1)
+    reply_to: str | None = None
+
+
+def _channel_has_post(channel_file: Path, post_id: str) -> bool:
+    """Return whether *post_id* exists in the channel log."""
+    try:
+        lines = channel_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict) and record.get("id") == post_id:
+            return True
+    return False
 
 
 def _get_messenger(shared_dir: Path) -> Messenger:
@@ -180,6 +198,7 @@ def create_channels_router() -> APIRouter:
                     break
                 new_msgs.append(msg)
             new_msgs.reverse()
+            new_msgs = attach_deliveries(shared_dir, name, new_msgs)
             return {
                 "channel": name,
                 "messages": new_msgs,
@@ -203,6 +222,7 @@ def create_channels_router() -> APIRouter:
                 continue
 
         has_more = start > 0
+        paginated = attach_deliveries(shared_dir, name, paginated)
 
         return {
             "channel": name,
@@ -231,6 +251,15 @@ def create_channels_router() -> APIRouter:
 
         from core.messaging.board import human_principal, post_to_board
 
+        channel_file = shared_dir / "channels" / f"{name}.jsonl"
+        if body.reply_to is not None and not _channel_has_post(channel_file, body.reply_to):
+            from core.i18n import t
+
+            return JSONResponse(
+                status_code=400,
+                content={"detail": t("server.channel_reply_to_not_found", post_id=body.reply_to)},
+            )
+
         post = await asyncio.to_thread(
             post_to_board,
             name,
@@ -238,6 +267,7 @@ def create_channels_router() -> APIRouter:
             human_principal(body.from_name),
             origin="http",
             shared_dir=shared_dir,
+            reply_to=body.reply_to,
         )
         if post.error == "not_found":
             return JSONResponse(

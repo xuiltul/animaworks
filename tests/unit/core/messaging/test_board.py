@@ -188,7 +188,7 @@ def test_request_id_deduplicates_last_posts_and_skips_hooks(shared_dir: Path) ->
     _write_channel(shared_dir)
     principal = human_principal()
     called: list[str] = []
-    register_post_hook("capture", lambda post: called.append(post.id) or "sent")
+    register_post_hook("capture", lambda post, result: called.append(post.id) or "sent")
 
     first = post_to_board("general", "same", principal, request_id="req-1", origin="http", shared_dir=shared_dir)
     second = post_to_board("general", "same", principal, request_id="req-1", origin="http", shared_dir=shared_dir)
@@ -202,10 +202,10 @@ def test_request_id_deduplicates_last_posts_and_skips_hooks(shared_dir: Path) ->
 
 def test_post_hooks_are_best_effort_and_report_status(shared_dir: Path) -> None:
     _write_channel(shared_dir)
-    register_post_hook("sent", lambda post: "sent")
-    register_post_hook("skipped", lambda post: "skipped")
+    register_post_hook("sent", lambda post, result: "sent")
+    register_post_hook("skipped", lambda post, result: "skipped")
 
-    def broken(post):
+    def broken(post, result):
         raise RuntimeError("hook error")
 
     register_post_hook("broken", broken)
