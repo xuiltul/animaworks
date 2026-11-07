@@ -67,6 +67,18 @@ function _channelGroups(store) {
   return result;
 }
 
+function _railTop(modeButtons, store) {
+  const view = store.state.view;
+  return `<div class="board-rail-top">
+    <button type="button" class="board-rail-search" data-board-search>${escapeHtml(t("board.search_button"))}<kbd>⌘K</kbd></button>
+    <div class="board-rail-views">
+      <button type="button" class="board-rail-item board-rail-view${view === "home" ? " board-is-active" : ""}" data-board-view="home" aria-pressed="${view === "home"}">${escapeHtml(t("board.home_rail"))}</button>
+      <button type="button" class="board-rail-item board-rail-view${view === "flows" ? " board-is-active" : ""}" data-board-view="flows" aria-pressed="${view === "flows"}">${escapeHtml(t("board.flows_title"))}</button>
+    </div>
+    ${modeButtons}
+  </div>`;
+}
+
 export function renderRail(element, store) {
   const mode = store.state.mode;
   const modeButtons = `
@@ -76,7 +88,7 @@ export function renderRail(element, store) {
     </div>`;
 
   if (mode === "dm") {
-    element.innerHTML = `<div class="board-rail-top">${modeButtons}</div>${renderDmList(store)}`;
+    element.innerHTML = `${_railTop(modeButtons, store)}${renderDmList(store)}`;
     return;
   }
 
@@ -103,7 +115,7 @@ export function renderRail(element, store) {
       </details>`
     : "";
 
-  element.innerHTML = `<div class="board-rail-top">${modeButtons}</div><div class="board-rail-list">${body}${archive}</div>`;
+  element.innerHTML = `${_railTop(modeButtons, store)}<div class="board-rail-list">${body}${archive}</div>`;
 
   const details = element.querySelector("[data-board-archive]");
   if (details) {

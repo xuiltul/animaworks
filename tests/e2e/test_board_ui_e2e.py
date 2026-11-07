@@ -235,6 +235,94 @@ class _BoardApi:
                 "last_from": "bob",
             }
         ]
+        self.flows_requests: list[dict[str, str]] = []
+        self.flows_calls: list[dict[str, object]] = [
+            {
+                "id": "c1",
+                "via": "board",
+                "place": "general",
+                "from": "alice",
+                "to": "bob",
+                "t": _iso(TODAY_AM + timedelta(minutes=30)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=33)),
+                "reply": _iso(TODAY_AM + timedelta(minutes=36)),
+                "reply_id": "c2",
+                "reply_text": "確認します。",
+                "inferred": False,
+                "parent": None,
+                "text": "bob、今日の共有を確認してください。",
+            },
+            {
+                "id": "c2",
+                "via": "dm",
+                "place": "alice-bob",
+                "from": "bob",
+                "to": "alice",
+                "t": _iso(TODAY_AM + timedelta(minutes=35)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=37)),
+                "reply": _iso(TODAY_AM + timedelta(minutes=40)),
+                "reply_id": None,
+                "reply_text": "ありがとう、進めます。",
+                "inferred": True,
+                "parent": "c1",
+                "text": "alice、確認しました。",
+            },
+            {
+                "id": "c3",
+                "via": "board",
+                "place": "ops",
+                "from": "bob",
+                "to": "carol",
+                "t": _iso(YESTERDAY_PM - timedelta(minutes=30)),
+                "delivered": False,
+                "reason": "offline",
+                "read": None,
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "carol、運用の確認をお願いします。",
+            },
+            {
+                "id": "c4",
+                "via": "board",
+                "place": "general",
+                "from": "human",
+                "to": "alice",
+                "t": _iso(TODAY_AM + timedelta(minutes=60)),
+                "delivered": True,
+                "reason": "",
+                "read": _iso(TODAY_AM + timedelta(minutes=62)),
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "alice、方針を確認したいです。",
+            },
+            {
+                "id": "c5",
+                "via": "board",
+                "place": "general",
+                "from": "carol",
+                "to": "bob",
+                "t": _iso(TODAY_AM + timedelta(minutes=70)),
+                "delivered": True,
+                "reason": "",
+                "read": None,
+                "reply": None,
+                "reply_id": None,
+                "reply_text": "",
+                "inferred": False,
+                "parent": None,
+                "text": "bob、こちらも見てください。",
+            },
+        ]
 
     def _json(self, route, payload: object, status: int = 200) -> None:
         route.fulfill(
@@ -256,6 +344,58 @@ class _BoardApi:
             return
         if path == "/api/dm":
             self._json(route, self.dm_pairs)
+            return
+        if path == "/api/flows":
+            query = parse_qs(urlparse(request.url).query)
+            days = int(query.get("days", ["30"])[0])
+            via = query.get("via", ["all"])[0]
+            self.flows_requests.append({"days": str(days), "via": via})
+            cutoff = datetime.now().astimezone() - timedelta(days=days)
+            calls = [
+                dict(call)
+                for call in self.flows_calls
+                if (via == "all" or call["via"] == via)
+                and datetime.fromisoformat(str(call["t"])) >= cutoff
+            ]
+            delivered = sum(1 for call in calls if call["delivered"])
+            read = sum(1 for call in calls if call["read"])
+            replied = sum(1 for call in calls if call["reply"])
+            reply_seconds = sorted(
+                max(
+                    0,
+                    int(
+                        (
+                            datetime.fromisoformat(str(call["reply"]))
+                            - datetime.fromisoformat(str(call["t"]))
+                        ).total_seconds()
+                    ),
+                )
+                for call in calls
+                if call["reply"]
+            )
+            median = reply_seconds[len(reply_seconds) // 2] if reply_seconds else None
+            now = datetime.now().astimezone()
+            waiting = sum(
+                1
+                for call in calls
+                if call["delivered"]
+                and not call["reply"]
+                and now - datetime.fromisoformat(str(call["t"])) <= timedelta(days=2)
+            )
+            self._json(
+                route,
+                {
+                    "calls": calls,
+                    "summary": {
+                        "calls": len(calls),
+                        "delivered": delivered,
+                        "read": read,
+                        "replied": replied,
+                        "median_reply_seconds": median,
+                        "waiting": waiting,
+                    },
+                },
+            )
             return
         if path.startswith("/api/animas/") and "/assets/" in path:
             self._json(route, {"error": "not found"}, status=404)
@@ -285,6 +425,8 @@ class _BoardApi:
                 )
                 return
             rows = self.messages[offset : offset + limit]
+            if limit == 1 and offset == 0:
+                rows = sorted(self.messages, key=lambda row: str(row["ts"]), reverse=True)[:1]
             self._json(
                 route,
                 {
@@ -603,3 +745,125 @@ def test_dm_mode_lists_pairs_and_is_readonly(board_page: Page) -> None:
     board_page.locator('[data-board-id="d1"]').wait_for(timeout=5000)
     assert board_page.locator('[data-board-id="d1"]').count() == 1
     assert board_page.locator('[data-board-id="d2"]').count() == 1
+
+
+# ── Home, flows and palette ──────────────────────────────────
+
+
+def _open_flows(page: Page) -> None:
+    page.locator('[data-board-view="flows"]').click()
+    page.locator('[data-flow-tile="calls"]').wait_for(timeout=5000)
+
+
+def test_home_cards_and_card_opens_board(board_page: Page) -> None:
+    home = board_page.locator("#boardHome")
+    home.wait_for(timeout=5000)
+    assert home.is_visible()
+    assert board_page.locator("#boardPlaceholder").is_hidden()
+
+    cards = board_page.locator("[data-board-home-card]")
+    assert cards.count() == 3
+    names = [cards.nth(i).get_attribute("data-board-home-card") for i in range(cards.count())]
+    assert names == ["general", "ops", "random"]
+    assert board_page.locator('[data-board-home-card="archive"]').count() == 0
+
+    general = board_page.locator('[data-board-home-card="general"]')
+    assert "general" in general.inner_text()
+    assert "team-a" in general.inner_text()
+    general.click()
+    board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
+    assert home.is_hidden()
+    assert board_page.locator("#boardView").is_visible()
+
+
+def test_flow_summary_matches_fixed_data(board_page: Page) -> None:
+    _open_flows(board_page)
+    assert board_page.locator(".board-flow-tiles").is_visible()
+    expected = {
+        "calls": "5",
+        "delivered": "80%",
+        "read": "75%",
+        "replied": "67%",
+        "median": "6分",
+        "waiting": "2",
+    }
+    for tile, value in expected.items():
+        text = board_page.locator(
+            f'[data-flow-tile="{tile}"] .board-flow-tile-value'
+        ).inner_text()
+        assert text == value
+
+
+def test_unread_stage_filters_the_list(board_page: Page) -> None:
+    _open_flows(board_page)
+    sankey = board_page.locator(".board-flow-sankey")
+    unread = sankey.locator('g[data-flow-stage="unread"]')
+    unread.locator(".board-flow-node-rect").click()
+
+    rows = board_page.locator(".board-flow-table tbody tr[data-flow-call]")
+    assert rows.count() == 1
+    assert rows.first.get_attribute("data-flow-call") == "c5"
+    assert board_page.locator(".board-flow-sankey g.is-selected").count() == 1
+
+
+def test_map_person_filters_the_list(board_page: Page) -> None:
+    _open_flows(board_page)
+    alice = board_page.locator('[data-flow-person="alice"]')
+    alice.locator(".board-flow-map-shape").click()
+
+    assert board_page.locator(".board-flow-panel.is-person h3").inner_text() == "alice"
+    rows = board_page.locator(".board-flow-table tbody tr[data-flow-call]")
+    ids = [rows.nth(i).get_attribute("data-flow-call") for i in range(rows.count())]
+    assert ids == ["c4", "c2", "c1"]
+
+
+def test_list_row_shows_root_to_child_trace(board_page: Page) -> None:
+    _open_flows(board_page)
+    row = board_page.locator('.board-flow-table tbody tr[data-flow-call="c2"]')
+    row.click()
+
+    boxes = board_page.locator(".board-flow-trace-box")
+    assert boxes.count() == 2
+    root = board_page.locator('.board-flow-trace-box[data-flow-call="c1"]')
+    child = board_page.locator('.board-flow-trace-box[data-flow-call="c2"]')
+    assert root.count() == 1
+    assert child.count() == 1
+    assert "is-selected" in (child.get_attribute("class") or "")
+    assert "c1" not in (child.inner_text())
+    assert "alice" in root.inner_text()
+
+
+def test_period_and_via_switch_call_the_api(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_flows(board_page)
+    assert api.flows_requests[-1] == {"days": "30", "via": "all"}
+
+    board_page.locator('[data-flow-days="7"]').click()
+    board_page.wait_for_function(
+        "document.querySelectorAll('[data-flow-tile]').length === 6",
+        timeout=5000,
+    )
+    assert api.flows_requests[-1] == {"days": "7", "via": "all"}
+
+    board_page.locator('[data-flow-via="board"]').click()
+    board_page.wait_for_function(
+        "document.querySelectorAll('[data-flow-tile]').length === 6",
+        timeout=5000,
+    )
+    assert api.flows_requests[-1] == {"days": "7", "via": "board"}
+
+
+def test_palette_moves_to_a_board(board_page: Page) -> None:
+    board_page.keyboard.press("Control+k")
+    search = board_page.locator("#boardPaletteInput")
+    search.wait_for(timeout=5000)
+    assert search.is_visible()
+    search.fill("general")
+    item = board_page.locator('[data-board-palette-item="general"]')
+    item.wait_for(timeout=5000)
+    assert "general" in item.inner_text()
+    item.click()
+
+    board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
+    assert board_page.locator("#boardPalette").is_hidden()
+    assert board_page.locator("#boardHome").is_hidden()

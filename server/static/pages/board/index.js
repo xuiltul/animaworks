@@ -9,6 +9,9 @@ import { renderDmHeader } from "./dm.js";
 import { createStream } from "./stream.js";
 import { createComposer } from "./composer.js";
 import { createMentionCard } from "./mention-card.js";
+import { createHomeView } from "./home.js";
+import { createFlowsView } from "./flows.js";
+import { createPalette } from "./palette.js";
 
 export function createBoardPage(container) {
   const store = createBoardStore();
@@ -24,6 +27,8 @@ export function createBoardPage(container) {
       <button type="button" class="board-mobile-toggle" id="boardMobileToggle" aria-expanded="false">${escapeHtml(t("board.rail_toggle"))}</button>
       <aside class="board-rail" id="boardRail" aria-label="${escapeHtml(t("board.channels"))}"></aside>
       <section class="board-main">
+        <section class="board-home" id="boardHome" hidden></section>
+        <section class="board-flows" id="boardFlows" hidden></section>
         <div class="board-placeholder" id="boardPlaceholder">
           <div class="board-placeholder-icon" aria-hidden="true">#</div>
           <div class="board-placeholder-text">${escapeHtml(t("board.channel_select"))}</div>
@@ -34,21 +39,39 @@ export function createBoardPage(container) {
           <div class="board-readonly" id="boardReadonly" hidden></div>
         </div>
       </section>
+      <div class="board-palette-backdrop" id="boardPalette" hidden></div>
     </div>`;
 
   const layout = container.querySelector("#boardLayout");
   const railElement = container.querySelector("#boardRail");
+  const homeElement = container.querySelector("#boardHome");
+  const flowsElement = container.querySelector("#boardFlows");
   const placeholder = container.querySelector("#boardPlaceholder");
   const view = container.querySelector("#boardView");
   const headerElement = container.querySelector("#boardHeader");
   const messagesElement = container.querySelector("#boardMessages");
   const readonlyElement = container.querySelector("#boardReadonly");
   const mobileToggle = container.querySelector("#boardMobileToggle");
+  const paletteRoot = container.querySelector("#boardPalette");
   const signal = abort.signal;
 
   composer = createComposer({ onSubmit: (text) => store.submit(text) });
   view.append(composer.element);
   stream = createStream({ element: messagesElement, store });
+  const home = createHomeView({ element: homeElement, store });
+  const flows = createFlowsView({ element: flowsElement, store });
+  const palette = createPalette({
+    root: paletteRoot,
+    store,
+    onSelect: (type, name) => {
+      store.select(type, name);
+      closeRailOnMobile();
+    },
+    onView: (next) => {
+      store.setView(next);
+      closeRailOnMobile();
+    },
+  });
 
   function setRailOpen(open) {
     layout.classList.toggle("board-is-rail-open", open);
@@ -63,9 +86,16 @@ export function createBoardPage(container) {
     renderRail(railElement, store);
 
     const hasSelection = Boolean(store.state.selectedType && store.state.selectedName);
-    placeholder.hidden = hasSelection;
+    const activeView = hasSelection ? null : (store.state.view || "home");
+    placeholder.hidden = hasSelection || activeView === "home" || activeView === "flows";
     view.hidden = !hasSelection;
-    if (!hasSelection) return;
+    homeElement.hidden = hasSelection || activeView !== "home";
+    flowsElement.hidden = hasSelection || activeView !== "flows";
+    if (!hasSelection) {
+      if (activeView === "flows") flows.show();
+      else home.render();
+      return;
+    }
 
     if (store.state.selectedType === "channel") {
       const channel = store.channel(store.state.selectedName);
@@ -88,6 +118,17 @@ export function createBoardPage(container) {
   }
 
   function onRailClick(event) {
+    const viewButton = event.target.closest("[data-board-view]");
+    if (viewButton) {
+      store.setView(viewButton.dataset.boardView);
+      closeRailOnMobile();
+      return;
+    }
+    const searchButton = event.target.closest("[data-board-search]");
+    if (searchButton) {
+      palette.open();
+      return;
+    }
     const modeButton = event.target.closest("[data-board-mode]");
     if (modeButton) {
       store.setMode(modeButton.dataset.boardMode);
@@ -96,6 +137,13 @@ export function createBoardPage(container) {
     const item = event.target.closest("[data-board-type][data-board-name]");
     if (!item) return;
     store.select(item.dataset.boardType, item.dataset.boardName);
+    closeRailOnMobile();
+  }
+
+  function onHomeClick(event) {
+    const card = event.target.closest("[data-board-home-card]");
+    if (!card) return;
+    store.select("channel", card.dataset.boardHomeCard);
     closeRailOnMobile();
   }
 
@@ -170,6 +218,7 @@ export function createBoardPage(container) {
 
   railElement.addEventListener("click", onRailClick, { signal });
   railElement.addEventListener("change", onRailChange, { signal });
+  homeElement.addEventListener("click", onHomeClick, { signal });
   messagesElement.addEventListener("click", onStreamClick, { signal });
   messagesElement.addEventListener("scroll", onScroll, { signal });
   mobileToggle.addEventListener("click", () => {
@@ -212,6 +261,9 @@ export function createBoardPage(container) {
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();
+    home.destroy();
+    flows.destroy();
+    palette.destroy();
     container.innerHTML = "";
   }
 

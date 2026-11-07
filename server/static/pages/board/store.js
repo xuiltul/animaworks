@@ -42,6 +42,7 @@ export function createBoardStore() {
     statusOverrides: new Map(),
     avatars: new Map(),
     mode: "board", // "board" | "dm"
+    view: "home", // "home" | "flows" (null while a channel/DM is open)
     selectedType: null, // "channel" | "dm"
     selectedName: null,
     messages: [],
@@ -264,10 +265,21 @@ export function createBoardStore() {
     emit("mode");
   }
 
+  function setView(view) {
+    if (view !== "home" && view !== "flows") return;
+    state.loadToken += 1;
+    state.view = view;
+    state.selectedType = null;
+    state.selectedName = null;
+    state.personFilter = "";
+    emit("view");
+  }
+
   // ── Selection / loading ────────────────────
   function select(type, name) {
     if (type !== "channel" && type !== "dm") return;
     state.loadToken += 1;
+    state.view = null;
     state.selectedType = type;
     state.selectedName = name || null;
     state.mode = type === "dm" ? "dm" : "board";
@@ -482,6 +494,7 @@ export function createBoardStore() {
     setDmFilter,
     setArchiveOpen,
     setMode,
+    setView,
     // messages
     mergeMessages,
     messageKey,
