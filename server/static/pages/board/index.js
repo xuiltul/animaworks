@@ -22,6 +22,8 @@ export function createBoardPage(container) {
   let composer = null;
   let unsubscribeStore = null;
   let unsubscribeStatus = null;
+  let unsubscribeRead = null;
+  let composingSearch = false;
 
   container.innerHTML = `
     <div class="board-layout" id="boardLayout">
@@ -277,10 +279,39 @@ export function createBoardPage(container) {
     updateDrawerToggle();
   }
 
+  function onHeaderFilterClick(event) {
+    const kindChip = event.target.closest("[data-board-kind]");
+    if (kindChip) {
+      store.setKindFilter(kindChip.dataset.boardKind);
+      return;
+    }
+    if (event.target.closest("[data-board-clear-filter]")) {
+      store.setPersonFilter("");
+    }
+  }
+
+  function onHeaderFilterInput(event) {
+    const input = event.target.closest("[data-board-search-input]");
+    if (!input || composingSearch || event.isComposing) return;
+    store.setQuery(input.value);
+  }
+
+  function onHeaderCompositionEnd(event) {
+    composingSearch = false;
+    const input = event.target.closest("[data-board-search-input]");
+    if (input) store.setQuery(input.value);
+  }
+
   railElement.addEventListener("click", onRailClick, { signal });
   railElement.addEventListener("change", onRailChange, { signal });
   homeElement.addEventListener("click", onHomeClick, { signal });
   headerElement.addEventListener("click", onHeaderClick, { signal });
+  headerElement.addEventListener("click", onHeaderFilterClick, { signal });
+  headerElement.addEventListener("input", onHeaderFilterInput, { signal });
+  headerElement.addEventListener("compositionstart", () => {
+    composingSearch = true;
+  }, { signal });
+  headerElement.addEventListener("compositionend", onHeaderCompositionEnd, { signal });
   messagesElement.addEventListener("click", onStreamClick, { signal });
   messagesElement.addEventListener("scroll", onScroll, { signal });
   mobileToggle.addEventListener("click", () => {
@@ -298,17 +329,20 @@ export function createBoardPage(container) {
       renderRail(railElement, store);
       return;
     }
-    if (reason === "filter") {
-      stream.render({ reason: "filter" });
+    if (reason === "filter" || reason === "filters") {
+      refresh(reason);
       return;
     }
     refresh(reason);
   });
 
   unsubscribeStatus = onEvent("anima.status", (data) => store.handleAnimaStatus(data));
+  unsubscribeRead = onEvent("board.read", (data) => store.handleBoardRead(data));
   window.__boardWsHandler = (data) => {
-    void store.handleBoardPost(data);
+    if (data && data.reader) store.handleBoardRead(data);
+    else void store.handleBoardPost(data);
   };
+  window.__boardReadHandler = (data) => store.handleBoardRead(data);
 
   function render() {
     refresh("selection");
@@ -320,7 +354,9 @@ export function createBoardPage(container) {
     store.stop();
     if (unsubscribeStore) unsubscribeStore();
     if (unsubscribeStatus) unsubscribeStatus();
+    if (unsubscribeRead) unsubscribeRead();
     if (window.__boardWsHandler) window.__boardWsHandler = null;
+    if (window.__boardReadHandler) window.__boardReadHandler = null;
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();
