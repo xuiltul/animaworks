@@ -219,6 +219,11 @@ export function createBoardStore() {
     return added;
   }
 
+  function messageById(id) {
+    if (id === undefined || id === null || id === "") return null;
+    return state.messages.find((message) => String(message.id) === String(id)) || null;
+  }
+
   function visibleMessages() {
     const person = state.personFilter;
     if (!person) return state.messages;
@@ -383,7 +388,17 @@ export function createBoardStore() {
       text: data.text,
       source: data.source,
       kind: data.kind,
+      reply_to: data.reply_to,
     };
+    if (data.delivery && typeof data.delivery === "object") {
+      row.delivery = data.delivery;
+    } else if (data.notified || data.not_notified) {
+      row.delivery = {
+        notified: Array.isArray(data.notified) ? data.notified : [],
+        not_notified: data.not_notified && typeof data.not_notified === "object" ? data.not_notified : {},
+      };
+    }
+    if (data.hooks && typeof data.hooks === "object") row.hooks = data.hooks;
     const added = mergeMessages([row], { type: "channel" });
     if (added === 0) return;
     state.total += added;
@@ -401,22 +416,29 @@ export function createBoardStore() {
     emit("channels");
   }
 
-  async function submit(text) {
+  async function submit(text, replyTo) {
     if (state.selectedType !== "channel" || !state.selectedName) {
       return { ok: false, error: "no channel" };
     }
     const name = state.selectedName;
     const token = state.loadToken;
     const currentUser = localStorage.getItem("animaworks_user") || "human";
+    const body = { text, from_name: currentUser };
+    if (replyTo !== undefined && replyTo !== null && replyTo !== "") body.reply_to = replyTo;
     try {
       const result = await api(`/api/channels/${encodeURIComponent(name)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, from_name: currentUser }),
+        body: JSON.stringify(body),
       });
       const post = result && result.post ? result.post : {};
       if (post.error) return { ok: false, error: String(post.error) };
-      if (token !== state.loadToken) return { ok: true };
+      const hooks = post.hooks && typeof post.hooks === "object" ? post.hooks : {};
+      const delivery = {
+        notified: Array.isArray(post.notified) ? post.notified : [],
+        not_notified: post.not_notified && typeof post.not_notified === "object" ? post.not_notified : {},
+      };
+      if (token !== state.loadToken) return { ok: true, delivery, hooks };
 
       if (post.id !== undefined && post.id !== null && post.id !== "") {
         const added = mergeMessages([{
@@ -426,18 +448,43 @@ export function createBoardStore() {
           text,
           source: "human",
           kind: "human",
+          reply_to: replyTo || undefined,
+          delivery,
+          hooks,
         }], { type: "channel" });
+        const stored = messageById(post.id);
+        if (stored) {
+          stored.delivery = delivery;
+          stored.hooks = hooks;
+        }
         if (added) {
           state.total += added;
           await ensureAvatars([currentUser]);
           emit("messages");
           emit("channels");
+        } else if (stored) {
+          emit("messages");
         }
       }
-      return { ok: true };
+      return { ok: true, delivery, hooks };
     } catch (error) {
       return { ok: false, error: error?.message || String(error) };
     }
+  }
+
+  async function updateSettings(name, payload) {
+    const updated = await api(`/api/channels/${encodeURIComponent(name)}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (updated && typeof updated === "object") {
+      const index = state.channels.findIndex((item) => item.name === name);
+      if (index >= 0) state.channels[index] = updated;
+      else state.channels.push(updated);
+      emit("channels");
+    }
+    return updated;
   }
 
   // ── Lifecycle ──────────────────────────────
@@ -485,6 +532,7 @@ export function createBoardStore() {
     // messages
     mergeMessages,
     messageKey,
+    messageById,
     visibleMessages,
     expansionKey,
     isExpanded,
@@ -496,6 +544,7 @@ export function createBoardStore() {
     refresh,
     handleBoardPost,
     submit,
+    updateSettings,
   };
 }
 
