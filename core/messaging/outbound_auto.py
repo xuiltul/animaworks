@@ -300,6 +300,23 @@ class DiscordAutoResponder:
         return targets
 
 
+def board_slack_outbound_enabled(slack_cfg: Any, board_name: str) -> bool:
+    """Return whether posts to *board_name* are configured to reach Slack.
+
+    Mirrors the checks in :meth:`BoardSlackSync.sync_board_post` so the board
+    API can report the same outbound state without performing a send.
+    """
+    if not getattr(slack_cfg, "enabled", False):
+        return False
+    outbound_whitelist = getattr(slack_cfg, "board_outbound_sync", [])
+    if outbound_whitelist:
+        if board_name not in outbound_whitelist:
+            return False
+    elif not getattr(slack_cfg, "board_outbound_sync_all", False):
+        return False
+    return any(bname == board_name for bname in (getattr(slack_cfg, "board_mapping", {}) or {}).values())
+
+
 class BoardSlackSync:
     """Sync AnimaWorks board posts back to mapped Slack channels."""
 
@@ -326,14 +343,7 @@ class BoardSlackSync:
         except Exception:
             logger.exception("BoardSlackSync: failed to load configuration for #%s", board_name)
             return "failed"
-        if not slack_cfg.enabled:
-            return "skipped"
-
-        outbound_whitelist = getattr(slack_cfg, "board_outbound_sync", [])
-        if outbound_whitelist:
-            if board_name not in outbound_whitelist:
-                return "skipped"
-        elif not getattr(slack_cfg, "board_outbound_sync_all", False):
+        if not board_slack_outbound_enabled(slack_cfg, board_name):
             return "skipped"
 
         # Reverse lookup: board_name -> slack_channel_id

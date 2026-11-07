@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=eb56db21815d79a4ad7df5aebf730c79c301d8fcc7740de907ada8deed04db2b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d9811f4a7df61d69f122cf5ab9978247fb134638a3d2444dd6498d4017f19484 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # Module List
 
@@ -713,7 +713,7 @@ Storage, search, and organization of conversation and episode memories.
 
 ## `core.messaging`
 
-Message delivery between Animas and to external parties.
+Message delivery between Anima and external systems.
 
 | Module | Lines | First line of docstring |
 |---|---:|---|
@@ -726,7 +726,7 @@ Message delivery between Animas and to external parties.
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1051 | — |
 | `core.messaging.outbound` | 408 | — |
-| `core.messaging.outbound_auto` | 380 | — |
+| `core.messaging.outbound_auto` | 390 | — |
 | `core.messaging.recipient_status` | 79 | — |
 | `core.messaging.reply_grants` | 253 | — |
 | `core.messaging.sender` | 34 | — |
@@ -1137,7 +1137,7 @@ Voice input/output and voice dialogue.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 433 | — |
+| `server.routes.channels` | 610 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

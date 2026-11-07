@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=eb56db21815d79a4ad7df5aebf730c79c301d8fcc7740de907ada8deed04db2b generated=2026-11-06 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=d9811f4a7df61d69f122cf5ab9978247fb134638a3d2444dd6498d4017f19484 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # 모듈 목록
 
@@ -715,7 +715,7 @@ Model Context Protocol 서버 및 클라이언트.
 
 Anima 간 및 외부와의 메시지 전달.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 373 | — |
@@ -726,7 +726,7 @@ Anima 간 및 외부와의 메시지 전달.
 | `core.messaging.mentions` | 32 | — |
 | `core.messaging.messenger` | 1051 | — |
 | `core.messaging.outbound` | 408 | — |
-| `core.messaging.outbound_auto` | 380 | — |
+| `core.messaging.outbound_auto` | 390 | — |
 | `core.messaging.recipient_status` | 79 | — |
 | `core.messaging.reply_grants` | 253 | — |
 | `core.messaging.sender` | 34 | — |
@@ -1137,7 +1137,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 433 | — |
+| `server.routes.channels` | 610 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |
@@ -1163,7 +1163,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.taskboard` | 237 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
-| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트입니다. Anima별 status.json 설정은 공유 헬퍼를 사용합니다. |
+| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |
 
