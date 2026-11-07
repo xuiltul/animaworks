@@ -352,7 +352,7 @@ class Messenger:
                 anima_dir = self.shared_dir.parent / "animas" / self.anima_name
                 if anima_dir.exists():
                     activity = ActivityLogger(anima_dir)
-                    meta: dict[str, Any] = {"from_type": "anima"}
+                    meta: dict[str, Any] = {"from_type": "anima", "message_id": msg.id}
                     if intent:
                         meta["intent"] = intent
                     if msg.reply_to:

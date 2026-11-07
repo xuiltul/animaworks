@@ -218,6 +218,7 @@ class TestCanonicalDelegation:
         mixin.messenger.archive_paths.assert_called_once_with([item])
         mixin.memory.append_episode.assert_called_once()
         mixin._activity.alog.assert_awaited_once()
+        assert mixin._activity.alog.await_args.kwargs["meta"]["message_id"] == item.msg.id
         assert len(queue.store.pending("bob")) == 1
 
     @pytest.mark.asyncio
