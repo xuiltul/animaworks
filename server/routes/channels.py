@@ -11,7 +11,10 @@ import json
 import logging
 import re
 import time
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -24,6 +27,15 @@ from core.messaging.messenger import Messenger
 logger = logging.getLogger("animaworks.routes.channels")
 
 _SAFE_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
+_JST = ZoneInfo("Asia/Tokyo")
+_ACTIVITY_DAYS = 14
+
+_KIND_FILTERS: dict[str, set[str]] = {
+    "anima": {"anima"},
+    "human": {"human"},
+    "external": {"external_user", "external_bot"},
+    "operator": {"operator"},
+}
 
 # ── Caches ────────────────────────────────────────
 # Channel metadata cache: keyed by file path, invalidated on mtime/size change
@@ -34,16 +46,43 @@ _dm_cache: dict[str, object] = {"data": None, "ts": 0.0, "key": ""}
 _DM_CACHE_TTL = 60.0
 
 
+def _ts_date(ts: Any) -> date | None:
+    """Return the JST calendar date for an ISO timestamp, or None."""
+    value = str(ts or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_JST)
+    return parsed.astimezone(_JST).date()
+
+
+def _activity_14d(records: list[dict], today: date) -> list[int]:
+    """Count posts per JST day for the last 14 days (oldest first)."""
+    counts = [0] * _ACTIVITY_DAYS
+    start = today - timedelta(days=_ACTIVITY_DAYS - 1)
+    for record in records:
+        day = _ts_date(record.get("ts"))
+        if day is None or day < start or day > today:
+            continue
+        counts[(day - start).days] += 1
+    return counts
+
+
 def _get_channel_meta(f: Path) -> dict:
-    """Return {count, last_ts} for a channel file, cached by mtime+size."""
+    """Return {count, last_ts, last_from, activity_14d} cached by mtime+size."""
     key = str(f)
     try:
         stat = f.stat()
     except OSError:
-        return {"count": 0, "last_ts": ""}
+        return {"count": 0, "last_ts": "", "last_from": "", "activity_14d": [0] * _ACTIVITY_DAYS}
 
+    today = datetime.now(_JST).date()
     cached = _channel_meta_cache.get(key)
-    if cached and cached["_mtime"] == stat.st_mtime and cached["_size"] == stat.st_size:
+    if cached and cached["_mtime"] == stat.st_mtime and cached["_size"] == stat.st_size and cached.get("_day") == today:
         return cached
 
     try:
@@ -51,23 +90,98 @@ def _get_channel_meta(f: Path) -> dict:
     except OSError:
         raw = b""
 
+    entry: dict = {
+        "count": 0,
+        "last_ts": "",
+        "last_from": "",
+        "activity_14d": [0] * _ACTIVITY_DAYS,
+        "_mtime": stat.st_mtime,
+        "_size": stat.st_size,
+        "_day": today,
+    }
     if not raw:
-        entry = {"count": 0, "last_ts": "", "_mtime": stat.st_mtime, "_size": stat.st_size}
         _channel_meta_cache[key] = entry
         return entry
 
-    count = raw.count(b"\n") + 1
+    entry["count"] = raw.count(b"\n") + 1
 
-    last_ts = ""
-    try:
-        last_line = raw.rsplit(b"\n", 1)[-1]
-        last_ts = json.loads(last_line).get("ts", "")
-    except (json.JSONDecodeError, IndexError):
-        pass
+    records: list[dict] = []
+    for line in raw.splitlines():
+        try:
+            record = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
 
-    entry = {"count": count, "last_ts": last_ts, "_mtime": stat.st_mtime, "_size": stat.st_size}
+    if records:
+        # Keep the existing "last physical line" behaviour for last_ts.
+        try:
+            last_line = raw.rsplit(b"\n", 1)[-1]
+            last_record = json.loads(last_line)
+        except (json.JSONDecodeError, IndexError):
+            last_record = records[-1]
+        if isinstance(last_record, dict):
+            entry["last_ts"] = str(last_record.get("ts", "") or "")
+            entry["last_from"] = str(last_record.get("from", "") or "")
+        entry["activity_14d"] = _activity_14d(records, today)
+
     _channel_meta_cache[key] = entry
     return entry
+
+
+def _request_username(request: Request) -> str:
+    """Return the authenticated username, falling back to "human"."""
+    user = getattr(request.state, "user", None)
+    username = getattr(user, "username", "") if user is not None else ""
+    return str(username or "human")
+
+
+def _slack_sync_flags(names: list[str]) -> dict[str, dict[str, bool]]:
+    """Return inbound/outbound Slack sync flags for each board name."""
+    flags = {name: {"inbound": False, "outbound": False} for name in names}
+    try:
+        from core.config.models import load_config
+
+        slack_cfg = load_config().external_messaging.slack
+    except Exception:
+        logger.debug("Could not read Slack settings for board list", exc_info=True)
+        return flags
+
+    try:
+        from core.messaging.outbound_auto import board_slack_outbound_enabled
+
+        mapping = getattr(slack_cfg, "board_mapping", {}) or {}
+        inbound_names = {value for value in mapping.values() if isinstance(value, str)}
+        for name in names:
+            flags[name] = {
+                "inbound": name in inbound_names,
+                "outbound": board_slack_outbound_enabled(slack_cfg, name),
+            }
+    except Exception:
+        logger.warning("Could not evaluate Slack settings for board list", exc_info=True)
+    return flags
+
+
+def _kind_from_source(source: Any) -> str:
+    """Infer a post kind from its legacy ``source`` value."""
+    value = str(source or "").lower()
+    if value == "anima":
+        return "anima"
+    if value == "human":
+        return "human"
+    if value in {"slack", "discord"}:
+        return "external_user"
+    return "operator"
+
+
+def _with_kind(record: dict) -> dict:
+    """Copy a post row and backfill ``kind`` from ``source`` when absent."""
+    message = dict(record)
+    if not message.get("kind"):
+        message["kind"] = _kind_from_source(message.get("source"))
+        message["kind_inferred"] = True
+    return message
 
 
 def _validate_name(name: str) -> JSONResponse | None:
@@ -105,26 +219,43 @@ def create_channels_router() -> APIRouter:
 
         from core.messaging.messenger import load_channel_meta
 
-        principal = human_principal("human")
-        channels: list[dict] = []
+        principal = human_principal(_request_username(request))
+        board_files: list[tuple[str, Path]] = []
         for f in sorted(channels_dir.glob("*.jsonl")):
             name = f.stem
             if not board_access(shared_dir, name, principal, "read").allowed:
                 continue
+            board_files.append((name, f))
+
+        slack_flags = _slack_sync_flags([name for name, _ in board_files])
+
+        channels: list[dict] = []
+        for name, f in board_files:
             meta_info = _get_channel_meta(f)
-
-            channel_info: dict = {
-                "name": name,
-                "message_count": meta_info["count"],
-                "last_post_ts": meta_info["last_ts"],
-            }
-
             meta = load_channel_meta(shared_dir, name)
-            if meta is not None and meta.members:
-                channel_info["members"] = meta.members
-                channel_info["description"] = meta.description
+            members = list(meta.members) if meta is not None and meta.members else []
+            if meta is not None and meta.closed:
+                access = "closed"
+            elif members:
+                access = "members"
+            else:
+                access = "open"
 
-            channels.append(channel_info)
+            channels.append(
+                {
+                    "name": name,
+                    "message_count": meta_info["count"],
+                    "last_post_ts": meta_info["last_ts"],
+                    "last_from": meta_info["last_from"],
+                    "access": access,
+                    "writable": board_access(shared_dir, name, principal, "write").allowed,
+                    "company": (meta.company if meta is not None else "") or "",
+                    "members": members,
+                    "description": (meta.description if meta is not None else "") or "",
+                    "slack": slack_flags.get(name, {"inbound": False, "outbound": False}),
+                    "activity_14d": meta_info["activity_14d"],
+                }
+            )
 
         return channels
 
@@ -135,6 +266,9 @@ def create_channels_router() -> APIRouter:
         limit: int = 50,
         offset: int = 0,
         since: str = "",
+        q: str = "",
+        kind: str = "",
+        around: str = "",
     ):
         """Get messages from a specific channel.
 
@@ -142,6 +276,10 @@ def create_channels_router() -> APIRouter:
 
         When *since* is provided (ISO timestamp), only messages strictly
         newer than that timestamp are returned (for incremental polling).
+
+        *q* filters by a case-insensitive substring of the text or sender, while
+        *kind* accepts ``anima``, ``human``, ``external`` (both external kinds),
+        or ``operator``. *around* returns a page centered on a message id.
         """
         if err := _validate_name(name):
             return err
@@ -166,17 +304,22 @@ def create_channels_router() -> APIRouter:
             all_lines = []
         all_lines = [line for line in all_lines if line.strip()]
 
-        total = len(all_lines)
+        records: list[dict] = []
+        for line in all_lines:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(_with_kind(record))
+        total = len(records)
 
         if since:
-            # Incremental mode: scan from the tail for new messages only
+            # Incremental mode: scan from the tail for new messages only.
+            # Filters are ignored here so polling keeps its existing contract.
             new_msgs: list[dict] = []
-            for line in reversed(all_lines):
-                try:
-                    msg = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if msg.get("ts", "") <= since:
+            for msg in reversed(records):
+                if str(msg.get("ts", "")) <= since:
                     break
                 new_msgs.append(msg)
             new_msgs.reverse()
@@ -190,17 +333,51 @@ def create_channels_router() -> APIRouter:
                 "incremental": True,
             }
 
+        if around:
+            center = next((index for index, msg in enumerate(records) if msg.get("id") == around), None)
+            if center is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": f"Message '{around}' not found in channel '{name}'"},
+                )
+            page_size = max(1, limit)
+            start = max(0, center - page_size // 2)
+            if start + page_size > total:
+                start = max(0, total - page_size)
+            end = min(total, start + page_size)
+            return {
+                "channel": name,
+                "messages": records[start:end],
+                "total": total,
+                "offset": start,
+                "limit": limit,
+                "has_more": start > 0,
+                "has_newer": end < total,
+            }
+
+        filtered = records
+        if q:
+            needle = q.casefold()
+            filtered = [
+                msg
+                for msg in filtered
+                if needle in str(msg.get("text", "")).casefold() or needle in str(msg.get("from", "")).casefold()
+            ]
+        if kind:
+            allowed_kinds = _KIND_FILTERS.get(kind)
+            if allowed_kinds is None:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": f"Invalid kind: {kind!r}"},
+                )
+            filtered = [msg for msg in filtered if msg.get("kind") in allowed_kinds]
+
+        total = len(filtered)
+
         # Reverse pagination: offset=0 → newest N messages
         start = max(0, total - offset - limit)
         end = max(0, total - offset)
-        sliced_lines = all_lines[start:end]
-
-        paginated: list[dict] = []
-        for line in sliced_lines:
-            try:
-                paginated.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+        paginated = filtered[start:end] if end > start else []
 
         has_more = start > 0
 
