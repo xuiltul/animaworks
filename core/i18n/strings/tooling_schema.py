@@ -418,15 +418,19 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "schema.read_channel.desc": {
         "ja": (
-            "Boardチャネルの直近メッセージを読むには Bash から `animaworks-tool board read <channel> --limit N` を実行する。人間の投稿だけ読む場合は `--human-only` を付ける。inbox はチャネルではないため指定不可（inbox はシステムが自動処理）。"
+            "Boardチャネルを読むには Bash から `animaworks-tool board read <channel> --limit N` を実行する。既定は前回の続き（未読の古い順）から読み、読んだ位置を進める。最新だけを見るときは `--latest` を付ける。人間の投稿だけ読む場合は `--human-only` を付ける。inbox はチャネルではないため指定不可（inbox はシステムが自動処理）。"
         ),
         "en": (
-            "Read recent Board messages by running `animaworks-tool board read <channel> --limit N` in Bash. Add `--human-only` to filter for human posts. 'inbox' is not a channel and cannot be specified (it is processed automatically by the system)."
+            "Read a Board channel by running `animaworks-tool board read <channel> --limit N` in Bash. By default it resumes from your previous position (oldest unread first) and advances the read position. Add `--latest` to show only the newest posts, and `--human-only` to filter for human posts. 'inbox' is not a channel and cannot be specified (it is processed automatically by the system)."
         ),
     },
     "schema.read_channel.human_only": {
         "ja": "trueの場合、人間の発言のみ返す",
         "en": "If true, return only human messages",
+    },
+    "schema.read_channel.latest": {
+        "ja": "trueの場合、最新の投稿だけを返し、読んだ位置は進めない",
+        "en": "If true, return only the latest posts and do not advance the read position",
     },
     "schema.read_channel.limit": {
         "ja": "取得件数（デフォルト: 20）",

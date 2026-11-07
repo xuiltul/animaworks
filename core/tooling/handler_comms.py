@@ -22,6 +22,7 @@ from core.tooling.handler_base import (
     active_session_type,
     board_reply_channels,
     build_outgoing_origin_chain,
+    current_run_triggers,
 )
 
 if TYPE_CHECKING:
@@ -55,6 +56,31 @@ def _notify_message_sent(
         cast(Any, callback)(from_person, to_person, content, message_id=message_id)
     else:
         callback(from_person, to_person, content)
+
+
+def _resolve_dm_reply(
+    to: str,
+    triggers: tuple[dict[str, str], ...],
+    *,
+    reply_to: str,
+    thread_id: str,
+) -> tuple[str, str, dict[str, str] | None]:
+    """Derive an automatic DM reply target and its message metadata."""
+    trigger_id = triggers[-1].get("id", "") if triggers else ""
+    message_meta = {"trigger_id": trigger_id} if trigger_id else None
+    if reply_to or not triggers:
+        return reply_to, thread_id, message_meta
+
+    for trigger in reversed(triggers):
+        if trigger.get("from") != to or trigger.get("type") == "board_mention":
+            continue
+        candidate = trigger.get("id", "")
+        if not candidate:
+            continue
+        if not thread_id:
+            thread_id = trigger.get("thread_id", "")
+        return candidate, thread_id, message_meta
+    return reply_to, thread_id, message_meta
 
 
 def _company_boundary_error(
@@ -215,13 +241,20 @@ class CommsToolsMixin:
 
         # ── Internal messaging ──
         internal_to = resolved.name if resolved else to
+        reply_to, thread_id, message_meta = _resolve_dm_reply(
+            internal_to,
+            current_run_triggers(),
+            reply_to=args.get("reply_to") or "",
+            thread_id=args.get("thread_id") or "",
+        )
         msg = self._messenger.send(
             to=internal_to,
             content=content,
-            thread_id=args.get("thread_id", ""),
-            reply_to=args.get("reply_to", ""),
+            thread_id=thread_id,
+            reply_to=reply_to,
             intent=intent,
             origin_chain=outgoing_chain,
+            meta=message_meta,
         )
 
         if msg.type == "error":
@@ -497,12 +530,91 @@ class CommsToolsMixin:
         if not (channels_dir / f"{channel}.jsonl").is_file() and not (channels_dir / f"{channel}.meta.json").is_file():
             return t("handler.channel_not_found", channel=channel)
 
-        limit = args.get("limit", 20)
-        human_only = args.get("human_only", False)
-        messages = self._messenger.read_channel(channel, limit=limit, human_only=human_only)
-        if not messages:
+        try:
+            limit = int(args.get("limit", 20))
+        except (TypeError, ValueError):
+            limit = 20
+        if limit < 1:
+            limit = 20
+        human_only = bool(args.get("human_only", False))
+        latest = bool(args.get("latest", False))
+        reader = f"anima:{self._anima_name}"
+
+        # ``--latest`` and ``--human-only`` deliberately re-read the newest
+        # slice instead of resuming: the filter makes a contiguous position
+        # wrong, so the returned posts are only marked as individually read.
+        if latest or human_only:
+            messages = self._messenger.read_channel(channel, limit=limit, human_only=human_only)
+            if not messages:
+                return t("handler.channel_empty", channel=channel)
+            from core.messaging.board_reads import add_picked
+
+            for message in messages:
+                post_id = message.get("id")
+                if isinstance(post_id, str) and post_id:
+                    add_picked(self._messenger.shared_dir, channel, reader, post_id)
+            return _json.dumps(messages, ensure_ascii=False, indent=2)
+
+        from core.messaging.board_reads import (
+            advance_upto,
+            entries_after_ts,
+            load_reads,
+            read_board_entries,
+            unread_summary,
+        )
+
+        shared_dir = self._messenger.shared_dir
+        entries = read_board_entries(shared_dir, channel)
+        if not entries:
             return t("handler.channel_empty", channel=channel)
-        return _json.dumps(messages, ensure_ascii=False, indent=2)
+
+        summary = unread_summary(shared_dir, channel, reader, self_name=self._anima_name)
+        reads = load_reads(shared_dir, channel)
+        record = reads["readers"].get(reader)
+        if isinstance(record, dict):
+            messages = entries_after_ts(entries, str(record.get("upto_ts") or ""))[:limit]
+            summary_key = "handler.channel_read_continuation"
+        else:
+            messages = entries[-limit:]
+            summary_key = "handler.channel_read_first"
+
+        picked = set(reads["picked"].get(reader, []))
+        unread_returned = sum(
+            1
+            for message in messages
+            if message.get("from") != self._anima_name
+            and not (isinstance(message.get("id"), str) and message.get("id") in picked)
+        )
+        if messages:
+            last = messages[-1]
+            advance_upto(
+                shared_dir,
+                channel,
+                reader,
+                post_id=last.get("id"),
+                post_ts=str(last.get("ts") or ""),
+            )
+
+        if not messages and summary["unread"] == 0:
+            return f"{t('handler.channel_read_none', channel=channel)}\n[]"
+
+        if summary_key == "handler.channel_read_continuation":
+            remaining = max(0, summary["unread"] - unread_returned)
+            headline = t(
+                summary_key,
+                channel=channel,
+                unread=summary["unread"],
+                shown=len(messages),
+                remaining=remaining,
+            )
+        else:
+            headline = t(
+                summary_key,
+                channel=channel,
+                unread=summary["unread"],
+                shown=len(messages),
+            )
+        return f"{headline}\n{_json.dumps(messages, ensure_ascii=False, indent=2)}"
 
     def _handle_read_dm_history(self: _CommsToolsHost, args: dict[str, Any]) -> str:
         if not self._messenger:

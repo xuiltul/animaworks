@@ -232,6 +232,24 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "#{channel} にはまだ投稿がありません。",
         "en": "There are no posts in #{channel} yet.",
     },
+    "handler.channel_read_first": {
+        "ja": "#{channel} の未読 {unread} 件のうち、最新 {shown} 件を出します。最新だけを見るときは `--latest`。",
+        "en": "Showing the latest {shown} of {unread} unread posts in #{channel}. Use `--latest` to read only the newest posts.",
+        "ko": "#{channel}의 미독 {unread}건 중 최신 {shown}건을 표시합니다. 최신 글만 보려면 `--latest`를 사용하세요.",
+        "zh": "#{channel} 有 {unread} 条未读，显示其中最新 {shown} 条。只想看最新内容时使用 `--latest`。",
+    },
+    "handler.channel_read_continuation": {
+        "ja": "#{channel} の未読 {unread} 件のうち、古い順に {shown} 件を出します。残り {remaining} 件。最新だけを見るときは `--latest`。",
+        "en": "Showing {shown} of {unread} unread posts in #{channel}, oldest first. {remaining} remain. Use `--latest` to read only the newest posts.",
+        "ko": "#{channel}의 미독 {unread}건 중 오래된 순서로 {shown}건을 표시합니다. 남은 {remaining}건. 최신 글만 보려면 `--latest`를 사용하세요.",
+        "zh": "#{channel} 有 {unread} 条未读，按从旧到新显示 {shown} 条，还剩 {remaining} 条。只想看最新内容时使用 `--latest`。",
+    },
+    "handler.channel_read_none": {
+        "ja": "#{channel} に新しい投稿はありません。",
+        "en": "There are no new posts in #{channel}.",
+        "ko": "#{channel}에 새 글이 없습니다.",
+        "zh": "#{channel} 没有新帖子。",
+    },
     "handler.channel_inbox_cli": {
         "ja": "'{channel}' はチャネルではありません。Inbox は自動処理されます。Inbox を読むには `animaworks-tool board read` を使わないでください。",
         "en": "'{channel}' is not a channel. Inbox messages are processed automatically; do not use `animaworks-tool board read` for inbox.",

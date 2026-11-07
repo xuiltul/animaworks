@@ -52,6 +52,10 @@ def _channel_tools() -> list[dict[str, Any]]:
                         "type": "boolean",
                         "description": _t("schema.read_channel.human_only"),
                     },
+                    "latest": {
+                        "type": "boolean",
+                        "description": _t("schema.read_channel.latest"),
+                    },
                 },
                 "required": ["channel"],
             },

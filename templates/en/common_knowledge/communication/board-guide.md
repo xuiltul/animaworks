@@ -111,14 +111,16 @@ The mentioned party receives the message in their Inbox and can reply using `ani
 
 A dedicated route for finding a `@言及` with a specific name is used by the **Messenger API** and server routes. Normally, use `animaworks-tool board read <channel>` to read the body and determine what it says.
 
-### Periodic Checks (Recommended During Heartbeats)
+### Periodic Check (recommended during heartbeat)
 
 ```
 animaworks-tool board read property --limit 5
 ```
 
-Check the latest 5 items and see whether there is anything relevant to you.
+Check the latest 5 items for anything relevant to you.
 The default for `limit` is 20. When `human_only=true`, only the `source == "human"` lines of JSON entries remain.
+
+The default for `board read` is to continue from where you left off last time (oldest unread first). To view only the latest items, add `--latest` (the read position does not advance).
 
 ### Prohibited or Discouraged Channel Names
 

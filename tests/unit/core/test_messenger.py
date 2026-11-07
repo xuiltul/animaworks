@@ -801,3 +801,22 @@ class TestServerFallback:
         assert row["from"] == "alice"
         assert row["text"] == "hi all"
         assert row["kind"] == "anima"
+
+
+def test_message_sent_activity_log_records_reply_metadata(shared_dir: Path, messenger: Messenger) -> None:
+    anima_dir = shared_dir.parent / "animas" / "alice"
+    (anima_dir / "activity_log").mkdir(parents=True, exist_ok=True)
+
+    messenger.send(
+        "bob",
+        "Report",
+        intent="report",
+        reply_to="post-1",
+        meta={"trigger_id": "msg-1"},
+    )
+
+    from core.activity.logger import ActivityLogger
+
+    entries = ActivityLogger(anima_dir).recent(days=1, types=["message_sent"])
+    assert entries[-1].meta.get("reply_to") == "post-1"
+    assert entries[-1].meta.get("trigger_id") == "msg-1"

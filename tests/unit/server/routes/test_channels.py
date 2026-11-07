@@ -1034,3 +1034,114 @@ class TestChannelReadBoardAccess:
             resp = await client.get("/api/channels")
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+class TestChannelReads:
+    async def test_get_returns_empty_read_state_for_new_channel(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human", "id": "p1"}],
+        )
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/general/reads")
+
+        assert resp.status_code == 200
+        assert resp.json() == {"channel": "general", "readers": {}, "picked": {}}
+
+    async def test_get_missing_channel_returns_404(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/missing/reads")
+
+        assert resp.status_code == 404
+
+    async def test_get_unreadable_channel_returns_403(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "restricted",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "Hello", "source": "human", "id": "p1"}],
+        )
+        (shared_dir / "channels" / "restricted.meta.json").write_text("{not json", encoding="utf-8")
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/channels/restricted/reads")
+
+        assert resp.status_code == 403
+
+    async def test_post_advances_and_get_reflects_the_position(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [
+                {"ts": "2026-02-17T10:00:00", "from": "owner", "text": "First", "source": "human", "id": "p1"},
+                {"ts": "2026-02-17T11:00:00", "from": "owner", "text": "Second", "source": "human", "id": "p2"},
+            ],
+        )
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/channels/general/read", json={"upto_id": "p2"})
+            assert resp.status_code == 200
+            assert resp.json() == {
+                "changed": True,
+                "upto_id": "p2",
+                "upto_ts": "2026-02-17T11:00:00",
+            }
+
+            reads = await client.get("/api/channels/general/reads")
+
+        assert reads.status_code == 200
+        assert reads.json()["readers"]["human:human"]["upto_id"] == "p2"
+
+    async def test_post_never_moves_backwards(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [
+                {"ts": "2026-02-17T10:00:00", "from": "owner", "text": "First", "source": "human", "id": "p1"},
+                {"ts": "2026-02-17T11:00:00", "from": "owner", "text": "Second", "source": "human", "id": "p2"},
+            ],
+        )
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            await client.post("/api/channels/general/read", json={"upto_id": "p2"})
+            resp = await client.post("/api/channels/general/read", json={"upto_id": "p1"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "changed": False,
+            "upto_id": "p2",
+            "upto_ts": "2026-02-17T11:00:00",
+        }
+
+    async def test_post_unknown_id_returns_404_without_writing(self, tmp_path: Path) -> None:
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(
+            shared_dir,
+            "general",
+            [{"ts": "2026-02-17T10:00:00", "from": "owner", "text": "First", "source": "human", "id": "p1"}],
+        )
+        app = _make_test_app(shared_dir)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/channels/general/read", json={"upto_id": "missing"})
+
+        assert resp.status_code == 404
+        assert not (shared_dir / "reads" / "board" / "general.json").exists()

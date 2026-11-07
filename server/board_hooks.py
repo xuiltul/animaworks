@@ -11,7 +11,14 @@ import logging
 import threading
 from typing import Any
 
-from core.messaging.board import BoardPost, board_access, register_post_hook, unregister_post_hook
+from core.messaging.board import (
+    BoardPost,
+    PostResult,
+    board_access,
+    register_post_hook,
+    unregister_post_hook,
+)
+from core.messaging.board_reads import register_read_hook, unregister_read_hook
 
 logger = logging.getLogger("animaworks.server.board_hooks")
 
@@ -34,7 +41,7 @@ def register_board_post_hooks(app: Any) -> None:
         # loop thread must not block it waiting for its own coroutine.
         return threading.get_ident() == loop_thread_id
 
-    def ws_event(post: BoardPost) -> str:
+    def ws_event(post: BoardPost, result: PostResult) -> str:
         ws_manager = getattr(app.state, "ws_manager", None)
         if ws_manager is None:
             return "skipped"
@@ -49,6 +56,11 @@ def register_board_post_hooks(app: Any) -> None:
             "id": post.id,
             "kind": post.kind,
         }
+        if post.reply_to:
+            event["reply_to"] = post.reply_to
+        if result.notified or result.not_notified:
+            event["notified"] = list(result.notified)
+            event["not_notified"] = dict(result.not_notified)
         if _on_loop_thread():
             _spawn(loop, emit_direct(ws_manager, "board.post", event))
             return "sent"
@@ -63,6 +75,34 @@ def register_board_post_hooks(app: Any) -> None:
 
     register_post_hook("ws_event", ws_event)
 
+    def ws_read_event(payload: dict[str, Any]) -> str:
+        ws_manager = getattr(app.state, "ws_manager", None)
+        if ws_manager is None:
+            return "skipped"
+        from server.events import emit_direct
+
+        event = {
+            "channel": payload.get("channel", ""),
+            "reader": payload.get("reader", ""),
+            "upto_id": payload.get("upto_id", ""),
+            "upto_ts": payload.get("upto_ts", ""),
+            "picked_id": payload.get("picked_id", ""),
+        }
+        channel = event["channel"]
+        if _on_loop_thread():
+            _spawn(loop, emit_direct(ws_manager, "board.read", event))
+            return "sent"
+        future = asyncio.run_coroutine_threadsafe(emit_direct(ws_manager, "board.read", event), loop)
+        try:
+            future.result(timeout=10)
+        except Exception:
+            future.cancel()
+            logger.exception("Failed to emit board.read for #%s", channel)
+            return "failed"
+        return "sent"
+
+    register_read_hook("ws_read_event", ws_read_event)
+
     try:
         from core.config.models import load_config
 
@@ -73,7 +113,7 @@ def register_board_post_hooks(app: Any) -> None:
 
     if slack_enabled:
 
-        def slack_outbound(post: BoardPost) -> str:
+        def slack_outbound(post: BoardPost, _result: PostResult) -> str:
             from core.platform.env import get_env
 
             if post.source in {"slack", "discord"} or post.origin == "mirror":
@@ -125,3 +165,4 @@ def register_board_post_hooks(app: Any) -> None:
 def unregister_board_post_hooks() -> None:
     unregister_post_hook("ws_event")
     unregister_post_hook("slack_outbound")
+    unregister_read_hook("ws_read_event")

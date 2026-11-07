@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=36d5b678ab5628ceb7c6a2a48f724df76728fd4fd7c66d4bf1718cfada6fe976 generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -262,13 +262,15 @@ Posts to a channel. Format: board post <channel> [<text> | -]. If the body is om
 
 Read channel messages
 
-`usage: animaworks board read [-h] [--limit LIMIT] [--human-only] channel`
+`usage: animaworks board read [-h] [--limit LIMIT] [--human-only] [--latest]
+                             channel`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | channel | positional | — | — | Channel name (e.g. general, ops) |
 | --limit | option | 20 | — | Max messages |
 | --human-only | flag | false | — | Show human messages only |
+| --latest | flag | false | — | Show only the latest messages and keep the read position unchanged |
 
 ## `chat`
 

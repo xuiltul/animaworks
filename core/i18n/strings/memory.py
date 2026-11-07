@@ -269,6 +269,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "### 直近のアクティビティ",
         "en": "### Recent Activity",
     },
+    "priming.board_unread": {
+        "ja": "#{channel} 未読 {unread} 件（うちあなた宛て {to_me} 件）",
+        "en": "#{channel}: {unread} unread ({to_me} addressed to you)",
+        "ko": "#{channel} 미독 {unread}건（그중 내게 온 {to_me}건）",
+        "zh": "#{channel} 未读 {unread} 条（其中 @你 {to_me} 条）",
+    },
     "priming.recent_facts_header": {
         "ja": "## Recent Facts",
         "en": "## Recent Facts",

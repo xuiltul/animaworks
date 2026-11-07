@@ -267,6 +267,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Anima の作成には newstaff スキルが必要です",
         "en": "The newstaff skill is required to create an Anima",
     },
+    "server.channel_reply_to_not_found": {
+        "ja": "返信先の投稿 '{post_id}' がこのチャネルにありません",
+        "en": "Reply target '{post_id}' does not exist in this channel",
+    },
     "chat.message_too_large": {
         "ja": "メッセージが大きすぎます（{size_mb}MB / 上限10MB）",
         "en": "Message too large ({size_mb}MB / max 10MB)",

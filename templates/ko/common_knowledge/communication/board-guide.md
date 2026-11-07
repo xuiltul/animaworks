@@ -117,8 +117,10 @@ animaworks-tool board post property "@alice 先ほどの未返信チケットの
 animaworks-tool board read property --limit 5
 ```
 
-최근 5개를 확인하고, 나와 관련된 정보가 있는지 살펴본다.
-`limit`의 기본값은 20이다. `human_only=true`일 때는 JSON 항목의 `source == "human"` 행만 남는다.
+최신 5개를 확인하고, 자신과 관련된 정보가 있는지 살펴본다.
+`limit`의 기본값은 20이다. `human_only=true`일 때는 JSON 항목에서 `source == "human"`이 포함된 행만 남는다.
+
+`board read`의 기본 동작은 지난번에 읽은 위치부터 이어서 읽는 것(읽지 않은 항목 중 오래된 순)이다. 최신 항목만 볼 때는 `--latest`를 붙인다(읽은 위치는 이동하지 않음).
 
 ### 금지·비권장 채널 이름
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from core.anima.inbox import _board_mention_suppression_channels
+from core.anima.inbox import _board_mention_suppression_channels, _record_board_mention_picks
 from core.messaging.messenger import InboxItem
 from core.schemas import Message
 from core.tooling.handler import ToolHandler, suppress_board_fanout_channels
@@ -46,6 +46,36 @@ def test_suppression_channels_fall_back_to_legacy_reply_prefix() -> None:
 
 def test_suppression_channels_ignore_missing_channel_data() -> None:
     assert _board_mention_suppression_channels([_item("no channel")]) == frozenset()
+
+
+def test_board_mentions_are_recorded_as_picked(tmp_path: Path) -> None:
+    from core.messaging.board_reads import load_reads
+
+    shared_dir = tmp_path / "shared"
+    items = [
+        _item("reply", meta={"board_channel": "team-x", "board_post_id": "post-1"}),
+        _item("reply again", meta={"board_channel": "team-x", "board_post_id": "post-2"}),
+        _item("legacy", meta={"board_channel": "team-x"}),
+        _item("not a board mention", meta={"board_channel": "ops", "board_post_id": "post-3"}, msg_type="message"),
+    ]
+
+    _record_board_mention_picks(shared_dir, "alice", items)
+
+    assert load_reads(shared_dir, "team-x")["picked"]["anima:alice"] == ["post-1", "post-2"]
+    assert load_reads(shared_dir, "ops")["picked"] == {}
+
+
+def test_board_mention_pick_failure_only_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(*_args, **_kwargs) -> bool:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr("core.messaging.board_reads.add_picked", fail)
+
+    _record_board_mention_picks(
+        tmp_path / "shared",
+        "alice",
+        [_item("reply", meta={"board_channel": "team-x", "board_post_id": "post-1"})],
+    )
 
 
 @pytest.fixture
@@ -134,3 +164,53 @@ def test_engine_environment_exports_the_suppressed_channels(tmp_path: Path) -> N
 
     assert workspace_value == "ops,team-x"
     assert session_value == "ops,team-x"
+
+
+def test_run_trigger_entries_describe_each_inbox_message() -> None:
+    from core.anima.inbox import _run_trigger_entries
+
+    mention = Message(
+        from_person="bob",
+        to_person="alice",
+        type="board_mention",
+        content="reply",
+        thread_id="thread-1",
+        meta={"board_channel": "team-x", "board_post_id": "post-9"},
+    )
+    direct = Message(
+        from_person="carol",
+        to_person="alice",
+        type="message",
+        content="hello",
+        thread_id="thread-2",
+    )
+    items = [
+        InboxItem(msg=mention, path=Path("/tmp/unused-inbox-message.json")),
+        InboxItem(msg=direct, path=Path("/tmp/unused-inbox-message.json")),
+    ]
+
+    assert _run_trigger_entries(items) == (
+        {
+            "id": mention.id,
+            "from": "bob",
+            "type": "board_mention",
+            "thread_id": "thread-1",
+            "board_channel": "team-x",
+            "board_post_id": "post-9",
+        },
+        {
+            "id": direct.id,
+            "from": "carol",
+            "type": "message",
+            "thread_id": "thread-2",
+        },
+    )
+
+
+def test_run_trigger_entries_omit_missing_optional_values() -> None:
+    from core.anima.inbox import _run_trigger_entries
+
+    message = Message(from_person="bob", to_person="alice", type="message", content="hello")
+    items = [InboxItem(msg=message, path=Path("/tmp/unused-inbox-message.json"))]
+
+    assert _run_trigger_entries(items) == ({"id": message.id, "from": "bob", "type": "message"},)
