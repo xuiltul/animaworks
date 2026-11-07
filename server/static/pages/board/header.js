@@ -36,9 +36,12 @@ export function renderChannelHeader(element, channel, store) {
   ].filter(Boolean).join("");
 
   element.innerHTML = `
-    <div class="board-header-title">
-      <span class="board-header-hash" aria-hidden="true">#</span>
-      <span class="board-header-name">${escapeHtml(channel.name)}</span>
+    <div class="board-header-top">
+      <div class="board-header-title">
+        <span class="board-header-hash" aria-hidden="true">#</span>
+        <span class="board-header-name">${escapeHtml(channel.name)}</span>
+      </div>
+      <button type="button" class="board-info-button" data-board-info aria-expanded="false" aria-controls="boardDrawer">${escapeHtml(t("board.info_button"))}</button>
     </div>
     <div class="board-header-meta">
       ${_accessBadge(channel.access, members.length)}

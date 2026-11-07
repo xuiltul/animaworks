@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=1767f6247e3f62a1988e25250278cd726cf62687a30b3f11981faeab3da9b4c2 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a3391e4fb6f8b0d30591aa62137520de6c78a0b711617d206cadee402505cd17 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 # API Reference
 
@@ -93,14 +93,15 @@ Generated from FastAPI’s OpenAPI definitions, WebSocket, and handwritten route
 
 ## `server/routes/channels.py`
 
-| GET | `/api/channels` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | List all shared channels with metadata including ACL info. | `server/routes/channels.py:list_channels` |
-| GET | `/api/channels/{name}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Get messages from a specific channel. | `server/routes/channels.py:get_channel_messages` |
-| POST | `/api/channels/{name}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Post a message to a channel (human-originated). | `server/routes/channels.py:post_to_channel` |
-| GET | `/api/channels/{name}/mentions/{anima}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Get messages mentioning a specific anima in a channel. | `server/routes/channels.py:get_channel_mentions` |
-| POST | `/api/channels/{name}/read` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Advance the requesting human's stored read position in one channel. | `server/routes/channels.py:mark_channel_read` |
-| GET | `/api/channels/{name}/reads` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Return the stored read positions for one Board channel. | `server/routes/channels.py:get_channel_reads` |
-| GET | `/api/dm` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | List all DM conversation pairs with metadata. | `server/routes/channels.py:list_dm_pairs` |
-| GET | `/api/dm/{pair}` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Get DM history for a specific pair. | `server/routes/channels.py:get_dm_history` |
+| GET | `/api/channels` | Session required (optional in local_trust mode or if localhost trust is enabled) | List all shared channels with metadata including ACL info. | `server/routes/channels.py:list_channels` |
+| GET | `/api/channels/{name}` | Session required (optional in local_trust mode or if localhost trust is enabled) | Get messages from a specific channel. | `server/routes/channels.py:get_channel_messages` |
+| POST | `/api/channels/{name}` | Session required (optional in local_trust mode or if localhost trust is enabled) | Post a message to a channel (human-originated). | `server/routes/channels.py:post_to_channel` |
+| GET | `/api/channels/{name}/mentions/{anima}` | Session required (optional in local_trust mode or if localhost trust is enabled) | Get messages mentioning a specific anima in a channel. | `server/routes/channels.py:get_channel_mentions` |
+| POST | `/api/channels/{name}/read` | Session required (optional in local_trust mode or if localhost trust is enabled) | Advance the requesting human's stored read position in one channel. | `server/routes/channels.py:mark_channel_read` |
+| GET | `/api/channels/{name}/reads` | Session required (optional in local_trust mode or if localhost trust is enabled) | Return the stored read positions for one Board channel. | `server/routes/channels.py:get_channel_reads` |
+| PUT | `/api/channels/{name}/settings` | Session required (optional in local_trust mode or if localhost trust is enabled) | Update a Board's description, visibility, and members (owner/admin only). | `server/routes/channels.py:update_channel_settings` |
+| GET | `/api/dm` | Session required (optional in local_trust mode or if localhost trust is enabled) | List all DM conversation pairs with metadata. | `server/routes/channels.py:list_dm_pairs` |
+| GET | `/api/dm/{pair}` | Session required (optional in local_trust mode or if localhost trust is enabled) | Get DM history for a specific pair. | `server/routes/channels.py:get_dm_history` |
 
 ## `server/routes/chat.py`
 

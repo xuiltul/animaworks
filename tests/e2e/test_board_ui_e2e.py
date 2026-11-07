@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from datetime import date, datetime, timedelta
 from datetime import time as dt_time
@@ -97,6 +98,8 @@ class _BoardApi:
 
     def __init__(self) -> None:
         self.posts: list[dict[str, object]] = []
+        self.settings_calls: list[dict[str, object]] = []
+        self.settings_error: tuple[int, str] | None = None
         self.messages: list[dict[str, object]] = [
             {
                 "id": "m5",
@@ -129,6 +132,11 @@ class _BoardApi:
                 "text": "人の投稿です。",
                 "source": "human",
                 "kind": "human",
+                "delivery": {
+                    "notified": ["alice"],
+                    "not_notified": {"bob": "メンバーではないので届きません"},
+                },
+                "hooks": {"slack_outbound": "failed"},
             },
             {
                 "id": "m3",
@@ -166,10 +174,11 @@ class _BoardApi:
             },
         ]
         self.animas = [
-            {"name": "alice", "status": "running", "enabled": True, "role": "進行役"},
-            {"name": "bob", "status": "idle", "enabled": True, "role": "調査担当"},
-            {"name": "system", "status": "idle", "enabled": True, "role": "システム"},
-            {"name": "slackbot", "status": "idle", "enabled": True, "role": "Slack bot"},
+            {"name": "alice", "status": "running", "enabled": True, "role": "進行役", "company": "team-a"},
+            {"name": "bob", "status": "idle", "enabled": True, "role": "調査担当", "company": "team-a"},
+            {"name": "carol", "status": "stopped", "enabled": False, "role": "補助", "company": "team-a"},
+            {"name": "system", "status": "idle", "enabled": True, "role": "システム", "company": "team-a"},
+            {"name": "slackbot", "status": "idle", "enabled": True, "role": "Slack bot", "company": "team-b"},
         ]
         activity = [1, 0, 3, 2, 0, 4, 6, 2, 1, 0, 5, 3, 2, 4]
         self.channels = [
@@ -183,8 +192,21 @@ class _BoardApi:
                 "company": "team-a",
                 "members": ["alice", "bob", "human", "system"],
                 "description": "チームの共有チャンネル",
-                "slack": {"inbound": True, "outbound": False},
+                "slack": {"inbound": True, "outbound": True},
                 "activity_14d": activity,
+            },
+            {
+                "name": "team",
+                "message_count": 0,
+                "last_post_ts": _iso(TODAY_AM + timedelta(minutes=6)),
+                "last_from": "alice",
+                "access": "members",
+                "writable": True,
+                "company": "team-a",
+                "members": ["alice", "bob"],
+                "description": "メンバーだけで使うチャンネル",
+                "slack": {"inbound": False, "outbound": False},
+                "activity_14d": [0] * 14,
             },
             {
                 "name": "ops",
@@ -401,12 +423,66 @@ class _BoardApi:
             self._json(route, {"error": "not found"}, status=404)
             return
 
+        if path.startswith("/api/channels/") and path.endswith("/settings"):
+            name = unquote(path[len("/api/channels/") : -len("/settings")])
+            if method != "PUT":
+                self._json(route, {"error": "method not allowed"}, status=405)
+                return
+            body = json.loads(request.post_data or "{}")
+            self.settings_calls.append({"name": name, **body})
+            if self.settings_error is not None:
+                status, detail = self.settings_error
+                self._json(route, {"detail": detail}, status=status)
+                return
+            channel = next((row for row in self.channels if row["name"] == name), None)
+            if channel is None:
+                self._json(route, {"detail": "channel not found"}, status=404)
+                return
+            for field in ("description", "access", "members"):
+                if field in body:
+                    channel[field] = body[field]
+            self._json(route, channel)
+            return
+
         if path.startswith("/api/channels/"):
             name = unquote(path[len("/api/channels/") :])
             if method == "POST":
                 body = json.loads(request.post_data or "{}")
                 self.posts.append(body)
-                self._json(route, {"post": {"id": f"posted-{len(self.posts)}"}})
+                channel = next((row for row in self.channels if row["name"] == name), None)
+                notified: list[str] = []
+                not_notified: dict[str, str] = {}
+                seen: set[str] = set()
+                for match in re.finditer(r"@([A-Za-z][A-Za-z0-9_-]{0,30})", str(body.get("text", ""))):
+                    mention = match.group(1)
+                    if mention.lower() in seen:
+                        continue
+                    seen.add(mention.lower())
+                    anima = next((row for row in self.animas if row["name"] == mention), None)
+                    if anima is None:
+                        not_notified[mention] = "存在しない anima です"
+                    elif anima.get("enabled") is False:
+                        not_notified[mention] = "無効にしてあるため届きません"
+                    elif channel and channel.get("access") == "members" and mention not in channel.get("members", []):
+                        not_notified[mention] = "メンバーではないので届きません"
+                    elif channel and channel.get("company") and anima.get("company") != channel.get("company"):
+                        not_notified[mention] = "別の会社なので届きません"
+                    else:
+                        notified.append(mention)
+                hooks: dict[str, str] = {}
+                if channel and (channel.get("slack") or {}).get("outbound"):
+                    hooks["slack_outbound"] = "sent"
+                self._json(
+                    route,
+                    {
+                        "post": {
+                            "id": f"posted-{len(self.posts)}",
+                            "notified": notified,
+                            "not_notified": not_notified,
+                            "hooks": hooks,
+                        }
+                    },
+                )
                 return
             query = parse_qs(urlparse(request.url).query)
             limit = int(query.get("limit", ["50"])[0])
@@ -762,9 +838,9 @@ def test_home_cards_and_card_opens_board(board_page: Page) -> None:
     assert board_page.locator("#boardPlaceholder").is_hidden()
 
     cards = board_page.locator("[data-board-home-card]")
-    assert cards.count() == 3
+    assert cards.count() == 4
     names = [cards.nth(i).get_attribute("data-board-home-card") for i in range(cards.count())]
-    assert names == ["general", "ops", "random"]
+    assert set(names) == {"general", "ops", "team", "random"}
     assert board_page.locator('[data-board-home-card="archive"]').count() == 0
 
     general = board_page.locator('[data-board-home-card="general"]')
@@ -867,3 +943,170 @@ def test_palette_moves_to_a_board(board_page: Page) -> None:
     board_page.locator(".board-header-name").filter(has_text="general").wait_for(timeout=5000)
     assert board_page.locator("#boardPalette").is_hidden()
     assert board_page.locator("#boardHome").is_hidden()
+
+
+def test_mention_suggestions_and_target_reasons(board_page: Page) -> None:
+    _open_channel(board_page, "team")
+    textarea = board_page.locator("#boardComposerInput")
+    textarea.type("hi @ali")
+
+    suggestion = board_page.locator(".board-suggest-item").filter(has_text="@alice")
+    suggestion.wait_for(timeout=5000)
+    assert "このボードのメンバー" in board_page.locator(".board-suggest-head").inner_text()
+    assert "作業中" in suggestion.inner_text()
+
+    textarea.press("Enter")
+    assert textarea.input_value() == "hi @alice "
+
+    textarea.fill("hi @alice @system")
+    target = board_page.locator(".board-target-ng").filter(has_text="system")
+    target.wait_for(timeout=5000)
+    assert "メンバーではないので届きません" in target.inner_text()
+    ok_target = board_page.locator(".board-target:not(.board-target-ng)").filter(has_text="alice")
+    assert ok_target.count() == 1
+
+
+def test_quote_reply_and_delivery_footer(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    post = board_page.locator('[data-board-id="m1"]')
+    post.hover()
+    post.locator('[data-board-action="quote"]').click()
+    textarea = board_page.locator("#boardComposerInput")
+    value = textarea.input_value()
+    assert value.startswith("> ")
+    assert "@alice " in value
+
+    textarea.press("Enter")
+    posted = board_page.locator('[data-board-id="posted-1"]')
+    posted.wait_for(timeout=5000)
+    assert api.posts[-1]["reply_to"] == "m1"
+    assert "> " in str(api.posts[-1]["text"])
+
+    delivery = posted.locator(".board-delivery")
+    delivery.wait_for(timeout=5000)
+    text = delivery.inner_text()
+    assert "届いた相手" in text
+    assert "alice" in text
+    assert "Slack に送りました" in text
+
+
+def test_row_delivery_is_rendered(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+    delivery = board_page.locator('[data-board-id="m2"] .board-delivery')
+    delivery.wait_for(timeout=5000)
+    text = delivery.inner_text()
+    assert "届いた相手" in text
+    assert "alice" in text
+    assert "届かなかった相手" in text
+    assert "bob" in text
+    assert "メンバーではないので届きません" in text
+    assert "Slack への送信に失敗しました" in text
+
+
+def test_draft_is_restored_when_reopening_board(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    textarea = board_page.locator("#boardComposerInput")
+    textarea.fill("下書きテスト")
+
+    _open_channel(board_page, "random")
+    assert board_page.locator("#boardComposerInput").input_value() == ""
+
+    _open_channel(board_page, "general")
+    restored = board_page.locator("#boardComposerInput")
+    restored.wait_for(timeout=5000)
+    assert restored.input_value() == "下書きテスト"
+    assert "下書きを戻しました" in board_page.locator("#boardComposerDraftNote").inner_text()
+
+
+def test_markdown_preview_toggle(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    textarea = board_page.locator("#boardComposerInput")
+    textarea.fill("# 見出し")
+    board_page.locator("#boardComposerPreviewToggle").click()
+
+    preview = board_page.locator("#boardComposerPreview")
+    preview.wait_for(timeout=5000)
+    assert preview.is_visible()
+    assert textarea.is_hidden()
+    assert preview.locator("h1").inner_text() == "見出し"
+
+    board_page.locator("#boardComposerPreviewToggle").click()
+    assert textarea.is_visible()
+
+
+def test_settings_drawer_saves_and_closed_needs_two_clicks(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    board_page.locator("[data-board-info]").click()
+    drawer = board_page.locator("#boardDrawer")
+    drawer.wait_for(timeout=5000)
+    assert "このボードについて" in drawer.inner_text()
+
+    drawer.locator("[data-board-drawer-edit]").click()
+    form = drawer.locator("#boardSettingsForm")
+    form.wait_for(timeout=5000)
+    form.locator("#boardSetDescription").fill("新しい説明")
+    form.locator(".board-drawer-save").click()
+    drawer.locator(".board-drawer-flash").wait_for(timeout=5000)
+    assert api.settings_calls[-1]["description"] == "新しい説明"
+    assert api.settings_calls[-1]["access"] == "open"
+
+    calls_before = len(api.settings_calls)
+    drawer.locator("[data-board-drawer-edit]").click()
+    form = drawer.locator("#boardSettingsForm")
+    form.wait_for(timeout=5000)
+    form.locator('input[name="boardSetAccess"][value="closed"]').click()
+    form.locator(".board-drawer-save").click()
+    warning = drawer.locator(".board-drawer-warning")
+    warning.wait_for(timeout=5000)
+    assert "もう一度押すと保存します" in warning.inner_text()
+    assert len(api.settings_calls) == calls_before
+
+    drawer.locator(".board-drawer-save").click()
+    drawer.locator(".board-drawer-flash").wait_for(timeout=5000)
+    assert len(api.settings_calls) == calls_before + 1
+    assert api.settings_calls[-1]["access"] == "closed"
+    assert "閉鎖" in drawer.locator(".board-drawer-kv").inner_text()
+
+
+def test_settings_permission_error_is_shown(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    api.settings_error = (403, "owner または admin だけが変更できます")
+    _open_channel(board_page, "general")
+    board_page.locator("[data-board-info]").click()
+    drawer = board_page.locator("#boardDrawer")
+    drawer.locator("[data-board-drawer-edit]").click()
+    drawer.locator("#boardSetDescription").fill("変更できない説明")
+    drawer.locator(".board-drawer-save").click()
+
+    error = drawer.locator(".board-drawer-error")
+    error.wait_for(timeout=5000)
+    assert "owner または admin" in error.inner_text()
+    assert drawer.locator("#boardSettingsForm").is_visible()
+
+
+def test_settings_member_chips_can_remove_and_add(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    board_page.locator("[data-board-info]").click()
+    drawer = board_page.locator("#boardDrawer")
+    drawer.locator("[data-board-drawer-edit]").click()
+    form = drawer.locator("#boardSettingsForm")
+    form.locator('input[name="boardSetAccess"][value="members"]').click()
+
+    chips = drawer.locator(".board-drawer-chip")
+    assert chips.count() == 4
+    drawer.locator('[data-board-member-remove="human"]').click()
+    assert drawer.locator(".board-drawer-chip").count() == 3
+
+    drawer.locator("#boardSetAdd").select_option("carol")
+    assert drawer.locator('[data-board-member-remove="carol"]').count() == 1
+
+    drawer.locator(".board-drawer-save").click()
+    drawer.locator(".board-drawer-flash").wait_for(timeout=5000)
+    assert api.settings_calls[-1]["access"] == "members"
+    assert set(api.settings_calls[-1]["members"]) == {"alice", "bob", "system", "carol"}

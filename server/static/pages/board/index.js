@@ -8,6 +8,7 @@ import { renderChannelHeader } from "./header.js";
 import { renderDmHeader } from "./dm.js";
 import { createStream } from "./stream.js";
 import { createComposer } from "./composer.js";
+import { createDrawer } from "./drawer.js";
 import { createMentionCard } from "./mention-card.js";
 import { createHomeView } from "./home.js";
 import { createFlowsView } from "./flows.js";
@@ -51,11 +52,15 @@ export function createBoardPage(container) {
   const headerElement = container.querySelector("#boardHeader");
   const messagesElement = container.querySelector("#boardMessages");
   const readonlyElement = container.querySelector("#boardReadonly");
+  const mainElement = container.querySelector(".board-main");
   const mobileToggle = container.querySelector("#boardMobileToggle");
   const paletteRoot = container.querySelector("#boardPalette");
   const signal = abort.signal;
 
-  composer = createComposer({ onSubmit: (text) => store.submit(text) });
+  composer = createComposer({
+    store,
+    onSubmit: (text, options) => store.submit(text, options?.replyTo),
+  });
   view.append(composer.element);
   stream = createStream({ element: messagesElement, store });
   const home = createHomeView({ element: homeElement, store });
@@ -72,6 +77,17 @@ export function createBoardPage(container) {
       closeRailOnMobile();
     },
   });
+
+  function updateDrawerToggle() {
+    const button = headerElement.querySelector("[data-board-info]");
+    if (button) button.setAttribute("aria-expanded", String(drawer.isOpen()));
+  }
+
+  const drawer = createDrawer({
+    store,
+    onToggle: () => updateDrawerToggle(),
+  });
+  mainElement.append(drawer.element);
 
   function setRailOpen(open) {
     layout.classList.toggle("board-is-rail-open", open);
@@ -92,6 +108,7 @@ export function createBoardPage(container) {
     homeElement.hidden = hasSelection || activeView !== "home";
     flowsElement.hidden = hasSelection || activeView !== "flows";
     if (!hasSelection) {
+      drawer.close();
       if (activeView === "flows") flows.show();
       else home.render();
       return;
@@ -101,14 +118,17 @@ export function createBoardPage(container) {
       const channel = store.channel(store.state.selectedName);
       renderChannelHeader(headerElement, channel, store);
       const writable = !channel || channel.writable !== false;
-      composer.setContext({ type: "channel", name: store.state.selectedName, writable });
+      composer.setContext({ type: "channel", name: store.state.selectedName, writable, channel });
       readonlyElement.hidden = writable;
       readonlyElement.textContent = t("board.closed_notice");
+      updateDrawerToggle();
+      if (drawer.isOpen()) drawer.render(channel);
     } else {
       renderDmHeader(headerElement, store.pair(store.state.selectedName), store);
       composer.setContext({ type: "dm", name: null, writable: false });
       readonlyElement.hidden = false;
       readonlyElement.textContent = t("board.dm_readonly_notice");
+      drawer.close();
     }
 
     const streamReason = reason === "older"
@@ -152,31 +172,39 @@ export function createBoardPage(container) {
     if (select) store.setDmFilter(select.value);
   }
 
-  async function copyCode(button) {
-    const wrapper = button.closest(".board-code");
-    const code = wrapper?.querySelector("pre")?.textContent || "";
-    const original = button.textContent;
+  async function copyText(text) {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(code);
+        await navigator.clipboard.writeText(text);
       } else {
         const textarea = document.createElement("textarea");
-        textarea.value = code;
+        textarea.value = text;
         document.body.append(textarea);
         textarea.select();
         document.execCommand("copy");
         textarea.remove();
       }
-      button.textContent = t("board.copied");
-      setTimeout(() => {
-        if (button.isConnected) button.textContent = original;
-      }, 1500);
+      return true;
     } catch {
-      button.textContent = original;
+      return false;
     }
   }
 
-  function onStreamClick(event) {
+  async function copyCode(button) {
+    const wrapper = button.closest(".board-code");
+    const code = wrapper?.querySelector("pre")?.textContent || "";
+    const original = button.textContent;
+    if (!(await copyText(code))) {
+      button.textContent = original;
+      return;
+    }
+    button.textContent = t("board.copied");
+    setTimeout(() => {
+      if (button.isConnected) button.textContent = original;
+    }, 1500);
+  }
+
+  async function onStreamClick(event) {
     const mention = event.target.closest("[data-board-mention]");
     if (mention) {
       const name = mention.dataset.boardMention;
@@ -207,6 +235,29 @@ export function createBoardPage(container) {
       return;
     }
 
+    const actionButton = event.target.closest("[data-board-action]");
+    if (actionButton) {
+      const postElement = actionButton.closest(".board-post");
+      const id = postElement?.dataset.boardId;
+      const message = store.messageById(id);
+      if (!message) return;
+      if (actionButton.dataset.boardAction === "quote") {
+        composer.quote(message);
+        return;
+      }
+      if (actionButton.dataset.boardAction === "link") {
+        const original = actionButton.textContent;
+        const copied = await copyText(`#/board/${store.state.selectedName}/${message.id}`);
+        if (copied) {
+          actionButton.textContent = t("board.link_copied");
+          setTimeout(() => {
+            if (actionButton.isConnected) actionButton.textContent = original;
+          }, 1500);
+        }
+        return;
+      }
+    }
+
     if (event.target.closest("[data-board-clear-filter]")) {
       store.setPersonFilter("");
     }
@@ -216,9 +267,20 @@ export function createBoardPage(container) {
     if (messagesElement.scrollTop < 48) void store.loadOlder();
   }
 
+  function onHeaderClick(event) {
+    if (!event.target.closest("[data-board-info]")) return;
+    if (store.state.selectedType !== "channel") return;
+    const channel = store.channel(store.state.selectedName);
+    if (!channel) return;
+    if (drawer.isOpen()) drawer.close();
+    else drawer.open(channel);
+    updateDrawerToggle();
+  }
+
   railElement.addEventListener("click", onRailClick, { signal });
   railElement.addEventListener("change", onRailChange, { signal });
   homeElement.addEventListener("click", onHomeClick, { signal });
+  headerElement.addEventListener("click", onHeaderClick, { signal });
   messagesElement.addEventListener("click", onStreamClick, { signal });
   messagesElement.addEventListener("scroll", onScroll, { signal });
   mobileToggle.addEventListener("click", () => {
@@ -229,6 +291,7 @@ export function createBoardPage(container) {
     if (reason === "status") {
       stream.updateStatusDots();
       mentionCard.update(store);
+      composer.refresh();
       return;
     }
     if (reason === "mode" || reason === "dm-filter") {
@@ -264,6 +327,7 @@ export function createBoardPage(container) {
     home.destroy();
     flows.destroy();
     palette.destroy();
+    drawer.destroy();
     container.innerHTML = "";
   }
 
