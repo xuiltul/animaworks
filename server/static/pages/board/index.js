@@ -374,6 +374,12 @@ export function createBoardPage(container, options = {}) {
 
   unsubscribeStatus = onEvent("anima.status", (data) => store.handleAnimaStatus(data));
   window.__boardWsHandler = (data) => {
+    const timelineItem =
+      data && data.id !== undefined && ["notified", "done", "decided"].includes(data.kind);
+    if (timelineItem) {
+      home.handleTimelineItem(data);
+      return;
+    }
     if (
       data &&
       data.text === undefined &&
@@ -390,6 +396,7 @@ export function createBoardPage(container, options = {}) {
   window.__boardReadWsHandler = (data) => {
     void store.handleBoardRead(data);
   };
+  window.__boardTimelineWsHandler = (data) => home.handleTimelineItem(data);
 
   function parseSubPath(subPath) {
     const text = String(subPath || "").replace(/^\/+|\/+$/g, "");
@@ -427,6 +434,7 @@ export function createBoardPage(container, options = {}) {
     if (unsubscribeRead) unsubscribeRead();
     if (window.__boardWsHandler) window.__boardWsHandler = null;
     if (window.__boardReadWsHandler) window.__boardReadWsHandler = null;
+    if (window.__boardTimelineWsHandler) window.__boardTimelineWsHandler = null;
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();

@@ -2458,6 +2458,282 @@
   font-size: 0.84rem;
 }
 
+/* ── Timeline ──────────────────────────────── */
+
+.board-timeline {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 10px;
+  background: var(--aw-color-bg-primary);
+}
+
+.board-timeline-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.board-timeline-title {
+  margin: 0;
+  color: var(--aw-color-text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.board-timeline-unread-count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--aw-color-warning-bg);
+  color: var(--aw-color-warning-text);
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-timeline-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-timeline-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 4px 8px 8px;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--aw-color-border-light);
+}
+
+.board-timeline-item:last-child {
+  border-bottom: 0;
+}
+
+.board-timeline-item.is-unread {
+  border-left-color: var(--aw-color-accent);
+  background: var(--aw-color-bg-subtle);
+}
+
+.board-timeline-item.is-urgent {
+  border-left-color: var(--aw-color-error);
+}
+
+.board-timeline-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 6px;
+}
+
+.board-timeline-time {
+  flex: none;
+  color: var(--aw-color-text-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-timeline-kind {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--aw-color-border-subtle);
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.board-timeline-kind-notified {
+  border-color: var(--aw-color-info-border);
+  background: var(--aw-color-info-bg);
+  color: var(--aw-color-info-text);
+}
+
+.board-timeline-kind-done {
+  border-color: var(--aw-color-success-border);
+  background: var(--aw-color-success-bg);
+  color: var(--aw-color-success-text);
+}
+
+.board-timeline-kind-decided {
+  border-color: var(--aw-color-warning-border);
+  background: var(--aw-color-warning-bg);
+  color: var(--aw-color-warning-text);
+}
+
+.board-timeline-from {
+  display: inline-flex;
+  min-width: 0;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-timeline-from-name {
+  overflow: hidden;
+  max-width: 9em;
+  color: var(--aw-color-text-secondary);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-timeline-system {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid var(--aw-color-border-subtle);
+  border-radius: 999px;
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-color-text-muted);
+  font-size: 0.62rem;
+}
+
+.board-timeline-text-wrap {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 180px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-timeline-text {
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--aw-color-text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.board-timeline-text.is-open {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.board-timeline-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--aw-color-text-link);
+  font: inherit;
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+.board-timeline-more:hover,
+.board-timeline-more:active {
+  text-decoration: underline;
+}
+
+.board-timeline-more:active {
+  opacity: 0.7;
+}
+
+.board-timeline-marks {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.board-timeline-mark {
+  padding: 0 5px;
+  border: 1px solid var(--aw-color-border-subtle);
+  border-radius: 999px;
+  font-size: 0.6rem;
+}
+
+.board-timeline-mark-unread {
+  border-color: var(--aw-color-accent-light);
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-text-link);
+  font-weight: 700;
+}
+
+.board-timeline-mark-urgent {
+  border-color: var(--aw-color-error-border);
+  background: var(--aw-color-error-bg);
+  color: var(--aw-color-error-text);
+  font-weight: 700;
+}
+
+.board-timeline-mark-undelivered {
+  border-color: var(--aw-color-warning-border);
+  background: var(--aw-color-warning-bg-alt);
+  color: var(--aw-color-warning-text-dark);
+}
+
+.board-timeline-mark-changed {
+  border-color: var(--aw-color-info-border);
+  background: var(--aw-color-info-bg);
+  color: var(--aw-color-info-text);
+}
+
+.board-timeline-ref {
+  flex: none;
+  color: var(--aw-color-text-link);
+  font-size: 0.66rem;
+}
+
+.board-timeline-updates {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 16px;
+  padding: 2px 0 0 10px;
+  border-left: 2px solid var(--aw-color-border-light);
+}
+
+.board-timeline-updates-label {
+  color: var(--aw-color-text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.board-timeline-update {
+  padding: 4px 4px 4px 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+}
+
+.board-timeline-empty {
+  padding: 8px 0 4px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 760px) {
+  .board-timeline {
+    padding: 10px;
+  }
+
+  .board-timeline-text-wrap {
+    flex-basis: 100%;
+  }
+
+  .board-timeline-from-name {
+    max-width: 6em;
+  }
+}
+
 /* ── Flows ─────────────────────────────────── */
 
 .board-flow-head {
@@ -3619,5 +3895,16 @@
   .board-home-head,
   .board-flow-head {
     margin-top: 34px;
+  }
+}
+
+/* Phone: the floating rail button sits over the home's top-left corner. */
+@media (max-width: 760px) {
+  .board-timeline {
+    margin-top: 34px;
+  }
+
+  .board-timeline:not([hidden]) + .board-home-content .board-home-head {
+    margin-top: 0;
   }
 }
