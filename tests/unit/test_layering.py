@@ -66,6 +66,7 @@ LAYER_RULES: tuple[tuple[str, int], ...] = (
     ("core.org", 3),
     ("core.messaging", 3),
     ("core.notification", 3),
+    ("core.hub", 3),
     ("core.usage", 3),
     ("core.channels", 3),  # Planned package; no current modules expected.
     ("core.tooling.policy", 3),  # Planned package; no current modules expected.

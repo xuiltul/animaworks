@@ -7,6 +7,7 @@ core.channels: Slack、Discord、Chatwork の共通送信クライアントと�
 core.config: アプリケーション設定のスキーマ、読み込み、検証、移行。
 core.enclave: 隔離された enclave モードの設定モデルと起動時セキュリティガード。
 core.execution: ツール実行、コマンド実行、安全制御。
+core.hub: 会社のタイムライン保存と既読位置。
 core.i18n: 翻訳カタログと言語選択。
 core.infra: ログ、データベース、キャッシュなどの基盤機能。
 core.integrations: 外部サービス連携と animaworks-tool の実装。

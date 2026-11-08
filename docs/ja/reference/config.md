@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 3f7f581e0292a79d0897922cf074ccbb6883977b63afa25a434f724f081b47c7 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: cba2aaf745eb9a1741cb155640194705ea1a682fb7120aff97a85544e92b9766 -->
 
 # 設定リファレンス
 
@@ -472,6 +472,19 @@
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
 | `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
+
+### `hub`
+
+| キー | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `hub` | `HubConfig` | `{HubConfig}` | 会社のタイムラインとハブの設定。 |
+| `hub.enabled` | `bool` | `false` | — |
+| `hub.timeline_enabled` | `bool` | `false` | — |
+| `hub.company` | `str` | `""` | — |
+| `hub.board` | `str` | `"hub"` | — |
+| `hub.public_hosts` | `list[str]` | `[]` | — |
+| `hub.max_posts_per_hour` | `int` | `20` | — |
+| `hub.max_round_trips` | `int` | `4` | — |
 
 ### `llm_rate_guard`
 

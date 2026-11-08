@@ -21,6 +21,7 @@ prompt: システムプロンプトとプロンプト構築の設定。
 priming: anima の起動時に読み込む情報の設定。
 image_gen: 画像生成プロバイダーと既定パラメーター。
 human_notification: 人間への通知方法と通知先。
+hub: 会社のタイムラインとハブの設定。
 interaction: anima 間の対話とメッセージ処理。
 server: HTTP サーバー、認証、利用量制御の設定。
 llm_rate_guard: LLM 呼び出し頻度と同時実行数の制御。

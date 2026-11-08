@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: 6ac04a020e0297c57bffbace7a54fb35e0082e2722146753c4264a95b37303bb -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: fb5fb461bd734b8bb89be636ff4c32c15608a8e23b7fc555618aa1c056fd04f7 -->
 
 # API リファレンス
 
@@ -269,6 +269,13 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 | GET | `/api/task-board` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the unified TaskBoard view read straight from the canonical TaskStore. | `server/routes/taskboard.py:list_task_board` |
 | GET | `/api/task-board/summary` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return TaskBoard summary counts for dashboard use. | `server/routes/taskboard.py:get_task_board_summary` |
 | POST | `/api/task-board/{anima_name}/{task_id}/cancel` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Explicitly cancel a task, overriding any outstanding lease (human operation). | `server/routes/taskboard.py:cancel_task` |
+
+## `server/routes/timeline.py`
+
+| GET | `/api/internal/timeline` | 内部 | Return the caller company's timeline for the Anima CLI. | `server/routes/timeline.py:internal_timeline` |
+| POST | `/api/internal/timeline/add` | 内部 | Append a timeline item on behalf of the verified caller. | `server/routes/timeline.py:internal_timeline_add` |
+| GET | `/api/timeline` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Return the company timeline newest first, with the caller's read flags. | `server/routes/timeline.py:get_timeline` |
+| POST | `/api/timeline/read` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Advance the requesting human's read position in the timeline. | `server/routes/timeline.py:mark_timeline_read` |
 
 ## `server/routes/usage_routes.py`
 

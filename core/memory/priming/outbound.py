@@ -93,6 +93,54 @@ async def collect_recent_outbound(anima_dir: Path, max_entries: int = 3) -> str:
     return ItemizedMemory(render_items(items, t("priming.outbound_header")), items) if items else ""
 
 
+def _collect_timeline_section(anima_dir: Path) -> str:
+    """Render the company timeline for the last 24 hours, or an empty string."""
+    try:
+        from core.config.models import load_config, read_anima_company_checked
+
+        hub = load_config().hub
+        if not hub.timeline_enabled or not hub.company:
+            return ""
+        readable, company = read_anima_company_checked(anima_dir)
+        if not readable or company != hub.company:
+            return ""
+
+        from core.hub.timeline import is_read_by_human, list_items, load_timeline_reads
+        from core.paths import get_shared_dir
+
+        shared_dir = get_shared_dir()
+        since = (now_local() - timedelta(hours=24)).isoformat()
+        items = list_items(shared_dir, company=hub.company, since=since, limit=15)
+        if not items:
+            return ""
+        reads = load_timeline_reads(shared_dir)
+
+        lines: list[str] = []
+        for item in items:
+            ts = str(item.get("ts") or "")
+            time_str = ts[11:16] if len(ts) >= 16 else ts
+            text = " ".join(str(item.get("text") or "").split())[:120]
+            marks = ""
+            if not is_read_by_human(item, reads):
+                marks += t("priming.timeline_unread_mark")
+            if item.get("about"):
+                marks += t("priming.timeline_update_mark")
+            lines.append(
+                t(
+                    "priming.timeline_line",
+                    time_str=time_str,
+                    kind=str(item.get("kind") or ""),
+                    from_name=str(item.get("from") or ""),
+                    text=text,
+                    marks=marks,
+                )
+            )
+        return "\n".join([t("priming.timeline_header"), *lines])
+    except Exception:
+        logger.warning("Failed to build timeline priming section", exc_info=True)
+        return ""
+
+
 async def collect_pending_human_notifications(anima_dir: Path, *, channel: str = "") -> str:
     """Collect recent call_human notifications for context injection.
 
@@ -101,6 +149,10 @@ async def collect_pending_human_notifications(anima_dir: Path, *, channel: str =
     """
     if channel not in HUMAN_NOTIFICATION_CHANNELS:
         return ""
+
+    timeline = _collect_timeline_section(anima_dir)
+    if timeline:
+        return timeline
 
     from core.activity.logger import ActivityLogger
     from core.notification import notification_key_for

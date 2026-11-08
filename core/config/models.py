@@ -73,6 +73,7 @@ from core.config.schemas import (
     HelperModelRole,
     HelperModelsConfig,
     HousekeepingConfig,
+    HubConfig,
     HumanNotificationConfig,
     ImageGenConfig,
     InboxConfig,

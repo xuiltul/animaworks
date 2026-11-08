@@ -245,6 +245,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_board_dm.add_argument("--keyword", default=None, help="Only include messages containing this keyword")
     p_board_dm.set_defaults(func=_lazy_board_dm_history)
 
+    # ── Timeline ──────────────────────────────────────────
+    p_timeline = sub.add_parser("timeline", help=t("cli.timeline_add_parser_help"))
+    timeline_sub = p_timeline.add_subparsers(dest="timeline_command")
+
+    p_timeline_add = timeline_sub.add_parser(
+        "add",
+        help=t("cli.timeline_add_parser_help"),
+        description=t("cli.timeline_add_parser_help"),
+    )
+    p_timeline_add.add_argument(
+        "--kind",
+        choices=("done", "decided"),
+        required=True,
+        help=t("cli.timeline_add_kind_help"),
+    )
+    p_timeline_add.add_argument("--text", required=True, help=t("cli.timeline_add_text_help"))
+    p_timeline_add.add_argument("--about", default=None, help=t("cli.timeline_add_about_help"))
+    p_timeline_add.add_argument("--ref", default=None, help=t("cli.timeline_add_ref_help"))
+    p_timeline_add.add_argument(
+        "--from",
+        dest="from_name",
+        default=None,
+        metavar="NAME",
+        help=t("cli.timeline_add_from_help"),
+    )
+    p_timeline_add.set_defaults(func=_lazy_timeline_add)
+
+    p_timeline_read = timeline_sub.add_parser(
+        "read",
+        help=t("cli.timeline_read_parser_help"),
+        description=t("cli.timeline_read_parser_help"),
+    )
+    p_timeline_read.add_argument("--limit", type=int, default=20, help=t("cli.timeline_read_limit_help"))
+    p_timeline_read.set_defaults(func=_lazy_timeline_read)
+
     # ── Status ────────────────────────────────────────────
     p_status = sub.add_parser("status", help="Show system status from gateway")
     p_status.set_defaults(func=_lazy_status)
@@ -896,3 +931,15 @@ def _lazy_board_dm_history(args: argparse.Namespace) -> None:
     from cli.commands.board import cmd_board_dm_history
 
     cmd_board_dm_history(args)
+
+
+def _lazy_timeline_add(args: argparse.Namespace) -> None:
+    from cli.commands.timeline import cmd_timeline_add
+
+    cmd_timeline_add(args)
+
+
+def _lazy_timeline_read(args: argparse.Namespace) -> None:
+    from cli.commands.timeline import cmd_timeline_read
+
+    cmd_timeline_read(args)
