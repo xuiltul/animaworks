@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: f8eea48261e58d749bb502dad55137106b7fbc065f4a62dae870caafeb5e1241 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 615ab93bc55d2742e56616ba17fcb7051b0d81e72a2b5a1529064d64727edff8 -->
 
 # モジュール一覧
 
@@ -17,7 +17,7 @@
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 945 | — |
+| `cli.parser` | 1046 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -35,6 +35,7 @@
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 345 | Operational commands for enclave runtimes. |
+| `cli.commands.hub` | 141 | — |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -389,6 +390,8 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.hub` | 41 | — |
+| `core.hub.mcp_app` | 407 | — |
+| `core.hub.members` | 242 | — |
 | `core.hub.timeline` | 298 | — |
 
 ## `core.i18n`
@@ -403,7 +406,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 594 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 714 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -604,7 +607,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 608 | — |
+| `core.memory.priming.channel_b` | 610 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -728,7 +731,7 @@ anima 間および外部とのメッセージ配送。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board` | 438 | — |
+| `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 116 | — |
 | `core.messaging.board_fanout` | 102 | — |
@@ -1112,7 +1115,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1563 | — |
+| `server.app` | 1577 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1150,7 +1153,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 912 | — |
+| `server.routes.channels` | 914 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

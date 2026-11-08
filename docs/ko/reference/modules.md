@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=a310e1ec3adac97be99b211d0072a01a050dec8a465faa9414f3ed90690c46e9 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=7b36310e7fd873942ab31c451d9a6f689abd12969c92fadba37c334bf8b13e5a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -17,8 +17,8 @@
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | Codex의 ``PreToolUse`` 명령 정책 훅을 위한 CLI 어댑터. |
 | `cli.demo` | 409 | 네이티브 ``animaworks demo`` 명령. |
-| `cli.parser` | 945 | — |
-| `cli.tool_dispatch` | 414 | 외부 도구, 태스크 제출, 명령 별칭을 위한 CLI 디스패치. |
+| `cli.parser` | 1046 | — |
+| `cli.tool_dispatch` | 414 | 외부 도구, 작업 제출, 명령 별칭을 위한 CLI 디스패치. |
 
 ## `cli.commands`
 
@@ -32,9 +32,10 @@
 | `cli.commands.anima_mgmt` | 1160 | anima 프로세스 관리를 위한 CLI 명령. |
 | `cli.commands.board` | 216 | — |
 | `cli.commands.company_cmd` | 272 | — |
-| `cli.commands.config_cmd` | 238 | ``animaworks config``을 위한 CLI 핸들러와 대화형 마법사. |
+| `cli.commands.config_cmd` | 238 | ``animaworks config``를 위한 CLI 핸들러 및 대화형 마법사. |
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 345 | enclave 런타임을 위한 운영 명령. |
+| `cli.commands.hub` | 141 | — |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -44,17 +45,17 @@
 | `cli.commands.memory_cmd` | 56 | — |
 | `cli.commands.messaging` | 86 | — |
 | `cli.commands.migrate_cmd` | 157 | — |
-| `cli.commands.models_cmd` | 304 | 모델 정보와 관리를 위한 CLI 명령. |
+| `cli.commands.models_cmd` | 304 | 모델 정보 및 관리를 위한 CLI 명령. |
 | `cli.commands.optimize_assets` | 189 | — |
 | `cli.commands.profile` | 332 | — |
-| `cli.commands.rag_repair_status` | 147 | 영속 RAG 복구 상태에 대한 상태 보고. |
+| `cli.commands.rag_repair_status` | 147 | 영구 RAG 복구 상태에 대한 상태 보고. |
 | `cli.commands.remake_cmd` | 279 | — |
 | `cli.commands.repair_rag_cmd` | 135 | — |
 | `cli.commands.server` | 903 | — |
 | `cli.commands.skills` | 211 | — |
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
-| `cli.commands.task_store_cmd` | 259 | 운영자 전용, 코호트 범위 태스크 마이그레이션 및 현재 상태 내보내기. |
+| `cli.commands.task_store_cmd` | 259 | 운영자 전용, 코호트 범위 작업 마이그레이션 및 현재 상태 내보내기. |
 | `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
@@ -384,16 +385,18 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.hub`
 
-회사의 타임라인 저장과 읽음 위치.
+회사 타임라인 저장 및 읽음 위치.
 
 | 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.hub` | 41 | — |
+| `core.hub.mcp_app` | 407 | — |
+| `core.hub.members` | 242 | — |
 | `core.hub.timeline` | 298 | — |
 
 ## `core.i18n`
 
-번역 카탈로그와 언어 선택.
+번역 카탈로그 및 언어 선택.
 
 | 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
@@ -403,7 +406,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.i18n.strings.config` | 840 | 도메인별 i18n 문자열. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.handler` | 594 | 도메인별 i18n 문자열 (핸들러 파트 1). |
+| `core.i18n.strings.handler` | 714 | 도메인별 i18n 문자열 (핸들러 파트 1). |
 | `core.i18n.strings.handler_ext` | 393 | 도메인별 i18n 문자열 (핸들러 파트 2). |
 | `core.i18n.strings.lifecycle` | 104 | 도메인별 i18n 문자열. |
 | `core.i18n.strings.memory` | 440 | 도메인별 i18n 문자열. |
@@ -415,7 +418,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.i18n.strings.server` | 405 | 도메인별 i18n 문자열. |
 | `core.i18n.strings.supervisor` | 140 | 도메인별 i18n 문자열. |
 | `core.i18n.strings.tmp` | 74 | — |
-| `core.i18n.strings.tooling` | 175 | 도메인별 i18n 문자열 (도구 프롬프트와 툴링). |
+| `core.i18n.strings.tooling` | 175 | 도메인별 i18n 문자열 (도구 프롬프트 및 툴링). |
 | `core.i18n.strings.tooling_schema` | 542 | 도메인별 i18n 문자열 (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | 도메인별 i18n 문자열 (schema.* 파트 2). |
 | `core.i18n.strings.zoom` | 26 | — |
@@ -561,7 +564,7 @@ Model Context Protocol 서버 및 클라이언트.
 
 대화·에피소드 기억의 저장, 검색, 정리.
 
-| 모듈 | 행수 | docstring 1행째 |
+| 모듈 | 행수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
@@ -604,7 +607,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 608 | — |
+| `core.memory.priming.channel_b` | 610 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -725,10 +728,10 @@ Model Context Protocol 서버 및 클라이언트.
 
 anima 간 및 외부와의 메시지 전달.
 
-| 모듈 | 행수 | docstring 1행째 |
+| 모듈 | 행수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board` | 438 | — |
+| `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 116 | — |
 | `core.messaging.board_fanout` | 102 | — |
@@ -1109,16 +1112,16 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행수 | docstring 첫 줄 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1563 | — |
+| `server.app` | 1577 | — |
 | `server.board_hooks` | 168 | — |
-| `server.enclave_delivery` | 327 | 완료된 enclave 질문 작업을 수집해 호스트 받은 편지함으로 전달합니다. |
+| `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
 | `server.internal_auth` | 232 | — |
 | `server.localhost` | 86 | — |
-| `server.loop_watchdog` | 102 | 이벤트 루프를 멈추게 한 스택과 함께 멈춤 현상을 로그에 기록합니다. |
+| `server.loop_watchdog` | 102 | Report event loop stalls in the log, with the stack that caused them. |
 | `server.reload_manager` | 115 | — |
 | `server.stream_registry` | 489 | — |
 | `server.websocket` | 165 | — |
@@ -1142,7 +1145,7 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행수 | docstring 1행째 |
+| 모듈 | 행수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 63 | — |
 | `server.routes.animas` | 1268 | — |
@@ -1150,7 +1153,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 912 | — |
+| `server.routes.channels` | 914 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

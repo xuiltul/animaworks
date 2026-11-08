@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: 59d086e0ee2063e239c1937c8c6f9709a6d2989cecf5790c0ca2b394376fb831 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: 5021368cdceea58fad9452537177899c635a0c90d865af8d51888f81e6ecdce0 -->
 
 # CLI リファレンス: `animaworks`
 
@@ -489,6 +489,88 @@ Trigger heartbeat
 |---|---|---|---|---|
 | anima | positional | — | — | Anima name |
 | --local | flag | false | — | (deprecated) Direct mode (no gateway) |
+
+## `hub`
+
+ハブの名簿と外部 AI のメンバーを管理
+
+`usage: animaworks hub [-h] {member} ...`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member`
+
+ハブのメンバーを管理
+
+`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member add`
+
+メンバーを名簿に追加
+
+`usage: animaworks hub member add [-h] --company COMPANY --route {webhook,poll}
+                                 [--url-ref URL_REF] [--key-ref KEY_REF]
+                                 [--expect-every EXPECT_EVERY]
+                                 [--display-name DISPLAY_NAME] [--kind KIND]
+                                 ID`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+| --company | option | — | — | メンバーの会社 ID |
+| --route | option | — | webhook, poll | 連絡方法（webhook または poll） |
+| --url-ref | option | — | — | webhook URL の vault キー名（shared セクション） |
+| --key-ref | option | — | — | webhook 認証キーの vault キー名（shared セクション） |
+| --expect-every | option | — | — | 期待する連絡間隔（30m / 3h / 1d など） |
+| --display-name | option | — | — | 表示名（既定は ID） |
+| --kind | option | "vendor_bot" | — | メンバーの種類（既定: vendor_bot） |
+
+## `hub member disable`
+
+メンバーを無効化
+
+`usage: animaworks hub member disable [-h] ID`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+
+## `hub member enable`
+
+メンバーを有効化
+
+`usage: animaworks hub member enable [-h] ID`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+
+## `hub member list`
+
+ハブのメンバー一覧を表示（トークンは表示しない）
+
+`usage: animaworks hub member list [-h]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member set-token`
+
+環境変数からベアラートークンの SHA-256 を登録
+
+`usage: animaworks hub member set-token [-h] --from-env VAR ID`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+| --from-env | option | — | — | トークンを格納した環境変数名 |
 
 ## `import`
 

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=537dd17bb5bf633dad492eb004b693c8027739655a57b86c0c2ac4081fb3b4a7 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=76eef6ee494de86db9cbfd2e358c4401e866ac5fc86d775543e7994a93dd715f generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -489,6 +489,88 @@ Trigger heartbeat
 |---|---|---|---|---|
 | anima | positional | — | — | Anima name |
 | --local | flag | false | — | (deprecated) Direct mode (no gateway) |
+
+## `hub`
+
+Manage the hub's roster and external AI members
+
+`usage: animaworks hub [-h] {member} ...`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member`
+
+Manage hub members
+
+`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member add`
+
+Add a member to the roster
+
+`usage: animaworks hub member add [-h] --company COMPANY --route {webhook,poll}
+                                 [--url-ref URL_REF] [--key-ref KEY_REF]
+                                 [--expect-every EXPECT_EVERY]
+                                 [--display-name DISPLAY_NAME] [--kind KIND]
+                                 ID`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+| --company | option | — | — | The member's company ID |
+| --route | option | — | webhook, poll | Contact method (webhook or poll) |
+| --url-ref | option | — | — | Vault key name for the webhook URL (shared section) |
+| --key-ref | option | — | — | Vault key name for the webhook authentication key (shared section) |
+| --expect-every | option | — | — | Expected contact interval (e.g., 30m / 3h / 1d) |
+| --display-name | option | — | — | Display name (defaults to the ID) |
+| --kind | option | "vendor_bot" | — | Member type (default: vendor_bot) |
+
+## `hub member disable`
+
+Disable a member
+
+`usage: animaworks hub member disable [-h] ID`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+
+## `hub member enable`
+
+Enable a member
+
+`usage: animaworks hub member enable [-h] ID`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+
+## `hub member list`
+
+Display the list of hub members (tokens are not shown)
+
+`usage: animaworks hub member list [-h]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member set-token`
+
+Register the SHA-256 of a bearer token from an environment variable
+
+`usage: animaworks hub member set-token [-h] --from-env VAR ID`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+| --from-env | option | — | — | Name of the environment variable containing the token |
 
 ## `import`
 

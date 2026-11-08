@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: fb5fb461bd734b8bb89be636ff4c32c15608a8e23b7fc555618aa1c056fd04f7 -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: a34b6c32fab40b5e4f3f12c3899f37c47fbb53bc330e08862a0e9913252e5f4d -->
 
 # API リファレンス
 
