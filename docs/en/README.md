@@ -1,7 +1,7 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/README.md -->
-<!-- i18n: source-sha256=582644ac13997cf7c0bb82404f6cb1c785b02b7ed687492367888946a3304901 generated=2026-10-31 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=cbbae9e7e720a02399f5fc59dd04a02458ac71717fa30fdd15777648b7a14760 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
-> Confirmed commit: 193a5e72
+> Confirmed commit: 9984ccc15
 
 # Documentation Index
 
@@ -9,44 +9,45 @@
 
 ## Document Structure
 
-| Document | Contents |
+| Document | Content |
 |---|---|
-| [Design Philosophy](vision.md) | The design principles and values AnimaWorks aims to embody. |
-| [Feature Overview](overview.md) | An overview of the features and entry points to detailed chapters. |
-| [Correspondence with Neuroscience](brain-mapping.md) | How memory, attention, and autonomous mechanisms correspond to neuroscience, and the rationale behind the design. |
-| [Overall Architecture](architecture/index.md) | System configuration and a guide to the architecture chapters. |
+| [Design Philosophy](vision.md) | The design philosophy and values that AnimaWorks aims for. |
+| [Feature Overview](overview.md) | The overall picture of features and entry points to detailed chapters. |
+| [Correspondence with Neuroscience](brain-mapping.md) | The correspondence between memory, attention, and autonomous mechanisms and neuroscience, and the design rationale. |
+| [Overall Architecture](architecture/index.md) | The system configuration and a guide to each architecture chapter. |
 | [Anima Files](architecture/anima-files.md) | Definition files, configuration, and status files for each Anima. |
-| [Process Configuration](architecture/process.md) | server, root, task runner, IPC, and restarts. |
-| [Execution Modes](architecture/execution.md) | Execution engines, model resolution, fallback, and context management. |
-| [Lifecycle](architecture/lifecycle.md) | Startup paths and locks for chat, inbox, heartbeat, cron, and tasks. |
-| [Prompt Construction](architecture/prompt.md) | Composition of system prompts and runtime context. |
-| [Task Management](architecture/tasks.md) | Task Board, delegation, and background tasks. |
-| [Messaging](architecture/messaging.md) | DMs, Board, notifications to people, Inbox wake and message handling, and external integrations. |
-| [Memory System](memory/index.md) | Memory design, directories, and frontmatter. |
-| [Automatic Recall](memory/priming.md) | How memories are incorporated into context at runtime. |
-| [Deliberate Recall and Search](memory/retrieval.md) | `search_memory`, search processing, RAG, and repair. |
-| [Consolidation and Forgetting](memory/consolidation.md) | Daily and weekly processing, memory review, and procedural memory. |
-| [Activity Log](memory/activity-log.md) | JSONL activity records and recovery records for streaming. |
-| [Security](security.md) | Permission boundaries, protection, and security operations. |
-| [Enclave](enclave.md) | Building an isolated runtime, referencing data, inspection, and auditing. |
-| [Configuration](operations/configuration.md) | Global configuration and configuration methods for each Anima. |
+| [Process Structure](architecture/process.md) | server, root, task runner, IPC, restart. |
+| [Execution Modes](architecture/execution.md) | Execution engine, model resolution, fallback, context management. |
+| [Lifecycle](architecture/lifecycle.md) | Startup paths and locks for chat, inbox, heartbeat, cron, and task. |
+| [Prompt Construction](architecture/prompt.md) | The composition of the system prompt and runtime context. |
+| [Task Management](architecture/tasks.md) | Task Board, delegation, background task. |
+| [Messaging](architecture/messaging.md) | DM, Board, notifications to humans, Inbox wake and message processing, external integrations. |
+| [Memory System](memory/index.md) | Memory design, directories, frontmatter. |
+| [Automatic Recall](memory/priming.md) | The method for bringing memory into context at runtime. |
+| [Intentional Recall and Search](memory/retrieval.md) | `search_memory`, search processing, RAG, repair. |
+| [Integration and Forgetting](memory/consolidation.md) | Daily and weekly processing, memory review, procedural memory. |
+| [Activity Log](memory/activity-log.md) | JSONL activity records and recovery records during streaming. |
+| [Security](security.md) | Permission boundaries, protection, security operations. |
+| [Enclave](enclave.md) | Construction of the isolated runtime, data reference, inspection and audit. |
+| [Configuration](operations/configuration.md) | Global configuration and per-Anima configuration methods. |
 | [Company Management](operations/company.md) | Management of organization and company information. |
-| [GPU Operations](operations/gpu.md) | Operations for components that use GPUs. |
+| [GPU Operations](operations/gpu.md) | Operations of components that use the GPU. |
 | [Development Team](operations/dev-team.md) | Development environment and team operations. |
-| [Slim Runtime Migration](operations/slim-runtime-migration.md) | Migration procedures for Slim Runtime. |
-| [Slack Integration](integrations/slack.md) | Configuration and operation of the Slack connection. |
-| [Zoom Integration](integrations/zoom.md) | Configuration and operation of the Zoom RTMS connection. |
+| [Slim Runtime Migration](operations/slim-runtime-migration.md) | Migration procedure for Slim Runtime. |
+| [Slack Integration](integrations/slack.md) | Configuration and operations for Slack connection. |
+| [Zoom Integration](integrations/zoom.md) | Configuration and operations for Zoom RTMS connection. |
+| [AnimaWorks Hub Integration](integrations/hub.md) | Configuration, roster, and avatars for having external AI participate in the Hub Board. |
 | [CLI Reference](reference/cli.md) | Auto-generated reference for `animaworks` commands. |
 | [Tool CLI Reference](reference/tool-cli.md) | Auto-generated reference for `animaworks-tool`. |
 | [API Reference](reference/api.md) | Auto-generated reference for the HTTP API. |
-| [Configuration Reference](reference/config.md) | Auto-generated reference for configuration options and default values. |
-| [Module Reference](reference/modules.md) | A guide to modules generated from the structure of `core/`. |
+| [Configuration Reference](reference/config.md) | Auto-generated reference for configuration items and default values. |
+| [Module Reference](reference/modules.md) | Module guide generated from the `core/` structure. |
 
 ## Reading Order
 
-- **First-time users**: [Feature Overview](overview.md) → [Overall Architecture](architecture/index.md) → [Memory System](memory/index.md). For the flow of operations, read [Lifecycle](architecture/lifecycle.md).
+- **First-time users**: [Feature Overview](overview.md) → [Overall Architecture](architecture/index.md) → [Memory System](memory/index.md). For the flow of operation, read [Lifecycle](architecture/lifecycle.md).
 - **Those interested in design**: [Design Philosophy](vision.md) → [Correspondence with Neuroscience](brain-mapping.md) → [Overall Architecture](architecture/index.md) → the memory chapters.
-- **Operators**: [Configuration](operations/configuration.md) → [Security](security.md) → [CLI Reference](reference/cli.md) and [Configuration Reference](reference/config.md). For individual integrations, refer to [Slack](integrations/slack.md) and [Zoom](integrations/zoom.md).
+- **Operators**: [Configuration](operations/configuration.md) → [Security](security.md) → [CLI Reference](reference/cli.md) and [Configuration Reference](reference/config.md). For individual integrations, refer to [Slack](integrations/slack.md), [Zoom](integrations/zoom.md), and [AnimaWorks Hub](integrations/hub.md).
 
 ## For Writers
 

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=d46d2bd8abcc02942a4af1893f73e0d32d5b2421d03b4fb85a27a0c60609e5a5 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # API Reference
 
@@ -137,6 +137,11 @@ Generated from FastAPI’s OpenAPI definitions, WebSocket, and handwritten route
 ## `server/routes/external_tasks.py`
 
 | GET | `/api/external-tasks` | Session required (may be omitted in local_trust mode or if localhost trust is enabled) | Get external tasks for the widget from the snapshot store. | `server/routes/external_tasks.py:get_external_tasks` |
+
+## `server/routes/hub.py`
+
+| GET | `/api/hub/members` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/hub.py:list_hub_members` |
+| GET | `/api/hub/members/{member_id}/avatar` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/hub.py:hub_member_avatar` |
 
 ## `server/routes/internal.py`
 

@@ -149,6 +149,10 @@
         "reason": "AnimaWorks server lifecycle commands are blocked"
       },
       {
+        "pattern": "\\banimaworks\\s+hub\\s+member\\s+(?:add|set-token|enable|disable|set-avatar)\\b",
+        "reason": "The hub roster is managed by the human, not by animas"
+      },
+      {
         "pattern": "\\bsystemctl\\s+(restart|stop|start|disable|enable)\\s+.*animaworks",
         "reason": "systemctl operations on AnimaWorks service are blocked"
       }

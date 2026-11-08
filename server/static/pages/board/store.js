@@ -69,6 +69,7 @@ export function createBoardStore() {
     animaByName: new Map(),
     statusOverrides: new Map(),
     avatars: new Map(),
+    hubMembers: new Map(),
     mode: "board", // "board" | "dm"
     view: "home", // "home" | "flows" (null while a channel/DM is open)
     selectedType: null, // "channel" | "dm"
@@ -153,6 +154,26 @@ export function createBoardStore() {
 
   function avatarUrl(name) {
     return state.avatars.get(name) || null;
+  }
+
+  async function loadHubMembers() {
+    let list = [];
+    try {
+      list = await api("/api/hub/members");
+    } catch {
+      list = [];
+    }
+    state.hubMembers = new Map(
+      (Array.isArray(list) ? list : []).map((member) => [String(member.id), member]),
+    );
+    for (const member of state.hubMembers.values()) {
+      state.avatars.set(member.id, member.avatar_url || null);
+    }
+    emit("avatars");
+  }
+
+  function hubMember(name) {
+    return state.hubMembers.get(name) || null;
   }
 
   // ── Read positions ─────────────────────────
@@ -997,6 +1018,7 @@ export function createBoardStore() {
     void loadChannels();
     void loadDmPairs();
     void loadAnimas();
+    void loadHubMembers();
     if (state.pollTimer) clearInterval(state.pollTimer);
     state.pollTimer = setInterval(() => {
       if (document.visibilityState === "visible") void refresh();
@@ -1024,6 +1046,7 @@ export function createBoardStore() {
     // avatars
     ensureAvatars,
     avatarUrl,
+    hubMember,
     // directory
     anima,
     hasAnima,

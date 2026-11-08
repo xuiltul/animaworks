@@ -14,6 +14,7 @@ from server.routes.chat import create_chat_router
 from server.routes.chat_ui_state import create_chat_ui_state_router
 from server.routes.config_routes import create_config_router
 from server.routes.external_tasks import create_external_tasks_router
+from server.routes.hub import create_hub_router
 from server.routes.internal import create_internal_router
 from server.routes.logs_routes import create_logs_router
 from server.routes.memory_routes import create_memory_router
@@ -52,6 +53,7 @@ def create_router() -> APIRouter:
     api.include_router(create_auth_router())
     api.include_router(create_users_router())
     api.include_router(create_external_tasks_router())
+    api.include_router(create_hub_router())
     api.include_router(create_usage_router())
     api.include_router(create_webhooks_router())
     api.include_router(create_phone_router())

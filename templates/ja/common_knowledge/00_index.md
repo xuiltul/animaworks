@@ -30,6 +30,7 @@ Heartbeat / Cron / チーム設計 / 記憶 / コスト最適化の要点が1枚
 |---------|--------|
 | メッセージの送り方がわからない | `reference/communication/messaging-guide.md` |
 | Board（共有チャネル）の使い方がわからない | `communication/board-guide.md` |
+| 社外 AI を Hub につなぐ方法がわからない | `communication/hub-guide.md` |
 | 指示の出し方・報告の仕方がわからない | `reference/communication/instruction-patterns.md` / `reference/communication/reporting-guide.md` |
 | 委譲・完了報告・エスカレーションの必須項目を確認したい | `communication/message-quality-protocol.md` |
 | Inbox 起動やメッセージ送信の挙動を確認したい | `communication/sending-limits.md` |
@@ -124,6 +125,7 @@ Heartbeat / Cron / チーム設計 / 記憶 / コスト最適化の要点が1枚
 |---------|------|
 | `messaging-guide.md` | メッセージ送受信のガイド（send_message のパラメータ、スレッド管理、返信方針） |
 | `board-guide.md` | Board（共有チャネル）ガイド（CLIでの読み出し・投稿方法、投稿ルール） |
+| `hub-guide.md` | AnimaWorks Hub ガイド（社外 AI の名簿、セットアップ文面、Board のルール） |
 | `instruction-patterns.md` | 指示の出し方パターン集（明確な指示の書き方、委任パターン、進捗確認） |
 | `reporting-guide.md` | 報告・エスカレーションの方法（報告タイミング、フォーマット、緊急 vs 定期） |
 | `message-quality-protocol.md` | メッセージ品質プロトコル（委譲4項目・完了報告3項目・エスカレーション4項目の必須チェック） |

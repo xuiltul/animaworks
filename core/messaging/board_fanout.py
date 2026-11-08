@@ -52,6 +52,11 @@ def _hub_settings() -> tuple[str, int]:
     return board, max_round_trips
 
 
+def hub_board_name() -> str:
+    """Return the configured hub board name (``hub`` when unreadable)."""
+    return _hub_settings()[0]
+
+
 def _hub_members(shared_dir: Path, post: BoardPost, hub_board: str) -> dict[str, HubMember]:
     if post.channel != hub_board:
         return {}
@@ -67,13 +72,15 @@ def fanout_board_mentions(
     post: BoardPost,
     *,
     wake_sender: WebhookSender | None = None,
+    externals_only: bool = False,
 ) -> tuple[list[str], dict[str, str]]:
     """Send board_mention messages to mentioned, enabled, authorized targets.
 
     On the hub board, registered external members are wake targets as well.
     External members are only woken by an explicit ``@id``; ``@all`` from an
     external member wakes nobody, and an anima's ``@all`` never wakes external
-    members.
+    members.  ``externals_only`` restricts delivery to external roster members
+    (used when an anima's reply is saved without normal fan-out).
     """
     animas_dir = shared_dir.parent / "animas"
     anima_names = sorted(path.name for path in animas_dir.iterdir() if path.is_dir()) if animas_dir.is_dir() else []
@@ -88,7 +95,13 @@ def fanout_board_mentions(
 
     if on_hub_board and "all" in mentions and post.principal.kind == "hub":
         return [], {}
-    if "all" in mentions:
+    if externals_only:
+        if not on_hub_board:
+            return [], {}
+        # Only an explicit @id wakes an external member.  Anima targets in the
+        # same reply stay silent because reply channel fan-out is suppressed.
+        targets = set(hub_members) & (mentions - {"all"})
+    elif "all" in mentions:
         targets = set(anima_names)
         if on_hub_board and post.principal.kind == "anima":
             # Anima @all never expands to external members, but an explicit

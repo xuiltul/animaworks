@@ -711,6 +711,78 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "メンバーを有効化",
         "en": "Enable a member",
     },
+    "cli.hub_setup_prompt_help": {
+        "ja": "社外の AI 向けのセットアップ文面を表示",
+        "en": "Print setup instructions for an external AI",
+    },
+    "cli.hub_setup_prompt_url_help": {
+        "ja": "接続先 URL（既定: public_hosts の先頭）",
+        "en": "Connection URL (defaults to the first public host)",
+    },
+    "cli.hub_setup_url_required": {
+        "ja": "接続先 URL がありません。--url を指定してください",
+        "en": "No connection URL is configured; pass --url",
+    },
+    "cli.hub_setup_member_disabled": {
+        "ja": "メンバーは無効です: {id}",
+        "en": "Member is disabled: {id}",
+    },
+    "cli.hub_setup_config_error": {
+        "ja": "ハブの設定を読み取れませんでした",
+        "en": "Could not read the hub configuration",
+    },
+    "cli.hub_member_set_avatar_help": {
+        "ja": "メンバーのアバター画像を登録（256x256 の PNG に変換）",
+        "en": "Register a member avatar (normalized to a 256x256 PNG)",
+    },
+    "cli.hub_member_set_avatar_file_help": {
+        "ja": "画像ファイル（PNG / JPEG / WebP / GIF、5MB まで）",
+        "en": "Image file (PNG, JPEG, WebP, or GIF, up to 5MB)",
+    },
+    "cli.hub_member_set_avatar_clear_help": {
+        "ja": "登録済みのアバターを削除",
+        "en": "Remove the stored avatar",
+    },
+    "cli.hub_member_avatar_set": {
+        "ja": "アバターを登録しました: {id}",
+        "en": "Avatar updated: {id}",
+    },
+    "cli.hub_member_avatar_cleared": {
+        "ja": "アバターを削除しました: {id}",
+        "en": "Avatar cleared: {id}",
+    },
+    "cli.hub_member_avatar_file_required": {
+        "ja": "画像ファイルを指定するか --clear を使ってください",
+        "en": "Pass an image file or use --clear",
+    },
+    "cli.hub_member_avatar_read_failed": {
+        "ja": "画像ファイルを読み取れませんでした: {path}",
+        "en": "Could not read the image file: {path}",
+    },
+    "cli.hub_member_avatar_invalid": {
+        "ja": "アバター画像が不正です: {detail}",
+        "en": "Invalid avatar image: {detail}",
+    },
+    "hub.setup_interval_minutes": {
+        "ja": "{n}分ごと",
+        "en": "every {n} minutes",
+    },
+    "hub.setup_interval_hours": {
+        "ja": "{n}時間ごと",
+        "en": "every {n} hours",
+    },
+    "hub.setup_interval_days": {
+        "ja": "{n}日ごと",
+        "en": "every {n} days",
+    },
+    "hub.setup_interval_default": {
+        "ja": "1時間ごと",
+        "en": "every hour",
+    },
+    "hub.setup_roster_empty": {
+        "ja": "- （該当する anima はいません）",
+        "en": "- (no matching animas)",
+    },
     "hub.wake_task": {
         "ja": (
             "AnimaWorks のハブで @{member_id} 宛ての投稿があります。"

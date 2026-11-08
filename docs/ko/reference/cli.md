@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=76eef6ee494de86db9cbfd2e358c4401e866ac5fc86d775543e7994a93dd715f generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -494,7 +494,7 @@ cli.cost_help
 
 허브의 명부와 외부 AI의 멤버를 관리
 
-`usage: animaworks hub [-h] {member} ...`
+`usage: animaworks hub [-h] {setup-prompt,member} ...`
 
 | 이름 | 유형 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
@@ -504,7 +504,9 @@ cli.cost_help
 
 허브의 멤버를 관리
 
-`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+`usage: animaworks hub member [-h]
+                             {add,list,set-token,disable,enable,set-avatar}
+                             ...`
 
 | 이름 | 유형 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
@@ -561,6 +563,18 @@ cli.cost_help
 |---|---|---|---|---|
 | — | — | — | — | — |
 
+## `hub member set-avatar`
+
+멤버의 아바타 이미지를 등록 (256x256 PNG로 변환)
+
+`usage: animaworks hub member set-avatar [-h] [--clear] ID [file]`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+| file | positional | — | — | 이미지 파일 (PNG / JPEG / WebP / GIF, 최대 5MB) |
+| --clear | flag | false | — | 등록된 아바타를 삭제 |
+
 ## `hub member set-token`
 
 환경 변수에서 베어러 토큰의 SHA-256을 등록
@@ -571,6 +585,17 @@ cli.cost_help
 |---|---|---|---|---|
 | member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
 | --from-env | option | — | — | 토큰을 저장한 환경 변수 이름 |
+
+## `hub setup-prompt`
+
+사외 AI용 설정 문면을 표시
+
+`usage: animaworks hub setup-prompt [-h] [--url URL] ID`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+| --url | option | — | — | 접속 대상 URL (기본: public_hosts의 첫 번째) |
 
 ## `import`
 

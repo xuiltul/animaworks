@@ -283,6 +283,16 @@ def build_parser() -> argparse.ArgumentParser:
     # ── Hub ───────────────────────────────────────────────
     p_hub = sub.add_parser("hub", help=t("cli.hub_parser_help"))
     hub_sub = p_hub.add_subparsers(dest="hub_command")
+
+    p_hub_setup_prompt = hub_sub.add_parser(
+        "setup-prompt",
+        help=t("cli.hub_setup_prompt_help"),
+        description=t("cli.hub_setup_prompt_help"),
+    )
+    p_hub_setup_prompt.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_setup_prompt.add_argument("--url", default=None, help=t("cli.hub_setup_prompt_url_help"))
+    p_hub_setup_prompt.set_defaults(func=_lazy_hub_setup_prompt)
+
     p_hub_member = hub_sub.add_parser("member", help=t("cli.hub_member_parser_help"))
     hub_member_sub = p_hub_member.add_subparsers(dest="hub_member_command")
 
@@ -350,6 +360,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_hub_member_enable.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
     p_hub_member_enable.set_defaults(func=_lazy_hub_member_enable)
+
+    p_hub_member_set_avatar = hub_member_sub.add_parser(
+        "set-avatar",
+        help=t("cli.hub_member_set_avatar_help"),
+        description=t("cli.hub_member_set_avatar_help"),
+    )
+    p_hub_member_set_avatar.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_member_set_avatar.add_argument("file", nargs="?", default=None, help=t("cli.hub_member_set_avatar_file_help"))
+    p_hub_member_set_avatar.add_argument(
+        "--clear",
+        action="store_true",
+        help=t("cli.hub_member_set_avatar_clear_help"),
+    )
+    p_hub_member_set_avatar.set_defaults(func=_lazy_hub_member_set_avatar)
 
     # ── Status ────────────────────────────────────────────
     p_status = sub.add_parser("status", help="Show system status from gateway")
@@ -1032,6 +1056,18 @@ def _lazy_hub_member_enable(args: argparse.Namespace) -> None:
     from cli.commands.hub import cmd_hub_member_enable
 
     cmd_hub_member_enable(args)
+
+
+def _lazy_hub_member_set_avatar(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_set_avatar
+
+    cmd_hub_member_set_avatar(args)
+
+
+def _lazy_hub_setup_prompt(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_setup_prompt
+
+    cmd_hub_setup_prompt(args)
 
 
 def _lazy_timeline_add(args: argparse.Namespace) -> None:

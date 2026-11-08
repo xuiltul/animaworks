@@ -4,17 +4,27 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 import json
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
 import pytest
+from PIL import Image
 from starlette.applications import Starlette
 from starlette.routing import Mount
 
 from core.hub import timeline
+from core.hub.avatar import AvatarError, avatar_path
 from core.hub.mcp_app import build_hub_mcp_app, run_hub_command
-from core.hub.members import HubMember, last_seen, save_member, token_digest
+from core.hub.members import (
+    HubMember,
+    last_seen,
+    save_member,
+    state_path,
+    token_digest,
+    update_member_state,
+)
 from core.messaging.board import clear_post_hooks
 from core.messaging.messenger import ChannelMeta, save_channel_meta
 from core.time_utils import now_iso
@@ -85,6 +95,7 @@ def test_help_and_argument_errors(shared_dir: Path, member: HubMember, monkeypat
     help_text = run_hub_command(shared_dir, member, "help")
     assert "commands:" in help_text
     assert "timeline" in help_text and "read" in help_text and "post" in help_text
+    assert "avatar" in help_text
 
     assert run_hub_command(shared_dir, member, "").startswith("error: missing command")
     assert run_hub_command(shared_dir, member, "nope").startswith("error: unknown command")
@@ -318,3 +329,75 @@ def test_other_company_member_cannot_read_timeline_or_hub(shared_dir: Path, monk
     save_member(shared_dir, outsider)
     for command in ("timeline", "read"):
         assert run_hub_command(shared_dir, outsider, command).startswith("error: this hub belongs to another company")
+
+
+def _avatar_png() -> bytes:
+    output = BytesIO()
+    Image.new("RGB", (300, 200), (10, 20, 30)).save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_avatar_command_saves_image_and_records_update(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    png = _avatar_png()
+    monkeypatch.setattr("core.hub.mcp_app.fetch_avatar_url", lambda url: png)
+
+    result = run_hub_command(shared_dir, member, "avatar https://hub.example.com/me.png")
+
+    assert result == "avatar updated (256x256)"
+    assert avatar_path(shared_dir, "grok").is_file()
+    member_file = json.loads((shared_dir / "hub" / "members" / "grok.json").read_text(encoding="utf-8"))
+    assert "avatar_url" not in member_file
+    state = json.loads(state_path(shared_dir, "grok").read_text(encoding="utf-8"))
+    assert len(state["avatar_updates"]) == 1
+
+
+def test_avatar_command_accepts_url_from_text(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    monkeypatch.setattr("core.hub.mcp_app.fetch_avatar_url", lambda url: _avatar_png())
+
+    assert run_hub_command(shared_dir, member, "avatar", text="https://hub.example.com/me.png") == (
+        "avatar updated (256x256)"
+    )
+
+
+def test_avatar_command_rate_limit_is_five_per_day(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    update_member_state(shared_dir, "grok", avatar_updates=[now_iso()] * 5)
+    called: list[str] = []
+    monkeypatch.setattr(
+        "core.hub.mcp_app.fetch_avatar_url",
+        lambda url: called.append(url) or _avatar_png(),
+    )
+
+    result = run_hub_command(shared_dir, member, "avatar https://hub.example.com/me.png")
+
+    assert "limit reached" in result
+    assert called == []
+    assert not avatar_path(shared_dir, "grok").exists()
+
+
+def test_avatar_command_rejects_failed_fetch(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    def fail_fetch(url: str) -> bytes:
+        raise AvatarError("url not allowed")
+
+    monkeypatch.setattr("core.hub.mcp_app.fetch_avatar_url", fail_fetch)
+
+    result = run_hub_command(shared_dir, member, "avatar https://private.example.com/me.png")
+
+    assert result.startswith("error: url not allowed")
+    assert not avatar_path(shared_dir, "grok").exists()

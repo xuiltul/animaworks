@@ -9,7 +9,10 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from core.auth.manager import hash_password, save_auth
+from core.auth.models import AuthConfig, AuthUser
 from core.config import invalidate_cache
+from core.hub.avatar import save_avatar
 from core.hub.members import HubMember, save_member, token_digest
 
 
@@ -104,3 +107,35 @@ def test_lifespan_starts_and_stops_hub_silence_task(data_dir_at_tmp_path: Path) 
         assert not task.done()
 
     assert app.state.hub_silence_task.done()
+
+
+def test_hub_avatar_api_requires_session_auth(data_dir_at_tmp_path: Path) -> None:
+    _enable_hub(data_dir_at_tmp_path)
+    shared = data_dir_at_tmp_path / "shared"
+    save_member(
+        shared,
+        HubMember(
+            id="vendor-a",
+            display_name="Vendor A",
+            company="a",
+            token_sha256=token_digest("token"),
+            message_route={"type": "poll"},
+        ),
+    )
+    save_avatar(shared, "vendor-a", b"png")
+    save_auth(
+        AuthConfig(
+            auth_mode="password",
+            owner=AuthUser(username="admin", password_hash=hash_password("pw"), role="owner"),
+        )
+    )
+    app = _create_app(data_dir_at_tmp_path)
+    client = TestClient(app)
+
+    assert client.get("/api/hub/members").status_code == 401
+    assert client.get("/api/hub/members/vendor-a/avatar").status_code == 401
+
+    assert client.post("/api/auth/login", json={"username": "admin", "password": "pw"}).status_code == 200
+    body = client.get("/api/hub/members").json()
+    assert body[0]["id"] == "vendor-a"
+    assert client.get("/api/hub/members/vendor-a/avatar").content == b"png"

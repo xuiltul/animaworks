@@ -55,6 +55,9 @@ export function avatarMarkup({ name, kind, url = null, size = "md" } = {}) {
     return `<span class="board-avatar board-avatar-human${sizeClass}" title="${safeName}">${PERSON_ICON}</span>`;
   }
   if (group === "external") {
+    if (url) {
+      return `<span class="board-avatar board-avatar-external${sizeClass}" title="${safeName}"><img class="board-avatar-img" src="${escapeHtml(url)}" alt="${safeName}" loading="lazy"></span>`;
+    }
     return `<span class="board-avatar board-avatar-external${sizeClass}" title="${safeName}">${initial}</span>`;
   }
   if (group === "operator") {

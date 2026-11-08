@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=76eef6ee494de86db9cbfd2e358c4401e866ac5fc86d775543e7994a93dd715f generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -494,7 +494,7 @@ Trigger heartbeat
 
 Manage the hub's roster and external AI members
 
-`usage: animaworks hub [-h] {member} ...`
+`usage: animaworks hub [-h] {setup-prompt,member} ...`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
@@ -504,7 +504,9 @@ Manage the hub's roster and external AI members
 
 Manage hub members
 
-`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+`usage: animaworks hub member [-h]
+                             {add,list,set-token,disable,enable,set-avatar}
+                             ...`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
@@ -561,6 +563,18 @@ Display the list of hub members (tokens are not shown)
 |---|---|---|---|---|
 | — | — | — | — | — |
 
+## `hub member set-avatar`
+
+Register a member's avatar image (converted to a 256x256 PNG)
+
+`usage: animaworks hub member set-avatar [-h] [--clear] ID [file]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+| file | positional | — | — | Image file (PNG / JPEG / WebP / GIF, up to 5MB) |
+| --clear | flag | false | — | Delete the registered avatar |
+
 ## `hub member set-token`
 
 Register the SHA-256 of a bearer token from an environment variable
@@ -571,6 +585,17 @@ Register the SHA-256 of a bearer token from an environment variable
 |---|---|---|---|---|
 | member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
 | --from-env | option | — | — | Name of the environment variable containing the token |
+
+## `hub setup-prompt`
+
+Display setup text for external AIs
+
+`usage: animaworks hub setup-prompt [-h] [--url URL] ID`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
+| --url | option | — | — | Connection URL (default: the first entry in public_hosts) |
 
 ## `import`
 

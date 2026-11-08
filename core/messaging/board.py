@@ -456,6 +456,17 @@ def post_to_board_in_shared_dir(
             result.notified, result.not_notified = fanout_board_mentions(shared_dir, post)
         except Exception:
             logger.exception("Board mention fan-out failed for #%s", channel)
+    elif principal.kind == "anima" and origin != "mirror":
+        # An anima's reply during a reply-triggered run is saved with
+        # notify=False so other animas are not woken again.  External hub
+        # members still need the reply: they cannot see the board without it.
+        try:
+            from core.messaging.board_fanout import fanout_board_mentions, hub_board_name
+
+            if channel == hub_board_name():
+                result.notified, result.not_notified = fanout_board_mentions(shared_dir, post, externals_only=True)
+        except Exception:
+            logger.exception("Board external fan-out failed for #%s", channel)
 
     if result.notified or result.not_notified:
         try:

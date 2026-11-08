@@ -227,3 +227,28 @@ class TestSdkSecurityBashCommandCheck:
             superuser=True,
         )
         assert result is None
+
+
+class TestHubRosterCommands:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "animaworks hub member add grok --company a --route poll",
+            "animaworks hub member set-token grok --from-env HUB_TOKEN",
+            "animaworks hub member enable grok",
+            "animaworks hub member disable grok",
+            "animaworks hub member set-avatar grok avatar.png",
+        ],
+    )
+    def test_roster_mutations_are_blocked(self, cmd: str):
+        assert _matches_handler(cmd), f"hub roster mutation not blocked: {cmd!r}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "animaworks hub member list",
+            "animaworks hub setup-prompt grok",
+        ],
+    )
+    def test_roster_reads_and_setup_prompt_are_allowed(self, cmd: str):
+        assert not _matches_handler(cmd), f"hub command falsely blocked: {cmd!r}"

@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: 5021368cdceea58fad9452537177899c635a0c90d865af8d51888f81e6ecdce0 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: edbd2303bf77bdfa6ef3ed57261ea89b5db12ddc815813f38a0025d032b87ec3 -->
 
 # CLI リファレンス: `animaworks`
 
@@ -494,7 +494,7 @@ Trigger heartbeat
 
 ハブの名簿と外部 AI のメンバーを管理
 
-`usage: animaworks hub [-h] {member} ...`
+`usage: animaworks hub [-h] {setup-prompt,member} ...`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
@@ -504,7 +504,9 @@ Trigger heartbeat
 
 ハブのメンバーを管理
 
-`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+`usage: animaworks hub member [-h]
+                             {add,list,set-token,disable,enable,set-avatar}
+                             ...`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
@@ -561,6 +563,18 @@ Trigger heartbeat
 |---|---|---|---|---|
 | — | — | — | — | — |
 
+## `hub member set-avatar`
+
+メンバーのアバター画像を登録（256x256 の PNG に変換）
+
+`usage: animaworks hub member set-avatar [-h] [--clear] ID [file]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+| file | positional | — | — | 画像ファイル（PNG / JPEG / WebP / GIF、5MB まで） |
+| --clear | flag | false | — | 登録済みのアバターを削除 |
+
 ## `hub member set-token`
 
 環境変数からベアラートークンの SHA-256 を登録
@@ -571,6 +585,17 @@ Trigger heartbeat
 |---|---|---|---|---|
 | member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
 | --from-env | option | — | — | トークンを格納した環境変数名 |
+
+## `hub setup-prompt`
+
+社外の AI 向けのセットアップ文面を表示
+
+`usage: animaworks hub setup-prompt [-h] [--url URL] ID`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| member_id | positional | — | — | メンバー ID（英小文字で始まる 2〜32 文字） |
+| --url | option | — | — | 接続先 URL（既定: public_hosts の先頭） |
 
 ## `import`
 
