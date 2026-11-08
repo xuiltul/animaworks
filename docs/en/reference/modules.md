@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=a830c7b293f32981fd6ad3410b0f23876e41f15cec5adc4480f70eb3325cdb6c generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=a310e1ec3adac97be99b211d0072a01a050dec8a465faa9414f3ed90690c46e9 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # Module List
 
@@ -9,7 +9,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `cli` | 9 | — |
 | `cli.__main__（非公開）` | 9 | — |
@@ -17,19 +17,19 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 898 | — |
+| `cli.parser` | 945 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
 | `cli.commands.anima_export_cmd` | 67 | — |
-| `cli.commands.anima_mgmt` | 1160 | CLI commands for Anima process management. |
+| `cli.commands.anima_mgmt` | 1160 | CLI commands for anima process management. |
 | `cli.commands.board` | 216 | — |
 | `cli.commands.company_cmd` | 272 | — |
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
@@ -39,7 +39,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
 | `cli.commands.internal_cmd` | 156 | — |
-| `cli.commands.logs` | 209 | CLI commands for viewing Anima logs. |
+| `cli.commands.logs` | 209 | CLI commands for viewing anima logs. |
 | `cli.commands.mcp_cmd` | 66 | — |
 | `cli.commands.memory_cmd` | 56 | — |
 | `cli.commands.messaging` | 86 | — |
@@ -55,6 +55,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
+| `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
 
@@ -192,9 +193,9 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Application configuration schema, loading, validation, and migration.
+Application configuration schemas, loading, validation, and migration.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
@@ -209,10 +210,10 @@ Application configuration schema, loading, validation, and migration.
 | `core.config.model_config` | 885 | Model configuration resolution: load_model_config, penalties, max_tokens. |
 | `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
 | `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
-| `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
+| `core.config.models` | 101 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1564 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -381,11 +382,20 @@ Tool execution, command execution, and safety controls.
 |---|---:|---|
 | `core.execution.session` | 7 | — |
 
+## `core.hub`
+
+Company timeline storage and read position.
+
+| Module | Lines | docstring 1st line |
+|---|---:|---|
+| `core.hub` | 41 | — |
+| `core.hub.timeline` | 298 | — |
+
 ## `core.i18n`
 
 Translation catalog and language selection.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
@@ -393,10 +403,10 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 534 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 594 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
-| `core.i18n.strings.memory` | 424 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
 | `core.i18n.strings.migrate` | 124 | — |
 | `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
@@ -549,19 +559,19 @@ Model Context Protocol servers and clients.
 
 ## `core.memory`
 
-Storage, search, and organization of conversation and episode memories.
+Storage, search, and organization of conversation and episode memory.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
 | `core.memory.config_reader` | 31 | — |
 | `core.memory.conversation.compression` | 322 | Compression logic for conversation memory. |
 | `core.memory.conversation.finalize` | 493 | Session finalization for conversation memory. |
-| `core.memory.conversation.memory` | 349 | Conversation memory (conversation memory / working memory) management. |
+| `core.memory.conversation.memory` | 349 | Conversation memory (会話記憶 / working memory) management. |
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
-| `core.memory.conversation.shortterm` | 313 | Short-term memory management. |
+| `core.memory.conversation.shortterm` | 313 | Short-term memory (短期記憶) management. |
 | `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
@@ -603,7 +613,7 @@ Storage, search, and organization of conversation and episode memories.
 | `core.memory.priming.engine` | 503 | — |
 | `core.memory.priming.format` | 124 | — |
 | `core.memory.priming.items` | 59 | — |
-| `core.memory.priming.outbound` | 142 | — |
+| `core.memory.priming.outbound` | 194 | — |
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
@@ -713,16 +723,16 @@ Storage, search, and organization of conversation and episode memories.
 
 ## `core.messaging`
 
-Message delivery between Animas and to external parties.
+Message delivery between animas and with the outside.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 438 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 116 | — |
 | `core.messaging.board_fanout` | 102 | — |
-| `core.messaging.board_reads` | 290 | — |
+| `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
@@ -751,7 +761,7 @@ Gradual migration of runtime data formats.
 
 Notification generation and delivery.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.notification` | 40 | — |
 | `core.notification.channels.chatwork` | 79 | — |
@@ -762,7 +772,7 @@ Notification generation and delivery.
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 613 | — |
-| `core.notification.notifier` | 238 | — |
+| `core.notification.notifier` | 312 | — |
 | `core.notification.reply_routing` | 535 | — |
 | `core.notification.slack_names` | 67 | — |
 
@@ -1132,9 +1142,9 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
-| `server.routes` | 61 | — |
+| `server.routes` | 63 | — |
 | `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1164,6 +1174,7 @@ Voice input/output and voice dialogue.
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1217 | — |
 | `server.routes.taskboard` | 237 | — |
+| `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |

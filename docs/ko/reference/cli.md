@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=537dd17bb5bf633dad492eb004b693c8027739655a57b86c0c2ac4081fb3b4a7 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -1442,6 +1442,41 @@ WAL 포함 DB 백업 새로 생성
 | 이름 | 유형 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
 | --anima | option | — | — | 대상 담당자 이름 |
+
+## `timeline`
+
+회사 타임라인에 "끝났다" "정해졌다"를 추가
+
+`usage: animaworks timeline [-h] {add,read} ...`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `timeline add`
+
+회사 타임라인에 "끝났다" "정해졌다"를 추가
+
+`usage: animaworks timeline add [-h] --kind {done,decided} --text TEXT
+                               [--about ABOUT] [--ref REF] [--from NAME]`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| --kind | option | — | done, decided | 항목의 종류(done 또는 decided) |
+| --text | option | — | — | 타임라인에 게시할 본문 |
+| --about | option | — | — | 업데이트할 원본 항목 ID(tl_...) |
+| --ref | option | — | — | 참조 URL 등 |
+| --from | option | — | — | 기록자 이름(오퍼레이터 런타임에만) |
+
+## `timeline read`
+
+회사 타임라인을 읽기(최근 24시간)
+
+`usage: animaworks timeline read [-h] [--limit LIMIT]`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| --limit | option | 20 | — | 가져올 최대 건수 |
 
 ## `tmp`
 

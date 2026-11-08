@@ -137,13 +137,13 @@ Role of each section:
 |-----------|------|
 | `version` | Configuration file version |
 | `setup_complete` | Setup completion flag |
-| `locale` | Locale setting |
+| `locale` | Locale settings |
 | `system` | System settings (mode, log level) |
 | `credentials` | API authentication credentials |
 | `model_modes` | Model name → execution mode mapping |
 | `model_context_windows` |  |
 | `model_max_tokens` |  |
-| `anima_defaults` | Anima configuration defaults |
+| `anima_defaults` | Anima configuration default values |
 | `animas` | Per-Anima configuration overrides |
 | `consolidation` | Memory consolidation settings |
 | `helper_models` |  |
@@ -159,6 +159,7 @@ Role of each section:
 | `human_notification` |  |
 | `interaction` |  |
 | `server` |  |
+| `hub` |  |
 | `llm_rate_guard` |  |
 | `mcp` |  |
 | `external_messaging` |  |
