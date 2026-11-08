@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 615ab93bc55d2742e56616ba17fcb7051b0d81e72a2b5a1529064d64727edff8 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 97c19baabfd186b9c98cc77ab966327edddbe13a9bbd2218921475b5068f515f -->
 
 # モジュール一覧
 
@@ -391,8 +391,10 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.mcp_app` | 407 | — |
-| `core.hub.members` | 242 | — |
+| `core.hub.members` | 279 | — |
+| `core.hub.silence` | 107 | — |
 | `core.hub.timeline` | 298 | — |
+| `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
 
@@ -406,7 +408,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 714 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 748 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -733,8 +735,8 @@ anima 間および外部とのメッセージ配送。
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
-| `core.messaging.board_deliveries` | 116 | — |
-| `core.messaging.board_fanout` | 102 | — |
+| `core.messaging.board_deliveries` | 137 | — |
+| `core.messaging.board_fanout` | 201 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1115,7 +1117,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1577 | — |
+| `server.app` | 1605 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
