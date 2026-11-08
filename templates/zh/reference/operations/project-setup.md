@@ -144,7 +144,7 @@ AnimaWorks 的集成配置文件放置在 `~/.animaworks/config.json` 中。
 | `model_context_windows` |  |
 | `model_max_tokens` |  |
 | `anima_defaults` | Anima 配置默认值 |
-| `animas` | Anima 个别配置覆盖 |
+| `animas` | 按 Anima 的配置覆盖 |
 | `consolidation` | 记忆整合配置 |
 | `helper_models` |  |
 | `background_review` |  |
@@ -154,11 +154,12 @@ AnimaWorks 的集成配置文件放置在 `~/.animaworks/config.json` 中。
 | `skills` |  |
 | `chatwork_tool` |  |
 | `prompt` |  |
-| `priming` | 预激活（自动记忆回忆）配置 |
+| `priming` | 预激活（自动记忆唤起）配置 |
 | `image_gen` | 图像生成配置 |
 | `human_notification` |  |
 | `interaction` |  |
 | `server` |  |
+| `hub` |  |
 | `llm_rate_guard` |  |
 | `mcp` |  |
 | `external_messaging` |  |

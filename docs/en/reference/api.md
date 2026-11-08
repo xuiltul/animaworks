@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=c0dec1831bd8ee58a52a34ebe423b741d6b5628e22b3c538070e9d72a0d11be3 generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=4f0617a8dabef337b83050acd0ab9fdff5bdb15beabbb4dc2cfa0990990b5de9 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # API Reference
 
@@ -269,6 +269,13 @@ Generated from FastAPI’s OpenAPI definitions, WebSocket, and handwritten route
 | GET | `/api/task-board` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return the unified TaskBoard view read straight from the canonical TaskStore. | `server/routes/taskboard.py:list_task_board` |
 | GET | `/api/task-board/summary` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Return TaskBoard summary counts for dashboard use. | `server/routes/taskboard.py:get_task_board_summary` |
 | POST | `/api/task-board/{anima_name}/{task_id}/cancel` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Explicitly cancel a task, overriding any outstanding lease (human operation). | `server/routes/taskboard.py:cancel_task` |
+
+## `server/routes/timeline.py`
+
+| GET | `/api/internal/timeline` | Internal | Return the caller company's timeline for the Anima CLI. | `server/routes/timeline.py:internal_timeline` |
+| POST | `/api/internal/timeline/add` | Internal | Append a timeline item on behalf of the verified caller. | `server/routes/timeline.py:internal_timeline_add` |
+| GET | `/api/timeline` | Session required (local_trust mode, or optional if localhost trust is enabled) | Return the company timeline newest first, with the caller's read flags. | `server/routes/timeline.py:get_timeline` |
+| POST | `/api/timeline/read` | Session required (local_trust mode, or optional if localhost trust is enabled) | Advance the requesting human's read position in the timeline. | `server/routes/timeline.py:mark_timeline_read` |
 
 ## `server/routes/usage_routes.py`
 

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=c0dec1831bd8ee58a52a34ebe423b741d6b5628e22b3c538070e9d72a0d11be3 generated=2026-11-07 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=4f0617a8dabef337b83050acd0ab9fdff5bdb15beabbb4dc2cfa0990990b5de9 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # API 참조
 
@@ -269,6 +269,13 @@ FastAPI의 OpenAPI 정의, WebSocket 및 `server/app.py`에 직접 작성된 라
 | GET | `/api/task-board` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 정식 TaskStore에서 바로 읽은 통합 TaskBoard 뷰를 반환합니다. | `server/routes/taskboard.py:list_task_board` |
 | GET | `/api/task-board/summary` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 대시보드에서 사용할 TaskBoard 요약 수치를 반환합니다. | `server/routes/taskboard.py:get_task_board_summary` |
 | POST | `/api/task-board/{anima_name}/{task_id}/cancel` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 미해결 리스를 무시하고 작업을 명시적으로 취소합니다(사람이 수행하는 작업). | `server/routes/taskboard.py:cancel_task` |
+
+## `server/routes/timeline.py`
+
+| GET | `/api/internal/timeline` | 내부 | Anima CLI의 호출자 회사 타임라인을 반환합니다. | `server/routes/timeline.py:internal_timeline` |
+| POST | `/api/internal/timeline/add` | 내부 | 검증된 호출자를 대신하여 타임라인 항목을 추가합니다. | `server/routes/timeline.py:internal_timeline_add` |
+| GET | `/api/timeline` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 회사 타임라인을 최신순으로 반환하며, 호출자의 읽음 플래그를 포함합니다. | `server/routes/timeline.py:get_timeline` |
+| POST | `/api/timeline/read` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 요청한 사용자의 타임라인 읽기 위치를 진행합니다. | `server/routes/timeline.py:mark_timeline_read` |
 
 ## `server/routes/usage_routes.py`
 

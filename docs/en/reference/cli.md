@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=dade52e52812f09435cc2279230e510601194a99eb7f5f2e9ce2a1ea275d825d generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=537dd17bb5bf633dad492eb004b693c8027739655a57b86c0c2ac4081fb3b4a7 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # CLI reference: `animaworks`
 
@@ -1442,6 +1442,41 @@ Show the shutdown gate and execution count
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | --anima | option | — | — | Target assignee name |
+
+## `timeline`
+
+Append "done" or "decided" to the company timeline
+
+`usage: animaworks timeline [-h] {add,read} ...`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `timeline add`
+
+Append "done" or "decided" to the company timeline
+
+`usage: animaworks timeline add [-h] --kind {done,decided} --text TEXT
+                               [--about ABOUT] [--ref REF] [--from NAME]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| --kind | option | — | done, decided | Item type (done or decided) |
+| --text | option | — | — | Body text to post to the timeline |
+| --about | option | — | — | ID of the original item to update (tl_...) |
+| --ref | option | — | — | Reference URL, etc. |
+| --from | option | — | — | Recorder name (only when run by an operator) |
+
+## `timeline read`
+
+Read the company timeline (last 24 hours)
+
+`usage: animaworks timeline read [-h] [--limit LIMIT]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| --limit | option | 20 | — | Maximum number of items to retrieve |
 
 ## `tmp`
 
