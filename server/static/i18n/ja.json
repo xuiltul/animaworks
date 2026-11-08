@@ -230,6 +230,7 @@
   "board.dms": "DM",
   "board.kind_external_bot": "外部ボット",
   "board.kind_external_user": "外部",
+  "board.kind_external_agent": "社外 AI",
   "board.kind_human": "人",
   "board.kind_operator": "システム",
   "board.load_failed": "読み込み失敗",

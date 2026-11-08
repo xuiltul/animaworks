@@ -68,6 +68,7 @@ _AUTH_WHITELIST_PREFIXES = (
     # Webhook receivers authenticate via per-platform HMAC signature
     # verification (Slack/Chatwork/Zoom), not session cookies.
     "/api/webhooks/",
+    "/hub/",
     "/health",
 )
 
@@ -995,6 +996,11 @@ async def lifespan(app: FastAPI):
     from core.tasks.board.tasks import ensure_task_store_schema
     from server.board_hooks import register_board_post_hooks, unregister_board_post_hooks
 
+    hub_session_manager = getattr(app.state, "hub_mcp_session_manager", None)
+    hub_session_cm = hub_session_manager.run() if hub_session_manager is not None else None
+    if hub_session_cm is not None:
+        await hub_session_cm.__aenter__()
+
     register_board_post_hooks(app)
     loop_watchdog = LoopLagWatchdog()
     loop_watchdog.start()
@@ -1042,6 +1048,8 @@ async def lifespan(app: FastAPI):
         )
 
     yield
+    if hub_session_cm is not None:
+        await hub_session_cm.__aexit__(None, None, None)
     # Shutdown
     unregister_board_post_hooks()
     if feed_prewarm_task is not None and not feed_prewarm_task.done():
@@ -1539,6 +1547,12 @@ def create_app(
             if "demo" not in request.query_params and "mock" not in request.query_params:
                 return RedirectResponse(_base_prefixed("/workspace/?view=battle"))
             return HTMLResponse(_inject_html(battle_html), headers={"Cache-Control": "no-store"})
+
+    from core.hub.mcp_app import build_hub_mcp_app
+
+    hub_mcp_app, hub_session_manager = build_hub_mcp_app(lambda: app.state.shared_dir)
+    app.state.hub_mcp_session_manager = hub_session_manager
+    app.mount("/hub", hub_mcp_app, name="hub_mcp")
 
     if setup_static_dir.exists():
         app.mount(

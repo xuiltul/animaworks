@@ -230,6 +230,7 @@
   "board.dms": "DMs",
   "board.kind_external_bot": "External bot",
   "board.kind_external_user": "External",
+  "board.kind_external_agent": "External AI",
   "board.kind_human": "Human",
   "board.kind_operator": "System",
   "board.load_failed": "Load failed",

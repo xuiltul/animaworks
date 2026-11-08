@@ -18,6 +18,7 @@ export function kindGroup(kind) {
 export function kindLabel(kind) {
   const value = String(kind || "").toLowerCase();
   if (value === "human") return t("board.kind_human");
+  if (value === "external_agent") return t("board.kind_external_agent");
   if (value === "external_bot") return t("board.source_slack_bot");
   if (value === "external_user" || value.startsWith("external")) return t("board.source_slack_user");
   if (value === "operator") return t("board.kind_operator");

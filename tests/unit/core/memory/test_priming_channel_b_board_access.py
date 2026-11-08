@@ -131,3 +131,48 @@ async def test_legacy_channel_fallback_uses_board_access(tmp_path: Path) -> None
 
     assert "general-content" in result
     assert "ops-content" not in result
+
+
+def _append_entry(shared_dir: Path, channel: str, entry: dict[str, object]) -> None:
+    path = shared_dir / "channels" / f"{channel}.jsonl"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def test_priming_excludes_hub_posts(tmp_path: Path) -> None:
+    from core.time_utils import now_iso
+
+    anima_dir = _make_anima(tmp_path, "alice", {"company": "alpha"})
+    shared_dir = _shared(tmp_path)
+    _write_channel(shared_dir, "same", "normal")
+    _write_meta(shared_dir, "same", {"members": [], "company": "alpha"})
+    _append_entry(
+        shared_dir,
+        "same",
+        {"ts": now_iso(), "from": "grok", "text": "hub-only", "source": "hub", "kind": "external_agent"},
+    )
+
+    result = read_shared_channels(anima_dir, shared_dir)
+
+    assert [entry.content for entry in result] == ["normal"]
+
+
+@pytest.mark.asyncio
+async def test_old_channel_fallback_excludes_hub_posts(tmp_path: Path) -> None:
+    from core.memory.priming.channel_b import read_old_channels
+    from core.time_utils import now_iso
+
+    anima_dir = _make_anima(tmp_path, "alice", {"company": "alpha"})
+    shared_dir = _shared(tmp_path)
+    _write_channel(shared_dir, "general", "normal")
+    _write_meta(shared_dir, "general", {"members": [], "company": "alpha"})
+    _append_entry(
+        shared_dir,
+        "general",
+        {"ts": now_iso(), "from": "grok", "text": "hub-only", "source": "hub", "kind": "external_agent"},
+    )
+
+    result = await read_old_channels(anima_dir, shared_dir)
+
+    assert "normal" in result
+    assert "hub-only" not in result
