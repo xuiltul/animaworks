@@ -711,4 +711,38 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "メンバーを有効化",
         "en": "Enable a member",
     },
+    "hub.wake_task": {
+        "ja": (
+            "AnimaWorks のハブで @{member_id} 宛ての投稿があります。"
+            "AnimaWorks Hub コネクタの `hub read` で読み、必要なら "
+            "`hub post --reply-to {post_id}` で返事してください。"
+        ),
+        "en": (
+            "There is a post for @{member_id} on the AnimaWorks hub. "
+            "Read it with the AnimaWorks Hub connector's `hub read`, and reply with "
+            "`hub post --reply-to {post_id}` if needed."
+        ),
+    },
+    "hub.loop_limit_subject": {
+        "ja": "ハブの往復が上限に達しました",
+        "en": "Hub round trips reached the limit",
+    },
+    "hub.loop_limit_body": {
+        "ja": (
+            "ボード #{board} の投稿 {post_id} で、anima と社外の往復が上限に達しました。"
+            "このスレッドでは新しい投稿を配りません。"
+        ),
+        "en": (
+            "Anima and external members reached the round-trip limit on board #{board} "
+            "at post {post_id}. New posts in this thread are not delivered."
+        ),
+    },
+    "hub.silence_subject": {
+        "ja": "{name} がハブに来ていません",
+        "en": "{name} has not visited the hub",
+    },
+    "hub.silence_body": {
+        "ja": "{name} は最後に {last_seen} にハブへ来ました。expect_every を過ぎています。",
+        "en": "{name} last visited the hub at {last_seen}, which is past expect_every.",
+    },
 }

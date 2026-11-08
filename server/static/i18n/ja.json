@@ -1408,6 +1408,7 @@
   "board.action_quote": "引用して返信",
   "board.delivery_not_notified": "届かなかった相手",
   "board.delivery_notified": "届いた相手",
+  "board.delivery_reason_polls": "読みに来たら届く",
   "board.delivery_slack_failed": "Slack への送信に失敗しました",
   "board.delivery_slack_sent": "Slack に送りました",
   "board.delivery_slack_skipped": "Slack には送っていません",

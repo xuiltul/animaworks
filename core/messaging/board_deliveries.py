@@ -83,7 +83,28 @@ def load_deliveries(shared_dir: Path, channel: str) -> dict[str, dict[str, Any]]
         post_id = record.get("post_id")
         if not isinstance(post_id, str) or not post_id:
             continue
-        deliveries[post_id] = record
+        existing = deliveries.get(post_id)
+        if existing is None:
+            deliveries[post_id] = record
+            continue
+        # A webhook wake appends its result after the initial record.  Merge
+        # every line for the same post so callers see one delivery view.
+        existing_notified = existing.get("notified")
+        merged_notified = list(existing_notified) if isinstance(existing_notified, list) else []
+        record_notified = record.get("notified")
+        if isinstance(record_notified, list):
+            for name in record_notified:
+                if name not in merged_notified:
+                    merged_notified.append(name)
+        existing_failed = existing.get("not_notified")
+        merged_failed = dict(existing_failed) if isinstance(existing_failed, dict) else {}
+        record_failed = record.get("not_notified")
+        if isinstance(record_failed, dict):
+            merged_failed.update(record_failed)
+        for name in merged_notified:
+            merged_failed.pop(name, None)
+        existing["notified"] = merged_notified
+        existing["not_notified"] = merged_failed
 
     with _CACHE_LOCK:
         _cache[key] = (stat.st_mtime, stat.st_size, deliveries)

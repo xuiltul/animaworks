@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from core.platform.atomic_io import atomic_write_json
+from core.platform.locks import locked_path
 from core.time_utils import now_iso
 
 logger = logging.getLogger(__name__)
@@ -202,19 +203,45 @@ def save_member(shared_dir: Path, member: HubMember) -> None:
     atomic_write_json(member_path(shared_dir, member.id), member.to_dict())
 
 
-def touch_last_seen(shared_dir: Path, member_id: str) -> None:
-    """Record that *member_id* reached the MCP surface just now."""
-    atomic_write_json(state_path(shared_dir, member_id), {"last_seen": now_iso()}, indent=2)
-
-
-def last_seen(shared_dir: Path, member_id: str) -> str | None:
-    """Return the last-seen timestamp for one member, if recorded."""
+def _read_state(shared_dir: Path, member_id: str) -> dict[str, Any]:
     path = state_path(shared_dir, member_id)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    value = data.get("last_seen") if isinstance(data, dict) else None
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def member_state(shared_dir: Path, member_id: str) -> dict[str, Any]:
+    """Return the member's persisted state object (never raises on bad files)."""
+    return _read_state(shared_dir, member_id)
+
+
+def update_member_state(shared_dir: Path, member_id: str, **updates: Any) -> dict[str, Any]:
+    """Merge *updates* into a member's state file under a lock.
+
+    The MCP surface calls :func:`touch_last_seen` on every request, so this
+    keeps unrelated keys (such as ``silence_alerted_for``) intact while doing a
+    single short read/modify/write.
+    """
+    path = state_path(shared_dir, member_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f"{path.name}.lock")
+    with locked_path(lock_path, exclusive=True, thread_lock=True):
+        state = _read_state(shared_dir, member_id)
+        state.update(updates)
+        atomic_write_json(path, state, indent=2)
+    return state
+
+
+def touch_last_seen(shared_dir: Path, member_id: str) -> None:
+    """Record that *member_id* reached the MCP surface just now."""
+    update_member_state(shared_dir, member_id, last_seen=now_iso())
+
+
+def last_seen(shared_dir: Path, member_id: str) -> str | None:
+    """Return the last-seen timestamp for one member, if recorded."""
+    value = _read_state(shared_dir, member_id).get("last_seen")
     return value if isinstance(value, str) and value else None
 
 
@@ -229,6 +256,16 @@ def token_from_env(var_name: str) -> str | None:
     if value is None or value == "":
         return None
     return value
+
+
+def expect_every_seconds(value: str | None) -> int | None:
+    """Convert an ``expect_every`` value (``15m`` / ``1h`` / ``2d``) to seconds."""
+    if not isinstance(value, str) or not EXPECT_EVERY_RE.fullmatch(value):
+        return None
+    amount = int(value[:-1])
+    unit = value[-1]
+    multiplier = {"m": 60, "h": 60 * 60, "d": 24 * 60 * 60}[unit]
+    return amount * multiplier
 
 
 def parse_iso(value: str) -> datetime | None:

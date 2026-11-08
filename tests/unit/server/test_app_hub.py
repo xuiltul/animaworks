@@ -87,3 +87,20 @@ def test_hub_endpoint_requires_bearer_token(data_dir_at_tmp_path: Path) -> None:
         ),
     )
     assert client.post("/hub/mcp", headers={"Authorization": "Bearer disabled-token"}).status_code == 401
+
+
+def test_lifespan_starts_and_stops_hub_silence_task(data_dir_at_tmp_path: Path) -> None:
+    _enable_hub(data_dir_at_tmp_path)
+    config_path = data_dir_at_tmp_path / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["setup_complete"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    invalidate_cache()
+    app = _create_app(data_dir_at_tmp_path)
+
+    with TestClient(app, base_url="http://localhost:8000"):
+        task = app.state.hub_silence_task
+        assert task is not None
+        assert not task.done()
+
+    assert app.state.hub_silence_task.done()

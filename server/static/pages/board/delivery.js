@@ -24,6 +24,11 @@ function _replyTargetId(reply) {
   return reply.id ?? reply.message_id ?? "";
 }
 
+function _reasonLabel(reason) {
+  if (reason === "polls") return t("board.delivery_reason_polls");
+  return reason || "";
+}
+
 function _callMarkup(name, message, store) {
   const status = store ? store.statusOf(name) : "idle";
   const kind = store?.anima(name)?.kind || "anima";
@@ -80,7 +85,7 @@ export function deliveryMarkup(message, ctx = {}) {
   if (notNotified.length > 0) {
     items.push(`<span class="board-delivery-title">${escapeHtml(t("board.delivery_not_notified"))}</span>`);
     for (const [name, reason] of notNotified) {
-      items.push(`<span class="board-delivery-item board-delivery-fail">${escapeHtml(name)} · ${escapeHtml(reason || "")}</span>`);
+      items.push(`<span class="board-delivery-item board-delivery-fail">${escapeHtml(name)} · ${escapeHtml(_reasonLabel(reason))}</span>`);
     }
   }
   if (slack) {
