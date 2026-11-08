@@ -11,6 +11,7 @@ HTTP endpoint at ``/hub/mcp``.  Authentication is a member bearer token, not
 the web session cookie, so a mounted MCP app has its own ASGI middleware.
 """
 
+import asyncio
 import contextvars
 import json
 import logging
@@ -25,7 +26,15 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from core.config.models import load_config
 from core.hub import timeline
-from core.hub.members import HubMember, find_member_by_token, touch_last_seen
+from core.hub.avatar import AvatarError, fetch_avatar_url, normalize_avatar, save_avatar
+from core.hub.members import (
+    HubMember,
+    find_member_by_token,
+    member_state,
+    parse_iso,
+    touch_last_seen,
+    update_member_state,
+)
 from core.i18n import t
 from core.messaging.board import hub_principal, post_to_board
 from core.messaging.board_reads import (
@@ -42,7 +51,8 @@ logger = logging.getLogger(__name__)
 
 TOOL_DESCRIPTION = (
     "One tool for the AnimaWorks hub. Commands: `help`, `timeline`, `read`, "
-    "`post [--reply-to ID] [--request-id ID]` (put the message body in `text`). "
+    "`post [--reply-to ID] [--request-id ID]` (put the message body in `text`), "
+    "`avatar <https image URL>` (register your avatar). "
     "Talk to animas only by posting in #hub. Learn the current situation from "
     "`timeline`. Before notifying the human directly, check `timeline`; do not "
     "send what is already there (especially items the human has already read). "
@@ -50,7 +60,7 @@ TOOL_DESCRIPTION = (
     "instead."
 )
 
-HELP_SUMMARY = "commands: help | timeline | read | post [--reply-to ID] [--request-id ID]"
+HELP_SUMMARY = "commands: help | timeline | read | post [--reply-to ID] [--request-id ID] | avatar <https image URL>"
 
 HELP_TEXT = (
     "AnimaWorks hub tool\n"
@@ -58,6 +68,7 @@ HELP_TEXT = (
     "- timeline: the last 24 hours of the company timeline (read-only, newest first).\n"
     "- read: new #hub posts since your last read (oldest first, mentions first).\n"
     "- post: post to #hub; put the message body in `text`.\n"
+    "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB).\n"
     "Rules: talk to animas only in #hub. Check timeline before notifying the human and do not repeat "
     "what is already there. Post in #hub for non-urgent matters.\n" + t("hub.tool.help_bilingual_ja")
 )
@@ -66,6 +77,8 @@ _MAX_TIMELINE_LINES = 50
 _MAX_READ_POSTS = 30
 MAX_POST_CHARS = 4000
 _TIMELINE_WINDOW = timedelta(hours=24)
+_AVATAR_UPDATES_PER_DAY = 5
+_AVATAR_UPDATE_WINDOW = timedelta(hours=24)
 
 _current_member: contextvars.ContextVar[HubMember | None] = contextvars.ContextVar(
     "hub_mcp_member",
@@ -234,6 +247,50 @@ def _run_post(shared_dir: Path, member: HubMember, tokens: list[str], text: str)
     return "\n".join(lines), "ok"
 
 
+def _avatar_updates(shared_dir: Path, member_id: str) -> list[str]:
+    state = member_state(shared_dir, member_id)
+    values = state.get("avatar_updates")
+    if not isinstance(values, list):
+        return []
+    cutoff = now_local() - _AVATAR_UPDATE_WINDOW
+    recent: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        parsed = parse_iso(value)
+        if parsed is not None and parsed >= cutoff:
+            recent.append(value)
+    return recent
+
+
+def _run_avatar(shared_dir: Path, member: HubMember, tokens: list[str], text: str) -> tuple[str, str]:
+    if len(tokens) > 1:
+        return _error("avatar takes one URL"), "invalid_argument"
+    url = tokens[0] if tokens else str(text or "").strip()
+    if not url:
+        return _error("avatar requires a URL"), "invalid_argument"
+
+    recent = _avatar_updates(shared_dir, member.id)
+    if len(recent) >= _AVATAR_UPDATES_PER_DAY:
+        return _error(f"avatar update limit reached ({_AVATAR_UPDATES_PER_DAY} per day)"), "rate_limited"
+
+    try:
+        png = normalize_avatar(fetch_avatar_url(url))
+    except AvatarError as exc:
+        return _error(str(exc)), "rejected"
+    except Exception:
+        logger.warning("Failed to fetch hub avatar for %s", member.id, exc_info=True)
+        return _error("fetch failed"), "rejected"
+
+    try:
+        save_avatar(shared_dir, member.id, png)
+        update_member_state(shared_dir, member.id, avatar_updates=[*recent, now_iso()])
+    except (OSError, ValueError):
+        logger.warning("Failed to save hub avatar for %s", member.id, exc_info=True)
+        return _error("save failed"), "rejected"
+    return "avatar updated (256x256)", "ok"
+
+
 def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str = "") -> str:
     """Execute one ``hub`` command for *member* and return the text response."""
     try:
@@ -245,10 +302,10 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
         return _error("missing command")
     name = tokens[0]
     args = tokens[1:]
-    if name not in {"help", "timeline", "read", "post"}:
+    if name not in {"help", "timeline", "read", "post", "avatar"}:
         return _error(f"unknown command: {name}")
-    if text and name != "post":
-        return _error("text is only accepted by post")
+    if text and name not in {"post", "avatar"}:
+        return _error("text is only accepted by post or avatar")
 
     if name == "help":
         if args:
@@ -275,6 +332,8 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
         if args:
             return _error("read takes no arguments")
         return _run_read(shared_dir, member)[0]
+    if name == "avatar":
+        return _run_avatar(shared_dir, member, args, text)[0]
     return _run_post(shared_dir, member, args, text)[0]
 
 
@@ -387,14 +446,16 @@ def build_hub_mcp_app(
     )
 
     @mcp.tool(name="hub", description=TOOL_DESCRIPTION)
-    def hub_tool(command: str, text: str = "") -> str:
-        """Run one hub command (help, timeline, read, post)."""
+    async def hub_tool(command: str, text: str = "") -> str:
+        """Run one hub command (help, timeline, read, post, avatar)."""
         member = _current_member.get()
         if member is None:
             return _error("unauthorized")
         shared_dir = Path(shared_dir_provider())
         try:
-            result = run_hub_command(shared_dir, member, command, text)
+            # File I/O, Board fan-out and avatar fetches block; keep them off the
+            # server event loop that also serves the Web UI and the animas.
+            result = await asyncio.to_thread(run_hub_command, shared_dir, member, command, text)
         except Exception:
             logger.exception("hub command failed member=%s", member.id)
             return "error: internal\n" + HELP_SUMMARY

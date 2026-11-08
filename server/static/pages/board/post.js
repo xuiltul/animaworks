@@ -74,7 +74,8 @@ export function buildPostElement(message, ctx) {
   const avatar = avatarMarkup({
     name: message.from,
     kind,
-    url: group === "anima" ? ctx.avatarUrl(message.from) : null,
+    // Slack users can share a name with an anima; only animas and hub members own avatars.
+    url: group === "anima" || kind === "external_agent" ? ctx.avatarUrl(message.from) : null,
     size: "md",
   });
 

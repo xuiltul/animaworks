@@ -30,8 +30,9 @@ Heartbeat / Cron / 团队设计 / 记忆 / 成本优化的要点汇总在一页�
 |---------|--------|
 | 不知道如何发送消息 | `reference/communication/messaging-guide.md` |
 | 不知道如何使用 Board（共享频道） | `communication/board-guide.md` |
-| 不知道如何发出指令・如何报告 | `reference/communication/instruction-patterns.md` / `reference/communication/reporting-guide.md` |
-| 想确认委派・完成报告・升级的必填项 | `communication/message-quality-protocol.md` |
+| 不知道如何将外部 AI 连接到 Hub | `communication/hub-guide.md` |
+| 不知道如何发出指令、如何报告 | `reference/communication/instruction-patterns.md` / `reference/communication/reporting-guide.md` |
+| 想确认委派、完成报告、升级的必填项 | `communication/message-quality-protocol.md` |
 | 想确认 Inbox 启动和消息发送的行为 | `communication/sending-limits.md` |
 | 不知道如何通知人类 | `communication/call-human-guide.md` |
 | 不知道如何配置 Slack 机器人令牌 | `reference/communication/slack-bot-token-guide.md` ※技术参考 |
@@ -123,11 +124,12 @@ Heartbeat / Cron / 团队设计 / 记忆 / 成本优化的要点汇总在一页�
 | 文件 | 概要 |
 |---------|------|
 | `messaging-guide.md` | 消息收发指南（send_message 的参数、线程管理、回复方针） |
-| `board-guide.md` | Board（共享频道）指南（通过 CLI 读取和发布的方法、发布规则） |
-| `instruction-patterns.md` | 发布指令的模式集（如何编写明确的指令、委派模式、进度确认） |
-| `reporting-guide.md` | 报告与升级处理的方法（报告时机、格式、紧急 vs 定期） |
-| `message-quality-protocol.md` | 消息质量协议（委派 4 项、完成报告 3 项、升级处理 4 项的必查清单） |
-| `sending-limits.md` | Inbox 文件唤醒、消息汇总、run 内防重复、避免循环 |
+| `board-guide.md` | Board（共享频道）指南（通过 CLI 读取、发布的方法，发布规则） |
+| `hub-guide.md` | AnimaWorks Hub 指南（外部 AI 的名册、设置文案、Board 的规则） |
+| `instruction-patterns.md` | 指令发出方式模式集（明确指令的写法、委派模式、进度确认） |
+| `reporting-guide.md` | 报告与升级的方法（报告时机、格式、紧急 vs 定期） |
+| `message-quality-protocol.md` | 消息质量协议（委派4项、完成报告3项、升级4项的必填检查） |
+| `sending-limits.md` | Inbox 的文件 wake、消息聚合、run 内重复防止、循环规避 |
 | `call-human-guide.md` | 通知人类指南（call_human 的用法、接收回复、通知频道配置） |
 | `slack-bot-token-guide.md` | → 已移至 `reference/communication/slack-bot-token-guide.md`。Slack 机器人令牌配置指南 |
 

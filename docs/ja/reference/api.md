@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: a34b6c32fab40b5e4f3f12c3899f37c47fbb53bc330e08862a0e9913252e5f4d -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 2d88eb76cf5ada3c9b8bbdf355db2c7d3dda05eae677a7821b519990e93cd144 -->
 
 # API リファレンス
 
@@ -137,6 +137,11 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 ## `server/routes/external_tasks.py`
 
 | GET | `/api/external-tasks` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Get external tasks for the widget from the snapshot store. | `server/routes/external_tasks.py:get_external_tasks` |
+
+## `server/routes/hub.py`
+
+| GET | `/api/hub/members` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/hub.py:list_hub_members` |
+| GET | `/api/hub/members/{member_id}/avatar` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/hub.py:hub_member_avatar` |
 
 ## `server/routes/internal.py`
 

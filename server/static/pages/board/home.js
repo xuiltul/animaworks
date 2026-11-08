@@ -72,7 +72,7 @@ function _lastMarkup(channel, cached, store) {
   }
   const from = String(cached?.from || channel.last_from || "?");
   const text = _headLines(cached?.text);
-  const kind = store.hasAnima(from) ? "anima" : "human";
+  const kind = store.hasAnima(from) ? "anima" : (store.hubMember(from) ? "external_agent" : "human");
   const body = text
     ? escapeHtml(text)
     : escapeHtml(t("board.loading"));

@@ -31,7 +31,7 @@ function _reasonLabel(reason) {
 
 function _callMarkup(name, message, store) {
   const status = store ? store.statusOf(name) : "idle";
-  const kind = store?.anima(name)?.kind || "anima";
+  const kind = store?.anima(name)?.kind || (store?.hubMember(name) ? "external_agent" : "anima");
   const url = store ? store.avatarUrl(name) : null;
   const read = store ? store.hasReadByName(name, message) : false;
   const reply = store ? store.replyFor(message, name) : null;

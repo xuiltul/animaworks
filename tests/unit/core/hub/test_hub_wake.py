@@ -32,9 +32,15 @@ from core.messaging.messenger import ChannelMeta, save_channel_meta
 
 @pytest.fixture(autouse=True)
 def _clear_hooks():
+    from core.activity.logger import ActivityLogger
+
+    # The live-event throttle is class-level and keyed by anima name.  Reset it
+    # so channel_post activity in this module cannot starve later tests.
+    ActivityLogger._live_rate_limiter.reset()
     clear_post_hooks()
     yield
     clear_post_hooks()
+    ActivityLogger._live_rate_limiter.reset()
 
 
 def _hub_config(monkeypatch: pytest.MonkeyPatch, *, board: str = "hub", max_round_trips: int = 4) -> None:
@@ -436,3 +442,117 @@ def test_touch_last_seen_preserves_silence_marker(tmp_path: Path) -> None:
     state = json.loads(state_path(shared, "grok").read_text())
     assert state["silence_alerted_for"] == "old"
     assert last_seen(shared, "grok") is not None
+
+
+def test_suppressed_anima_reply_wakes_only_external_members(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch)
+    shared = _shared(tmp_path)
+    _anima(shared, "alice")
+    save_member(
+        shared,
+        _member("muse", message_route={"type": "webhook", "url_ref": "hub.url", "key_ref": "hub.key"}),
+    )
+    vault = VaultManager(tmp_path)
+    vault.store("shared", "hub.url", "https://hooks.example.com/wake")
+    vault.store("shared", "hub.key", "s3cret")
+    calls: list[tuple[str, str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        wake_module,
+        "send_webhook",
+        lambda url, key, payload: calls.append((url, key, payload)) or (True, ""),
+    )
+
+    result = post_to_board_in_shared_dir(
+        shared,
+        "hub",
+        "@muse @alice quick reply",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="internal",
+        notify=False,
+    )
+    assert result.committed
+    wake_module.wait_for_pending_wakes(timeout=5.0)
+
+    assert len(calls) == 1
+    assert calls[0][2]["from"] == "alice"
+    delivery = load_deliveries(shared, "hub")[result.id]
+    assert delivery["notified"] == ["muse"]
+    assert delivery["not_notified"] == {}
+    assert "alice" not in delivery["notified"]
+
+
+def test_suppressed_anima_reply_records_poll_member(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch)
+    shared = _shared(tmp_path)
+    _anima(shared, "alice")
+    save_member(shared, _member("muse", message_route={"type": "poll"}))
+
+    result = post_to_board_in_shared_dir(
+        shared,
+        "hub",
+        "@muse check",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="internal",
+        notify=False,
+    )
+
+    assert result.notified == []
+    assert result.not_notified == {"muse": "polls"}
+    delivery = load_deliveries(shared, "hub")[result.id]
+    assert delivery["notified"] == []
+    assert delivery["not_notified"] == {"muse": "polls"}
+
+
+def test_suppressed_anima_reply_does_not_wake_on_other_board_or_mirror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    shared = _shared(tmp_path)
+    _anima(shared, "alice")
+    (shared / "channels" / "other.jsonl").touch()
+    save_channel_meta(shared, "other", ChannelMeta(members=[], company="a"))
+    save_member(shared, _member("muse"))
+
+    other = post_to_board_in_shared_dir(
+        shared,
+        "other",
+        "@muse check",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="internal",
+        notify=False,
+    )
+    mirror = post_to_board_in_shared_dir(
+        shared,
+        "hub",
+        "@muse check",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="mirror",
+        notify=False,
+    )
+
+    assert other.notified == [] and other.not_notified == {}
+    assert mirror.notified == [] and mirror.not_notified == {}
+    assert load_deliveries(shared, "hub") == {}
+
+
+def test_suppressed_anima_reply_records_loop_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch, max_round_trips=0)
+    shared = _shared(tmp_path)
+    _anima(shared, "alice")
+    save_member(shared, _member("muse", message_route={"type": "webhook", "url_ref": "hub.url", "key_ref": "hub.key"}))
+    _write_round_trip_chain(shared)
+    monkeypatch.setattr(wake_module, "notify_human", lambda *args, **kwargs: [])
+
+    result = post_to_board_in_shared_dir(
+        shared,
+        "hub",
+        "@muse reply",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="internal",
+        notify=False,
+        reply_to="p3",
+    )
+
+    assert result.not_notified == {"muse": "loop_limit"}
+    delivery = load_deliveries(shared, "hub")[result.id]
+    assert delivery["not_notified"] == {"muse": "loop_limit"}

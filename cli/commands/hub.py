@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from core.hub.members import (
     HubMember,
@@ -119,6 +120,42 @@ def cmd_hub_member_set_token(args) -> None:
     except ValueError as exc:
         _fail(t("cli.hub_member_invalid", detail=str(exc)))
     print(t("cli.hub_member_token_set", id=member.id))
+
+
+def cmd_hub_member_set_avatar(args) -> None:
+    """Store a normalized avatar PNG, or clear the member's avatar."""
+    from core.hub.avatar import AvatarError, clear_avatar, normalize_avatar, save_avatar
+    from core.i18n import t
+
+    member, _members = _load_or_fail(args.member_id)
+    if args.clear:
+        clear_avatar(_shared_dir(), member.id)
+        print(t("cli.hub_member_avatar_cleared", id=member.id))
+        return
+    if not args.file:
+        _fail(t("cli.hub_member_avatar_file_required"))
+
+    try:
+        data = Path(args.file).read_bytes()
+    except OSError:
+        _fail(t("cli.hub_member_avatar_read_failed", path=args.file))
+    try:
+        png = normalize_avatar(data)
+    except AvatarError as exc:
+        _fail(t("cli.hub_member_avatar_invalid", detail=str(exc)))
+
+    save_avatar(_shared_dir(), member.id, png)
+    print(t("cli.hub_member_avatar_set", id=member.id))
+
+
+def cmd_hub_setup_prompt(args) -> None:
+    """Print setup instructions for one external hub member."""
+    from core.hub.setup_prompt import SetupPromptError, build_setup_prompt
+
+    try:
+        print(build_setup_prompt(_shared_dir(), args.member_id, url=args.url))
+    except SetupPromptError as exc:
+        _fail(str(exc))
 
 
 def cmd_hub_member_enable(args) -> None:

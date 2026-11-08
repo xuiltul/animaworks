@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=5bd265477606cf338e1ae47a0e2fa0976c99e95c1d12b3a6c993956550fbfd20 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=4159aa3c81b90417b3bbdde0ba4b33358dd722dc724e9bd4d26cecada22a1b1a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -17,7 +17,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 1046 | — |
+| `cli.parser` | 1082 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -35,7 +35,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 345 | Operational commands for enclave runtimes. |
-| `cli.commands.hub` | 141 | — |
+| `cli.commands.hub` | 178 | — |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -385,22 +385,24 @@ Tool execution, command execution, and safety controls.
 
 ## `core.hub`
 
-Company timeline storage and read-position tracking.
+Company timeline storage and read position.
 
-| Module | Lines | docstring first line |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.hub` | 41 | — |
-| `core.hub.mcp_app` | 407 | — |
+| `core.hub.avatar` | 159 | — |
+| `core.hub.mcp_app` | 468 | — |
 | `core.hub.members` | 279 | — |
+| `core.hub.setup_prompt` | 154 | — |
 | `core.hub.silence` | 107 | — |
 | `core.hub.timeline` | 298 | — |
 | `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
 
-Translation catalogs and language selection.
+Translation catalog and language selection.
 
-| Module | Lines | docstring first line |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
@@ -408,7 +410,7 @@ Translation catalogs and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 748 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 820 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -728,15 +730,15 @@ Storage, search, and organization of conversation and episodic memory.
 
 ## `core.messaging`
 
-Message delivery between animas and to/from external parties.
+Message delivery between animas and to external parties.
 
-| Module | Lines | docstring first line |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board` | 491 | — |
+| `core.messaging.board` | 502 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 137 | — |
-| `core.messaging.board_fanout` | 201 | — |
+| `core.messaging.board_fanout` | 214 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1149,7 +1151,7 @@ Voice input/output and voice dialogue.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
-| `server.routes` | 63 | — |
+| `server.routes` | 65 | — |
 | `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1168,6 +1170,7 @@ Voice input/output and voice dialogue.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
+| `server.routes.hub` | 67 | — |
 | `server.routes.internal` | 1604 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |

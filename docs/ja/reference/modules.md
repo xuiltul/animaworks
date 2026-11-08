@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 97c19baabfd186b9c98cc77ab966327edddbe13a9bbd2218921475b5068f515f -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: bf8045d56c3a1e2d2c18789fc375b6581f7fa3299da8a6b8aa21a62583de9a61 -->
 
 # モジュール一覧
 
@@ -17,7 +17,7 @@
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 1046 | — |
+| `cli.parser` | 1082 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -35,7 +35,7 @@
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 345 | Operational commands for enclave runtimes. |
-| `cli.commands.hub` | 141 | — |
+| `cli.commands.hub` | 178 | — |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -390,8 +390,10 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.hub` | 41 | — |
-| `core.hub.mcp_app` | 407 | — |
+| `core.hub.avatar` | 159 | — |
+| `core.hub.mcp_app` | 468 | — |
 | `core.hub.members` | 279 | — |
+| `core.hub.setup_prompt` | 154 | — |
 | `core.hub.silence` | 107 | — |
 | `core.hub.timeline` | 298 | — |
 | `core.hub.wake` | 378 | — |
@@ -408,7 +410,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 748 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 820 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -733,10 +735,10 @@ anima 間および外部とのメッセージ配送。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board` | 491 | — |
+| `core.messaging.board` | 502 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 137 | — |
-| `core.messaging.board_fanout` | 201 | — |
+| `core.messaging.board_fanout` | 214 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1149,7 +1151,7 @@ LLM 利用量とコストの記録・集計。
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `server.routes` | 63 | — |
+| `server.routes` | 65 | — |
 | `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1168,6 +1170,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
+| `server.routes.hub` | 67 | — |
 | `server.routes.internal` | 1604 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |

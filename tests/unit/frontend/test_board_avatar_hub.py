@@ -22,3 +22,21 @@ def test_external_agent_i18n_key_exists_in_all_locales() -> None:
     for locale, expected in EXPECTED.items():
         data = json.loads((I18N_DIR / f"{locale}.json").read_text(encoding="utf-8"))
         assert data["board.kind_external_agent"] == expected
+
+
+def test_external_avatars_use_images_and_hub_store() -> None:
+    avatar = AVATAR_JS.read_text(encoding="utf-8")
+    assert 'group === "external"' in avatar
+    assert "board-avatar-img" in avatar
+
+    board_dir = AVATAR_JS.parent
+    post = (board_dir / "post.js").read_text(encoding="utf-8")
+    assert 'kind === "external_agent" ? ctx.avatarUrl(message.from)' in post
+
+    store = (board_dir / "store.js").read_text(encoding="utf-8")
+    assert 'api("/api/hub/members")' in store
+    assert "hubMembers" in store
+    assert "loadHubMembers" in store
+
+    delivery = (board_dir / "delivery.js").read_text(encoding="utf-8")
+    assert "store?.hubMember(name)" in delivery

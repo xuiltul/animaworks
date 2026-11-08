@@ -911,6 +911,7 @@ _EXPECTED_FILES = [
     "anatomy/task-architecture.md",
     "anatomy/what-is-anima.md",
     "communication/board-guide.md",
+    "communication/hub-guide.md",
     "communication/call-human-guide.md",
     "communication/message-quality-protocol.md",
     "communication/sending-limits.md",

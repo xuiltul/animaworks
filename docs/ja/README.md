@@ -1,4 +1,4 @@
-> 確認したコミット: 193a5e72
+> 確認したコミット: 9984ccc15
 
 # ドキュメント索引
 
@@ -33,6 +33,7 @@
 | [Slim Runtime 移行](operations/slim-runtime-migration.md) | Slim Runtime の移行手順。 |
 | [Slack 連携](integrations/slack.md) | Slack 接続の設定と運用。 |
 | [Zoom 連携](integrations/zoom.md) | Zoom RTMS 接続の設定と運用。 |
+| [AnimaWorks Hub 連携](integrations/hub.md) | 社外 AI を Hub Board に参加させる設定、名簿、アバター。 |
 | [CLI リファレンス](reference/cli.md) | `animaworks` コマンドの自動生成リファレンス。 |
 | [ツール CLI リファレンス](reference/tool-cli.md) | `animaworks-tool` の自動生成リファレンス。 |
 | [API リファレンス](reference/api.md) | HTTP API の自動生成リファレンス。 |
@@ -43,7 +44,7 @@
 
 - **はじめて触る人**: [機能概観](overview.md) → [アーキテクチャ全体](architecture/index.md) → [記憶システム](memory/index.md)。動作の流れは[ライフサイクル](architecture/lifecycle.md)を読む。
 - **設計に関心がある人**: [設計理念](vision.md) → [脳科学との対応](brain-mapping.md) → [アーキテクチャ全体](architecture/index.md) → 記憶の各章。
-- **運用者**: [設定](operations/configuration.md) → [セキュリティ](security.md) → [CLI リファレンス](reference/cli.md)・[設定リファレンス](reference/config.md)。個別の連携は[Slack](integrations/slack.md)・[Zoom](integrations/zoom.md)を参照する。
+- **運用者**: [設定](operations/configuration.md) → [セキュリティ](security.md) → [CLI リファレンス](reference/cli.md)・[設定リファレンス](reference/config.md)。個別の連携は[Slack](integrations/slack.md)・[Zoom](integrations/zoom.md)・[AnimaWorks Hub](integrations/hub.md)を参照する。
 
 ## 執筆者向け
 

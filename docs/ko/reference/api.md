@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=d46d2bd8abcc02942a4af1893f73e0d32d5b2421d03b4fb85a27a0c60609e5a5 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # API 참조
 
@@ -137,6 +137,11 @@ FastAPI의 OpenAPI 정의, WebSocket 및 `server/app.py`에 직접 작성된 라
 ## `server/routes/external_tasks.py`
 
 | GET | `/api/external-tasks` | 세션 필수(local_trust 모드이거나 localhost 신뢰가 활성화된 경우 생략 가능) | 스냅샷 저장소에서 위젯용 외부 작업을 가져옵니다. | `server/routes/external_tasks.py:get_external_tasks` |
+
+## `server/routes/hub.py`
+
+| GET | `/api/hub/members` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화되어 있으면 생략 가능) | — | `server/routes/hub.py:list_hub_members` |
+| GET | `/api/hub/members/{member_id}/avatar` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화되어 있으면 생략 가능) | — | `server/routes/hub.py:hub_member_avatar` |
 
 ## `server/routes/internal.py`
 
