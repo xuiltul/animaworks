@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=7b36310e7fd873942ab31c451d9a6f689abd12969c92fadba37c334bf8b13e5a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=5bd265477606cf338e1ae47a0e2fa0976c99e95c1d12b3a6c993956550fbfd20 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -387,18 +387,20 @@ Tool execution, command execution, and safety controls.
 
 Company timeline storage and read-position tracking.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.mcp_app` | 407 | — |
-| `core.hub.members` | 242 | — |
+| `core.hub.members` | 279 | — |
+| `core.hub.silence` | 107 | — |
 | `core.hub.timeline` | 298 | — |
+| `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
 
 Translation catalogs and language selection.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
@@ -406,7 +408,7 @@ Translation catalogs and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 714 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 748 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -726,15 +728,15 @@ Storage, search, and organization of conversation and episodic memory.
 
 ## `core.messaging`
 
-Message delivery between animas and with the outside world.
+Message delivery between animas and to/from external parties.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
-| `core.messaging.board_deliveries` | 116 | — |
-| `core.messaging.board_fanout` | 102 | — |
+| `core.messaging.board_deliveries` | 137 | — |
+| `core.messaging.board_fanout` | 201 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1112,10 +1114,10 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1577 | — |
+| `server.app` | 1605 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |

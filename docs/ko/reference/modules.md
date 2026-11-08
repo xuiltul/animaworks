@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=7b36310e7fd873942ab31c451d9a6f689abd12969c92fadba37c334bf8b13e5a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=5bd265477606cf338e1ae47a0e2fa0976c99e95c1d12b3a6c993956550fbfd20 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -387,40 +387,42 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 회사 타임라인 저장 및 읽음 위치.
 
-| 모듈 | 행 수 | docstring 1행째 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.mcp_app` | 407 | — |
-| `core.hub.members` | 242 | — |
+| `core.hub.members` | 279 | — |
+| `core.hub.silence` | 107 | — |
 | `core.hub.timeline` | 298 | — |
+| `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
 
 번역 카탈로그 및 언어 선택.
 
-| 모듈 | 행 수 | docstring 1행째 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
-| `core.i18n` | 135 | 런타임 문자열을 위한 경량 i18n 지원. |
-| `core.i18n.strings.communication` | 46 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.company` | 14 | 회사 관리를 위한 현지화 문자열. |
-| `core.i18n.strings.config` | 840 | 도메인별 i18n 문자열. |
+| `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
+| `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
+| `core.i18n.strings.company` | 14 | Localized strings for company management. |
+| `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
-| `core.i18n.strings.execution` | 221 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.handler` | 714 | 도메인별 i18n 문자열 (핸들러 파트 1). |
-| `core.i18n.strings.handler_ext` | 393 | 도메인별 i18n 문자열 (핸들러 파트 2). |
-| `core.i18n.strings.lifecycle` | 104 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.memory` | 440 | 도메인별 i18n 문자열. |
+| `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
+| `core.i18n.strings.handler` | 748 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
+| `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
 | `core.i18n.strings.migrate` | 124 | — |
-| `core.i18n.strings.misc` | 542 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.misc_routes` | 21 | 도메인별 i18n 문자열 (레거시 라우트 모듈). |
-| `core.i18n.strings.models` | 70 | 모델 검사를 위한 현지화된 CLI 메시지. |
+| `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
+| `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
+| `core.i18n.strings.models` | 70 | Localized CLI messages for model inspection. |
 | `core.i18n.strings.phone` | 127 | — |
-| `core.i18n.strings.server` | 405 | 도메인별 i18n 문자열. |
-| `core.i18n.strings.supervisor` | 140 | 도메인별 i18n 문자열. |
+| `core.i18n.strings.server` | 405 | Domain-specific i18n strings. |
+| `core.i18n.strings.supervisor` | 140 | Domain-specific i18n strings. |
 | `core.i18n.strings.tmp` | 74 | — |
-| `core.i18n.strings.tooling` | 175 | 도메인별 i18n 문자열 (도구 프롬프트 및 툴링). |
-| `core.i18n.strings.tooling_schema` | 542 | 도메인별 i18n 문자열 (schema.*). |
-| `core.i18n.strings.tooling_schema_ext` | 167 | 도메인별 i18n 문자열 (schema.* 파트 2). |
+| `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
+| `core.i18n.strings.tooling_schema` | 542 | Domain-specific i18n strings (schema.*). |
+| `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -728,13 +730,13 @@ Model Context Protocol 서버 및 클라이언트.
 
 anima 간 및 외부와의 메시지 전달.
 
-| 모듈 | 행수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.messaging` | 6 | — |
 | `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
-| `core.messaging.board_deliveries` | 116 | — |
-| `core.messaging.board_fanout` | 102 | — |
+| `core.messaging.board_deliveries` | 137 | — |
+| `core.messaging.board_fanout` | 201 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1112,10 +1114,10 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1577 | — |
+| `server.app` | 1605 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |

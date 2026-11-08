@@ -1421,6 +1421,7 @@
   "board.action_quote": "Reply with quote",
   "board.delivery_not_notified": "Not notified",
   "board.delivery_notified": "Notified",
+  "board.delivery_reason_polls": "Delivered when they next poll",
   "board.delivery_slack_failed": "Failed to send to Slack",
   "board.delivery_slack_sent": "Sent to Slack",
   "board.delivery_slack_skipped": "Not sent to Slack",

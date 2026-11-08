@@ -1368,6 +1368,7 @@
   "board.action_quote": "인용해서 답장",
   "board.delivery_not_notified": "받지 못한 대상",
   "board.delivery_notified": "받은 대상",
+  "board.delivery_reason_polls": "다음에 읽으러 오면 전달됩니다",
   "board.delivery_slack_failed": "Slack 전송 실패",
   "board.delivery_slack_sent": "Slack으로 보냈습니다",
   "board.delivery_slack_skipped": "Slack으로 보내지 않았습니다",

@@ -1047,6 +1047,19 @@ async def lifespan(app: FastAPI):
             name="conversation-feed-prewarm",
         )
 
+    app.state.hub_silence_stop = None
+    app.state.hub_silence_task = None
+    if delivery_config.hub.enabled:
+        from core.hub.silence import silence_alert_loop
+
+        hub_silence_stop = Event()
+        app.state.hub_silence_stop = hub_silence_stop
+        app.state.hub_silence_task = asyncio.create_task(
+            silence_alert_loop(Path(app.state.shared_dir), hub_silence_stop),
+            name="hub-silence-alerts",
+        )
+        logger.info("Hub silence alerts started")
+
     yield
     if hub_session_cm is not None:
         await hub_session_cm.__aexit__(None, None, None)
@@ -1065,6 +1078,21 @@ async def lifespan(app: FastAPI):
     if delivery_task is not None:
         try:
             await delivery_task
+        except asyncio.CancelledError:
+            pass
+    silence_stop = getattr(app.state, "hub_silence_stop", None)
+    silence_task = getattr(app.state, "hub_silence_task", None)
+    if silence_stop is not None:
+        silence_stop.set()
+    if silence_task is not None:
+        try:
+            await asyncio.wait_for(silence_task, timeout=5.0)
+        except TimeoutError:
+            silence_task.cancel()
+            try:
+                await silence_task
+            except asyncio.CancelledError:
+                pass
         except asyncio.CancelledError:
             pass
     if app.state.setup_complete:
