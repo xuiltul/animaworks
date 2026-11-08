@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: 5c91dbee9dd4694ce1ed0fc565d4b108470cf25abbb18646386d51e59e268af0 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: 59d086e0ee2063e239c1937c8c6f9709a6d2989cecf5790c0ca2b394376fb831 -->
 
 # CLI リファレンス: `animaworks`
 
@@ -1442,6 +1442,41 @@ WAL込みのDBバックアップを新規作成
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
 | --anima | option | — | — | 対象の担当者名 |
+
+## `timeline`
+
+会社のタイムラインに「終わった」「決まった」を追記
+
+`usage: animaworks timeline [-h] {add,read} ...`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `timeline add`
+
+会社のタイムラインに「終わった」「決まった」を追記
+
+`usage: animaworks timeline add [-h] --kind {done,decided} --text TEXT
+                               [--about ABOUT] [--ref REF] [--from NAME]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| --kind | option | — | done, decided | 項目の種類（done または decided） |
+| --text | option | — | — | タイムラインに載せる本文 |
+| --about | option | — | — | 更新する元の項目 ID（tl_...） |
+| --ref | option | — | — | 参照 URL など |
+| --from | option | — | — | 記録者名（オペレーター実行時のみ） |
+
+## `timeline read`
+
+会社のタイムラインを読む（直近24時間）
+
+`usage: animaworks timeline read [-h] [--limit LIMIT]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| --limit | option | 20 | — | 取得する最大件数 |
 
 ## `tmp`
 

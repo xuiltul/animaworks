@@ -70,12 +70,12 @@ def _lock_path(path: Path) -> Path:
     return path.with_name(f"{path.name}.lock")
 
 
-def _empty_reads(channel: str) -> dict[str, Any]:
-    return {"stream": f"board/{channel}", "readers": {}, "picked": {}}
+def _empty_reads(stream: str) -> dict[str, Any]:
+    return {"stream": stream, "readers": {}, "picked": {}}
 
 
-def _load_unlocked(path: Path, channel: str) -> dict[str, Any]:
-    empty = _empty_reads(channel)
+def _load_unlocked(path: Path, stream: str) -> dict[str, Any]:
+    empty = _empty_reads(stream)
     try:
         raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -110,12 +110,17 @@ def _load_unlocked(path: Path, channel: str) -> dict[str, Any]:
             if isinstance(reader, str) and isinstance(values, list):
                 picked[reader] = [str(value) for value in values if isinstance(value, str) and value]
 
-    return {"stream": f"board/{channel}", "readers": readers, "picked": picked}
+    return {"stream": stream, "readers": readers, "picked": picked}
+
+
+def load_reads_at(path: Path, stream: str) -> dict[str, Any]:
+    """Load a read-position document at an arbitrary path."""
+    return _load_unlocked(Path(path), stream)
 
 
 def load_reads(shared_dir: Path, channel: str) -> dict[str, Any]:
     """Load the read-position document, returning an empty shape when absent."""
-    return _load_unlocked(reads_path(shared_dir, channel), channel)
+    return load_reads_at(reads_path(shared_dir, channel), f"board/{channel}")
 
 
 def _parse_ts(value: object) -> datetime | None:
@@ -180,22 +185,21 @@ def find_post_ts(shared_dir: Path, channel: str, post_id: str) -> str | None:
     return None
 
 
-def advance_upto(
-    shared_dir: Path,
-    channel: str,
+def advance_upto_at(
+    path: Path,
+    stream: str,
     reader: str,
     *,
     post_id: str | None,
     post_ts: str,
 ) -> bool:
-    """Advance *reader*'s contiguous position when *post_ts* is newer."""
-    path = reads_path(shared_dir, channel)
+    """Advance *reader*'s contiguous position in a read document at *path*."""
     new_ts = str(post_ts or "")
     new_id = str(post_id or "")
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    changed = False
     with locked_path(_lock_path(path), exclusive=True, thread_lock=True):
-        payload = _load_unlocked(path, channel)
+        payload = _load_unlocked(path, stream)
         readers = payload["readers"]
         current = readers.get(reader)
         current_ts = str(current.get("upto_ts") or "") if isinstance(current, dict) else ""
@@ -207,15 +211,27 @@ def advance_upto(
             "updated_at": now_iso(),
         }
         atomic_write_json(path, payload, indent=2, ensure_ascii=False)
-        changed = True
+        return True
 
+
+def advance_upto(
+    shared_dir: Path,
+    channel: str,
+    reader: str,
+    *,
+    post_id: str | None,
+    post_ts: str,
+) -> bool:
+    """Advance *reader*'s contiguous position when *post_ts* is newer."""
+    path = reads_path(shared_dir, channel)
+    changed = advance_upto_at(path, f"board/{channel}", reader, post_id=post_id, post_ts=post_ts)
     if changed:
         _run_read_hooks(
             {
                 "channel": channel,
                 "reader": reader,
-                "upto_id": new_id,
-                "upto_ts": new_ts,
+                "upto_id": str(post_id or ""),
+                "upto_ts": str(post_ts or ""),
                 "picked_id": "",
             }
         )
@@ -231,7 +247,7 @@ def add_picked(shared_dir: Path, channel: str, reader: str, post_id: str) -> boo
     changed = False
     updated: dict[str, str] = {}
     with locked_path(_lock_path(path), exclusive=True, thread_lock=True):
-        payload = _load_unlocked(path, channel)
+        payload = _load_unlocked(path, f"board/{channel}")
         picked = payload["picked"].setdefault(reader, [])
         if post_id in picked:
             return False

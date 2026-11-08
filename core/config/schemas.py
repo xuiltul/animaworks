@@ -672,6 +672,18 @@ class MediaProxyConfig(BaseModel):
     rate_limit_window_s: int = 60
 
 
+class HubConfig(BaseModel):
+    """Hub (company timeline / external MCP surface) configuration."""
+
+    enabled: bool = False
+    timeline_enabled: bool = False
+    company: str = ""
+    board: str = "hub"
+    public_hosts: list[str] = Field(default_factory=list)
+    max_posts_per_hour: int = 20
+    max_round_trips: int = 4
+
+
 class ServerConfig(BaseModel):
     """Server runtime configuration."""
 
@@ -1464,6 +1476,7 @@ class AnimaWorksConfig(BaseModel):
     human_notification: HumanNotificationConfig = HumanNotificationConfig()
     interaction: InteractionConfig = InteractionConfig()
     server: ServerConfig = ServerConfig()
+    hub: HubConfig = HubConfig()
     llm_rate_guard: LlmRateGuardConfig = LlmRateGuardConfig()
     mcp: MCPConfig = MCPConfig()
     external_messaging: ExternalMessagingConfig = ExternalMessagingConfig()
@@ -1533,6 +1546,7 @@ __all__ = [
     "HelperModelRole",
     "HelperModelsConfig",
     "HousekeepingConfig",
+    "HubConfig",
     "HumanNotificationConfig",
     "ImageGenConfig",
     "InboxConfig",

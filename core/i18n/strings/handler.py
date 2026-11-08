@@ -334,6 +334,66 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "Error: ボードへの投稿に失敗しました: {detail}",
         "en": "Error: Board post failed: {detail}",
     },
+    "cli.timeline_add_parser_help": {
+        "ja": "会社のタイムラインに「終わった」「決まった」を追記",
+        "en": "Append a done/decided item to the company timeline",
+    },
+    "cli.timeline_add_kind_help": {
+        "ja": "項目の種類（done または decided）",
+        "en": "Item kind (done or decided)",
+    },
+    "cli.timeline_add_text_help": {
+        "ja": "タイムラインに載せる本文",
+        "en": "Text to record on the timeline",
+    },
+    "cli.timeline_add_about_help": {
+        "ja": "更新する元の項目 ID（tl_...）",
+        "en": "Original item id to update (tl_...)",
+    },
+    "cli.timeline_add_ref_help": {
+        "ja": "参照 URL など",
+        "en": "Reference URL or similar",
+    },
+    "cli.timeline_add_from_help": {
+        "ja": "記録者名（オペレーター実行時のみ）",
+        "en": "Recorder name (operator runs only)",
+    },
+    "cli.timeline_read_parser_help": {
+        "ja": "会社のタイムラインを読む（直近24時間）",
+        "en": "Read the company timeline (last 24h)",
+    },
+    "cli.timeline_read_limit_help": {
+        "ja": "取得する最大件数",
+        "en": "Maximum number of items",
+    },
+    "cli.timeline_add_success": {
+        "ja": "タイムラインに {kind} を追記しました",
+        "en": "Added {kind} to the timeline",
+    },
+    "cli.timeline_add_failed": {
+        "ja": "Error: タイムラインへの追記に失敗しました: {detail}",
+        "en": "Error: Timeline append failed: {detail}",
+    },
+    "cli.timeline_read_failed": {
+        "ja": "Error: タイムラインの取得に失敗しました: {detail}",
+        "en": "Error: Timeline read failed: {detail}",
+    },
+    "server.timeline_disabled": {
+        "ja": "タイムラインは無効です",
+        "en": "Timeline is disabled",
+    },
+    "server.timeline_item_not_found": {
+        "ja": "タイムライン項目が見つかりません: {item_id}",
+        "en": "Timeline item not found: {item_id}",
+    },
+    "server.timeline_company_mismatch": {
+        "ja": "この Anima の会社はタイムラインの対象会社と一致しません",
+        "en": "This anima's company does not match the timeline company",
+    },
+    "server.timeline_invalid_request": {
+        "ja": "タイムラインの要求が不正です: {detail}",
+        "en": "Invalid timeline request: {detail}",
+    },
     "handler.channel_post_validation_failed": {
         "ja": "Error: 投稿者名を検証できないため投稿を中止しました",
         "en": "Error: Could not validate the channel poster, so the post was refused",

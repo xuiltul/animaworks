@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 6da2c991f27e9af92e6ca1b929bdeb3b05d4ac30f4acda2f218042f0ff5aead7 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: f8eea48261e58d749bb502dad55137106b7fbc065f4a62dae870caafeb5e1241 -->
 
 # モジュール一覧
 
@@ -17,7 +17,7 @@
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 898 | — |
+| `cli.parser` | 945 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -55,6 +55,7 @@
 | `cli.commands.supervisor_cmd` | 91 | — |
 | `cli.commands.task_cmd` | 667 | — |
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
+| `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
 | `cli.commands.vault_cmd` | 309 | — |
 
@@ -209,10 +210,10 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.model_config` | 885 | Model configuration resolution: load_model_config, penalties, max_tokens. |
 | `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
 | `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
-| `core.config.models` | 100 | Central configuration module — facade re-exporting split modules. |
+| `core.config.models` | 101 | Central configuration module — facade re-exporting split modules. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1564 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
 
 ## `core.enclave`
@@ -381,6 +382,15 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 |---|---:|---|
 | `core.execution.session` | 7 | — |
 
+## `core.hub`
+
+会社のタイムライン保存と既読位置。
+
+| モジュール | 行数 | docstring 1行目 |
+|---|---:|---|
+| `core.hub` | 41 | — |
+| `core.hub.timeline` | 298 | — |
+
 ## `core.i18n`
 
 翻訳カタログと言語選択。
@@ -393,10 +403,10 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 534 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 594 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
-| `core.i18n.strings.memory` | 424 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
 | `core.i18n.strings.migrate` | 124 | — |
 | `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
@@ -603,7 +613,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.priming.engine` | 503 | — |
 | `core.memory.priming.format` | 124 | — |
 | `core.memory.priming.items` | 59 | — |
-| `core.memory.priming.outbound` | 142 | — |
+| `core.memory.priming.outbound` | 194 | — |
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
@@ -722,7 +732,7 @@ anima 間および外部とのメッセージ配送。
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 116 | — |
 | `core.messaging.board_fanout` | 102 | — |
-| `core.messaging.board_reads` | 290 | — |
+| `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
 | `core.messaging.inbox_quiet_window` | 38 | — |
@@ -762,7 +772,7 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 613 | — |
-| `core.notification.notifier` | 238 | — |
+| `core.notification.notifier` | 312 | — |
 | `core.notification.reply_routing` | 535 | — |
 | `core.notification.slack_names` | 67 | — |
 
@@ -1134,7 +1144,7 @@ LLM 利用量とコストの記録・集計。
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `server.routes` | 61 | — |
+| `server.routes` | 63 | — |
 | `server.routes.animas` | 1268 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1164,6 +1174,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1217 | — |
 | `server.routes.taskboard` | 237 | — |
+| `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |

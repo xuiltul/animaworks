@@ -26,6 +26,66 @@ logger = logging.getLogger("animaworks.notification")
 PRIORITY_LEVELS = ("low", "normal", "high", "urgent")
 
 
+def _record_timeline_notification(
+    subject: str,
+    body: str,
+    priority: str,
+    *,
+    anima_name: str,
+    delivered: bool,
+) -> None:
+    """Append a timeline ``notified`` item without affecting notification delivery."""
+    try:
+        from core.config.models import load_config, read_anima_company_checked
+
+        hub = load_config().hub
+        if not hub.timeline_enabled:
+            return
+
+        company = hub.company
+        from_name = "system"
+        source = "system"
+        if anima_name:
+            from core.paths import get_animas_dir
+
+            readable, anima_company = read_anima_company_checked(get_animas_dir() / anima_name)
+            if not readable or anima_company != hub.company:
+                return
+            company = anima_company
+            from_name = anima_name
+            source = "anima"
+
+        subject_text = str(subject or "").strip()
+        body_text = str(body or "").strip()
+        if subject_text and body_text:
+            text = f"{subject_text}: {body_text}"
+        else:
+            text = subject_text or body_text
+
+        normalized_priority = priority if priority in PRIORITY_LEVELS else "normal"
+        from core.hub.timeline import append_item
+
+        append_item(
+            _shared_dir(),
+            from_name=from_name,
+            company=company,
+            kind="notified",
+            text=text,
+            source=source,
+            urgent=normalized_priority in ("high", "urgent"),
+            priority=normalized_priority,
+            delivered=delivered,
+        )
+    except Exception:
+        logger.warning("Failed to record timeline notification", exc_info=True)
+
+
+def _shared_dir():
+    from core.paths import get_shared_dir
+
+    return get_shared_dir()
+
+
 # ── Abstract base ───────────────────────────────────────────
 
 
@@ -177,6 +237,13 @@ class HumanNotifier:
         Failed channels return error strings instead of raising.
         """
         if not self._channels:
+            _record_timeline_notification(
+                subject,
+                body,
+                priority,
+                anima_name=anima_name,
+                delivered=False,
+            )
             return ["No notification channels configured"]
 
         if priority not in PRIORITY_LEVELS:
@@ -216,6 +283,13 @@ class HumanNotifier:
                 priority,
                 len(self._channels),
             )
+        _record_timeline_notification(
+            subject,
+            body,
+            priority,
+            anima_name=anima_name,
+            delivered=len(status) > failed_count,
+        )
         return status
 
 
