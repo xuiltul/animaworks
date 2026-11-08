@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=592404a324536200764ecf86f068e6a21b87874392581c42ff9c6e98a18152d3 generated=2026-11-07 engine=luna model=gpt-6-luna translator=2 -->
+<!-- i18n: source-sha256=985318166f6470319e9c533e165e0fb4603a2a220f308007ca7e6814b8fb0b2e generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # Configuration Reference
 
@@ -472,6 +472,19 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | `server.media_proxy.rate_limit_window_s` | `int` | `60` | — |
 | `server.base_path` | `str` | `""` | Reverse proxy sub-path (e.g. "/app"); empty = root deploy |
 | `server.internal_api_auth` | `Literal['off', 'log', 'enforce']` | `"enforce"` | /api/internal/* caller verification |
+
+### `hub`
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `hub` | `HubConfig` | `{HubConfig}` | Configuration for the company timeline and hub. |
+| `hub.enabled` | `bool` | `false` | — |
+| `hub.timeline_enabled` | `bool` | `false` | — |
+| `hub.company` | `str` | `""` | — |
+| `hub.board` | `str` | `"hub"` | — |
+| `hub.public_hosts` | `list[str]` | `[]` | — |
+| `hub.max_posts_per_hour` | `int` | `20` | — |
+| `hub.max_round_trips` | `int` | `4` | — |
 
 ### `llm_rate_guard`
 
