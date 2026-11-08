@@ -5,6 +5,7 @@ import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { t } from "/shared/i18n.js";
 import { avatarMarkup } from "./avatar.js";
 import { numberText, relativeTime } from "./time.js";
+import { createTimelineView } from "./timeline.js";
 
 const SPARK_WIDTH = 240;
 const SPARK_HEIGHT = 42;
@@ -109,6 +110,14 @@ export function createHomeView({ element, store }) {
   const cache = new Map();
   const pending = new Set();
   let destroyed = false;
+  // The timeline keeps its own element so ordinary home re-renders (which only
+  // refresh board cards) never reset the read marks or the live list.
+  const timelineElement = document.createElement("section");
+  timelineElement.className = "board-timeline";
+  const contentElement = document.createElement("div");
+  contentElement.className = "board-home-content";
+  element.replaceChildren(timelineElement, contentElement);
+  const timeline = createTimelineView({ element: timelineElement, store });
 
   function channels() {
     return store.state.channels
@@ -146,14 +155,14 @@ export function createHomeView({ element, store }) {
     if (destroyed) return;
     const rows = channels();
     if (rows.length === 0) {
-      element.innerHTML = `<div class="board-home-head">
+      contentElement.innerHTML = `<div class="board-home-head">
         <h1 class="board-home-title">${escapeHtml(t("board.home_title"))}</h1>
         <p class="board-home-subtitle">${escapeHtml(t("board.home_subtitle"))}</p>
       </div><div class="board-home-empty">${escapeHtml(t("board.home_empty"))}</div>`;
       return;
     }
 
-    element.innerHTML = `<div class="board-home-head">
+    contentElement.innerHTML = `<div class="board-home-head">
       <h1 class="board-home-title">${escapeHtml(t("board.home_title"))}</h1>
       <p class="board-home-subtitle">${escapeHtml(t("board.home_subtitle"))}</p>
     </div>
@@ -168,8 +177,13 @@ export function createHomeView({ element, store }) {
     destroyed = true;
     pending.clear();
     cache.clear();
+    timeline.destroy();
     element.innerHTML = "";
   }
 
-  return { render, destroy };
+  function handleTimelineItem(data) {
+    timeline.handleEvent(data);
+  }
+
+  return { render, destroy, handleTimelineItem };
 }
