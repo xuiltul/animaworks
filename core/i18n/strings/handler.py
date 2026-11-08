@@ -591,4 +591,124 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "code search requires a project",
         "ko": "code 검색에는 project가 필요합니다",
     },
+    "hub.tool.timeline_disabled": {
+        "ja": "タイムラインは無効です",
+        "en": "The company timeline is disabled.",
+    },
+    "hub.tool.timeline_empty": {
+        "ja": "直近24時間のタイムラインに項目はありません",
+        "en": "No timeline items in the last 24 hours.",
+    },
+    "hub.tool.no_new_posts": {
+        "ja": "新着なし ({now})",
+        "en": "No new posts ({now})",
+    },
+    "hub.tool.help_bilingual_ja": {
+        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。",
+        "en": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。",
+    },
+    "cli.hub_parser_help": {
+        "ja": "ハブの名簿と外部 AI のメンバーを管理",
+        "en": "Manage the hub roster and external AI members",
+    },
+    "cli.hub_member_parser_help": {
+        "ja": "ハブのメンバーを管理",
+        "en": "Manage hub members",
+    },
+    "cli.hub_member_add_help": {
+        "ja": "メンバーを名簿に追加",
+        "en": "Add a member to the roster",
+    },
+    "cli.hub_member_add_id_help": {
+        "ja": "メンバー ID（英小文字で始まる 2〜32 文字）",
+        "en": "Member ID (2-32 characters, starts with a lowercase letter)",
+    },
+    "cli.hub_member_add_company_help": {
+        "ja": "メンバーの会社 ID",
+        "en": "Member company ID",
+    },
+    "cli.hub_member_add_route_help": {
+        "ja": "連絡方法（webhook または poll）",
+        "en": "Message route (webhook or poll)",
+    },
+    "cli.hub_member_add_url_ref_help": {
+        "ja": "webhook URL の vault キー名（shared セクション）",
+        "en": "Vault key name for the webhook URL (shared section)",
+    },
+    "cli.hub_member_add_key_ref_help": {
+        "ja": "webhook 認証キーの vault キー名（shared セクション）",
+        "en": "Vault key name for the webhook key (shared section)",
+    },
+    "cli.hub_member_add_expect_every_help": {
+        "ja": "期待する連絡間隔（30m / 3h / 1d など）",
+        "en": "Expected contact interval (for example 30m, 3h, 1d)",
+    },
+    "cli.hub_member_add_display_name_help": {
+        "ja": "表示名（既定は ID）",
+        "en": "Display name (defaults to the ID)",
+    },
+    "cli.hub_member_added": {
+        "ja": "メンバーを追加しました: {id}",
+        "en": "Member added: {id}",
+    },
+    "cli.hub_member_exists": {
+        "ja": "メンバーは既に登録されています: {id}",
+        "en": "Member already exists: {id}",
+    },
+    "cli.hub_member_not_found": {
+        "ja": "メンバーが見つかりません: {id}",
+        "en": "Member not found: {id}",
+    },
+    "cli.hub_member_enabled": {
+        "ja": "メンバーを有効にしました: {id}",
+        "en": "Member enabled: {id}",
+    },
+    "cli.hub_member_disabled": {
+        "ja": "メンバーを無効にしました: {id}",
+        "en": "Member disabled: {id}",
+    },
+    "cli.hub_member_token_set": {
+        "ja": "トークンを更新しました: {id}",
+        "en": "Token updated: {id}",
+    },
+    "cli.hub_member_token_env_missing": {
+        "ja": "環境変数 {var} が未設定または空です",
+        "en": "Environment variable {var} is unset or empty",
+    },
+    "cli.hub_member_webhook_refs": {
+        "ja": "webhook には --url-ref と --key-ref が必要です",
+        "en": "webhook requires --url-ref and --key-ref",
+    },
+    "cli.hub_member_invalid": {
+        "ja": "メンバーの設定が不正です: {detail}",
+        "en": "Invalid member settings: {detail}",
+    },
+    "cli.hub_member_list_empty": {
+        "ja": "ハブのメンバーは登録されていません",
+        "en": "No hub members are registered",
+    },
+    "cli.hub_member_add_kind_help": {
+        "ja": "メンバーの種類（既定: vendor_bot）",
+        "en": "Member kind (default: vendor_bot)",
+    },
+    "cli.hub_member_list_help": {
+        "ja": "ハブのメンバー一覧を表示（トークンは表示しない）",
+        "en": "List hub members (tokens are never shown)",
+    },
+    "cli.hub_member_set_token_help": {
+        "ja": "環境変数からベアラートークンの SHA-256 を登録",
+        "en": "Store the SHA-256 of a bearer token read from an environment variable",
+    },
+    "cli.hub_member_set_token_from_env_help": {
+        "ja": "トークンを格納した環境変数名",
+        "en": "Environment variable holding the token",
+    },
+    "cli.hub_member_disable_help": {
+        "ja": "メンバーを無効化",
+        "en": "Disable a member",
+    },
+    "cli.hub_member_enable_help": {
+        "ja": "メンバーを有効化",
+        "en": "Enable a member",
+    },
 }

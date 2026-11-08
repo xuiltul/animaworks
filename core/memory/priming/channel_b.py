@@ -340,6 +340,7 @@ def read_shared_channels(
                 except json.JSONDecodeError:
                     continue
 
+            all_entries = [entry for entry in all_entries if entry.get("source") != "hub"]
             if not all_entries:
                 continue
 
@@ -564,6 +565,7 @@ async def read_old_channels(
             except json.JSONDecodeError:
                 continue
 
+        entries = [entry for entry in entries if entry.get("source") != "hub"]
         if not entries:
             continue
 

@@ -192,6 +192,7 @@
   "board.dms": "DM",
   "board.kind_external_bot": "외부 봇",
   "board.kind_external_user": "외부",
+  "board.kind_external_agent": "외부 AI",
   "board.kind_human": "사람",
   "board.kind_operator": "시스템",
   "board.load_failed": "불러오기 실패",

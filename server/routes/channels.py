@@ -36,7 +36,7 @@ _ACTIVITY_DAYS = 14
 _KIND_FILTERS: dict[str, set[str]] = {
     "anima": {"anima"},
     "human": {"human"},
-    "external": {"external_user", "external_bot"},
+    "external": {"external_user", "external_bot", "external_agent"},
     "operator": {"operator"},
 }
 
@@ -207,6 +207,8 @@ def _kind_from_source(source: Any) -> str:
         return "anima"
     if value == "human":
         return "human"
+    if value == "hub":
+        return "external_agent"
     if value in {"slack", "discord"}:
         return "external_user"
     return "operator"

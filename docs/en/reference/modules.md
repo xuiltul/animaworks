@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=a310e1ec3adac97be99b211d0072a01a050dec8a465faa9414f3ed90690c46e9 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=7b36310e7fd873942ab31c451d9a6f689abd12969c92fadba37c334bf8b13e5a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -17,7 +17,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli._gateway（非公開）` | 93 | — |
 | `cli.codex_command_hook` | 64 | CLI adapter for Codex's ``PreToolUse`` command-policy hook. |
 | `cli.demo` | 409 | Native ``animaworks demo`` command. |
-| `cli.parser` | 945 | — |
+| `cli.parser` | 1046 | — |
 | `cli.tool_dispatch` | 414 | CLI dispatch for external tools, submit tasks, and command aliases. |
 
 ## `cli.commands`
@@ -35,6 +35,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.config_cmd` | 238 | CLI handlers and interactive wizard for ``animaworks config``. |
 | `cli.commands.cost_cmd` | 326 | — |
 | `cli.commands.enclave_cmd` | 345 | Operational commands for enclave runtimes. |
+| `cli.commands.hub` | 141 | — |
 | `cli.commands.import_cmd` | 88 | — |
 | `cli.commands.index_cmd` | 376 | — |
 | `cli.commands.init_cmd` | 155 | — |
@@ -384,16 +385,18 @@ Tool execution, command execution, and safety controls.
 
 ## `core.hub`
 
-Company timeline storage and read position.
+Company timeline storage and read-position tracking.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.hub` | 41 | — |
+| `core.hub.mcp_app` | 407 | — |
+| `core.hub.members` | 242 | — |
 | `core.hub.timeline` | 298 | — |
 
 ## `core.i18n`
 
-Translation catalog and language selection.
+Translation catalogs and language selection.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
@@ -403,7 +406,7 @@ Translation catalog and language selection.
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 594 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 714 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
@@ -559,7 +562,7 @@ Model Context Protocol servers and clients.
 
 ## `core.memory`
 
-Storage, search, and organization of conversation and episode memory.
+Storage, search, and organization of conversation and episodic memory.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
@@ -604,7 +607,7 @@ Storage, search, and organization of conversation and episode memory.
 | `core.memory.manager` | 693 | — |
 | `core.memory.peer_profiles` | 37 | — |
 | `core.memory.priming.channel_a` | 70 | — |
-| `core.memory.priming.channel_b` | 608 | — |
+| `core.memory.priming.channel_b` | 610 | — |
 | `core.memory.priming.channel_c` | 610 | — |
 | `core.memory.priming.channel_e` | 205 | — |
 | `core.memory.priming.channel_f` | 215 | — |
@@ -723,12 +726,12 @@ Storage, search, and organization of conversation and episode memory.
 
 ## `core.messaging`
 
-Message delivery between animas and with the outside.
+Message delivery between animas and with the outside world.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.messaging` | 6 | — |
-| `core.messaging.board` | 438 | — |
+| `core.messaging.board` | 491 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 116 | — |
 | `core.messaging.board_fanout` | 102 | — |
@@ -1109,10 +1112,10 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1563 | — |
+| `server.app` | 1577 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1150,7 +1153,7 @@ Voice input/output and voice dialogue.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 912 | — |
+| `server.routes.channels` | 914 | — |
 | `server.routes.chat` | 459 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |

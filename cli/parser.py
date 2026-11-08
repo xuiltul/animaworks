@@ -280,6 +280,77 @@ def build_parser() -> argparse.ArgumentParser:
     p_timeline_read.add_argument("--limit", type=int, default=20, help=t("cli.timeline_read_limit_help"))
     p_timeline_read.set_defaults(func=_lazy_timeline_read)
 
+    # ── Hub ───────────────────────────────────────────────
+    p_hub = sub.add_parser("hub", help=t("cli.hub_parser_help"))
+    hub_sub = p_hub.add_subparsers(dest="hub_command")
+    p_hub_member = hub_sub.add_parser("member", help=t("cli.hub_member_parser_help"))
+    hub_member_sub = p_hub_member.add_subparsers(dest="hub_member_command")
+
+    p_hub_member_add = hub_member_sub.add_parser(
+        "add",
+        help=t("cli.hub_member_add_help"),
+        description=t("cli.hub_member_add_help"),
+    )
+    p_hub_member_add.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_member_add.add_argument("--company", required=True, help=t("cli.hub_member_add_company_help"))
+    p_hub_member_add.add_argument(
+        "--route",
+        required=True,
+        choices=("webhook", "poll"),
+        help=t("cli.hub_member_add_route_help"),
+    )
+    p_hub_member_add.add_argument("--url-ref", default=None, help=t("cli.hub_member_add_url_ref_help"))
+    p_hub_member_add.add_argument("--key-ref", default=None, help=t("cli.hub_member_add_key_ref_help"))
+    p_hub_member_add.add_argument(
+        "--expect-every",
+        default=None,
+        help=t("cli.hub_member_add_expect_every_help"),
+    )
+    p_hub_member_add.add_argument(
+        "--display-name",
+        default=None,
+        help=t("cli.hub_member_add_display_name_help"),
+    )
+    p_hub_member_add.add_argument("--kind", default="vendor_bot", help=t("cli.hub_member_add_kind_help"))
+    p_hub_member_add.set_defaults(func=_lazy_hub_member_add)
+
+    p_hub_member_list = hub_member_sub.add_parser(
+        "list",
+        help=t("cli.hub_member_list_help"),
+        description=t("cli.hub_member_list_help"),
+    )
+    p_hub_member_list.set_defaults(func=_lazy_hub_member_list)
+
+    p_hub_member_set_token = hub_member_sub.add_parser(
+        "set-token",
+        help=t("cli.hub_member_set_token_help"),
+        description=t("cli.hub_member_set_token_help"),
+    )
+    p_hub_member_set_token.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_member_set_token.add_argument(
+        "--from-env",
+        required=True,
+        metavar="VAR",
+        help=t("cli.hub_member_set_token_from_env_help"),
+    )
+    p_hub_member_set_token.set_defaults(func=_lazy_hub_member_set_token)
+
+    p_hub_member_disable = hub_member_sub.add_parser(
+        "disable",
+        help=t("cli.hub_member_disable_help"),
+        description=t("cli.hub_member_disable_help"),
+    )
+    p_hub_member_disable.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_member_disable.set_defaults(func=_lazy_hub_member_disable)
+
+    p_hub_member_enable = hub_member_sub.add_parser(
+        "enable",
+        help=t("cli.hub_member_enable_help"),
+        description=t("cli.hub_member_enable_help"),
+    )
+    p_hub_member_enable.add_argument("member_id", metavar="ID", help=t("cli.hub_member_add_id_help"))
+    p_hub_member_enable.set_defaults(func=_lazy_hub_member_enable)
+
     # ── Status ────────────────────────────────────────────
     p_status = sub.add_parser("status", help="Show system status from gateway")
     p_status.set_defaults(func=_lazy_status)
@@ -931,6 +1002,36 @@ def _lazy_board_dm_history(args: argparse.Namespace) -> None:
     from cli.commands.board import cmd_board_dm_history
 
     cmd_board_dm_history(args)
+
+
+def _lazy_hub_member_add(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_add
+
+    cmd_hub_member_add(args)
+
+
+def _lazy_hub_member_list(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_list
+
+    cmd_hub_member_list(args)
+
+
+def _lazy_hub_member_set_token(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_set_token
+
+    cmd_hub_member_set_token(args)
+
+
+def _lazy_hub_member_disable(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_disable
+
+    cmd_hub_member_disable(args)
+
+
+def _lazy_hub_member_enable(args: argparse.Namespace) -> None:
+    from cli.commands.hub import cmd_hub_member_enable
+
+    cmd_hub_member_enable(args)
 
 
 def _lazy_timeline_add(args: argparse.Namespace) -> None:

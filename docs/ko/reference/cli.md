@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=537dd17bb5bf633dad492eb004b693c8027739655a57b86c0c2ac4081fb3b4a7 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=76eef6ee494de86db9cbfd2e358c4401e866ac5fc86d775543e7994a93dd715f generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -489,6 +489,88 @@ cli.cost_help
 |---|---|---|---|---|
 | anima | 위치 인자 | — | — | Anima 이름 |
 | --local | 플래그 | false | — | (더 이상 사용되지 않음) 직접 모드 (게이트웨이 없음) |
+
+## `hub`
+
+허브의 명부와 외부 AI의 멤버를 관리
+
+`usage: animaworks hub [-h] {member} ...`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member`
+
+허브의 멤버를 관리
+
+`usage: animaworks hub member [-h] {add,list,set-token,disable,enable} ...`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member add`
+
+멤버를 명부에 추가
+
+`usage: animaworks hub member add [-h] --company COMPANY --route {webhook,poll}
+                                 [--url-ref URL_REF] [--key-ref KEY_REF]
+                                 [--expect-every EXPECT_EVERY]
+                                 [--display-name DISPLAY_NAME] [--kind KIND]
+                                 ID`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+| --company | option | — | — | 멤버의 회사 ID |
+| --route | option | — | webhook, poll | 연락 방법 (webhook 또는 poll) |
+| --url-ref | option | — | — | webhook URL의 vault 키 이름 (shared 섹션) |
+| --key-ref | option | — | — | webhook 인증 키의 vault 키 이름 (shared 섹션) |
+| --expect-every | option | — | — | 기대하는 연락 간격 (30m / 3h / 1d 등) |
+| --display-name | option | — | — | 표시 이름 (기본은 ID) |
+| --kind | option | "vendor_bot" | — | 멤버의 종류 (기본: vendor_bot) |
+
+## `hub member disable`
+
+멤버를 비활성화
+
+`usage: animaworks hub member disable [-h] ID`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+
+## `hub member enable`
+
+멤버를 활성화
+
+`usage: animaworks hub member enable [-h] ID`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+
+## `hub member list`
+
+허브의 멤버 목록을 표시 (토큰은 표시하지 않음)
+
+`usage: animaworks hub member list [-h]`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `hub member set-token`
+
+환경 변수에서 베어러 토큰의 SHA-256을 등록
+
+`usage: animaworks hub member set-token [-h] --from-env VAR ID`
+
+| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| member_id | positional | — | — | 멤버 ID (영소문자로 시작하는 2~32자) |
+| --from-env | option | — | — | 토큰을 저장한 환경 변수 이름 |
 
 ## `import`
 
