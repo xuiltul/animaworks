@@ -438,6 +438,7 @@
 }
 
 .board-search-toggle:hover,
+.board-search-toggle:active,
 .board-info-button:hover,
 .board-nav-toggle:hover,
 .board-mobile-toggle:hover {
