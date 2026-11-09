@@ -107,6 +107,22 @@ export function mountOfficePixel(dom) {
   });
 
   let disposed = false;
+  const replyWaiting = new Set();
+
+  function applyReplyWaiting() {
+    const actors = office.actors;
+    if (!actors) return;
+    for (const actor of actors.values()) {
+      actor.replyWaiting = replyWaiting.has(String(actor.id).toLowerCase());
+    }
+  }
+
+  function setReplyWaiting(names) {
+    replyWaiting.clear();
+    for (const name of names || []) replyWaiting.add(String(name).toLowerCase());
+    applyReplyWaiting();
+  }
+
   function dispose() {
     if (disposed) return;
     disposed = true;
@@ -117,6 +133,7 @@ export function mountOfficePixel(dom) {
 
   const ready = office.ready.then((runtime) => {
     if (disposed || !runtime) return null;
+    applyReplyWaiting();
     const selectedAnima = getState().selectedAnima;
     if (selectedAnima) office.highlight(selectedAnima);
     return runtime;
@@ -130,6 +147,7 @@ export function mountOfficePixel(dom) {
     highlight(name) {
       office.highlight(name);
     },
+    setReplyWaiting,
     dispose,
   };
 }

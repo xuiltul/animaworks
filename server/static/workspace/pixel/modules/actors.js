@@ -1,3 +1,4 @@
+import { t } from "/shared/i18n.js";
 import { SpriteSheet } from "./sprite.js";
 import { drawPixelText, measurePixelText } from "./pixel-text.js";
 
@@ -128,6 +129,8 @@ const WORK_KINDS = Object.freeze({
 const DYNAMIC_BUBBLE_FILL = "#fbf0e4";
 const DEFAULT_WORK_BORDER = "#3f7a38";
 const DEFAULT_WORK_TEXT = "#356b2e";
+// Persistent "reply waiting" badge; unlike activity labels it has no timer.
+const REPLY_WAITING_COLORS = Object.freeze({ border: "#c27f00", text: "#9b720f" });
 
 // Labels formerly baked into fx/bubbles.png rows — keep wording identical.
 const STATE_BUBBLE_LABELS = Object.freeze({
@@ -366,6 +369,7 @@ class Actor {
     this.bubble = "";
     this.bubbleOverride = "";
     this.bubbleOverrideRemaining = 0;
+    this.replyWaiting = false;
     this.fxTime = 0;
     this.motion = null;
     this.isSeated = true;
@@ -474,6 +478,9 @@ class Actor {
   }
 
   workBubbleColors() {
+    if (this.replyWaiting) {
+      return { ...REPLY_WAITING_COLORS, fill: DYNAMIC_BUBBLE_FILL };
+    }
     const config = workKindConfig(this.workKind);
     if (config) {
       return {
@@ -499,6 +506,7 @@ class Actor {
   // Activity label, transient override, or state default — all draw via the
   // same programmatic bubble path (no baked text in bubbles.png).
   fullBubbleLabel() {
+    if (this.replyWaiting) return t("ws.reply_waiting");
     const activity = this.dynamicLabel();
     if (activity) return activity;
     if (this.bubbleOverride) return labelForBubbleName(this.bubbleOverride);
@@ -743,7 +751,7 @@ class Actor {
   }
 
   isCompactStatus() {
-    if (this.dynamicLabel()) return false;
+    if (this.replyWaiting || this.dynamicLabel()) return false;
     return !this.bubbleOverride && Object.hasOwn(COMPACT_STATUS_COLORS, this.state);
   }
 
@@ -770,8 +778,10 @@ class Actor {
   }
 
   bubbleBounds(name = this.currentBubble(), spriteY = this.spriteY(), offsetY = 0, offsetX = 0) {
-    const label = this.dynamicLabel() || labelForBubbleName(name) ||
-      STATE_BUBBLE_LABELS[this.state] || "";
+    const label = this.replyWaiting
+      ? t("ws.reply_waiting")
+      : (this.dynamicLabel() || labelForBubbleName(name) ||
+        STATE_BUBBLE_LABELS[this.state] || "");
     const size = this.dynamicBubbleSize(label);
     const x = Math.round(this.x - size.width / 2 + offsetX);
     const headTop = this.headTop(spriteY);
@@ -814,8 +824,10 @@ class Actor {
   }
 
   drawBubble(ctx, name, spriteY, options = {}) {
-    const label = this.dynamicLabel() || labelForBubbleName(name) ||
-      STATE_BUBBLE_LABELS[this.state] || "";
+    const label = this.replyWaiting
+      ? t("ws.reply_waiting")
+      : (this.dynamicLabel() || labelForBubbleName(name) ||
+        STATE_BUBBLE_LABELS[this.state] || "");
     if (!label) return;
     this.drawDynamicBubble(ctx, label, spriteY, options);
   }

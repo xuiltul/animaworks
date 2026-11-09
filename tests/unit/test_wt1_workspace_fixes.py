@@ -1,9 +1,7 @@
 """Unit tests for WT-1 workspace fixes — static analysis of JS/Python source files.
 
-Covers four issues:
-  A (P1): WS Event Mismatch — data.job→data.task, chat.response removal, dm_received to_person
-  B (P1): Activity Sidebar Empty — isoTs param, loadActivityHistory, activateRightTab
-  C (P2): chat.js Integration — stream imports, heartbeat relay, resumeConversationStream, chat.js deletion
+Covers two issues:
+  A (P1): WS Event Mismatch — data.job→data.task and chat.response removal
   D (P3): Timeline Filter Expansion — human_notify/notification and error/issue_resolved filterDefs
 """
 # AnimaWorks - Digital Anima Framework
@@ -21,14 +19,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APP_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "app-websocket.js"
-ACTIVITY_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "activity.js"
-SIDEBAR_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "sidebar.js"
-CHAT_STREAMING_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "chat-streaming.js"
-CHAT_CONTROLLER_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "chat-controller.js"
-RENDER_UTILS_JS = REPO_ROOT / "server" / "static" / "shared" / "chat" / "render-utils.js"
 WEBSOCKET_JS = REPO_ROOT / "server" / "static" / "modules" / "websocket.js"
 TIMELINE_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "timeline.js"
-CHAT_JS = REPO_ROOT / "server" / "static" / "workspace" / "modules" / "chat.js"
 
 
 # ── Issue A: WS Event Mismatch ────────────────────────
@@ -83,143 +75,6 @@ class TestIssueA_WSEventMismatch:
         """chat.response WS handler was dead code and must be removed."""
         src = APP_JS.read_text(encoding="utf-8")
         assert 'onEvent("chat.response"' not in src, "chat.response handler still present in app.js (should be removed)"
-
-
-# ── Issue B: Activity Sidebar Empty ───────────────────
-
-
-class TestIssueB_ActivitySidebarEmpty:
-    """Verify activity sidebar initialization and history loading."""
-
-    def test_addActivity_accepts_isoTs_parameter(self) -> None:
-        """addActivity function signature must include isoTs parameter."""
-        src = ACTIVITY_JS.read_text(encoding="utf-8")
-        match = re.search(r"function\s+addActivity\s*\([^)]*\)", src)
-        assert match, "addActivity function not found in activity.js"
-        sig = match.group(0)
-        assert "isoTs" in sig, f"isoTs parameter missing from addActivity signature: {sig}"
-
-    def test_addActivity_uses_isoTs_for_date(self) -> None:
-        """addActivity must use isoTs when provided (not always new Date())."""
-        src = ACTIVITY_JS.read_text(encoding="utf-8")
-        idx = src.index("function addActivity")
-        block = src[idx : idx + 300]
-        assert "isoTs" in block, "isoTs not used in addActivity body"
-        assert "new Date(isoTs)" in block, "addActivity does not parse isoTs into Date"
-
-    def test_loadActivityHistory_exists(self) -> None:
-        """loadActivityHistory function must exist in activity.js."""
-        src = ACTIVITY_JS.read_text(encoding="utf-8")
-        assert "function loadActivityHistory" in src or "async function loadActivityHistory" in src
-
-    def test_loadActivityHistory_fetches_activity_recent(self) -> None:
-        """loadActivityHistory must fetch from /api/activity/recent endpoint."""
-        src = ACTIVITY_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"(?:async\s+)?function\s+loadActivityHistory.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nexport\s|\nclass\s|$)",
-            src,
-            re.DOTALL,
-        )
-        assert match, "loadActivityHistory function body not found"
-        body = match.group(0)
-        assert "/api/activity/recent" in body, "loadActivityHistory does not fetch /api/activity/recent"
-
-    def test_activateRightTab_handles_activity(self) -> None:
-        """activateRightTab must have an 'activity' case that calls loadActivityHistory."""
-        src = SIDEBAR_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"function\s+activateRightTab\s*\([^)]*\).*?(?=\nexport\s+function\s|\nclass\s|$)",
-            src,
-            re.DOTALL,
-        )
-        assert match, "activateRightTab function not found"
-        body = match.group(0)
-        assert '"activity"' in body, 'No "activity" case in activateRightTab'
-        assert "loadActivityHistory" in body, "activateRightTab does not call loadActivityHistory for activity tab"
-
-
-# ── Issue C: chat.js Integration ──────────────────────
-
-
-class TestIssueC_ChatJsIntegration:
-    """Verify chat-stream imports, heartbeat relay, stream recovery, and chat.js deletion."""
-
-    def test_fetchActiveStream_imported(self) -> None:
-        """fetchActiveStream must be imported via chat-controller.js."""
-        src = CHAT_CONTROLLER_JS.read_text(encoding="utf-8")
-        assert "fetchActiveStream" in src
-        import_match = re.search(r"import\s*\{[^}]*fetchActiveStream[^}]*\}.*?from.*?chat-stream", src)
-        assert import_match, "fetchActiveStream not imported from chat-stream.js in chat-controller.js"
-
-    def test_fetchStreamProgress_imported(self) -> None:
-        """fetchStreamProgress must be imported via chat-controller.js."""
-        src = CHAT_CONTROLLER_JS.read_text(encoding="utf-8")
-        assert "fetchStreamProgress" in src
-        import_match = re.search(r"import\s*\{[^}]*fetchStreamProgress[^}]*\}.*?from.*?chat-stream", src)
-        assert import_match, "fetchStreamProgress not imported from chat-stream.js in chat-controller.js"
-
-    def test_onHeartbeatRelayStart_handler(self) -> None:
-        """onHeartbeatRelayStart callback must exist in streamChat call."""
-        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
-        assert "onHeartbeatRelayStart" in src
-
-    def test_onHeartbeatRelay_handler(self) -> None:
-        """onHeartbeatRelay callback must exist in streamChat call."""
-        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
-        matches = re.findall(r"onHeartbeatRelay(?!Start|Done)\b", src)
-        assert len(matches) >= 1, "onHeartbeatRelay handler not found in chat-streaming.js"
-
-    def test_onHeartbeatRelayDone_handler(self) -> None:
-        """onHeartbeatRelayDone callback must exist in streamChat call."""
-        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
-        assert "onHeartbeatRelayDone" in src
-
-    def test_heartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
-        """renderStreamingBubbleInner delegates to _renderTextZoneContent which handles heartbeatRelay."""
-        src = RENDER_UTILS_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"function\s+_renderTextZoneContent.*?(?=\nfunction\s+_render|\nexport\s+function\s|$)",
-            src,
-            re.DOTALL,
-        )
-        assert match, "_renderTextZoneContent (streaming helper) not found"
-        body = match.group(0)
-        assert "heartbeatRelay" in body, "heartbeatRelay state not handled in streaming text zone"
-
-    def test_afterHeartbeatRelay_rendering_in_renderStreamingBubbleInner(self) -> None:
-        """renderStreamingBubbleInner delegates to _renderTextZoneContent which handles afterHeartbeatRelay."""
-        src = RENDER_UTILS_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"function\s+_renderTextZoneContent.*?(?=\nfunction\s+_render|\nexport\s+function\s|$)",
-            src,
-            re.DOTALL,
-        )
-        assert match, "_renderTextZoneContent (streaming helper) not found"
-        body = match.group(0)
-        assert "afterHeartbeatRelay" in body, "afterHeartbeatRelay state not handled in streaming text zone"
-
-    def test_resumeConversationStream_exists(self) -> None:
-        """resumeConversationStream function must exist for page-reload stream recovery."""
-        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
-        assert "function resumeConversationStream" in src or "async function resumeConversationStream" in src, (
-            "resumeConversationStream function not found in chat-streaming.js"
-        )
-
-    def test_resumeConversationStream_delegates_to_session_manager(self) -> None:
-        """resumeConversationStream must delegate to ChatSessionManager."""
-        src = CHAT_STREAMING_JS.read_text(encoding="utf-8")
-        match = re.search(
-            r"(?:async\s+)?function\s+resumeConversationStream.*?(?=\nfunction\s|\n(?:async\s+)?function\s|\nexport\s|\nclass\s|$)",
-            src,
-            re.DOTALL,
-        )
-        assert match, "resumeConversationStream function body not found"
-        body = match.group(0)
-        assert "_mgr()" in body, "resumeConversationStream does not delegate to ChatSessionManager"
-
-    def test_chat_js_deleted(self) -> None:
-        """workspace/modules/chat.js must be deleted (dead code removed)."""
-        assert not CHAT_JS.exists(), f"chat.js still exists at {CHAT_JS} — should have been deleted"
 
 
 # ── Issue D: Timeline Filter Expansion ────────────────

@@ -20,13 +20,8 @@ CHAT_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat.js"
 CHAT_CTX_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "ctx.js"
 CHAT_STREAMING_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "streaming-controller.js"
 CHAT_RENDERER_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "chat-renderer.js"
-WORKSPACE_APP_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "app.js"
-WORKSPACE_CHAT_THREAD_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "chat-thread.js"
-WORKSPACE_CHAT_STREAMING_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "chat-streaming.js"
 SESSION_MANAGER_JS = PROJECT_ROOT / "server" / "static" / "shared" / "chat" / "session-manager.js"
-WORKSPACE_STATE_JS = PROJECT_ROOT / "server" / "static" / "workspace" / "modules" / "state.js"
 CHAT_CSS = PROJECT_ROOT / "server" / "static" / "styles" / "chat.css"
-WORKSPACE_STYLE = PROJECT_ROOT / "server" / "static" / "workspace" / "style.css"
 
 
 def _read(path: Path) -> str:
@@ -105,49 +100,6 @@ class TestChatJsChatHistoryRefactored:
         assert "mgr.getHistoryState(name, tid)" in js
 
 
-# ── TestWorkspaceStateFields ────────────────────────────────
-
-
-@pytest.mark.unit
-class TestWorkspaceStateFields:
-    """Verify state.js contains thread-related state fields."""
-
-    def test_state_js_contains_active_thread_id(self) -> None:
-        """state.js contains activeThreadId field."""
-        js = _read(WORKSPACE_STATE_JS)
-        assert "activeThreadId" in js
-
-    def test_state_js_contains_threads(self) -> None:
-        """state.js contains threads field."""
-        js = _read(WORKSPACE_STATE_JS)
-        assert "threads:" in js or "threads :" in js
-
-    def test_state_js_contains_chat_messages_by_thread(self) -> None:
-        """state.js contains chatMessagesByThread field."""
-        js = _read(WORKSPACE_STATE_JS)
-        assert "chatMessagesByThread" in js
-
-
-# ── TestWorkspaceAppJsThreadTabs ─────────────────────────────
-
-
-@pytest.mark.unit
-class TestWorkspaceAppJsThreadTabs:
-    """Verify workspace app.js thread tab rendering and thread_id in send."""
-
-    def test_app_js_contains_thread_tab_rendering(self) -> None:
-        """chat-thread.js contains thread tab rendering function/logic."""
-        js = _read(WORKSPACE_CHAT_THREAD_JS)
-        assert "thread-tab" in js
-        assert "wsThreadTabs" in js or "threadTabs" in js
-
-    def test_send_conversation_message_includes_thread_id_in_body(self) -> None:
-        """session-manager.js includes thread_id: thread in the body."""
-        js = _read(SESSION_MANAGER_JS)
-        assert "thread_id: thread" in js
-        assert re.search(r"thread_id\s*:\s*thread", js)
-
-
 # ── TestChatCssThreadStyles ──────────────────────────────────
 
 
@@ -173,27 +125,4 @@ class TestChatCssThreadStyles:
     def test_chat_css_thread_tab_new_class(self) -> None:
         """chat.css contains .thread-tab-new class."""
         css = _read(CHAT_CSS)
-        assert ".thread-tab-new" in css
-
-
-# ── TestWorkspaceCssThreadStyles ─────────────────────────────
-
-
-@pytest.mark.unit
-class TestWorkspaceCssThreadStyles:
-    """Verify workspace style.css contains thread tab styles."""
-
-    def test_workspace_css_thread_tabs_exists(self) -> None:
-        """Workspace style.css contains thread-tabs / ws-thread-tabs."""
-        css = _read(WORKSPACE_STYLE)
-        assert "thread-tabs" in css or "ws-thread-tabs" in css
-
-    def test_workspace_css_thread_tab_class(self) -> None:
-        """Workspace has .thread-tab styling."""
-        css = _read(WORKSPACE_STYLE)
-        assert ".thread-tab" in css
-
-    def test_workspace_css_thread_tab_new_class(self) -> None:
-        """Workspace has .thread-tab-new styling."""
-        css = _read(WORKSPACE_STYLE)
         assert ".thread-tab-new" in css

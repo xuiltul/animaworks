@@ -7,17 +7,18 @@ import { api } from "../../modules/api.js";
 import { getState, setState } from "./state.js";
 import { initLogin, getCurrentUser, logout } from "./login.js";
 import { initAnima, loadAnimas, selectAnima } from "./anima.js";
-import { initMemory, loadMemoryTab } from "./memory.js";
-import { initSession, loadSessions } from "./session.js";
 import { mountOffice, disposeOfficeRenderer, highlightAnima } from "./office-renderer.js";
 import { normalizeWorkspaceView, selectWorkspaceView } from "./office-renderer-selection.js";
 import { createBattleView } from "../../battle/modules/view.js";
 import { initOrgDashboard, disposeOrgDashboard, startReplay, stopReplay, isReplayMode } from "./org-dashboard.js";
 import { isVisible as isMessagePopupVisible, hide as hideMessagePopup } from "./message-popup.js";
-import { initActivity } from "./activity.js";
-import { initSidebar, activateRightTab } from "./sidebar.js";
-import { initBoard, initBoardTab } from "./board.js";
-import { initChatController, openConversation, closeConversation } from "./chat-controller.js";
+import {
+  initChatDock,
+  openConversation,
+  closeConversation,
+  isConversationOpen,
+  isChatPopoverOpen,
+} from "./chat-dock.js";
 
 import { setupWebSocket } from "./app-websocket.js";
 import { initOfficeShell, loadSystemStatus, updateStatusDisplay } from "./app-system.js";
@@ -33,52 +34,17 @@ function cacheDom() {
   dom.animaSelector = document.getElementById("wsAnimaSelector");
   dom.systemStatus = document.getElementById("wsSystemStatus");
   dom.userInfo = document.getElementById("wsUserInfo");
-  dom.rightTabs = document.getElementById("wsRightTabs");
-  dom.tabState = document.getElementById("wsTabState");
-  dom.tabActivity = document.getElementById("wsTabActivity");
-  dom.tabBoard = document.getElementById("wsTabBoard");
-  dom.tabHistory = document.getElementById("wsTabHistory");
-  dom.paneState = document.getElementById("wsPaneState");
-  dom.paneActivity = document.getElementById("wsPaneActivity");
-  dom.paneBoard = document.getElementById("wsPaneBoard");
-  dom.paneHistory = document.getElementById("wsPaneHistory");
-  dom.memoryPanel = document.getElementById("wsMemoryPanel");
+  dom.currentUserLabel = document.getElementById("currentUserLabel");
   dom.logoutBtn = document.getElementById("wsLogoutBtn");
 
-  // Replaceable office renderer and dashboard
+  // Replaceable office renderer, stage and embedded Chat dock
   dom.officePanel = document.getElementById("wsOfficePanel");
   dom.officeCanvas = document.getElementById("wsOfficeCanvas");
   dom.orgPanel = document.getElementById("wsOrgPanel");
   dom.battlePanel = document.getElementById("wsBattlePanel");
+  dom.stage = document.getElementById("wsStage");
+  dom.chatDock = document.getElementById("wsChatDock");
   dom.viewToggle = document.getElementById("wsViewToggle");
-
-  // Conversation overlay (3-column)
-  dom.convOverlay = document.getElementById("wsConvOverlay");
-  dom.convLayout = document.getElementById("wsConvLayout");
-  dom.convBack = document.getElementById("wsConvBack");
-  dom.convAnimaName = document.getElementById("wsConvAnimaName");
-  dom.threadTabs = document.getElementById("wsThreadTabs");
-  dom.convCanvas = document.getElementById("wsConvCanvas");
-  dom.convMessages = document.getElementById("wsConvMessages");
-  dom.convInput = document.getElementById("wsConvInput");
-  dom.convSend = document.getElementById("wsConvSend");
-  dom.convModel = document.getElementById("wsConvModel");
-  dom.convPreviewBar = document.getElementById("wsConvPreviewBar");
-  dom.convAttachBtn = document.getElementById("wsConvAttachBtn");
-  dom.convFileInput = document.getElementById("wsConvFileInput");
-  dom.convPending = document.getElementById("wsConvPending");
-  dom.convPendingList = document.getElementById("wsConvPendingList");
-  dom.convPendingLabel = document.getElementById("wsConvPendingLabel");
-  dom.convPendingCancel = document.getElementById("wsConvPendingCancel");
-  dom.convQueueBtn = document.getElementById("wsConvQueueBtn");
-
-  // Mobile controls
-  dom.mobileSidebarToggle = document.getElementById("wsMobileSidebarToggle");
-  dom.mobileCharacterToggle = document.getElementById("wsMobileCharacterToggle");
-  dom.sidebarBackdrop = document.getElementById("wsSidebarBackdrop");
-  dom.mobileMemoryClose = document.getElementById("wsMobileMemoryClose");
-  dom.convSidebar = document.querySelector(".ws-conv-sidebar");
-  dom.convCharacter = document.querySelector(".ws-conv-character");
 }
 
 // ── View Switching ──────────────────────
@@ -219,43 +185,35 @@ async function startDashboard() {
   }
   dashboardInitialized = true;
 
-  initAnima(dom.animaSelector, dom.paneState, onAnimaSelected);
-  initMemory(dom.memoryPanel);
-  initSession(dom.paneHistory);
-
-  initActivity(dom.paneActivity);
-  initBoard(dom.paneBoard);
-  initSidebar({
-    tabState: dom.tabState, tabActivity: dom.tabActivity, tabBoard: dom.tabBoard, tabHistory: dom.tabHistory,
-    paneState: dom.paneState, paneActivity: dom.paneActivity, paneBoard: dom.paneBoard, paneHistory: dom.paneHistory,
-  }, { onBoardInit: initBoardTab });
-
-  initChatController(dom);
+  initAnima(dom.animaSelector, onAnimaSelected);
+  initChatDock(dom.chatDock, { onClosed: () => highlightAnima(null) });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (isMessagePopupVisible()) {
-        hideMessagePopup();
-      } else if (getState().conversationOpen) {
-        closeConversation();
-      }
+    if (e.key !== "Escape") return;
+    if (isMessagePopupVisible()) {
+      hideMessagePopup();
+    } else if (isChatPopoverOpen()) {
+      // The chat pane's own handlers close the popover first.
+      return;
+    } else if (isConversationOpen()) {
+      closeConversation();
     }
   });
 
   dom.logoutBtn?.addEventListener("click", () => {
+    closeConversation();
     dom.dashboard.classList.add("hidden");
     logout();
   });
 
   await loadAnimas();
   await loadSystemStatus(dom);
+  if (dom.currentUserLabel) dom.currentUserLabel.textContent = getCurrentUser() || "";
   setupWebSocket({
     dom,
     updateStatusDisplay: (ok, text) => updateStatusDisplay(dom, ok, text),
     getCurrentView: () => _currentView,
   });
-  activateRightTab("state");
-
   const initialView = getCurrentView();
   await switchView(initialView);
 
@@ -274,14 +232,9 @@ async function startDashboard() {
 
 // ── Anima Selection Callback ──────────────────────
 
-async function onAnimaSelected(name) {
+function onAnimaSelected(name) {
   highlightAnima(name);
-
-  await Promise.all([
-    openConversation(name),
-    loadMemoryTab(getState().activeMemoryTab),
-    loadSessions(),
-  ]);
+  void openConversation(name);
 }
 
 // ── Main Init ──────────────────────
@@ -292,10 +245,17 @@ const ALL_THEMES = [
 ];
 
 function applyTheme() {
-  const theme = localStorage.getItem("aw-theme") || "default";
+  let theme = localStorage.getItem("aw-theme");
+  if (!theme) theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "midnight" : "default";
+
   ALL_THEMES.forEach(t => document.body.classList.remove(`theme-${t}`));
   if (theme !== "default") {
     document.body.classList.add(`theme-${theme}`);
+  }
+  if (theme === "monokai" || theme === "midnight") {
+    document.body.setAttribute("data-theme", "dark");
+  } else {
+    document.body.removeAttribute("data-theme");
   }
 }
 
@@ -335,7 +295,8 @@ export async function init() {
   }
 }
 
-function onLoginSuccess(_username) {
+function onLoginSuccess(username) {
+  if (dom.currentUserLabel) dom.currentUserLabel.textContent = username || "";
   startDashboard();
 }
 

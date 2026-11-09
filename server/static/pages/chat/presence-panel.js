@@ -31,7 +31,11 @@ export function createPresencePanel(ctx) {
   const { state, deps } = ctx;
   const { t } = deps;
 
-  const area = $("chatPageMessages")?.parentElement;
+  const mountTarget = typeof ctx.state.presenceMount === "function"
+    ? ctx.state.presenceMount()
+    : null;
+  const area = mountTarget || $("chatPageMessages")?.parentElement;
+  const areaIsMessages = !mountTarget;
   const messages = $("chatPageMessages");
   if (!area || !messages) return { refresh() {}, destroy() {} };
 
@@ -66,6 +70,7 @@ export function createPresencePanel(ctx) {
   }
 
   function _shouldShow() {
+    if (state.embedded && state.embeddedVisible === false) return false;
     return isPresenceEnabled() && Boolean(state.selectedAnima)
       && window.innerWidth >= MIN_WIDTH && !_splitActive();
   }
@@ -126,7 +131,7 @@ export function createPresencePanel(ctx) {
     clearTimeout(timer);
     const show = _shouldShow();
     el.hidden = !show;
-    area.classList.toggle("presence-on", show);
+    if (areaIsMessages) area.classList.toggle("presence-on", show);
     if (!show) { _stopAnimator(); currentEmotion = null; return; }
 
     const name = state.selectedAnima;
@@ -174,7 +179,7 @@ export function createPresencePanel(ctx) {
     window.removeEventListener("resize", refresh);
     window.removeEventListener("aw:presence-pref", refresh);
     el.remove();
-    area.classList.remove("presence-on");
+    if (areaIsMessages) area.classList.remove("presence-on");
   }
 
   return { refresh, destroy };

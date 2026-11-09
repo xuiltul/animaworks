@@ -278,11 +278,6 @@ class TestHamburgerMenu:
         html = _read(DASHBOARD_HTML)
         assert 'id="hamburgerBtn"' in html or 'class="hamburger-btn"' in html
 
-    def test_hamburger_button_workspace_html(self) -> None:
-        """Workspace has mobile toggle buttons for sidebar/character panels."""
-        html = _read(WORKSPACE_HTML)
-        assert 'id="wsMobileSidebarToggle"' in html or "ws-mobile-sidebar-toggle" in html
-
     def test_mobile_nav_backdrop_dashboard_html(self) -> None:
         html = _read(DASHBOARD_HTML)
         assert "mobile-nav-backdrop" in html
@@ -312,31 +307,6 @@ class TestTouchModule:
         assert "destroy()" in js
 
 
-# ── 7. Chat Mobile Send ─────────────────────────────────────
-
-
-class TestWorkspaceChatMobile:
-    """Verify workspace chat modules handle mobile send and virtual keyboard."""
-
-    def test_workspace_chat_mobile_enter_send(self) -> None:
-        """chat-mobile.js should have mobile Enter-to-send logic (not just Ctrl+Enter)."""
-        js = _read(WORKSPACE_DIR / "modules" / "chat-mobile.js")
-        assert "matchMedia" in js, "Expected matchMedia for mobile detection"
-        assert "chat.placeholder_enter" in js, "Expected i18n key for Enter placeholder"
-
-        assert "mobile" in js.lower() or "max-width: 768px" in js
-
-    def test_workspace_chat_visualviewport(self) -> None:
-        """Workspace app-mobile.js should handle visualViewport for mobile keyboard."""
-        js = _read(WORKSPACE_DIR / "modules" / "app-mobile.js")
-        assert "visualViewport" in js
-
-    def test_workspace_chat_mobile_placeholder(self) -> None:
-        """Chat placeholder should show mobile-appropriate shortcut hint via i18n."""
-        js = _read(WORKSPACE_DIR / "modules" / "chat-mobile.js")
-        assert "ws.message_placeholder" in js or "chat.placeholder_enter" in js
-
-
 # ── 8. Sidebar Drawer Styles ────────────────────────────────
 
 
@@ -352,15 +322,6 @@ class TestSidebarDrawer:
         assert "position: fixed" in combined, "Sidebar should be fixed position"
         assert "translateX" in combined, "Sidebar should use translateX for slide"
 
-    def test_workspace_mobile_sidebar_styles(self) -> None:
-        """Workspace sidebar should become an overlay drawer on mobile."""
-        css = _read(WORKSPACE_STYLE)
-        blocks_768 = _extract_media_blocks(css, 768)
-        combined = "\n".join(blocks_768)
-
-        assert "translateX" in combined, (
-            "Workspace sidebar should use translateX for mobile drawer"
-        )
 
 
 # ── 9. Chat Bubble Width on Mobile ──────────────────────────
@@ -369,21 +330,6 @@ class TestSidebarDrawer:
 class TestChatBubbleWidth:
     """Verify chat bubbles expand on mobile for better readability."""
 
-    def test_workspace_chat_bubble_width_mobile(self) -> None:
-        """Chat bubble max-width should be > 75% on mobile."""
-        css = _read(WORKSPACE_STYLE)
-        # Check in 900px, 768px, or 640px media queries for wider bubbles
-        found_wider = False
-        for width in (900, 768, 640):
-            blocks = _extract_media_blocks(css, width)
-            for block in blocks:
-                # Look for max-width values larger than 75%
-                for m in re.finditer(r"max-width\s*:\s*(\d+)%", block):
-                    val = int(m.group(1))
-                    if val > 75:
-                        found_wider = True
-                        break
-        assert found_wider, "Expected chat bubble max-width > 75% in mobile media queries"
 
     def test_responsive_chat_bubble_width_mobile(self) -> None:
         """Dashboard chat bubble max-width should be wider on mobile."""
@@ -450,38 +396,3 @@ class TestMobileNavBackdrop:
     def test_backdrop_shown_when_nav_open(self) -> None:
         css = _read(RESPONSIVE_CSS)
         assert ".mobile-nav-open .mobile-nav-backdrop" in css
-
-
-# ── 13. Workspace Mobile UI Elements ────────────────────────
-
-
-class TestWorkspaceMobileElements:
-    """Verify workspace-specific mobile UI elements."""
-
-    def test_mobile_sidebar_toggle_hidden_desktop(self) -> None:
-        """Mobile toggle buttons should be hidden on desktop."""
-        css = _read(WORKSPACE_STYLE)
-        assert "display: none" in css
-        # Verify the toggle buttons are hidden by default
-        pattern = r"\.ws-mobile-sidebar-toggle[^{]*\{[^}]*display\s*:\s*none"
-        assert re.search(pattern, css, re.DOTALL)
-
-    def test_mobile_sidebar_toggle_visible_mobile(self) -> None:
-        """Mobile toggle buttons should be visible in 768px media query."""
-        css = _read(WORKSPACE_STYLE)
-        blocks_768 = _extract_media_blocks(css, 768)
-        combined = "\n".join(blocks_768)
-        assert "ws-mobile-sidebar-toggle" in combined
-        assert "display: inline-flex" in combined
-
-    def test_workspace_sidebar_backdrop_exists(self) -> None:
-        """Workspace should have a sidebar backdrop element."""
-        html = _read(WORKSPACE_HTML)
-        assert "wsSidebarBackdrop" in html or "ws-conv-sidebar-backdrop" in html
-
-    def test_workspace_conv_sidebar_becomes_drawer(self) -> None:
-        """Workspace sidebar should use absolute positioning on mobile."""
-        css = _read(WORKSPACE_STYLE)
-        blocks_768 = _extract_media_blocks(css, 768)
-        combined = "\n".join(blocks_768)
-        assert "position: absolute" in combined

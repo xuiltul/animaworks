@@ -20,7 +20,6 @@ _RENDER_UTILS_JS = _STATIC_DIR / "shared" / "chat" / "render-utils.js"
 _HTML_UTILS_JS = _STATIC_DIR / "shared" / "html-utils.js"
 _CHAT_CSS = _STATIC_DIR / "styles" / "chat.css"
 _CHAT_RENDERER_JS = _STATIC_DIR / "pages" / "chat" / "chat-renderer.js"
-_WS_CHAT_HISTORY_JS = _STATIC_DIR / "workspace" / "modules" / "chat-history.js"
 
 
 class TestActionBarHTMLConsistency:
@@ -166,14 +165,6 @@ class TestConsumerIntegrationFlow:
             "Dashboard must bind tool handlers, then bubble actions, then init lucide icons"
         )
 
-    def test_workspace_bind_order(self) -> None:
-        source = _WS_CHAT_HISTORY_JS.read_text(encoding="utf-8")
-        tool_pos = source.index("bindToolCallHandlers(dom.convMessages)")
-        bubble_pos = source.index("bindBubbleActionHandlers(dom.convMessages)")
-        lucide_pos = source.index("lucide.createIcons")
-        assert tool_pos < bubble_pos < lucide_pos, (
-            "Workspace must bind tool handlers, then bubble actions, then init lucide icons"
-        )
 
 
 class TestDuplicateBindingPrevention:

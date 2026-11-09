@@ -128,7 +128,7 @@ class TestPaneHostBootstrapIntegration:
         return path.read_text(encoding="utf-8")
 
     def test_imports_on_event(self, pane_host_content):
-        assert "import { onEvent }" in pane_host_content
+        assert 'import { onEvent as defaultOnEvent } from "../../modules/websocket.js"' in pane_host_content
 
     def test_subscribes_to_bootstrap(self, pane_host_content):
         assert 'onEvent("anima.bootstrap"' in pane_host_content

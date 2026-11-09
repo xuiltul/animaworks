@@ -264,31 +264,16 @@ class TestDashboardMobile:
 class TestWorkspaceMobile:
     """Workspace responsive behavior on mobile viewports."""
 
-    def test_workspace_sidebar_hidden_mobile(
+    def test_workspace_dock_hidden_initially(
         self, mobile_page: Page, static_server: str
     ) -> None:
-        """Workspace sidebar should be hidden initially on mobile."""
+        """The Chat dock is closed until an anima conversation is opened."""
         mobile_page.goto(f"{static_server}/workspace/")
         mobile_page.wait_for_load_state("domcontentloaded")
 
-        sidebar = mobile_page.locator(".ws-conv-sidebar").first
-        if sidebar.count() > 0:
-            box = sidebar.bounding_box()
-            if box:
-                # Should be off-screen (translateX(-100%))
-                assert box["x"] < 0, "Workspace sidebar should be off-screen"
-
-    def test_workspace_mobile_sidebar_toggle_visible(
-        self, mobile_page: Page, static_server: str
-    ) -> None:
-        """Mobile sidebar toggle should be visible on mobile viewport."""
-        mobile_page.goto(f"{static_server}/workspace/")
-        mobile_page.wait_for_load_state("domcontentloaded")
-
-        toggle = mobile_page.locator("#wsMobileSidebarToggle")
-        if toggle.count() > 0:
-            display = toggle.evaluate("el => getComputedStyle(el).display")
-            assert display != "none", "Mobile sidebar toggle should be visible"
+        dock = mobile_page.locator("#wsChatDock")
+        assert dock.count() == 1, "Workspace Chat dock should exist"
+        assert dock.evaluate("el => el.hidden") is True
 
     def test_workspace_chat_send_tap_target(
         self, mobile_page: Page, static_server: str
@@ -297,7 +282,7 @@ class TestWorkspaceMobile:
         mobile_page.goto(f"{static_server}/workspace/")
         mobile_page.wait_for_load_state("domcontentloaded")
 
-        send_btn = mobile_page.locator(".ws-conv-send").first
+        send_btn = mobile_page.locator("#wsChatDock .chat-send-btn").first
         if send_btn.count() > 0:
             min_height = send_btn.evaluate(
                 "el => getComputedStyle(el).minHeight"
@@ -388,18 +373,18 @@ class TestDashboardDesktopRegression:
 class TestWorkspaceDesktopRegression:
     """Verify workspace desktop layout is preserved."""
 
-    def test_workspace_sidebars_visible_desktop(
+    def test_workspace_dock_before_stage_desktop(
         self, desktop_page: Page, static_server: str
     ) -> None:
-        """Workspace sidebars should be visible at correct widths on desktop."""
+        """The Chat dock should sit left of the office stage on desktop."""
         desktop_page.goto(f"{static_server}/workspace/")
         desktop_page.wait_for_load_state("domcontentloaded")
 
-        # Check that mobile toggle buttons are hidden
-        toggle = desktop_page.locator("#wsMobileSidebarToggle")
-        if toggle.count() > 0:
-            display = toggle.evaluate("el => getComputedStyle(el).display")
-            assert display == "none", "Mobile toggle should be hidden on desktop"
+        order = desktop_page.evaluate(
+            "() => [...document.querySelectorAll('.ws-layout > #wsChatDock, .ws-layout > #wsStage')]"
+            ".map(el => el.id)"
+        )
+        assert order == ["wsChatDock", "wsStage"]
 
     def test_workspace_no_horizontal_scroll(
         self, desktop_page: Page, static_server: str

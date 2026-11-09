@@ -33,7 +33,7 @@ export function initMobileKeyboard() {
 
   function scrollInputIntoView() {
     const active = document.activeElement;
-    if (!active?.matches(".ws-conv-input, .chat-input")) return;
+    if (!active?.matches(".chat-input")) return;
     requestAnimationFrame(() => {
       active.scrollIntoView({ block: "nearest" });
     });

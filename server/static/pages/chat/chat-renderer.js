@@ -711,7 +711,11 @@ export function createChatRenderer(ctx) {
 
   function markResponseComplete(animaName, threadId) {
     if (!animaName || !threadId) return;
-    const isActive = state.selectedAnima === animaName && state.selectedThreadId === threadId;
+    // A closed embedded dock is not "active" even though it still remembers
+    // the selected anima/thread; its reply must stay unread.
+    const dockVisible = !state.embedded || state.embeddedVisible !== false;
+    const isActive = dockVisible
+      && state.selectedAnima === animaName && state.selectedThreadId === threadId;
     setThreadUnread(ctx, animaName, threadId, !isActive);
     refreshAnimaUnread(ctx, animaName);
     if (animaName === state.selectedAnima) ctx.controllers.thread.renderThreadTabs();

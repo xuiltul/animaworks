@@ -1014,12 +1014,23 @@ export function createMemoryPopover(ctx) {
     const popWidth = Math.min(960, width - 24);
     const popHeight = Math.min(670, height - 32);
     // An anima in the left rail: open to its right, with the tail on the left edge.
-    const beside = rect.right < width * 0.3 && rect.right + 14 + Math.min(popWidth, 480) <= width;
+    let beside = rect.right < width * 0.3 && rect.right + 14 + Math.min(popWidth, 480) <= width;
+    let anchorRight = rect.right;
+    if (ctx.state.embedded) {
+      // In the Workspace dock, use the dock's right edge so the memory dialog
+      // opens onto the stage without covering the conversation.
+      const dock = ctx.state.container?.closest?.(".ws-chat-dock");
+      const dockRect = dock?.getBoundingClientRect?.();
+      if (dockRect && dockRect.right + 14 + 480 <= width) {
+        anchorRight = dockRect.right;
+        beside = true;
+      }
+    }
     dialog.classList.toggle("is-beside-anchor", beside);
     if (beside) {
-      const sideWidth = Math.min(popWidth, width - rect.right - 26);
+      const sideWidth = Math.min(popWidth, width - anchorRight - 26);
       const sideTop = Math.max(12, Math.min(height - popHeight - 12, rect.top + rect.height / 2 - 48));
-      dialog.style.left = (rect.right + 14) + "px";
+      dialog.style.left = (anchorRight + 14) + "px";
       dialog.style.top = sideTop + "px";
       dialog.style.width = sideWidth + "px";
       dialog.style.height = popHeight + "px";
