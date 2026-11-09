@@ -83,6 +83,13 @@ class ContextMixin:
                 self._model_config.thinking_effort,
             )
 
+    @staticmethod
+    def _apply_template_thinking(kwargs: dict[str, Any], enabled: bool) -> None:
+        """Chat-template thinking toggle for self-hosted servers (vLLM, llama.cpp)."""
+        eb = kwargs.setdefault("extra_body", {})
+        eb["enable_thinking"] = enabled
+        eb.setdefault("chat_template_kwargs", {})["enable_thinking"] = enabled
+
     def _build_llm_kwargs(self) -> dict[str, Any]:
         """Credential + model kwargs for ``litellm.acompletion``."""
         from core.config.models import resolve_max_tokens
@@ -92,6 +99,7 @@ class ContextMixin:
             is_bedrock_glm,
             is_bedrock_kimi,
             is_bedrock_qwen,
+            is_openai_hosted_model,
             resolve_thinking_effort,
         )
 
@@ -161,22 +169,16 @@ class ContextMixin:
             elif model.startswith("openai/"):
                 if self._thinking_format() == "deepseek":
                     self._apply_deepseek_thinking(kwargs, self._model_config.thinking)
-                else:
-                    kwargs.setdefault("extra_body", {})
-                    kwargs["extra_body"]["enable_thinking"] = self._model_config.thinking
-                    kwargs["extra_body"].setdefault("chat_template_kwargs", {})
-                    kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] = self._model_config.thinking
+                elif not is_openai_hosted_model(model):
+                    self._apply_template_thinking(kwargs, self._model_config.thinking)
             else:
                 kwargs["think"] = self._model_config.thinking
         elif self._model_config.model.startswith("openai/"):
             if self._thinking_format() == "deepseek":
                 # DeepSeek-format models default to thinking on (effort high).
                 self._apply_deepseek_thinking(kwargs, True)
-            else:
-                kwargs.setdefault("extra_body", {})
-                kwargs["extra_body"]["enable_thinking"] = True
-                kwargs["extra_body"].setdefault("chat_template_kwargs", {})
-                kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] = True
+            elif not is_openai_hosted_model(self._model_config.model):
+                self._apply_template_thinking(kwargs, True)
         elif self._model_config.model.startswith("ollama/"):
             kwargs["think"] = False
         # Ollama num_ctx: explicitly set context window to prevent silent truncation
