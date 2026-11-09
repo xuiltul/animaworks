@@ -19,7 +19,7 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 _DASHBOARD_CSS = _PROJECT_ROOT / "server" / "static" / "styles" / "chat.css"
-_WORKSPACE_CSS = _PROJECT_ROOT / "server" / "static" / "workspace" / "style.css"
+_WORKSPACE_HTML = _PROJECT_ROOT / "server" / "static" / "workspace" / "index.html"
 _DASHBOARD_JS = _PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "streaming-controller.js"
 
 
@@ -27,18 +27,19 @@ _DASHBOARD_JS = _PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "stream
 
 
 class TestStreamingIndicatorCSS:
-    """Verify streaming cursor styles are defined in both CSS files."""
+    """Verify the streaming cursor style exists and reaches the Workspace dock."""
 
-    @pytest.mark.parametrize("css_path", [_DASHBOARD_CSS, _WORKSPACE_CSS])
-    def test_streaming_cursor_class_defined(self, css_path: Path):
-        content = css_path.read_text()
-        assert ".streaming-cursor" in content, f".streaming-cursor class not found in {css_path.name}"
+    def test_streaming_cursor_class_defined(self):
+        content = _DASHBOARD_CSS.read_text()
+        assert ".streaming-cursor" in content, f".streaming-cursor class not found in {_DASHBOARD_CSS.name}"
 
-    @pytest.mark.parametrize("css_path", [_DASHBOARD_CSS, _WORKSPACE_CSS])
-    def test_streaming_cursor_has_animation(self, css_path: Path):
-        content = css_path.read_text()
+    def test_streaming_cursor_has_animation(self):
+        content = _DASHBOARD_CSS.read_text()
         cursor_start = content.index(".streaming-cursor")
-        assert "animation" in content[cursor_start:], f".streaming-cursor missing animation in {css_path.name}"
+        assert "animation" in content[cursor_start:], f".streaming-cursor missing animation in {_DASHBOARD_CSS.name}"
+
+    def test_workspace_dock_loads_the_shared_chat_styles(self):
+        assert "/styles/chat.css" in _WORKSPACE_HTML.read_text()
 
 
 # ── JS: tool_end Behavior ─────────────────────────────────
