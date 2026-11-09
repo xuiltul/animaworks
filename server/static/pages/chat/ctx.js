@@ -218,6 +218,7 @@ async function saveChatUiStateNow(ctx) {
 }
 
 export function scheduleSaveChatUiState(ctx) {
+  if (ctx.state.embedded) return;
   if (ctx.state.chatUiStateSaveTimer) clearTimeout(ctx.state.chatUiStateSaveTimer);
   ctx.state.chatUiStateSaveTimer = setTimeout(() => {
     ctx.state.chatUiStateSaveTimer = null;

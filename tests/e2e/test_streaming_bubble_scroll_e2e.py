@@ -167,49 +167,35 @@ class TestStreamingMultiLineSSE:
         assert "".join(d["data"]["text"] for d in deltas) == full_text
 
 
-# ── chat.js rAF + scrollIntoView pattern ─────────────────────
+# ── Chat streaming rAF + scroll pattern ──────────────────────
 
 
 class TestAppJsScrollPattern:
-    """Verify app.js contains streaming scroll patterns.
-
-    After workspace chat.js deletion, streaming scroll is handled
-    by app.js using scrollTop-based scrolling and rAF-throttled updates.
-    """
+    """Verify the Chat page contains streaming scroll patterns."""
 
     @pytest.fixture()
     def source(self) -> str:
-        return _read_source("server/static/workspace/modules/chat-streaming.js")
+        return _read_source("server/static/pages/chat/streaming-controller.js")
 
-    def test_update_streaming_bubble_exists(self, source):
-        assert "function updateStreamingBubble" in source
+    def test_schedule_render_exists(self, source):
+        assert "_scheduleRender" in source
 
-    def test_schedule_streaming_update_exists(self, source):
-        assert "function scheduleStreamingUpdate" in source
-
-    def test_schedule_streaming_update_uses_raf(self, source):
-        assert "_convRafPending" in source
+    def test_schedule_render_uses_raf(self, source):
         assert "requestAnimationFrame" in source
 
-    def test_update_streaming_bubble_scrolls(self, source):
-        """updateStreamingBubble scrolls the messages container."""
-        idx = source.index("function updateStreamingBubble")
-        end_marker = source.find("\n// ──", idx + 1)
-        if end_marker == -1:
-            end_marker = source.find("\nfunction ", idx + 100)
-        func_body = source[idx:end_marker]
-        assert "scrollTop" in func_body or "scrollIntoView" in func_body
+    def test_streaming_scrolls_to_bottom(self, source):
+        assert "scrollTop = msgs.scrollHeight" in source
 
 
 # ── CSS multi-line rendering ─────────────────────────────────
 
 
 class TestChatBubbleCSSMultiLine:
-    """Verify workspace CSS allows multi-line chat bubble rendering."""
+    """Verify Chat CSS allows multi-line chat bubble rendering."""
 
     @pytest.fixture()
     def css(self) -> str:
-        return _read_source("server/static/workspace/style.css")
+        return _read_source("server/static/styles/chat.css")
 
     def test_chat_bubble_has_pre_wrap(self, css):
         assert "white-space: pre-wrap" in css
@@ -235,10 +221,9 @@ class TestMarkdownLineBreakRendering:
     def test_newline_to_br_conversion(self):
         assert "<br>" in _read_source("server/static/workspace/modules/utils.js")
 
-    def test_app_js_uses_render_simple_markdown(self):
-        # renderSimpleMarkdown is in utils.js; used by chat-history.js, session.js, timeline-dom.js
+    def test_timeline_uses_render_simple_markdown(self):
         assert "renderSimpleMarkdown" in _read_source(
-            "server/static/workspace/modules/chat-history.js"
+            "server/static/workspace/modules/timeline-dom.js"
         )
 
 

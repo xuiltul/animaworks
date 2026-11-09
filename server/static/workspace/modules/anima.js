@@ -1,70 +1,16 @@
-// ── Anima Selector & Status Panel ──────────────────────
-// Dropdown for anima selection + detail card rendering.
+// ── Anima Selector ──────────────────────
+// Header dropdown for selecting the active anima.
 
 import { getState, setState } from "./state.js";
 import { t } from "/shared/i18n.js";
-import { fetchAnimas, fetchAnimaDetail } from "./api.js";
-import { escapeHtml, renderSimpleMarkdown } from "./utils.js";
+import { fetchAnimas } from "./api.js";
+import { escapeHtml } from "./utils.js";
 import { animaStatusLabel } from "/shared/anima-status.js";
 
 // ── Private State ──────────────────────
 
 let _selectorContainer = null;
-let _statusContainer = null;
 let _onAnimaSelect = null;
-
-// ── Helpers ──────────────────────
-
-/**
- * Map a status string to its CSS class.
- */
-function statusClassName(status) {
-  if (!status) return "status-offline";
-  const s = status.toLowerCase();
-  if (s === "idle" || s === "running") return "status-idle";
-  if (s === "thinking" || s === "processing" || s === "busy" || s === "bootstrapping") return "status-thinking";
-  if (s === "error") return "status-error";
-  return "status-offline";
-}
-
-/**
- * Map a status string to a display label.
- */
-function statusLabel(status) {
-  if (!status) return "offline";
-  return status.toLowerCase();
-}
-
-/**
- * Map a full model name to a short display alias.
- */
-function modelAlias(model) {
-  if (!model) return "";
-  const m = model.toLowerCase();
-  // S: Claude models
-  if (m.includes("opus")) return "Opus";
-  if (m.includes("sonnet")) return "Sonnet";
-  if (m.includes("haiku")) return "Haiku";
-  // C: Codex CLI
-  if (m.startsWith("codex/")) return "Codex " + model.slice(6);
-  if (m.startsWith("openai-codex/")) return "Codex " + model.slice(13);
-  // A: OpenAI
-  if (m.includes("o4-mini")) return "o4-mini";
-  if (m.includes("o3")) return "o3";
-  if (m.includes("o1")) return "o1";
-  if (m.includes("gpt-4.1-nano")) return "GPT-4.1 nano";
-  if (m.includes("gpt-4.1-mini")) return "GPT-4.1 mini";
-  if (m.includes("gpt-4.1")) return "GPT-4.1";
-  if (m.includes("gpt-4o-mini")) return "GPT-4o mini";
-  if (m.includes("gpt-4o")) return "GPT-4o";
-  // A: Google
-  if (m.includes("gemini")) return "Gemini";
-  // B: Ollama / OSS
-  if (m.includes("ollama/")) return model.split("/").pop();
-  // Fallback: last segment
-  const parts = model.split("/");
-  return parts[parts.length - 1];
-}
 
 // ── Dropdown Rendering ──────────────────────
 
@@ -91,7 +37,6 @@ function renderDropdown() {
   html += "</select>";
   _selectorContainer.innerHTML = html;
 
-  // Bind change event
   const dropdown = _selectorContainer.querySelector("#wsAnimaDropdown");
   if (dropdown) {
     dropdown.addEventListener("change", (e) => {
@@ -101,158 +46,22 @@ function renderDropdown() {
   }
 }
 
-// ── Status Panel Rendering ──────────────────────
-
-function renderStatusPanel() {
-  if (!_statusContainer) return;
-
-  const { animaDetail, selectedAnima } = getState();
-
-  if (!selectedAnima) {
-    _statusContainer.innerHTML = `
-      <div class="anima-status-panel">
-        <div class="loading-placeholder">${t("ws.select_anima_detail")}</div>
-      </div>
-    `;
-    return;
-  }
-
-  if (!animaDetail) {
-    _statusContainer.innerHTML = `
-      <div class="anima-status-panel">
-        <div class="loading-placeholder">${t("common.loading")}</div>
-      </div>
-    `;
-    return;
-  }
-
-  const d = animaDetail;
-  const rawStatus = d.status;
-  const statusStr = (rawStatus && typeof rawStatus === "object") ? (rawStatus.status || "offline") : (rawStatus || "offline");
-  const dotClass = statusClassName(statusStr);
-
-  // Resolve model alias from animas list
-  const { animas } = getState();
-  const animaEntry = animas.find((a) => a.name === selectedAnima);
-  const alias = modelAlias(animaEntry?.model);
-
-  // Build sections
-  let sectionsHtml = "";
-
-  // Identity section (Markdown)
-  if (d.identity) {
-    sectionsHtml += `
-      <div class="status-section">
-        <div class="status-section-title">Identity</div>
-        <div class="status-section-body md-content">${renderSimpleMarkdown(d.identity)}</div>
-      </div>
-    `;
-  }
-
-  // Injection section (Markdown)
-  if (d.injection) {
-    sectionsHtml += `
-      <div class="status-section">
-        <div class="status-section-title">Injection</div>
-        <div class="status-section-body md-content">${renderSimpleMarkdown(d.injection)}</div>
-      </div>
-    `;
-  }
-
-  // State section (Markdown for strings, JSON for objects)
-  if (d.state) {
-    const isString = typeof d.state === "string";
-    const body = isString
-      ? `<div class="md-content">${renderSimpleMarkdown(d.state)}</div>`
-      : `<pre>${escapeHtml(JSON.stringify(d.state, null, 2))}</pre>`;
-    sectionsHtml += `
-      <div class="status-section">
-        <div class="status-section-title">State</div>
-        <div class="status-section-body">${body}</div>
-      </div>
-    `;
-  }
-
-  // Pending section (Markdown for strings, JSON for objects)
-  if (d.pending) {
-    const isString = typeof d.pending === "string";
-    const body = isString
-      ? `<div class="md-content">${renderSimpleMarkdown(d.pending)}</div>`
-      : `<pre>${escapeHtml(JSON.stringify(d.pending, null, 2))}</pre>`;
-    sectionsHtml += `
-      <div class="status-section">
-        <div class="status-section-title">Pending</div>
-        <div class="status-section-body">${body}</div>
-      </div>
-    `;
-  }
-
-  // Fallback if no sections
-  if (!sectionsHtml) {
-    sectionsHtml = `<div class="loading-placeholder">${t("ws.no_detail")}</div>`;
-  }
-
-  // Build meta info line (department / title / role / model)
-  const dept = animaEntry?.department || "";
-  const ttl  = animaEntry?.title || "";
-  const role = animaEntry?.role || "";
-  const metaParts = [dept, ttl, role].filter(Boolean);
-  const metaLine = metaParts.length
-    ? `<div class="status-meta">${escapeHtml(metaParts.join(" / "))}</div>`
-    : "";
-
-  _statusContainer.innerHTML = `
-    <div class="anima-status-panel">
-      <div class="status-header">
-        <span class="status-dot ${dotClass}"></span>
-        <span class="status-anima-name">${escapeHtml(selectedAnima)}</span>
-        <span class="status-label">${escapeHtml(statusLabel(statusStr))}</span>
-        ${alias ? `<span class="status-model">${escapeHtml(alias)}</span>` : ""}
-      </div>
-      ${metaLine}
-      ${sectionsHtml}
-    </div>
-  `;
-}
-
-function truncate(str, maxLen) {
-  if (!str) return "";
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen) + "...";
-}
-
 // ── Public API ──────────────────────
 
 /**
- * Render the anima selector dropdown into the given container.
- */
-export function renderAnimaSelector(container) {
-  _selectorContainer = container || _selectorContainer;
-  renderDropdown();
-}
-
-/**
- * Render the anima status detail panel into the given container.
- */
-export function renderStatus(container) {
-  _statusContainer = container || _statusContainer;
-  renderStatusPanel();
-}
-
-/**
- * Initialize the anima module.
+ * Initialize the anima selector.
  * @param {HTMLElement} selectorContainer - DOM element for the dropdown
- * @param {HTMLElement} statusContainer - DOM element for the status panel
  * @param {function} onAnimaSelect - Callback invoked with anima name on selection
  */
-export function initAnima(selectorContainer, statusContainer, onAnimaSelect) {
+export function initAnima(selectorContainer, onAnimaSelect) {
   _selectorContainer = selectorContainer;
-  _statusContainer = statusContainer;
   _onAnimaSelect = onAnimaSelect;
-
-  // Render initial empty state
   renderDropdown();
-  renderStatusPanel();
+}
+
+/** Re-render the dropdown after external status updates. */
+export function renderAnimaSelector() {
+  renderDropdown();
 }
 
 /**
@@ -273,31 +82,11 @@ export async function loadAnimas() {
 }
 
 /**
- * Select an anima by name. Fetches detail and updates state + UI.
+ * Select an anima by name and notify the shell.
  */
-export async function selectAnima(name) {
-  setState({ selectedAnima: name, animaDetail: null });
+export function selectAnima(name) {
+  setState({ selectedAnima: name });
   renderDropdown();
-  renderStatusPanel();
-
-  try {
-    const detail = await fetchAnimaDetail(name);
-    setState({ animaDetail: detail });
-    renderStatusPanel();
-  } catch (err) {
-    console.error(`Failed to load anima detail for "${name}":`, err);
-    if (_statusContainer) {
-      _statusContainer.innerHTML = `
-        <div class="anima-status-panel">
-          <div class="loading-placeholder" style="color:#ef4444;">
-            ${t("animas.detail_load_failed")}: ${escapeHtml(name)}
-          </div>
-        </div>
-      `;
-    }
-  }
-
-  // Notify callback
   if (_onAnimaSelect) {
     _onAnimaSelect(name);
   }

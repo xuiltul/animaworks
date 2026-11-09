@@ -434,14 +434,14 @@ class TestSafeAreaPadding:
     def test_conv_input_has_safe_area_padding(
         self, ipad_portrait_page: Page, static_server: str
     ) -> None:
-        """The .ws-conv-input-area should have padding-bottom for safe areas."""
+        """The .chat-input-form should have padding-bottom for safe areas."""
         ipad_portrait_page.goto(f"{static_server}/workspace/")
         ipad_portrait_page.wait_for_load_state("domcontentloaded")
         _dismiss_login(ipad_portrait_page)
 
-        input_area = ipad_portrait_page.locator(".ws-conv-input-area").first
+        input_area = ipad_portrait_page.locator(".chat-input-form").first
         if input_area.count() == 0:
-            pytest.skip(".ws-conv-input-area element not found")
+            pytest.skip(".chat-input-form element not found")
 
         padding_bottom = input_area.evaluate(
             "el => getComputedStyle(el).paddingBottom"

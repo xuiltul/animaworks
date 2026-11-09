@@ -7,15 +7,12 @@ import { mapAnimaStatusToAnim } from "./anima-status.js";
 import { getActiveRenderer } from "./office-renderer.js";
 export { mapAnimaStatusToAnim } from "./anima-status.js";
 import { connect, onEvent } from "./websocket.js";
-import { renderAnimaSelector, renderStatus } from "./anima.js";
+import { renderAnimaSelector } from "./anima.js";
 import { updateCharacterState, removeCharacter, createCharacter } from "./character.js";
-import { setCharacter } from "./live2d.js";
 import { getDesks, registerClickTarget } from "./office3d.js";
 import { cancelBehavior } from "./idle_behavior.js";
 import { showMessageEffect } from "./interactions.js";
 import { addTimelineEvent, localISOString } from "./timeline.js";
-import { addActivity } from "./activity.js";
-import { getSelectedBoard, appendBoardMessage } from "./board.js";
 import { updateAnimaStatus, updateCardActivity, showMessageLine, showExternalLine, updateAvatarExpression, isReplayMode, bufferReplayEvent, VISIBLE_TOOL_NAMES } from "./org-dashboard.js";
 import { playReveal } from "./reveal.js";
 import { createLogger } from "../../shared/logger.js";
@@ -58,18 +55,12 @@ export function setupWebSocket(deps) {
         setState({ animas: [...animas] });
         renderAnimaSelector(dom.animaSelector);
       }
-      if (data.name === selectedAnima) {
-        renderStatus(dom.paneState);
-      }
       if (is3dOfficeReady()) {
         const animState = mapAnimaStatusToAnim(data.status);
         updateCharacterState(data.name, animState);
         setState({ characterStates: { ...getState().characterStates, [data.name]: animState } });
       }
-      if (lastAnimaStatus[data.name] !== data.status) {
-        lastAnimaStatus[data.name] = data.status;
-        addActivity("system", data.name, `Status: ${data.status}`);
-      }
+      lastAnimaStatus[data.name] = data.status;
       if (getCurrentView() === "org") {
         updateAnimaStatus(data.name, data.status || data);
         updateAvatarExpression(data.name, (typeof data.status === "object" ? (data.status.state || data.status.status || "idle") : String(data.status || "idle")).toLowerCase());
@@ -111,13 +102,6 @@ export function setupWebSocket(deps) {
   }));
 
   wsUnsubscribers.push(onEvent("anima.heartbeat", (data) => {
-    applyOrBufferReplay((d) => addActivity("heartbeat", d.name, d.summary || "heartbeat completed", undefined, d.ctx), data);
-    applyOrBufferReplay((d) => {
-      const { selectedAnima } = getState();
-      if (d.name === selectedAnima) {
-        renderStatus(dom.paneState);
-      }
-    }, data);
     applyOrBufferReplay((d) => addTimelineEvent({
       id: Date.now().toString(),
       type: "heartbeat",
@@ -135,7 +119,6 @@ export function setupWebSocket(deps) {
   }));
 
   wsUnsubscribers.push(onEvent("anima.cron", (data) => {
-    applyOrBufferReplay((data) => addActivity("cron", data.name, data.summary || `cron: ${data.task || ""}`, undefined, data.ctx), data);
     applyOrBufferReplay((data) => addTimelineEvent({
       id: Date.now().toString(),
       type: "cron",
@@ -171,16 +154,6 @@ export function setupWebSocket(deps) {
         channel: data.channel || "",
       };
       applyOrBufferReplay((d) => updateCardActivity(d.name, d.payload), { name: data.name, payload: _cardUpdatePayload });
-    }
-    if (evtType === "tool_start") {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, t("chat.tool_running", { tool: d.toolName }), undefined, d.ctx), { ...data, toolName });
-    } else if (evtType === "tool_detail") {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.toolName}: ${d.detail || ""}`, undefined, d.ctx), { ...data, toolName });
-    } else if (evtType === "tool_end" || evtType === "tool_use") {
-      const suffix = data.is_error ? " (error)" : "";
-      applyOrBufferReplay((d) => addActivity("tool", d.name, suffix ? t("chat.tool_done_suffix", { tool: d.toolName, suffix }) : t("chat.tool_done", { tool: d.toolName }), undefined, d.ctx), { ...data, toolName });
-    } else if (evtType) {
-      applyOrBufferReplay((d) => addActivity("tool", d.name, `${d.summary || evtType}`, undefined, d.ctx), data);
     }
     if (evtType === "message_sent" && data.to_person) {
       applyOrBufferReplay((d) => {
@@ -231,16 +204,6 @@ export function setupWebSocket(deps) {
     const text = data.text || "";
 
     applyOrBufferReplay((d) => {
-      const boardSel = getSelectedBoard();
-      if (boardSel.type === "channel" && boardSel.channel === d.channel) {
-        appendBoardMessage({
-          ts: d.ts || new Date().toISOString(),
-          from: d.from,
-          text: d.text,
-          source: d.source || "",
-        });
-      }
-      addActivity("chat", d.from, `[#${d.channel}] ${d.text}`);
       updateCardActivity(d.from, {
         eventType: "board_post",
         channel: d.channel,
@@ -297,7 +260,8 @@ export function setupWebSocket(deps) {
         if (is3dOfficeReady()) {
           updateCharacterState(name, "thinking");
         }
-        addActivity("system", name, t("ws.bootstrap_start"));
+        // The embedded Chat pane loads newly hired animas on this signal.
+        window.dispatchEvent(new CustomEvent("aw:animas-changed"));
       } else if (bsStatus === "completed") {
         const { animas } = getState();
         const idx = animas.findIndex((p) => p.name === name);
@@ -309,7 +273,6 @@ export function setupWebSocket(deps) {
         if (is3dOfficeReady()) {
           updateCharacterState(name, "idle");
         }
-        addActivity("system", name, t("ws.bootstrap_done"));
       } else if (bsStatus === "failed") {
         const { animas } = getState();
         const idx = animas.findIndex((p) => p.name === name);
@@ -321,7 +284,6 @@ export function setupWebSocket(deps) {
         if (is3dOfficeReady()) {
           updateCharacterState(name, "error");
         }
-        addActivity("system", name, t("ws.bootstrap_failed"));
       }
     }, data);
   }));
@@ -331,8 +293,6 @@ export function setupWebSocket(deps) {
     invalidateAvatarCache(animaName).catch(() => {});
     applyOrBufferReplay(async (d) => {
       const animaName = d.name;
-      addActivity("system", animaName, t("ws.asset_update_msg", { types: (d.assets || []).join(", ") }));
-
       const assets = d.assets || [];
       const hasAvatar = assets.some(
         (a) => a.startsWith("avatar_") || a === "icon.png" || a === "icon_realistic.png",
@@ -359,9 +319,6 @@ export function setupWebSocket(deps) {
         }
       }
 
-      if (getState().conversationAnima === animaName) {
-        await setCharacter(animaName);
-      }
     }, data);
   }));
 

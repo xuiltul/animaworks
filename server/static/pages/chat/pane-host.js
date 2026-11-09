@@ -15,7 +15,7 @@ import { createEventsController } from "./events-controller.js";
 import { createImageVoiceController } from "./image-voice-controller.js";
 import { createWorkIndicatorController } from "./work-indicator-controller.js";
 import { initSplitter } from "./splitter.js";
-import { onEvent } from "../../modules/websocket.js";
+import { onEvent as defaultOnEvent } from "../../modules/websocket.js";
 import { invalidateAvatarCache } from "../../modules/avatar-resolver.js";
 import { presence, initPresence } from "../../modules/anima-presence.js";
 import { wireReplyToasts } from "../../modules/presence-ui.js";
@@ -28,7 +28,7 @@ import { startSessionsRefreshFallback } from "./session-refresh.js";
 const LAYOUT_KEY = "aw-chat-pane-layout";
 const PHONE_QUERY = window.matchMedia("(max-width: 560px)");
 
-function paneHtml() {
+function paneHtml(embedded) {
   return `
     <div class="chat-page-main">
       <div class="chat-anima-tabs-header" data-chat-id="chatAnimaTabsHeader">
@@ -86,6 +86,9 @@ function paneHtml() {
           <hr class="chat-unified-user-sep">
           <button class="chat-unified-user-logout" data-chat-id="chatUnifiedUserLogout">${t("ws.logout")}</button>
         </div>
+        ${embedded ? `<button class="chat-dock-close" data-chat-id="chatDockClose" aria-label="${t("common.aria_close")}" title="${t("common.aria_close")}">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>` : ""}
       </div>
 
       <div class="chat-messages-area">
@@ -154,7 +157,11 @@ function paneHtml() {
 
 const MAX_PANES = 4;
 
-export function createPaneHost(rootContainer) {
+export function createPaneHost(rootContainer, options = {}) {
+  const embedded = Boolean(options.embedded);
+  const onEvent = typeof options.onEvent === "function" ? options.onEvent : defaultOnEvent;
+  const onClose = typeof options.onClose === "function" ? options.onClose : null;
+  let _visible = !embedded;
   const panes = [];
   let focusedIdx = 0;
   let nextId = 0;
@@ -171,10 +178,12 @@ export function createPaneHost(rootContainer) {
   const railEl = document.createElement("nav");
   railEl.className = "chat-rail";
   railEl.setAttribute("aria-label", t("chat.presence.rail_label"));
-  layoutEl.insertBefore(railEl, hostEl);
+  if (embedded) hostEl.classList.add("is-embedded");
+  else layoutEl.insertBefore(railEl, hostEl);
 
   /** Phones keep the rail folded away until the header's name is tapped. */
   function setRailOpen(open) {
+    if (embedded) return;
     layoutEl.classList.toggle("rail-open", open);
     hostEl.querySelectorAll('[data-chat-id="chatRailToggle"]').forEach((btn) => btn.setAttribute("aria-expanded", String(open)));
   }
@@ -193,7 +202,9 @@ export function createPaneHost(rootContainer) {
   /** Pull stream / unread facts the chat controllers already hold into the store. */
   function _syncPresenceFromPanes() {
     const streaming = new Set();
-    const shown = new Set(panes.map((p) => p.ctx.state.selectedAnima).filter(Boolean));
+    const shown = _visible
+      ? new Set(panes.map((p) => p.ctx.state.selectedAnima).filter(Boolean))
+      : new Set();
     for (const p of panes) {
       for (const a of p.ctx.state.animas || []) {
         if (p.ctx.state.manager?.isStreamingForAnima(a.name)) streaming.add(a.name);
@@ -219,7 +230,13 @@ export function createPaneHost(rootContainer) {
         _syncedStreaming.delete(name);
       }
     }
-    presence.setVisibleAnimas(panes.map((p) => p.ctx.state.selectedAnima));
+    if (!_visible) {
+      presence.setVisibleAnimas([]);
+    } else if (embedded) {
+      presence.setVisibleAnimas(panes.map((p) => p.ctx.state.selectedAnima).filter(Boolean));
+    } else {
+      presence.setVisibleAnimas(panes.map((p) => p.ctx.state.selectedAnima));
+    }
   }
 
   function _repaintPresence() {
@@ -266,7 +283,7 @@ export function createPaneHost(rootContainer) {
     const paneEl = document.createElement("div");
     paneEl.className = "chat-pane" + (panes.length === 0 ? " focused" : "");
     paneEl.dataset.paneId = String(id);
-    paneEl.innerHTML = paneHtml();
+    paneEl.innerHTML = paneHtml(embedded);
 
     if (panes.length > 0) {
       const splitterEl = document.createElement("div");
@@ -281,6 +298,7 @@ export function createPaneHost(rootContainer) {
     ctx.state.rootContainer = rootContainer;
     ctx.state.paneId = id;
     ctx.state.paneIdx = panes.length;
+    if (embedded) ctx.state.embedded = true;
     ctx.state.paneHost = { splitPane, removePane, savePaneStates, getPaneState, renderRail, getOpenThreadIds };
 
     ctx.controllers.anima = createAnimaController(ctx);
@@ -297,7 +315,7 @@ export function createPaneHost(rootContainer) {
     ctx.controllers.presencePanel = createPresencePanel(ctx);
     ctx.controllers.slash = createSlashPalette(ctx);
 
-    const pane = { id, el: paneEl, ctx, intervals: [] };
+    const pane = { id, el: paneEl, ctx, intervals: [], loadAnimasPromise: null };
     panes.push(pane);
 
     paneEl.addEventListener("pointerdown", () => _handlePaneFocus(id), true);
@@ -305,8 +323,15 @@ export function createPaneHost(rootContainer) {
 
     _initModelSelect(ctx, paneEl);
 
+    const closeBtn = paneEl.querySelector('[data-chat-id="chatDockClose"]');
+    if (embedded && closeBtn) closeBtn.addEventListener("click", () => onClose?.());
+
     ctx.controllers.events.bindPaneEvents();
-    ctx.controllers.anima.loadAnimas();
+    const loadPromise = ctx.controllers.anima.loadAnimas();
+    if (embedded) {
+      pane.loadAnimasPromise = loadPromise;
+      loadPromise.catch(() => {});
+    }
 
     // A member hired after this page loaded is otherwise unknown here, so its
     // DMs with the leader would not fold into the activity bundle.
@@ -581,6 +606,7 @@ export function createPaneHost(rootContainer) {
   }
 
   function _saveLayout() {
+    if (embedded) return;
     try {
       const layout = {
         paneCount: panes.length,
@@ -620,6 +646,7 @@ export function createPaneHost(rootContainer) {
   }
 
   function restoreLayout() {
+    if (embedded) return;
     try {
       const raw = localStorage.getItem(LAYOUT_KEY);
       if (!raw) return;
@@ -659,18 +686,43 @@ export function createPaneHost(rootContainer) {
   }
 
   function splitPane() {
-    if (_isMobile()) return null;
+    if (embedded || _isMobile()) return null;
     return addPane();
+  }
+
+  /** Show an anima in the (single) embedded pane, winning the initial-load race. */
+  async function openAnima(name) {
+    if (!name) return;
+    let pane = getFocused();
+    if (!pane) pane = addPane();
+    if (!pane) return;
+    pane.ctx.controllers.anima.openOrSelectAnima(name);
+    if (pane.loadAnimasPromise) {
+      try { await pane.loadAnimasPromise; } catch { /* controller logs it */ }
+    }
+    const current = getFocused();
+    if (current && current.ctx.state.selectedAnima !== name) {
+      current.ctx.controllers.anima.openOrSelectAnima(name);
+    }
+  }
+
+  function setVisible(visible) {
+    _visible = Boolean(visible);
+    if (!_visible) presence.setVisibleAnimas([]);
+    _syncPresenceFromPanes();
   }
 
   return {
     addPane,
     removePane,
     splitPane,
+    openAnima,
+    setVisible,
     getFocused,
     bindSharedEvents,
     restoreLayout,
     destroy,
     get panes() { return panes; },
+    get embedded() { return embedded; },
   };
 }

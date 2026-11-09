@@ -30,7 +30,6 @@ _CONSUMER_FILES = [
     _STATIC / "modules" / "activity.js",
     _STATIC / "workspace" / "modules" / "timeline-dom.js",
     _STATIC / "workspace" / "modules" / "timeline-history.js",
-    _STATIC / "workspace" / "modules" / "activity.js",
 ]
 
 
@@ -157,8 +156,7 @@ class TestConsumerFilesUseSharedFunctions:
         _STATIC / "pages" / "chat" / "activity-controller.js",
         _STATIC / "modules" / "activity.js",
         _STATIC / "workspace" / "modules" / "timeline-dom.js",
-        _STATIC / "workspace" / "modules" / "activity.js",
-    ]
+        ]
 
     @pytest.mark.parametrize("filepath", _FILES_USING_GET_ICON, ids=[p.name for p in _FILES_USING_GET_ICON])
     def test_uses_get_icon(self, filepath: Path) -> None:

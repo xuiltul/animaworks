@@ -1,10 +1,10 @@
 # AnimaWorks - Digital Anima Framework
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Unit tests for streaming bubble scroll fix.
+"""Unit tests for streaming bubble scroll and throttling.
 
-Verifies that the JavaScript source files contain the correct patterns
-for rAF-based scrolling and throttled streaming updates.
+The Workspace now embeds the Chat pane, so streaming lives in
+``pages/chat/streaming-controller.js`` and ``pages/chat/chat-renderer.js``.
 """
 from __future__ import annotations
 
@@ -12,105 +12,41 @@ from pathlib import Path
 
 import pytest
 
-# Path to project root (worktree)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+STREAMING_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "streaming-controller.js"
+RENDERER_JS = PROJECT_ROOT / "server" / "static" / "pages" / "chat" / "chat-renderer.js"
+RENDER_UTILS_JS = PROJECT_ROOT / "server" / "static" / "shared" / "chat" / "render-utils.js"
 
 
-class TestAppJsScrollFix:
-    """Verify chat-streaming.js contains correct scroll and throttle patterns.
-
-    chat-streaming.js handles workspace streaming with scheduleStreamingUpdate
-    (rAF throttling) and updateStreamingBubble for rendering.
-    renderConvMessages lives in chat-history.js for synchronous scrollTop render.
-    """
+class TestStreamingScrollFix:
+    """Verify Chat streaming keeps the message list pinned to the bottom."""
 
     @pytest.fixture()
     def streaming_source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/chat-streaming.js").read_text()
+        return STREAMING_JS.read_text(encoding="utf-8")
 
     @pytest.fixture()
-    def history_source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/chat-history.js").read_text()
+    def renderer_source(self) -> str:
+        return RENDERER_JS.read_text(encoding="utf-8")
 
-    def test_update_streaming_bubble_exists(self, streaming_source: str):
-        """updateStreamingBubble function should exist in chat-streaming.js."""
-        assert "function updateStreamingBubble" in streaming_source
+    def test_streaming_renders_are_throttled(self, streaming_source: str) -> None:
+        assert "_scheduleRender" in streaming_source
+        assert "requestAnimationFrame" in streaming_source
 
-    def test_update_streaming_bubble_updates_inner_html(self, streaming_source: str):
-        """updateStreamingBubble delegates to updateStreamingZone which updates bubble.innerHTML."""
-        # bubble.innerHTML is in render-utils.js updateStreamingZone (imported by chat-streaming)
-        render_utils = (PROJECT_ROOT / "server/static/shared/chat/render-utils.js").read_text()
-        assert "bubble.innerHTML" in render_utils
+    def test_streaming_scrolls_to_bottom(self, streaming_source: str) -> None:
+        assert "msgs.scrollTop = msgs.scrollHeight" in streaming_source
 
-    def test_schedule_streaming_update_exists(self, streaming_source: str):
-        """scheduleStreamingUpdate function with rAF throttle guard must exist."""
-        assert "function scheduleStreamingUpdate" in streaming_source
-        assert "_convRafPending" in streaming_source
+    def test_streaming_uses_text_animator(self, streaming_source: str) -> None:
+        assert "TextAnimator" in streaming_source
+        assert "_textAnimator.push(" in streaming_source
 
-    def test_text_delta_uses_throttled_update(self, streaming_source: str):
-        """onTextDelta callback should push to TextAnimator which calls scheduleStreamingUpdate."""
-        idx = streaming_source.index("onTextDelta")
-        context = streaming_source[idx:idx + 400]
-        assert "_textAnimator" in context or "scheduleStreamingUpdate" in context
-        assert "scheduleStreamingUpdate" in streaming_source
+    def test_renderer_scroll_helper_uses_scroll_top(self, renderer_source: str) -> None:
+        idx = renderer_source.index("function scrollToBottom")
+        end = renderer_source.index("function ", idx + 20)
+        block = renderer_source[idx:end]
+        assert "scrollTop = el.scrollHeight" in block
 
-    def test_render_conv_messages_renders_chat(self, history_source: str):
-        """renderConvMessages should render chat messages into the DOM."""
-        idx = history_source.index("function renderConvMessages")
-        end_idx = history_source.find("\nasync function", idx + 1)
-        if end_idx == -1:
-            end_idx = history_source.find("\nfunction ", idx + 100)
-            if end_idx == -1:
-                end_idx = history_source.find("\nexport function ", idx + 100)
-        func_body = history_source[idx:end_idx]
-        assert "innerHTML" in func_body
-
-
-class TestWorkspaceAppJsScrollFix:
-    """Verify workspace chat-streaming.js contains correct scroll and throttle patterns.
-
-    After workspace chat.js deletion, chat-streaming.js handles all workspace streaming.
-    Uses scrollTop-based scrolling (not scrollIntoView).
-    """
-
-    @pytest.fixture()
-    def streaming_source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/chat-streaming.js").read_text()
-
-    @pytest.fixture()
-    def history_source(self) -> str:
-        return (PROJECT_ROOT / "server/static/workspace/modules/chat-history.js").read_text()
-
-    def test_update_streaming_bubble_scrolls(self, streaming_source: str):
-        """updateStreamingBubble should scroll the messages container."""
-        idx = streaming_source.index("function updateStreamingBubble")
-        end_marker = streaming_source.find("\n// ──", idx + 1)
-        if end_marker == -1:
-            end_marker = streaming_source.find("\nfunction ", idx + 100)
-            if end_marker == -1:
-                end_marker = streaming_source.find("\nexport function ", idx + 100)
-        func_body = streaming_source[idx:end_marker]
-        assert "scrollTop" in func_body or "scrollIntoView" in func_body
-
-    def test_schedule_streaming_update_exists(self, streaming_source: str):
-        """scheduleStreamingUpdate function with rAF throttle guard must exist."""
-        assert "function scheduleStreamingUpdate" in streaming_source
-        assert "_convRafPending" in streaming_source
-
-    def test_text_delta_uses_throttled_update(self, streaming_source: str):
-        """onTextDelta handler should push to TextAnimator which calls scheduleStreamingUpdate."""
-        idx = streaming_source.index("onTextDelta")
-        context = streaming_source[idx:idx + 400]
-        assert "_textAnimator" in context or "scheduleStreamingUpdate" in context
-        assert "scheduleStreamingUpdate" in streaming_source
-
-    def test_render_conv_messages_scrolls(self, history_source: str):
-        """renderConvMessages should scroll messages container."""
-        idx = history_source.index("function renderConvMessages")
-        end_idx = history_source.find("\nasync function", idx + 1)
-        if end_idx == -1:
-            end_idx = history_source.find("\nfunction ", idx + 100)
-            if end_idx == -1:
-                end_idx = history_source.find("\nexport function ", idx + 100)
-        func_body = history_source[idx:end_idx]
-        assert "scrollTop" in func_body
+    def test_render_utils_updates_streaming_bubble(self) -> None:
+        source = RENDER_UTILS_JS.read_text(encoding="utf-8")
+        assert "function updateStreamingZone" in source
+        assert "bubble.innerHTML" in source

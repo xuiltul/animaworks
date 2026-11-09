@@ -20,7 +20,6 @@ _STATIC_DIR = Path(__file__).resolve().parents[4] / "server" / "static"
 _RENDER_UTILS_JS = _STATIC_DIR / "shared" / "chat" / "render-utils.js"
 _CHAT_CSS = _STATIC_DIR / "styles" / "chat.css"
 _CHAT_RENDERER_JS = _STATIC_DIR / "pages" / "chat" / "chat-renderer.js"
-_WS_CHAT_HISTORY_JS = _STATIC_DIR / "workspace" / "modules" / "chat-history.js"
 
 
 class TestRenderUtilsHelpers:
@@ -226,16 +225,4 @@ class TestConsumerImports:
 
     def test_chat_renderer_initializes_lucide(self) -> None:
         source = _CHAT_RENDERER_JS.read_text(encoding="utf-8")
-        assert "lucide.createIcons" in source
-
-    def test_ws_chat_history_imports_handler(self) -> None:
-        source = _WS_CHAT_HISTORY_JS.read_text(encoding="utf-8")
-        assert "bindBubbleActionHandlers" in source
-
-    def test_ws_chat_history_calls_handler(self) -> None:
-        source = _WS_CHAT_HISTORY_JS.read_text(encoding="utf-8")
-        assert "bindBubbleActionHandlers(dom.convMessages)" in source
-
-    def test_ws_chat_history_initializes_lucide(self) -> None:
-        source = _WS_CHAT_HISTORY_JS.read_text(encoding="utf-8")
         assert "lucide.createIcons" in source
