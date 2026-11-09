@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,35 @@ def _read_appearance(anima_dir: Path) -> dict | None:
         return data if data else None
     except (json.JSONDecodeError, OSError):
         return None
+
+
+_IMAGE_COLOR_RE = re.compile(
+    r"(?:\u30a4\u30e1\u30fc\u30b8\u30ab\u30e9\u30fc|image[_ ]?color)",
+    re.IGNORECASE,
+)
+_HEX_COLOR_RE = re.compile(r"#([0-9A-Fa-f]{6})")
+
+
+def _read_image_color(anima_dir: Path) -> str | None:
+    """Read the anima's image colour from IDENTITY.md, if declared.
+
+    Accepts markdown list entries, table rows and plain ``image_color:``
+    lines. Only explicit image-colour labels are matched; a bare "カラー"
+    is not treated as a colour declaration.
+    """
+    path = anima_dir / IDENTITY_FILE
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in text.splitlines():
+        marker = _IMAGE_COLOR_RE.search(line)
+        if marker is None:
+            continue
+        color = _HEX_COLOR_RE.search(line, marker.end())
+        if color:
+            return color.group(0)
+    return None
 
 
 def _read_busy_sidecar(name: str) -> dict | None:
@@ -139,6 +169,7 @@ def create_animas_router() -> APIRouter:
                 "last_busy_since": proc_status.get("last_busy_since"),
                 "busy": _read_busy_sidecar(name),
                 "appearance": appearance,
+                "image_color": _read_image_color(anima_dir),
                 "supervisor": anima_supervisor,
                 "speciality": anima_speciality,
                 "role": role,

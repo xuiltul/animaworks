@@ -27,7 +27,6 @@ export function createBoardPage(container, options = {}) {
 
   container.innerHTML = `
     <div class="board-layout" id="boardLayout">
-      <button type="button" class="board-mobile-toggle" id="boardMobileToggle" aria-expanded="false">${escapeHtml(t("board.rail_toggle"))}</button>
       <aside class="board-rail" id="boardRail" aria-label="${escapeHtml(t("board.channels"))}"></aside>
       <section class="board-main">
         <section class="board-home" id="boardHome" hidden></section>
@@ -55,7 +54,6 @@ export function createBoardPage(container, options = {}) {
   const messagesElement = container.querySelector("#boardMessages");
   const readonlyElement = container.querySelector("#boardReadonly");
   const mainElement = container.querySelector(".board-main");
-  const mobileToggle = container.querySelector("#boardMobileToggle");
   const paletteRoot = container.querySelector("#boardPalette");
   const signal = abort.signal;
 
@@ -91,17 +89,66 @@ export function createBoardPage(container, options = {}) {
   });
   mainElement.append(drawer.element);
 
+  function syncRailToggles() {
+    const open = layout.classList.contains("board-is-rail-open");
+    const buttons = [...container.querySelectorAll("[data-board-rail-toggle]")];
+    for (const button of buttons) {
+      button.setAttribute("aria-expanded", String(open));
+    }
+    // Keep the legacy mobile-toggle id on the top bar that is actually shown.
+    const visible = buttons.find((button) => button.offsetParent !== null);
+    if (visible) {
+      for (const button of buttons) {
+        if (button !== visible && button.id === "boardMobileToggle") {
+          button.removeAttribute("id");
+        }
+      }
+      visible.id = "boardMobileToggle";
+    }
+  }
+
   function setRailOpen(open) {
     layout.classList.toggle("board-is-rail-open", open);
-    mobileToggle.setAttribute("aria-expanded", String(open));
+    syncRailToggles();
   }
 
   function closeRailOnMobile() {
     if (window.innerWidth <= 760) setRailOpen(false);
   }
 
+  // Touch devices reveal a post's quote/link buttons only after a tap.
+  let openActionsPost = null;
+
+  function _isTouchLike() {
+    return typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
+  }
+
+  function closePostActions() {
+    if (openActionsPost) openActionsPost.classList.remove("board-actions-open");
+    openActionsPost = null;
+  }
+
+  function toggleTouchPostActions(event) {
+    if (!_isTouchLike()) return;
+    const post = event.target.closest(".board-post");
+    const interactive = event.target.closest("a, button, [data-board-mention], .board-seen-face");
+    if (interactive) return;
+    if (!post) {
+      closePostActions();
+      return;
+    }
+    const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
+    if (selection && String(selection).trim()) return;
+    if (openActionsPost && openActionsPost !== post) closePostActions();
+    if (!openActionsPost) {
+      post.classList.add("board-actions-open");
+      openActionsPost = post;
+    }
+  }
+
   function refresh(reason) {
     renderRail(railElement, store);
+    syncRailToggles();
 
     const hasSelection = Boolean(store.state.selectedType && store.state.selectedName);
     const activeView = hasSelection ? null : (store.state.view || "home");
@@ -113,6 +160,7 @@ export function createBoardPage(container, options = {}) {
       drawer.close();
       if (activeView === "flows") flows.show();
       else home.render();
+      syncRailToggles();
       return;
     }
 
@@ -132,6 +180,7 @@ export function createBoardPage(container, options = {}) {
       readonlyElement.textContent = t("board.dm_readonly_notice");
       drawer.close();
     }
+    syncRailToggles();
 
     const streamReason = reason === "older"
       ? "older"
@@ -218,6 +267,8 @@ export function createBoardPage(container, options = {}) {
   }
 
   async function onStreamClick(event) {
+    toggleTouchPostActions(event);
+
     const pill = event.target.closest("[data-board-new-pill]");
     if (pill) {
       stream.scrollToBottom();
@@ -303,6 +354,16 @@ export function createBoardPage(container, options = {}) {
   }
 
   function onHeaderClick(event) {
+    const searchToggle = event.target.closest("[data-board-search-toggle]");
+    if (searchToggle) {
+      const open = !store.state.filtersOpen;
+      store.setFiltersOpen(open);
+      if (open) {
+        const input = headerElement.querySelector("[data-board-search-input]");
+        if (input) input.focus();
+      }
+      return;
+    }
     if (!event.target.closest("[data-board-info]")) return;
     if (store.state.selectedType !== "channel") return;
     const channel = store.channel(store.state.selectedName);
@@ -310,6 +371,11 @@ export function createBoardPage(container, options = {}) {
     if (drawer.isOpen()) drawer.close();
     else drawer.open(channel);
     updateDrawerToggle();
+  }
+
+  function onHeaderKeydown(event) {
+    if (event.key !== "Escape" || !store.state.filtersOpen) return;
+    store.setFiltersOpen(false);
   }
 
   function onHeaderFilterClick(event) {
@@ -339,6 +405,7 @@ export function createBoardPage(container, options = {}) {
   railElement.addEventListener("change", onRailChange, { signal });
   homeElement.addEventListener("click", onHomeClick, { signal });
   headerElement.addEventListener("click", onHeaderClick, { signal });
+  document.addEventListener("keydown", onHeaderKeydown, { signal });
   headerElement.addEventListener("click", onHeaderFilterClick, { signal });
   headerElement.addEventListener("input", onHeaderFilterInput, { signal });
   headerElement.addEventListener("compositionstart", () => {
@@ -347,8 +414,22 @@ export function createBoardPage(container, options = {}) {
   headerElement.addEventListener("compositionend", onHeaderCompositionEnd, { signal });
   messagesElement.addEventListener("click", onStreamClick, { signal });
   messagesElement.addEventListener("scroll", onScroll, { signal });
-  mobileToggle.addEventListener("click", () => {
-    setRailOpen(!layout.classList.contains("board-is-rail-open"));
+  container.addEventListener("click", (event) => {
+    if (event.target.closest("[data-board-nav]")) {
+      document.body.classList.toggle("mobile-nav-open");
+      return;
+    }
+    if (event.target.closest("[data-board-rail-toggle]")) {
+      setRailOpen(!layout.classList.contains("board-is-rail-open"));
+      return;
+    }
+    const viewLink = event.target.closest("[data-board-view-link]");
+    if (viewLink) {
+      store.setView(viewLink.dataset.boardViewLink);
+      closeRailOnMobile();
+      return;
+    }
+    if (_isTouchLike() && !event.target.closest(".board-post")) closePostActions();
   }, { signal });
 
   unsubscribeStore = store.subscribe((reason) => {
@@ -365,7 +446,7 @@ export function createBoardPage(container, options = {}) {
       renderRail(railElement, store);
       return;
     }
-    if (reason === "filter" || reason === "filters") {
+    if (reason === "filter" || reason === "filters" || reason === "filters-open") {
       refresh(reason);
       return;
     }

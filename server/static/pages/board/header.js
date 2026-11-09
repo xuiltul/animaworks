@@ -1,8 +1,8 @@
 // ── Board channel header ─────────────────────
 import { t } from "/shared/i18n.js";
 import { escapeAttr, escapeHtml } from "../../modules/state.js";
-import { avatarMarkup } from "./avatar.js";
 import { numberText } from "./time.js";
+import { boardTopBar } from "./topbar.js";
 
 const FILTER_KINDS = ["all", "anima", "human", "external", "operator"];
 
@@ -30,18 +30,19 @@ function _filterChips(store) {
 function _filterMarkup(store, channel) {
   const state = store.state;
   const serverFiltered = state.kindFilter !== "all" || Boolean(state.query);
+  const filtered = serverFiltered || Boolean(state.personFilter);
   const total = Number(state.boardTotal) || Number(channel.message_count) || 0;
   const shown = state.personFilter
     ? store.visibleMessages().length
     : serverFiltered
       ? Number(state.filterTotal) || 0
       : total;
-  const countText = serverFiltered || state.personFilter
-    ? t("board.filter_count", { shown: numberText(shown), total: numberText(total) })
-    : t("board.filter_count_all", { total: numberText(total) });
+  const countText = filtered
+    ? `<span class="board-filter-total" data-board-filter-count>${escapeHtml(t("board.filter_count", { shown: numberText(shown), total: numberText(total) }))}</span>`
+    : "";
 
-  return `<div class="board-header-filters" role="group" aria-label="${escapeAttr(t("board.filter_search_label"))}">
-    ${_filterChips(store)}
+  return `<div class="board-header-filters" role="group" aria-label="${escapeAttr(t("board.filter_search_label"))}"${state.filtersOpen ? "" : " hidden"}>
+    <div class="board-filter-chips">${_filterChips(store)}</div>
     <label class="board-filter-search" for="boardSearchInput">
       <span class="board-filter-search-icon" aria-hidden="true">⌕</span>
       <input id="boardSearchInput" type="search" data-board-search-input
@@ -49,62 +50,50 @@ function _filterMarkup(store, channel) {
         aria-label="${escapeAttr(t("board.filter_search_label"))}"
         value="${escapeAttr(state.query)}" autocomplete="off">
     </label>
-    <span class="board-filter-total" data-board-filter-count>${escapeHtml(countText)}</span>
+    ${countText}
   </div>`;
 }
 
-function _accessBadge(access, memberCount) {
-  if (access === "closed") return `<span class="board-badge board-badge-access board-badge-access-closed">${escapeHtml(t("board.access_closed"))}</span>`;
-  if (access === "members") {
-    return `<span class="board-badge board-badge-access board-badge-access-members">${escapeHtml(t("board.access_members", { count: memberCount }))}</span>`;
-  }
-  return `<span class="board-badge board-badge-access board-badge-access-open">${escapeHtml(t("board.access_open"))}</span>`;
+function _searchButton(store) {
+  const state = store.state;
+  const open = Boolean(state.filtersOpen);
+  const active = !open && store.isFiltered();
+  return `<button type="button" class="board-search-toggle${active ? " board-has-filter" : ""}" data-board-search-toggle aria-expanded="${open ? "true" : "false"}" aria-label="${escapeAttr(t("board.search_toggle"))}" title="${escapeAttr(t("board.search_toggle"))}">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg>
+  </button>`;
+}
+
+function _infoButton() {
+  return `<button type="button" class="board-info-button" data-board-info aria-expanded="false" aria-controls="boardDrawer" aria-label="${escapeAttr(t("board.info_button"))}" title="${escapeAttr(t("board.info_button"))}">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"></circle><path d="M12 10.5v5"></path><circle class="board-info-dot" cx="12" cy="7.5" r="1"></circle></svg>
+  </button>`;
 }
 
 export function renderChannelHeader(element, channel, store) {
   if (!channel) {
     element.innerHTML = `<div class="board-header-title">${escapeHtml(t("board.loading"))}</div>`;
+    element.classList.remove("board-is-filters-open");
     return;
   }
 
+  const state = store.state;
+  element.classList.toggle("board-is-filters-open", Boolean(state.filtersOpen));
+
   const previousInput = element.querySelector("[data-board-search-input]");
-  const hadFocus = previousInput && document.activeElement === previousInput;
+  const hadFocus = Boolean(state.filtersOpen)
+    && previousInput
+    && document.activeElement === previousInput;
   const caret = hadFocus ? previousInput.selectionStart : null;
 
-  const members = Array.isArray(channel.members) ? channel.members : [];
-  const visibleMembers = members.slice(0, 6);
-  const memberAvatars = visibleMembers.map((name) => avatarMarkup({
-    name,
-    kind: "anima",
-    url: store.avatarUrl(name),
-    size: "sm",
-  })).join("");
-  const moreMembers = members.length > visibleMembers.length
-    ? `<span class="board-members-more" title="${escapeHtml(members.slice(6).join(", "))}">${escapeHtml(t("board.members_more", { count: members.length - visibleMembers.length }))}</span>`
-    : "";
+  const title = `<span class="board-header-hash" aria-hidden="true">#</span>
+    <span class="board-header-name" title="${escapeAttr(channel.name)}">${escapeHtml(channel.name)}</span>`;
 
-  const slack = channel.slack || {};
-  const slackBadges = [
-    slack.inbound ? `<span class="board-badge board-badge-slack">${escapeHtml(t("board.slack_inbound"))}</span>` : "",
-    slack.outbound ? `<span class="board-badge board-badge-slack">${escapeHtml(t("board.slack_outbound"))}</span>` : "",
-  ].filter(Boolean).join("");
-
-  element.innerHTML = `
-    <div class="board-header-top">
-      <div class="board-header-title">
-        <span class="board-header-hash" aria-hidden="true">#</span>
-        <span class="board-header-name">${escapeHtml(channel.name)}</span>
-      </div>
-      <button type="button" class="board-info-button" data-board-info aria-expanded="false" aria-controls="boardDrawer">${escapeHtml(t("board.info_button"))}</button>
-    </div>
-    <div class="board-header-meta">
-      ${_accessBadge(channel.access, members.length)}
-      ${channel.company ? `<span class="board-badge">${escapeHtml(channel.company)}</span>` : ""}
-      ${slackBadges}
-      ${members.length ? `<span class="board-members">${memberAvatars}${moreMembers}</span>` : ""}
-    </div>
-    ${channel.description ? `<div class="board-header-description">${escapeHtml(channel.description)}</div>` : ""}
-    ${_filterMarkup(store, channel)}`;
+  element.innerHTML = `${boardTopBar({
+    title,
+    titleClass: "board-header-title",
+    actions: `${_searchButton(store)}${_infoButton()}`,
+  })}
+  ${_filterMarkup(store, channel)}`;
 
   if (hadFocus) {
     const input = element.querySelector("[data-board-search-input]");

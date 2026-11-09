@@ -3,6 +3,7 @@ import { t } from "/shared/i18n.js";
 import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { avatarMarkup } from "./avatar.js";
 import { relativeTime } from "./time.js";
+import { boardTopBar } from "./topbar.js";
 
 function _participantAvatars(participants, store) {
   return (participants || []).map((name) => avatarMarkup({
@@ -55,11 +56,13 @@ export function renderDmList(store) {
 
 export function renderDmHeader(element, pair, store) {
   const participants = pair?.participants || String(store.state.selectedName || "").split("-");
-  const title = participants.map((name) => `${avatarMarkup({ name, kind: "anima", url: store.avatarUrl(name), size: "sm" })}<span>${escapeHtml(name)}</span>`).join('<span class="board-dm-arrow">↔</span>');
-  element.innerHTML = `
-    <div class="board-header-title">${title}</div>
-    <div class="board-header-meta">
-      <span class="board-badge">${escapeHtml(t("board.dm_readonly"))}</span>
-      ${pair ? `<span class="board-header-muted">${escapeHtml(t("board.dm_count", { count: pair.message_count || 0 }))}</span>` : ""}
-    </div>`;
+  const title = participants.map((name) => `${avatarMarkup({ name, kind: "anima", url: store.avatarUrl(name), size: "sm" })}<span class="board-dm-name">${escapeHtml(name)}</span>`).join('<span class="board-dm-arrow">↔</span>');
+  const count = pair
+    ? `<span class="board-header-muted">${escapeHtml(t("board.dm_count", { count: pair.message_count || 0 }))}</span>`
+    : "";
+  element.innerHTML = boardTopBar({
+    title,
+    titleClass: "board-header-title",
+    actions: count,
+  });
 }

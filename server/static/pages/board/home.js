@@ -6,6 +6,7 @@ import { t } from "/shared/i18n.js";
 import { avatarMarkup } from "./avatar.js";
 import { numberText, relativeTime } from "./time.js";
 import { createTimelineView } from "./timeline.js";
+import { boardTopBar, boardViewLink } from "./topbar.js";
 
 const SPARK_WIDTH = 240;
 const SPARK_HEIGHT = 42;
@@ -114,9 +115,11 @@ export function createHomeView({ element, store }) {
   // refresh board cards) never reset the read marks or the live list.
   const timelineElement = document.createElement("section");
   timelineElement.className = "board-timeline";
+  const headElement = document.createElement("div");
+  headElement.className = "board-home-head";
   const contentElement = document.createElement("div");
   contentElement.className = "board-home-content";
-  element.replaceChildren(timelineElement, contentElement);
+  element.replaceChildren(headElement, timelineElement, contentElement);
   const timeline = createTimelineView({ element: timelineElement, store });
 
   function channels() {
@@ -154,18 +157,23 @@ export function createHomeView({ element, store }) {
   function render() {
     if (destroyed) return;
     const rows = channels();
+    headElement.innerHTML = boardTopBar({
+      title: `<h1 class="board-home-title">${escapeHtml(t("board.home_title"))}</h1>`,
+      actions: boardViewLink("flows", t("board.flows_title")),
+      railToggleId: "boardMobileToggle",
+    });
+    const railToggle = headElement.querySelector("[data-board-rail-toggle]");
+    const layout = element.closest(".board-layout");
+    railToggle?.setAttribute(
+      "aria-expanded",
+      String(Boolean(layout?.classList.contains("board-is-rail-open"))),
+    );
     if (rows.length === 0) {
-      contentElement.innerHTML = `<div class="board-home-head">
-        <h1 class="board-home-title">${escapeHtml(t("board.home_title"))}</h1>
-        <p class="board-home-subtitle">${escapeHtml(t("board.home_subtitle"))}</p>
-      </div><div class="board-home-empty">${escapeHtml(t("board.home_empty"))}</div>`;
+      contentElement.innerHTML = `<div class="board-home-empty">${escapeHtml(t("board.home_empty"))}</div>`;
       return;
     }
 
-    contentElement.innerHTML = `<div class="board-home-head">
-      <h1 class="board-home-title">${escapeHtml(t("board.home_title"))}</h1>
-      <p class="board-home-subtitle">${escapeHtml(t("board.home_subtitle"))}</p>
-    </div>
+    contentElement.innerHTML = `
     <div class="board-home-grid">
       ${rows.map((channel) => _card(channel, cache.get(channel.name), store)).join("")}
     </div>`;

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=4159aa3c81b90417b3bbdde0ba4b33358dd722dc724e9bd4d26cecada22a1b1a generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=f1d34b8cdb6a749722f6cb680a042e8238cb43cc8f92633de94178c4a24de851 generated=2026-11-09 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -1152,7 +1152,7 @@ Voice input/output and voice dialogue.
 | Module | Lines | docstring 1st line |
 |---|---:|---|
 | `server.routes` | 65 | — |
-| `server.routes.animas` | 1268 | — |
+| `server.routes.animas` | 1299 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |

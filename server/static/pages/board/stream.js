@@ -2,10 +2,10 @@
 // Keyed reconciliation: existing post nodes are reused so expanded long posts,
 // scroll position and in-flight selection survive new posts and status events.
 import { t } from "/shared/i18n.js";
-import { escapeHtml } from "../../modules/state.js";
+import { escapeHtml, state as appState } from "../../modules/state.js";
 import { buildPostElement } from "./post.js";
-import { isCompactWithPrevious } from "./store.js";
-import { clockTime, dayLabel, localDayKey, numberText } from "./time.js";
+import { currentUser, isCompactWithPrevious } from "./store.js";
+import { dayLabel, localDayKey, numberText } from "./time.js";
 
 const FOLD_THRESHOLD = 290;
 
@@ -57,6 +57,8 @@ export function createStream({ element, store }) {
     isAnima: (name) => store.hasAnima(name),
     hasChannel: (name) => store.hasChannel(name),
     avatarUrl: (name) => store.avatarUrl(name),
+    // The server records the signed-in username, or "human" when unauthenticated.
+    isMine: (name) => name === currentUser() || Boolean(appState.currentUser && name === appState.currentUser),
     statusOf: (name) => store.statusOf(name),
     statusLabel: (name) => t(`board.mention_status_${store.statusOf(name)}`),
     // Post actions belong to channel boards. Quoting needs a writable board.
@@ -90,11 +92,7 @@ export function createStream({ element, store }) {
     wrap.className = "board-newline";
     wrap.dataset.boardNewline = line.afterId;
     const label = t("board.newline");
-    const note = line.name
-      ? t("board.newline_previous", { name: line.name, time: clockTime(line.ts) })
-      : t("board.newline_previous_unknown", { time: clockTime(line.ts) });
-    wrap.innerHTML = `<span class="board-newline-label">${escapeHtml(label)}</span><span class="board-newline-note">${escapeHtml(note)}</span>`;
-    wrap.title = `${label} · ${note}`;
+    wrap.innerHTML = `<span class="board-newline-label">${escapeHtml(label)}</span>`;
     return wrap;
   }
 

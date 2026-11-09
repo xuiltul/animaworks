@@ -19,15 +19,17 @@ export function createComposer({ store, onSubmit }) {
   form.innerHTML = `
     <div class="board-composer-suggest" id="boardComposerSuggest" role="listbox" aria-label="${escapeHtml(t("board.suggest_label"))}" hidden></div>
     <div class="board-composer-wrap">
+      <button type="button" class="board-composer-preview-toggle" id="boardComposerPreviewToggle" aria-pressed="false" aria-label="${escapeAttr(t("board.preview"))}" title="${escapeAttr(t("board.preview"))}">
+        <svg class="board-composer-preview-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      </button>
       <textarea id="boardComposerInput" class="board-composer-input" rows="1" autocomplete="off" placeholder="${escapeHtml(t("board.message_placeholder"))}" aria-label="${escapeHtml(t("board.message_input"))}"></textarea>
       <div class="board-composer-preview board-markdown" id="boardComposerPreview" hidden></div>
+      <button type="submit" class="board-composer-send" disabled aria-label="${escapeAttr(t("board.send"))}" title="${escapeAttr(t("board.send"))}">
+        <svg class="board-send-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </button>
       <div class="board-composer-targets" id="boardComposerTargets" aria-live="polite" hidden></div>
-      <div class="board-composer-tools">
-        <button type="button" class="board-composer-preview-toggle" id="boardComposerPreviewToggle" aria-pressed="false">${escapeHtml(t("board.preview"))}</button>
-        <span class="board-composer-draft-note" id="boardComposerDraftNote"></span>
-      </div>
+      <span class="board-composer-draft-note" id="boardComposerDraftNote"></span>
     </div>
-    <button type="submit" class="board-composer-send">${escapeHtml(t("board.send"))}</button>
     <div class="board-composer-error" hidden></div>`;
 
   const textarea = form.querySelector("#boardComposerInput");
@@ -98,6 +100,10 @@ export function createComposer({ store, onSubmit }) {
 
   function setDraftNote(message) {
     draftNote.textContent = message || "";
+  }
+
+  function updateSendState() {
+    sendButton.disabled = sending || !textarea.value.trim();
   }
 
   // ── @ suggestions ────────────────────────
@@ -241,6 +247,7 @@ export function createComposer({ store, onSubmit }) {
       setDraftNote("");
     }
     if (previewOn) renderPreview();
+    updateSendState();
   }
 
   function loadDraft() {
@@ -253,6 +260,7 @@ export function createComposer({ store, onSubmit }) {
     closeSuggest();
     if (previewOn) renderPreview();
     resize();
+    updateSendState();
   }
 
   // ── Submit / quote ───────────────────────
@@ -262,13 +270,12 @@ export function createComposer({ store, onSubmit }) {
     if (!text) return;
     sending = true;
     textarea.disabled = true;
-    sendButton.disabled = true;
+    updateSendState();
     setError("");
     const options = replyTo ? { replyTo } : {};
     const result = await onSubmit(text, options);
     sending = false;
     textarea.disabled = false;
-    sendButton.disabled = false;
     if (result?.ok) {
       textarea.value = "";
       replyTo = null;
@@ -283,6 +290,7 @@ export function createComposer({ store, onSubmit }) {
       setError(`${t("board.send_failed")}${result?.error ? `: ${result.error}` : ""}`);
       textarea.focus();
     }
+    updateSendState();
   }
 
   function quote(message) {
@@ -379,6 +387,7 @@ export function createComposer({ store, onSubmit }) {
   }
 
   resize();
+  updateSendState();
 
   return {
     element: form,

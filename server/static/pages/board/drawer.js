@@ -102,6 +102,9 @@ export function createDrawer({ store, onToggle, onSaved }) {
     const description = channel.description
       ? `<p class="board-drawer-description">${escapeHtml(channel.description)}</p>`
       : `<p class="board-drawer-description board-drawer-muted">—</p>`;
+    const memberList = members.length
+      ? `<div class="board-drawer-members">${members.map((name) => `<span class="board-drawer-member">${avatarMarkup({ name, kind: "anima", url: store.avatarUrl(name), size: "xs" })}<span>${escapeHtml(name)}</span></span>`).join("")}</div>`
+      : "";
     const rows = `
       <dl class="board-drawer-kv">
         <dt>${escapeHtml(t("board.drawer_access"))}</dt><dd>${escapeHtml(_accessLabel(channel))}</dd>
@@ -114,7 +117,7 @@ export function createDrawer({ store, onToggle, onSaved }) {
       : "";
     return _section(
       t("board.drawer_about"),
-      `${description}${rows}${flashMessage}
+      `${description}${rows}${memberList}${flashMessage}
        <button type="button" class="board-drawer-edit" data-board-drawer-edit>${escapeHtml(t("board.drawer_edit"))}</button>
        <span class="board-drawer-hint">${escapeHtml(t("board.drawer_edit_hint"))}</span>`,
       "board-drawer-about",
