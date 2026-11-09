@@ -6,6 +6,7 @@ import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { t } from "/shared/i18n.js";
 import { clockTime, dayLabel, localDayKey, numberText } from "./time.js";
 import { lanesMarkup, mapMarkup, sankeyMarkup } from "./flows-charts.js";
+import { boardTopBar, boardViewLink } from "./topbar.js";
 
 const PAGE_SIZE = 25;
 const WAITING_MS = 2 * 24 * 60 * 60 * 1000;
@@ -200,12 +201,10 @@ function _tiles(summary, calls) {
     <div class="board-flow-tile" data-flow-tile="median">
       <span class="board-flow-tile-label">${escapeHtml(t("board.flows_tile_median"))}</span>
       <b class="board-flow-tile-value">${escapeHtml(_duration(summary.median_reply_seconds))}</b>
-      <small>${escapeHtml(t("board.flows_tile_median_note"))}</small>
     </div>
     <div class="board-flow-tile is-warn" data-flow-tile="waiting">
       <span class="board-flow-tile-label">${escapeHtml(t("board.flows_tile_waiting"))}</span>
       <b class="board-flow-tile-value">${numberText(summary.waiting)}</b>
-      <small>${escapeHtml(t("board.flows_tile_waiting_note"))}</small>
     </div>
   </div>`;
 }
@@ -237,7 +236,6 @@ function _personPanel(calls, person) {
     return `<div class="board-flow-panel">
       <h3>${escapeHtml(t("board.flows_pairs_title"))}</h3>
       ${_pairsMarkup(calls)}
-      <span class="board-flow-panel-note">${escapeHtml(t("board.flows_pairs_note"))}</span>
     </div>`;
   }
   const out = calls.filter((call) => call.from === person);
@@ -417,8 +415,10 @@ export function createFlowsView({ element, store }) {
 
   function _header() {
     return `<div class="board-flow-head">
-      <h1>${escapeHtml(t("board.flows_title"))}</h1>
-      <p>${escapeHtml(t("board.flows_subtitle"))}</p>
+      ${boardTopBar({
+        title: `<h1 class="board-flow-title">${escapeHtml(t("board.flows_title"))}</h1>`,
+        actions: boardViewLink("home", t("board.home_rail")),
+      })}
       ${_controls()}
     </div>`;
   }
@@ -440,11 +440,11 @@ export function createFlowsView({ element, store }) {
     return `${_tiles(summary, allCalls)}
       <div class="board-flow-grid">
         <section class="board-flow-card">
-          <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_sankey_title"))}</h2><span>${escapeHtml(t("board.flows_sankey_note"))}</span></div>
+          <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_sankey_title"))}</h2></div>
           <div class="board-flow-svgwrap">${sankeyMarkup(allCalls, state.stage)}</div>
         </section>
         <section class="board-flow-card">
-          <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_map_title"))}</h2><span>${escapeHtml(t("board.flows_map_note"))}</span></div>
+          <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_map_title"))}</h2></div>
           <div class="board-flow-mapgrid">
             <div class="board-flow-svgwrap">${mapMarkup(allCalls, { person: state.person, isHuman })}</div>
             ${_personPanel(allCalls, state.person)}
@@ -452,7 +452,7 @@ export function createFlowsView({ element, store }) {
         </section>
       </div>
       <section class="board-flow-card">
-        <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_lanes_title"))}</h2><span>${escapeHtml(t("board.flows_lanes_note"))}</span></div>
+        <div class="board-flow-section-head"><h2>${escapeHtml(t("board.flows_lanes_title"))}</h2></div>
         <div class="board-flow-days">${dayChips}</div>
         ${lanesMarkup(allCalls, { dayKey: state.day, selectedId: state.selected })}
         ${_legend()}

@@ -1,6 +1,7 @@
 // ── "Who has read this" footer ───────────────
-// Small overlapping anima faces at the bottom right of every post, with a
-// count ("n人が読んだ") or "全員が読んだ" when the whole reader pool is done.
+// Small overlapping anima faces at the bottom right of every post. The names
+// stay in the title / aria-label and in the hover panel; no summary text is
+// shown in the stream.
 import { t } from "/shared/i18n.js";
 import { escapeHtml } from "../../modules/state.js";
 import { avatarMarkup } from "./avatar.js";
@@ -10,11 +11,6 @@ export function seenMarkup(message, ctx = {}) {
   if (!store || !message) return "";
   const readers = store.readersForMessage(message);
   if (readers.length === 0) return "";
-  const pool = store.readerPoolForMessage(message);
-  const all = pool.length > 0 && readers.length >= pool.length;
-  const label = all
-    ? t("board.seen_all")
-    : t("board.seen_count", { count: readers.length });
   const separator = t("board.seen_separator") || "、";
   const names = readers.join(separator);
   const title = t("board.seen_names", { names });
@@ -29,7 +25,6 @@ export function seenMarkup(message, ctx = {}) {
 
   return `<button type="button" class="board-seen" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" data-board-seen="${escapeHtml(names)}">
     <span class="board-seen-faces">${faces}</span>
-    <span class="board-seen-label">${escapeHtml(label)}</span>
     <span class="board-seen-names">${escapeHtml(title)}</span>
   </button>`;
 }

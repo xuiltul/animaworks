@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: bf8045d56c3a1e2d2c18789fc375b6581f7fa3299da8a6b8aa21a62583de9a61 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 279c333f6fe9e869ebaab5521b9f8d37d063189b8e0af3febc4cb6a5f895c4cb -->
 
 # モジュール一覧
 
@@ -1152,7 +1152,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server.routes` | 65 | — |
-| `server.routes.animas` | 1268 | — |
+| `server.routes.animas` | 1299 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import threading
+import time
 from datetime import date, datetime, timedelta
 from datetime import time as dt_time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -101,6 +102,7 @@ class _BoardApi:
         self.settings_calls: list[dict[str, object]] = []
         self.channel_requests: list[dict[str, object]] = []
         self.settings_error: tuple[int, str] | None = None
+        self.animas_delay = 0.0
         self.read_calls: list[dict[str, object]] = []
         self.reads = {
             "readers": {
@@ -212,7 +214,14 @@ class _BoardApi:
             },
         ]
         self.animas = [
-            {"name": "alice", "status": "running", "enabled": True, "role": "進行役", "company": "team-a"},
+            {
+                "name": "alice",
+                "status": "running",
+                "enabled": True,
+                "role": "進行役",
+                "company": "team-a",
+                "image_color": "#C41E3A",
+            },
             {"name": "bob", "status": "idle", "enabled": True, "role": "調査担当", "company": "team-a"},
             {"name": "carol", "status": "stopped", "enabled": False, "role": "補助", "company": "team-a"},
             {"name": "system", "status": "idle", "enabled": True, "role": "システム", "company": "team-a"},
@@ -398,6 +407,8 @@ class _BoardApi:
         method = request.method.upper()
 
         if path == "/api/animas":
+            if self.animas_delay:
+                time.sleep(self.animas_delay)
             self._json(route, self.animas)
             return
         if path == "/api/channels":
@@ -694,8 +705,11 @@ TEST_HTML = """<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>board e2e</title>
 <link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/styles/chat-line.css">
+<link rel="stylesheet" href="/styles/chat-presence.css">
 <link rel="stylesheet" href="/styles/board.css">
 <style>
   body { margin: 0; font-family: system-ui, sans-serif; }
@@ -814,6 +828,51 @@ def board_page(static_server: str, browser_instance: Browser):
         context.close()
 
 
+@pytest.fixture
+def mobile_board_page(static_server: str, browser_instance: Browser):
+    api = _BoardApi()
+    context = browser_instance.new_context(
+        viewport={"width": 390, "height": 844},
+        has_touch=True,
+        is_mobile=True,
+    )
+    page = context.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.route("**/api/**", api.handle)
+    page.route(
+        "**/board-test.html",
+        lambda route: route.fulfill(status=200, content_type="text/html", body=TEST_HTML),
+    )
+    page.goto(f"{static_server}/board-test.html", wait_until="load")
+    try:
+        page.wait_for_function("window.__boardReady === true", timeout=7000)
+    except Exception:
+        context.close()
+        raise AssertionError(f"board page failed to initialise: {errors}") from None
+    page.locator('[data-board-mode="board"]').wait_for(timeout=5000)
+    page.locator('[data-board-type="channel"][data-board-name="general"]').wait_for(timeout=5000)
+    page.api = api  # type: ignore[attr-defined]
+    try:
+        yield page
+    finally:
+        page.close()
+        context.close()
+
+
+def _open_channel_on_mobile(page: Page, name: str) -> None:
+    page.locator("#boardHome").wait_for(state="visible", timeout=5000)
+    page.locator("[data-board-rail-toggle]").click()
+    page.locator(f'[data-board-type="channel"][data-board-name="{name}"]').click()
+    page.locator(".board-header-name").filter(has_text=name).wait_for(timeout=5000)
+
+
+def _box(locator) -> dict:
+    box = locator.bounding_box()
+    assert box is not None
+    return box
+
+
 def _open_channel(page: Page, name: str) -> None:
     page.locator(f'[data-board-type="channel"][data-board-name="{name}"]').click()
     page.locator(".board-header-name").filter(has_text=name).wait_for(timeout=5000)
@@ -821,6 +880,56 @@ def _open_channel(page: Page, name: str) -> None:
 
 def _wait_for_messages(page: Page) -> None:
     page.locator('[data-board-id="m1"]').wait_for(timeout=5000)
+
+
+def _computed(locator, prop: str) -> str:
+    return locator.evaluate(
+        "(element, name) => getComputedStyle(element).getPropertyValue(name)",
+        prop,
+    )
+
+
+def _color_rgb(page: Page, color: str) -> str:
+    return page.evaluate(
+        """(color) => {
+          const probe = document.createElement('span');
+          probe.style.color = color;
+          document.body.appendChild(probe);
+          const value = getComputedStyle(probe).color;
+          probe.remove();
+          return value;
+        }""",
+        color,
+    )
+
+
+def _var_rgb(page: Page, name: str) -> str:
+    return page.evaluate(
+        """(name) => {
+          const probe = document.createElement('span');
+          probe.style.color = `var(${name})`;
+          document.body.appendChild(probe);
+          const value = getComputedStyle(probe).color;
+          probe.remove();
+          return value;
+        }""",
+        name,
+    )
+
+
+def _hash_rgb(page: Page, name: str) -> str:
+    return page.evaluate(
+        """async (name) => {
+          const { animaHashColor } = await import('/shared/avatar-utils.js');
+          const probe = document.createElement('span');
+          probe.style.color = animaHashColor(name);
+          document.body.appendChild(probe);
+          const value = getComputedStyle(probe).color;
+          probe.remove();
+          return value;
+        }""",
+        name,
+    )
 
 
 # ── Tests ───────────────────────────────────────────────────
@@ -903,7 +1012,9 @@ def test_readonly_channel_hides_composer(board_page: Page) -> None:
     readonly = board_page.locator("#boardReadonly")
     assert readonly.is_visible()
     assert "このボードは閉じています" in readonly.inner_text()
-    assert board_page.locator(".board-badge-access-members").count() == 1
+    assert board_page.locator(".board-badge").count() == 0
+    assert board_page.locator(".board-members").count() == 0
+    assert board_page.locator(".board-header-description").count() == 0
 
 
 def test_kind_shapes_and_badges(board_page: Page) -> None:
@@ -914,8 +1025,10 @@ def test_kind_shapes_and_badges(board_page: Page) -> None:
     assert anima_post.locator(".board-post-gutter .board-avatar-anima").count() == 1
 
     human_post = board_page.locator('[data-board-id="m2"]')
-    assert human_post.locator(".board-post-gutter .board-avatar-human .board-avatar-icon").count() == 1
-    assert "人" in human_post.locator(".board-kind-badge-human").inner_text()
+    assert "board-post-mine" in (human_post.get_attribute("class") or "")
+    assert human_post.locator(".board-post-gutter").count() == 0
+    assert human_post.locator(".board-post-author").count() == 0
+    assert human_post.locator(".board-post-time").count() == 1
 
     external_post = board_page.locator('[data-board-id="m3"]')
     assert external_post.locator(".board-post-gutter .board-avatar-external").count() == 1
@@ -1392,7 +1505,8 @@ def test_read_faces_count_names_and_live_drop(board_page: Page) -> None:
     seen = board_page.locator('[data-board-id="m1"] .board-seen')
     seen.wait_for(timeout=5000)
     assert seen.locator(".board-seen-face").count() == 2
-    assert "全員が読んだ" in seen.inner_text()
+    assert seen.locator(".board-seen-label").count() == 0
+    assert "全員が読んだ" not in seen.inner_text()
 
     seen.hover()
     names = seen.locator(".board-seen-names")
@@ -1416,7 +1530,7 @@ def test_read_faces_count_names_and_live_drop(board_page: Page) -> None:
     seen_m4.wait_for(timeout=5000)
     assert seen_m4.locator(".board-seen-face").count() == 1
     assert seen_m4.locator(".board-seen-face.board-is-new").count() == 1
-    assert "1人が読んだ" in seen_m4.inner_text()
+    assert seen_m4.locator(".board-seen-label").count() == 0
 
 
 def test_read_line_stays_and_read_advances(board_page: Page) -> None:
@@ -1428,8 +1542,9 @@ def test_read_line_stays_and_read_advances(board_page: Page) -> None:
     line.wait_for(timeout=5000)
     text = line.inner_text()
     assert "ここから新着" in text
-    assert "前回は alice" in text
-    assert "投稿まで読みました" in text
+    assert "前回は" not in text
+    assert "投稿まで読みました" not in text
+    assert line.locator(".board-newline-note").count() == 0
 
     board_page.wait_for_timeout(1400)
     assert api.read_calls
@@ -1466,8 +1581,7 @@ def test_read_line_fetches_old_position_with_around(board_page: Page) -> None:
     _wait_for_messages(board_page)
     line = board_page.locator('[data-board-newline="m2"]')
     line.wait_for(timeout=5000)
-    assert "ここから新着" in line.inner_text()
-    assert "human" in line.inner_text()
+    assert line.inner_text() == "ここから新着"
 
 
 def test_deep_link_opens_channel_and_focuses_post(board_page: Page) -> None:
@@ -1547,6 +1661,7 @@ def test_kind_chips_filter_via_api_and_show_counts(board_page: Page) -> None:
     _open_channel(board_page, "general")
     _wait_for_messages(board_page)
 
+    board_page.locator("[data-board-search-toggle]").click()
     anima_chip = board_page.locator('[data-board-kind="anima"]')
     anima_chip.wait_for(timeout=5000)
     board_page.wait_for_function(
@@ -1571,6 +1686,7 @@ def test_search_uses_q_and_shows_result_ratio(board_page: Page) -> None:
     _open_channel(board_page, "general")
     _wait_for_messages(board_page)
 
+    board_page.locator("[data-board-search-toggle]").click()
     search = board_page.locator("[data-board-search-input]")
     search.fill("投稿です")
     board_page.wait_for_function(
@@ -1597,6 +1713,7 @@ def test_mention_card_filter_narrows_and_chip_clears(board_page: Page) -> None:
         "() => !document.querySelector('[data-board-id=\"m2\"]') && document.querySelector('[data-board-id=\"m3\"]')",
         timeout=5000,
     )
+    board_page.locator("[data-board-search-toggle]").click()
     chip = board_page.locator("[data-board-clear-filter]").first
     assert "alice の投稿と呼びかけ" in chip.inner_text()
 
@@ -1636,3 +1753,378 @@ def test_info_drawer_shows_reads_unread_snippet_and_charts(board_page: Page) -> 
     assert "alice" in drawer.locator(".board-drawer-hbars").inner_text()
     assert drawer.locator(".board-drawer-kind-seg").count() == 4
     assert "投稿した人の種類" in drawer.inner_text()
+
+
+# ── Compact header / mobile top row (stage 1-2) ──────────────
+
+
+def test_desktop_header_is_compact_and_filters_closed(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    header = board_page.locator(".board-header")
+    assert _box(header)["height"] <= 58
+    assert header.locator(".board-badge, .board-members, .board-header-description").count() == 0
+    assert board_page.locator(".board-header-filters").is_hidden()
+    assert board_page.locator("[data-board-search-toggle]").get_attribute("aria-expanded") == "false"
+    assert board_page.locator("[data-board-info]").get_attribute("aria-expanded") == "false"
+
+
+def test_mobile_header_is_one_row_and_details_live_in_drawer(mobile_board_page: Page) -> None:
+    page = mobile_board_page
+    _open_channel_on_mobile(page, "general")
+
+    assert _box(page.locator(".board-layout"))["height"] >= 800
+    header = page.locator(".board-header")
+    assert _box(header)["height"] <= 54
+    assert header.locator(".board-badge, .board-members, .board-header-description").count() == 0
+
+    nav = _box(page.locator(".board-header [data-board-nav]"))
+    rail = _box(page.locator(".board-header [data-board-rail-toggle]"))
+    title = _box(page.locator(".board-header-title"))
+    search = _box(page.locator("[data-board-search-toggle]"))
+    assert nav["x"] + nav["width"] <= rail["x"] + 0.5
+    assert rail["x"] + rail["width"] <= title["x"] + 0.5
+    assert title["x"] + title["width"] <= search["x"] + 0.5
+    assert page.locator("[data-board-info]").get_attribute("aria-label")
+
+    page.locator("[data-board-info]").click()
+    drawer = page.locator("#boardDrawer")
+    drawer.wait_for(timeout=5000)
+    assert "チームの共有チャンネル" in drawer.inner_text()
+    assert "社内に公開" in drawer.inner_text()
+    members = drawer.locator(".board-drawer-members")
+    assert members.count() == 1
+    member_text = members.inner_text()
+    assert "alice" in member_text and "bob" in member_text and "human" in member_text
+
+    page.locator("[data-board-drawer-close]").click()
+    drawer.wait_for(state="hidden", timeout=5000)
+    page.locator("[data-board-search-toggle]").click()
+    page.wait_for_function("() => !document.querySelector('.board-header-filters').hidden")
+    chips = page.locator(".board-filter-chip")
+    assert chips.count() > 0
+    rects = chips.evaluate_all("els => els.map(el => el.getBoundingClientRect())")
+    assert len({round(rect["y"]) for rect in rects}) == 1
+    assert page.locator(".board-filter-chips").evaluate("el => getComputedStyle(el).flexWrap") == "nowrap"
+
+    page.evaluate(
+        """() => {
+          const header = document.createElement('header');
+          header.className = 'app-header';
+          header.id = 'testAppHeader';
+          document.body.prepend(header);
+        }"""
+    )
+    assert page.locator("#testAppHeader").evaluate("el => getComputedStyle(el).display") == "none"
+    page.evaluate("() => document.getElementById('testAppHeader').remove()")
+
+
+def test_filters_toggle_focus_dot_and_board_switch(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    filters = board_page.locator(".board-header-filters")
+    toggle = board_page.locator("[data-board-search-toggle]")
+    assert filters.is_hidden()
+
+    toggle.click()
+    board_page.wait_for_function("() => !document.querySelector('.board-header-filters').hidden")
+    assert toggle.get_attribute("aria-expanded") == "true"
+    assert board_page.evaluate("() => document.activeElement === document.querySelector('[data-board-search-input]')")
+    assert board_page.locator("[data-board-filter-count]").count() == 0
+
+    search = board_page.locator("[data-board-search-input]")
+    search.fill("投稿です")
+    board_page.wait_for_function(
+        "() => document.querySelectorAll('.board-post').length === 3",
+        timeout=5000,
+    )
+    board_page.locator("[data-board-filter-count]").wait_for(timeout=5000)
+    assert "3 /" in board_page.locator("[data-board-filter-count]").inner_text()
+    page_toggle = board_page.locator("[data-board-search-toggle]")
+    page_toggle.click()
+    assert filters.is_hidden()
+    assert page_toggle.get_attribute("aria-expanded") == "false"
+    assert page_toggle.evaluate("el => el.classList.contains('board-has-filter')")
+
+    page_toggle.click()
+    board_page.wait_for_function("() => !document.querySelector('.board-header-filters').hidden")
+    assert search.input_value() == "投稿です"
+
+    board_page.locator(".board-header-title").click()
+    board_page.keyboard.press("Escape")
+    assert filters.is_hidden()
+    assert page_toggle.get_attribute("aria-expanded") == "false"
+
+    page_toggle.click()
+    board_page.wait_for_function("() => !document.querySelector('.board-header-filters').hidden")
+    assert search.input_value() == "投稿です"
+    board_page.locator('[data-board-name="random"]').click()
+    board_page.locator(".board-header-name").filter(has_text="random").wait_for(timeout=5000)
+    assert board_page.locator(".board-header-filters").is_hidden()
+    assert not board_page.locator("[data-board-search-toggle]").evaluate(
+        "el => el.classList.contains('board-has-filter')"
+    )
+
+
+def test_mobile_top_rows_cover_home_flows_and_dm(mobile_board_page: Page) -> None:
+    page = mobile_board_page
+
+    home_top = page.locator("#boardHome .board-view-top")
+    home_top.wait_for(timeout=5000)
+    assert _box(home_top)["height"] == 52
+    assert page.locator(".board-home-subtitle, .board-home-head p").count() == 0
+
+    nav = page.locator("#boardHome [data-board-nav]")
+    nav.click()
+    assert page.evaluate("() => document.body.classList.contains('mobile-nav-open')")
+    nav.click()
+    assert not page.evaluate("() => document.body.classList.contains('mobile-nav-open')")
+
+    page.locator('[data-board-view-link="flows"]').click()
+    flows_top = page.locator("#boardFlows .board-view-top")
+    flows_top.wait_for(timeout=5000)
+    assert _box(flows_top)["height"] == 52
+    assert page.locator(".board-flow-head p, .board-flow-panel-note").count() == 0
+
+    page.locator("#boardFlows [data-board-rail-toggle]").click()
+    page.locator('[data-board-mode="dm"]').click()
+    dm_row = page.locator('[data-board-type="dm"][data-board-name="alice-bob"]')
+    dm_row.click()
+    dm_top = page.locator(".board-header .board-view-top")
+    dm_top.wait_for(timeout=5000)
+    assert _box(dm_top)["height"] == 52
+    assert page.locator(".board-badge").count() == 0
+
+
+def test_touch_tap_reveals_only_the_tapped_post_actions(mobile_board_page: Page) -> None:
+    page = mobile_board_page
+    _open_channel_on_mobile(page, "general")
+    _wait_for_messages(page)
+
+    m1 = page.locator('[data-board-id="m1"]')
+    m1.locator(".board-post-actions").wait_for(state="attached")
+    page.wait_for_function(
+        "() => { const el = document.querySelector('[data-board-id=\"m1\"] .board-post-actions'); "
+        "return el !== null && getComputedStyle(el).opacity === '0'; }"
+    )
+
+    m1.locator(".board-post-text").tap()
+    page.wait_for_function(
+        "() => document.querySelector('[data-board-id=\"m1\"]')?.classList.contains('board-actions-open')"
+    )
+    page.wait_for_function(
+        "() => getComputedStyle(document.querySelector('[data-board-id=\"m1\"] .board-post-actions')).opacity === '1'"
+    )
+
+    m2 = page.locator('[data-board-id="m2"]')
+    m2.locator(".board-post-text").tap()
+    page.wait_for_function(
+        "() => document.querySelector('[data-board-id=\"m2\"]')?.classList.contains('board-actions-open')"
+    )
+    assert not m1.evaluate("el => el.classList.contains('board-actions-open')")
+
+    # Mentions are their own control: tapping one does not move the action row.
+    page.locator('[data-board-id="m3"] [data-board-mention="alice"]').tap()
+    assert m2.evaluate("el => el.classList.contains('board-actions-open')")
+
+    page.locator(".board-header-title").tap()
+    assert page.locator(".board-post.board-actions-open").count() == 0
+
+
+# ── Chat-aligned surfaces, bubbles and composer (stage 3) ─────
+
+
+def test_chat_surface_anima_colors_and_neutral_borders(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    messages = board_page.locator(".board-messages")
+    assert _computed(messages, "background-color") == _color_rgb(board_page, "#e6ecf2")
+
+    rail = board_page.locator(".board-rail")
+    assert _computed(rail, "background-color") == _color_rgb(board_page, "#1e293b")
+
+    alice_bubble = board_page.locator('[data-board-id="m1"] .board-post-bubble')
+    alice_bubble.wait_for(timeout=5000)
+    assert _computed(alice_bubble, "border-top-color") == _color_rgb(board_page, "#C41E3A")
+    assert _computed(alice_bubble, "border-top-left-radius") == "6px"
+    assert _computed(alice_bubble, "border-top-right-radius") == "18px"
+    assert _computed(alice_bubble, "background-color") == _color_rgb(board_page, "#ffffff")
+    assert _computed(alice_bubble, "padding-top") == "9px"
+    assert _computed(alice_bubble, "padding-left") == "13px"
+
+    bob_bubble = board_page.locator('[data-board-id="m5"] .board-post-bubble')
+    bob_bubble.wait_for(timeout=5000)
+    assert _computed(bob_bubble, "border-top-color") == _hash_rgb(board_page, "bob")
+
+    neutral = _var_rgb(board_page, "--aw-line-line")
+    assert _computed(board_page.locator('[data-board-id="m3"] .board-post-bubble'), "border-top-color") == neutral
+    assert _computed(board_page.locator('[data-board-id="m4"] .board-post-bubble'), "border-top-color") == neutral
+
+
+def test_current_user_posts_are_right_aligned_and_chat_styled(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    mine = board_page.locator('[data-board-id="m2"]')
+    assert "board-post-mine" in (mine.get_attribute("class") or "")
+    assert mine.locator(".board-post-gutter").count() == 0
+    assert mine.locator(".board-post-author").count() == 0
+    assert mine.locator(".board-kind-badge").count() == 0
+    assert mine.locator(".board-post-time").count() == 1
+
+    mine_bubble = mine.locator(".board-post-bubble")
+    mine_bubble.wait_for(timeout=5000)
+    assert _computed(mine_bubble, "background-color") == _color_rgb(board_page, "#b9eaa0")
+    assert _computed(mine_bubble, "border-top-width") == "0px"
+    assert _computed(mine_bubble, "border-top-right-radius") == "6px"
+
+    alice_bubble = board_page.locator('[data-board-id="m1"] .board-post-bubble')
+    alice_box = _box(alice_bubble)
+    mine_box = _box(mine_bubble)
+    messages_box = _box(board_page.locator(".board-messages"))
+    assert mine_box["x"] + mine_box["width"] > alice_box["x"]
+    assert mine_box["x"] + mine_box["width"] >= messages_box["x"] + messages_box["width"] - 45
+
+
+def test_current_user_bubble_keeps_its_width_on_phones(mobile_board_page: Page) -> None:
+    _open_channel_on_mobile(mobile_board_page, "general")
+    # Measured in one evaluation: the stream may replace post nodes while it settles.
+    mobile_board_page.wait_for_function(
+        """() => {
+            const bubble = document.querySelector('[data-board-id="m2"] .board-post-bubble');
+            const list = document.querySelector('.board-messages');
+            if (!bubble || !list) return false;
+            const bubbleBox = bubble.getBoundingClientRect();
+            return bubbleBox.width > 60 && bubbleBox.right >= list.getBoundingClientRect().right - 45;
+        }""",
+        timeout=5000,
+    )
+
+
+def test_mine_alignment_tracks_current_user_and_human_uses_neutral_border(board_page: Page) -> None:
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+    board_page.evaluate("() => localStorage.setItem('animaworks_user', 'someone-else')")
+    board_page.reload(wait_until="load")
+    board_page.wait_for_function("window.__boardReady === true", timeout=7000)
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+
+    human = board_page.locator('[data-board-id="m2"]')
+    human.locator(".board-post-bubble").wait_for(timeout=5000)
+    assert "board-post-mine" not in (human.get_attribute("class") or "")
+    assert human.locator(".board-post-gutter .board-avatar-human .board-avatar-icon").count() == 1
+    assert "human" in human.locator(".board-post-author").inner_text()
+    assert _computed(human.locator(".board-post-bubble"), "border-top-color") == _var_rgb(board_page, "--aw-line-line")
+    human_box = _box(human.locator(".board-post-bubble"))
+    alice_box = _box(board_page.locator('[data-board-id="m1"] .board-post-bubble'))
+    assert abs(human_box["x"] - alice_box["x"]) <= 2
+
+
+def test_home_and_flows_use_chat_surface_and_lifted_cards(board_page: Page) -> None:
+    talk_bg = _color_rgb(board_page, "#e6ecf2")
+    white = _color_rgb(board_page, "#ffffff")
+
+    home = board_page.locator("#boardHome")
+    home.wait_for(timeout=5000)
+    assert _computed(home, "background-color") == talk_bg
+    home_card = home.locator(".board-home-card").first
+    home_card.wait_for(timeout=5000)
+    assert _computed(home_card, "background-color") == white
+    assert _computed(home_card, "box-shadow") != "none"
+
+    board_page.evaluate("() => document.querySelector('#boardHome [data-board-view-link=\"flows\"]').click()")
+    flows = board_page.locator("#boardFlows")
+    flows.wait_for(timeout=5000)
+    assert _computed(flows, "background-color") == talk_bg
+    flow_card = flows.locator(".board-flow-card").first
+    flow_card.wait_for(timeout=5000)
+    assert _computed(flow_card, "background-color") == white
+    assert _computed(flow_card, "box-shadow") != "none"
+
+
+def test_mobile_bubbles_faces_composer_and_no_horizontal_scroll(mobile_board_page: Page) -> None:
+    page = mobile_board_page
+    _open_channel_on_mobile(page, "general")
+    _wait_for_messages(page)
+
+    assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
+
+    post = page.locator('[data-board-id="m1"]')
+    bubble = post.locator(".board-post-bubble")
+    bubble.wait_for(timeout=5000)
+    assert bubble.count() == 1
+    assert _computed(bubble, "font-size") == "16px"
+    assert _computed(post.locator(".board-post-author"), "font-size") == "12px"
+    assert _computed(post.locator(".board-post-time"), "font-size") == "11px"
+
+    faces = post.locator(".board-seen .board-seen-face")
+    faces.first.wait_for(timeout=5000)
+    assert faces.count() == 2
+    for index in range(faces.count()):
+        box = _box(faces.nth(index))
+        assert box["width"] <= 20
+        assert box["height"] <= 20
+
+    wrap = page.locator(".board-composer-wrap")
+    assert _computed(wrap, "border-top-left-radius") == "22px"
+    assert wrap.locator(".board-composer-send").count() == 1
+    send = wrap.locator(".board-composer-send")
+    assert _computed(send, "border-top-left-radius") == "50%"
+    assert _box(send)["width"] == 28
+    assert send.is_disabled()
+    assert _box(page.locator("#boardComposer"))["height"] <= 64
+
+    textarea = page.locator("#boardComposerInput")
+    textarea.fill("モバイルからの送信")
+    assert not send.is_disabled()
+    send.click()
+    page.wait_for_function(
+        "document.querySelector('#boardComposerInput').value === ''",
+        timeout=5000,
+    )
+    api = page.api  # type: ignore[attr-defined]
+    assert api.posts[-1]["text"] == "モバイルからの送信"
+
+
+def test_anima_colors_apply_after_directory_load(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    api.animas_delay = 0.7
+    expected = _color_rgb(board_page, "#C41E3A")
+    board_page.reload(wait_until="load")
+    board_page.wait_for_function("window.__boardReady === true", timeout=7000)
+    _open_channel(board_page, "general")
+    board_page.wait_for_function(
+        """(expected) => {
+          const bubble = document.querySelector('[data-board-id="m1"] .board-post-bubble');
+          return bubble !== null && getComputedStyle(bubble).borderTopColor === expected;
+        }""",
+        arg=expected,
+        timeout=5000,
+    )
+
+
+def test_missing_or_invalid_image_color_falls_back_to_hash(board_page: Page) -> None:
+    api = board_page.api  # type: ignore[attr-defined]
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+    expected = _hash_rgb(board_page, "bob")
+    bob_bubble = board_page.locator('[data-board-id="m5"] .board-post-bubble')
+    bob_bubble.wait_for(timeout=5000)
+    assert _computed(bob_bubble, "border-top-color") == expected
+
+    bob = next(row for row in api.animas if row["name"] == "bob")
+    bob["image_color"] = "red;}"
+    board_page.reload(wait_until="load")
+    board_page.wait_for_function("window.__boardReady === true", timeout=7000)
+    _open_channel(board_page, "general")
+    _wait_for_messages(board_page)
+    board_page.wait_for_function(
+        """(expected) => {
+          const bubble = document.querySelector('[data-board-id="m5"] .board-post-bubble');
+          return bubble !== null && getComputedStyle(bubble).borderTopColor === expected;
+        }""",
+        arg=expected,
+        timeout=5000,
+    )
+    style_text = board_page.locator("#boardAnimaColors").text_content() or ""
+    assert "red;}" not in style_text
