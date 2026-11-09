@@ -161,6 +161,7 @@ export function createPaneHost(rootContainer, options = {}) {
   const embedded = Boolean(options.embedded);
   const onEvent = typeof options.onEvent === "function" ? options.onEvent : defaultOnEvent;
   const onClose = typeof options.onClose === "function" ? options.onClose : null;
+  const presenceMount = typeof options.presenceMount === "function" ? options.presenceMount : null;
   let _visible = !embedded;
   const panes = [];
   let focusedIdx = 0;
@@ -215,7 +216,11 @@ export function createPaneHost(rootContainer, options = {}) {
       const threads = fstate.threads?.[a.name] || [];
       const tab = fstate.animaTabs.find((x) => x.name === a.name);
       const n = threads.filter((th) => th.unread).length || (tab?.unreadStar ? 1 : 0);
-      presence.setUnread(a.name, shown.has(a.name) ? 0 : n);
+      // A closed dock must keep the "reply waiting" badge until its conversation
+      // is opened again; opening it is what clears the unread count.
+      const current = presence.get(a.name).unread;
+      const next = embedded ? Math.max(current, n) : n;
+      presence.setUnread(a.name, shown.has(a.name) ? 0 : next);
     }
     for (const name of streaming) {
       if (!_syncedStreaming.has(name)) {
@@ -299,6 +304,8 @@ export function createPaneHost(rootContainer, options = {}) {
     ctx.state.paneId = id;
     ctx.state.paneIdx = panes.length;
     if (embedded) ctx.state.embedded = true;
+    ctx.state.embeddedVisible = _visible;
+    if (presenceMount) ctx.state.presenceMount = presenceMount;
     ctx.state.paneHost = { splitPane, removePane, savePaneStates, getPaneState, renderRail, getOpenThreadIds };
 
     ctx.controllers.anima = createAnimaController(ctx);
@@ -708,6 +715,7 @@ export function createPaneHost(rootContainer, options = {}) {
 
   function setVisible(visible) {
     _visible = Boolean(visible);
+    for (const pane of panes) pane.ctx.state.embeddedVisible = _visible;
     if (!_visible) presence.setVisibleAnimas([]);
     _syncPresenceFromPanes();
   }

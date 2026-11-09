@@ -128,7 +128,7 @@ class TestWorkspaceStyles:
         css = _read(WORKSPACE / "style.css")
         assert ".ws-stage" in css
         assert ".ws-chat-dock" in css
-        assert "width: clamp(380px, 38vw, 560px)" in css
+        assert "var(--ws-dock-width, clamp(380px, 38vw, 560px))" in css
         assert ".ws-chat-dock[hidden]" in css
 
     def test_embedded_controls_are_hidden(self) -> None:
@@ -163,3 +163,179 @@ class TestWorkspaceStyles:
         src = _read(WORKSPACE_MODULES / "app.js")
         assert 'setAttribute("data-theme", "dark")' in src
         assert 'removeAttribute("data-theme")' in src
+
+
+@pytest.mark.unit
+class TestPresenceMount:
+    """The presence/bust-up panel moves into the stage while the dock is open."""
+
+    def test_index_has_a_presence_slot_inside_the_stage(self) -> None:
+        html = _read(WORKSPACE / "index.html")
+        assert 'id="wsPresenceSlot"' in html
+        stage_start = html.index('id="wsStage"')
+        stage_end = html.index("</div>", html.index('id="wsPresenceSlot"'))
+        assert stage_start < html.index('id="wsPresenceSlot"') < stage_end
+
+    def test_dock_passes_a_presence_mount_to_the_pane_host(self) -> None:
+        src = _read(WORKSPACE_MODULES / "chat-dock.js")
+        assert "presenceMount" in src
+        assert 'document.getElementById("wsPresenceSlot")' in src
+
+    def test_pane_host_accepts_presence_mount_as_an_option(self) -> None:
+        src = _read(STATIC / "pages" / "chat" / "pane-host.js")
+        assert "options.presenceMount" in src
+        assert "ctx.state.presenceMount" in src
+
+    def test_presence_panel_uses_the_mount_and_embedded_visibility(self) -> None:
+        src = _read(STATIC / "pages" / "chat" / "presence-panel.js")
+        assert "ctx.state.presenceMount" in src
+        assert "areaIsMessages" in src
+        assert "state.embeddedVisible === false" in src
+
+    def test_slot_hugs_the_timeline_and_is_hidden_away_from_the_office(self) -> None:
+        css = _read(WORKSPACE / "style.css")
+        assert ".ws-presence-slot" in css
+        assert "left: 14px" in css
+        assert "var(--ws-timeline-bar-height, 44px)" in css
+        assert "pointer-events: none" in css
+        assert ".ws-chat-dock[hidden] ~ .ws-stage .ws-presence-slot" in css
+        assert ".ws-office-panel.hidden" in css
+
+
+@pytest.mark.unit
+class TestReplyWaitingBubble:
+    """Unread replies become non-expiring office bubbles."""
+
+    def test_dock_subscribes_to_presence_and_sets_reply_waiting(self) -> None:
+        src = _read(WORKSPACE_MODULES / "chat-dock.js")
+        assert "presence.subscribe" in src
+        assert "presence.addUnread" in src
+        assert "setReplyWaiting" in src
+        assert "unread > 0" in src
+
+    def test_office_renderer_exposes_optional_reply_waiting(self) -> None:
+        src = _read(WORKSPACE_MODULES / "office-renderer.js")
+        assert "export function setReplyWaiting" in src
+        assert 'typeof _activeInstance?.setReplyWaiting === "function"' in src
+        assert "_replyWaitingNames" in src
+
+    def test_pixel_renderer_and_actor_implement_the_bubble(self) -> None:
+        renderer = _read(WORKSPACE_MODULES / "renderers" / "office-pixel-renderer.js")
+        actors = _read(WORKSPACE / "pixel" / "modules" / "actors.js")
+        assert "function setReplyWaiting" in renderer
+        assert "actor.replyWaiting" in renderer
+        assert "this.replyWaiting" in actors
+        assert 't("ws.reply_waiting")' in actors
+        assert "this.replyWaiting || this.dynamicLabel()" in actors
+
+    @pytest.mark.parametrize(
+        ("lang", "value"),
+        [("ja", "返事あり"), ("en", "Reply waiting"), ("ko", "답장 있음")],
+    )
+    def test_reply_waiting_is_translated(self, lang: str, value: str) -> None:
+        i18n = _read(STATIC / "i18n" / f"{lang}.json")
+        assert f'"ws.reply_waiting": "{value}"' in i18n
+
+    def test_hidden_dock_keeps_a_completed_reply_unread(self) -> None:
+        renderer = _read(STATIC / "pages" / "chat" / "chat-renderer.js")
+        pane_host = _read(STATIC / "pages" / "chat" / "pane-host.js")
+        assert "state.embeddedVisible !== false" in renderer
+        assert "embedded ? Math.max(current, n) : n" in pane_host
+
+
+@pytest.mark.unit
+class TestDockResizer:
+    """The conversation/stage boundary is draggable, keyboard-friendly and saved."""
+
+    def test_index_has_the_resizer_between_dock_and_stage(self) -> None:
+        html = _read(WORKSPACE / "index.html")
+        assert 'id="wsDockResizer"' in html
+        assert 'role="separator"' in html
+        assert 'aria-orientation="vertical"' in html
+        assert 'tabindex="0"' in html
+        assert 'id="wsChatDock"' in html
+        assert html.index('id="wsChatDock"') < html.index('id="wsDockResizer"') < html.index('id="wsStage"')
+        assert "hidden" in html[html.index('id="wsDockResizer"') : html.index('id="wsStage"')]
+
+    def test_resizer_module_handles_drag_keys_reset_and_storage(self) -> None:
+        src = _read(WORKSPACE_MODULES / "chat-dock-resizer.js")
+        assert "setPointerCapture" in src
+        assert "releasePointerCapture" in src
+        assert "pointermove" in src
+        assert "ArrowLeft" in src and "ArrowRight" in src
+        assert "KEYBOARD_STEP = 20" in src
+        assert "dblclick" in src
+        assert '"aw-workspace-dock-width"' in src
+        assert "localStorage.setItem" in src
+        assert "document.body.style.userSelect" in src
+        assert "MIN_DOCK_WIDTH = 340" in src
+        assert "MAX_DOCK_WIDTH = 760" in src
+        assert "MIN_STAGE_WIDTH = 320" in src
+        assert "window.innerWidth <= 768" in src
+        assert "resizer.hidden = narrow || dock.hidden" in src
+
+    def test_dock_resizer_is_initialized_and_refreshed(self) -> None:
+        src = _read(WORKSPACE_MODULES / "chat-dock.js")
+        assert "initChatDockResizer" in src
+        assert 'document.getElementById("wsDockResizer")' in src
+        assert "_resizer?.refresh()" in src
+
+    def test_css_uses_the_width_variable_and_keeps_the_stage_clipped(self) -> None:
+        css = _read(WORKSPACE / "style.css")
+        assert "--ws-dock-width" in css
+        assert ".ws-dock-resizer" in css
+        assert ".ws-dock-resizer:active" in css
+        assert "cursor: col-resize" in css
+        assert "overflow: hidden" in css
+
+
+@pytest.mark.unit
+class TestMobileDockLayout:
+    """Phones stack the stage over the dock and allow a full-screen conversation."""
+
+    def test_mobile_stack_and_fullscreen_rules_exist(self) -> None:
+        css = _read(WORKSPACE / "style.css")
+        mobile = css[css.index("@media (max-width: 768px)") :]
+        assert "flex-direction: column" in mobile
+        assert "order: 1" in mobile
+        assert "order: 2" in mobile
+        assert "30dvh" in mobile
+        assert "is-dock-full" in mobile
+        assert ".ws-dock-handle" in mobile
+
+    def test_dock_handle_toggles_fullscreen(self) -> None:
+        src = _read(WORKSPACE_MODULES / "chat-dock.js")
+        assert "wsDockHandle" in src
+        assert "is-dock-full" in src
+        assert "ws.dock_expand" in src
+
+    def test_mobile_chat_column_keeps_the_input_at_the_bottom(self) -> None:
+        css = _read(WORKSPACE / "style.css")
+        mobile = css[css.index("@media (max-width: 768px)") :]
+        assert ".ws-chat-dock .chat-page-main" in mobile
+        assert "flex-direction: column" in mobile
+        assert ".chat-messages-area" in mobile
+        assert ".chat-input-form" in mobile
+
+    def test_shared_mobile_stylesheet_does_not_override_the_dock(self) -> None:
+        css = _read(STATIC / "styles" / "chat-mobile.css")
+        assert ".ws-chat-dock" not in css
+        assert ".ws-stage" not in css
+
+
+@pytest.mark.unit
+class TestMemoryPopoverBesideDock:
+    """The embedded memory popover opens to the right of the whole dock."""
+
+    def test_embedded_branch_uses_the_dock_right_edge(self) -> None:
+        src = _read(STATIC / "pages" / "chat" / "memory-popover.js")
+        assert "ctx.state.embedded" in src
+        assert 'closest?.(".ws-chat-dock")' in src
+        assert "dockRect.right + 14 + 480 <= width" in src
+        assert "anchorRight" in src
+        assert "dialog.style.left = (anchorRight + 14)" in src
+
+    def test_non_embedded_anchor_logic_is_preserved(self) -> None:
+        src = _read(STATIC / "pages" / "chat" / "memory-popover.js")
+        assert "rect.right < width * 0.3" in src
+        assert "Math.min(popWidth, 480)" in src

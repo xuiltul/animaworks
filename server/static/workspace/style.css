@@ -216,12 +216,13 @@ html, body {
   flex: 1;
   min-width: 0;
   display: flex;
+  overflow: hidden;
 }
 
 /* Embedded Chat conversation pane (left side of the stage). */
 .ws-chat-dock {
   flex: none;
-  width: clamp(380px, 38vw, 560px);
+  width: var(--ws-dock-width, clamp(380px, 38vw, 560px));
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -231,6 +232,86 @@ html, body {
 }
 
 .ws-chat-dock[hidden] {
+  display: none;
+}
+
+/* Conversation/stage boundary. It overlays the dock edge so the stage keeps
+   its full width (and the dock's default width is unchanged). */
+.ws-dock-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--ws-dock-width, clamp(380px, 38vw, 560px));
+  width: 8px;
+  transform: translateX(-4px);
+  z-index: 30;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.ws-dock-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--aw-color-border, #ddd);
+}
+
+.ws-dock-resizer:hover::before,
+.ws-dock-resizer:active::before,
+.ws-dock-resizer:focus-visible::before,
+.ws-dock-resizer.is-dragging::before {
+  width: 3px;
+  background: var(--aw-color-accent, #4a90d9);
+}
+
+.ws-dock-resizer[hidden] {
+  display: none;
+}
+
+.ws-dock-resizer:focus-visible {
+  outline: 2px solid var(--aw-color-accent, #4a90d9);
+  outline-offset: -2px;
+}
+
+/* Mobile-only dock expansion handle. */
+.ws-dock-handle {
+  display: none;
+}
+
+.ws-dock-handle-grip {
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--aw-color-text-muted, #777);
+}
+
+/* Presence panel mounted in the stage's lower-left corner. */
+.ws-presence-slot {
+  position: absolute;
+  left: 14px;
+  bottom: calc(var(--ws-timeline-bar-height, 44px) + 12px);
+  width: 180px;
+  z-index: 21;
+  pointer-events: none;
+}
+
+.ws-presence-slot .chat-presence {
+  position: static;
+  right: auto;
+  bottom: auto;
+  pointer-events: auto;
+}
+
+.ws-chat-dock[hidden] ~ .ws-stage .ws-presence-slot {
+  display: none;
+}
+
+.ws-stage:has(.ws-office-panel.hidden) .ws-presence-slot {
   display: none;
 }
 
@@ -300,12 +381,96 @@ body[data-theme="dark"] .ws-view-toggle {
 }
 
 @media (max-width: 768px) {
-  .ws-chat-dock {
-    width: 100%;
+  /* Stack the office above the conversation; the dock keeps the input at
+     the visual bottom of the viewport. */
+  .ws-layout {
+    flex-direction: column;
+  }
+
+  .ws-dock-resizer {
+    display: none !important;
   }
 
   .ws-stage {
-    flex: 1;
+    order: 1;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .ws-chat-dock {
+    order: 2;
+    width: 100%;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-right: 0;
+    border-top: 1px solid var(--aw-color-border, #ddd);
+  }
+
+  .ws-layout:has(.ws-chat-dock:not([hidden])) .ws-stage {
+    flex: 0 0 30dvh;
+    height: 30dvh;
+    min-height: 200px;
+  }
+
+  .ws-layout:has(.ws-chat-dock:not([hidden])) .ws-chat-dock {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .ws-layout.is-dock-full .ws-stage {
+    display: none;
+  }
+
+  .ws-layout.is-dock-full .ws-chat-dock {
+    flex: 1 1 auto;
+    height: auto;
+  }
+
+  .ws-dock-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 100%;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--aw-color-border, #ddd);
+    background: var(--aw-color-bg, #fff);
+    color: var(--aw-color-text-muted, #777);
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .ws-dock-handle-grip {
+    transition: transform 0.15s;
+  }
+
+  .ws-dock-handle[aria-pressed="true"] .ws-dock-handle-grip {
+    transform: rotate(180deg);
+  }
+
+  .ws-chat-dock .chat-page-layout {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .ws-chat-dock .chat-page-main {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .ws-chat-dock .chat-page-main > .chat-messages-area {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .ws-chat-dock .chat-page-main > .chat-input-form {
+    flex: 0 0 auto;
   }
 }
 

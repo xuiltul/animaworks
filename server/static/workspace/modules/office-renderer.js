@@ -10,6 +10,7 @@ let _activeRenderer = null;
 let _activeInstance = null;
 let _pendingMount = null;
 let _mountGeneration = 0;
+let _replyWaitingNames = new Set();
 
 function selectedRenderer() {
   if (_selectedRenderer) return _selectedRenderer;
@@ -72,6 +73,10 @@ export async function mountOffice(dom) {
 
       _activeInstance = instance;
       _activeRenderer = renderer;
+      // Renderers opt in to the reply-waiting bubble; 3D simply ignores it.
+      if (typeof instance.setReplyWaiting === "function") {
+        instance.setReplyWaiting(_replyWaitingNames);
+      }
       if (instance.ready) {
         const runtime = await instance.ready;
         if (generation !== _mountGeneration || _activeInstance !== instance) {
@@ -106,6 +111,14 @@ export function disposeOfficeRenderer() {
 
 export function highlightAnima(name) {
   _activeInstance?.highlight(name == null ? null : name);
+}
+
+/** Show a persistent "reply waiting" bubble on the given Animas' desks. */
+export function setReplyWaiting(names) {
+  _replyWaitingNames = new Set(names || []);
+  if (typeof _activeInstance?.setReplyWaiting === "function") {
+    _activeInstance.setReplyWaiting(_replyWaitingNames);
+  }
 }
 
 export function getActiveRenderer() {
