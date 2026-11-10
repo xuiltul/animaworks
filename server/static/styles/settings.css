@@ -420,3 +420,294 @@
   align-self: flex-start;
   margin-top: 0.25rem;
 }
+
+/* ── Secrets tab ─────────────────────────────── */
+
+.secrets-status.hidden {
+  display: none;
+}
+
+.secrets-write-warning {
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--aw-color-warning-border, #fde68a);
+  border-radius: 8px;
+  background: var(--aw-color-warning-bg, #fffbeb);
+  color: var(--aw-color-warning-text, #92400e);
+  font-size: 0.85rem;
+}
+
+.secrets-op-block {
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--aw-color-border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--aw-color-bg-secondary, #f9fafb);
+}
+
+.secrets-op-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--aw-color-text-primary);
+  margin-bottom: 0.35rem;
+}
+
+.secrets-op-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--aw-color-success, #22c55e);
+  flex-shrink: 0;
+}
+
+.secrets-op-label {
+  color: var(--aw-color-text-muted, #6b7280);
+  min-width: 7rem;
+}
+
+.secrets-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.secrets-table {
+  min-width: 680px;
+}
+
+.secrets-key-cell code {
+  font-size: 0.85rem;
+  color: var(--aw-color-code-text, inherit);
+  background: var(--aw-color-code-inline-bg, transparent);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.secrets-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.secrets-badge-op {
+  background: var(--aw-color-accent-bg, #eff6ff);
+  color: var(--aw-color-accent, #2563eb);
+  border: 1px solid var(--aw-color-accent-light, #93c5fd);
+}
+
+.secrets-badge-local {
+  background: var(--aw-color-bg-tertiary, #f3f4f6);
+  color: var(--aw-color-text-secondary, #4b5563);
+  border: 1px solid var(--aw-color-border, #e5e7eb);
+}
+
+.secrets-status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.secrets-status-set {
+  background: var(--aw-color-success-bg, #f0fdf4);
+  color: var(--aw-color-success-text, #166534);
+  border: 1px solid var(--aw-color-success-border, #bbf7d0);
+}
+
+.secrets-status-unset {
+  background: var(--aw-color-warning-bg, #fffbeb);
+  color: var(--aw-color-warning-text, #92400e);
+  border: 1px solid var(--aw-color-warning-border, #fde68a);
+}
+
+.secrets-note {
+  font-size: 0.8rem;
+  color: var(--aw-color-text-muted, #6b7280);
+}
+
+.secrets-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.secrets-link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--aw-color-text-link, #2563eb);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.secrets-link-btn:disabled {
+  color: var(--aw-color-text-faint, #9ca3af);
+  cursor: default;
+}
+
+.secrets-link {
+  color: var(--aw-color-text-link, #2563eb);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.secrets-row-target {
+  outline: 2px solid var(--aw-color-accent, #2563eb);
+  outline-offset: -2px;
+}
+
+.secrets-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: 420px;
+}
+
+.secrets-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--aw-color-text-primary);
+}
+
+.secrets-field input {
+  height: 36px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--aw-color-text-primary);
+  background: var(--aw-color-bg-primary);
+  border: 1px solid var(--aw-color-border-medium);
+  border-radius: 6px;
+}
+
+.secrets-field input:focus {
+  outline: 2px solid var(--aw-color-accent);
+  outline-offset: -1px;
+}
+
+.secrets-value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.secrets-value-row input {
+  flex: 1;
+}
+
+.secrets-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.secrets-form-row td {
+  padding: 0.75rem 1rem;
+  background: var(--aw-color-bg-secondary, #f9fafb);
+  border-top: 1px solid var(--aw-color-border, #e5e7eb);
+}
+
+.secrets-confirm {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--aw-color-text-primary);
+}
+
+.secrets-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--aw-color-text-muted, #6b7280);
+}
+
+.secrets-muted {
+  font-size: 0.8rem;
+  color: var(--aw-color-text-muted, #6b7280);
+}
+
+.secrets-sync-panel {
+  padding: 0.9rem 1rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--aw-color-accent-light, #93c5fd);
+  border-radius: 8px;
+  background: var(--aw-color-bg-primary);
+}
+
+.secrets-sync-line {
+  margin: 0 0 0.35rem;
+  font-size: 0.88rem;
+}
+
+.secrets-plan-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: var(--aw-color-bg-tertiary, #f3f4f6);
+  color: var(--aw-color-text-secondary, #4b5563);
+}
+
+.secrets-plan-change {
+  background: var(--aw-color-info-bg, #eff6ff);
+  color: var(--aw-color-info-text, #1e40af);
+  border: 1px solid var(--aw-color-info-border, #bfdbfe);
+}
+
+.secrets-webhook {
+  font-size: 0.8rem;
+  color: var(--aw-color-text-muted, #6b7280);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.secrets-token-notice {
+  padding: 0.9rem 1rem;
+  margin-top: 0.75rem;
+  border: 1px solid var(--aw-color-accent-light, #93c5fd);
+  border-radius: 8px;
+  background: var(--aw-color-accent-bg, #eff6ff);
+}
+
+.secrets-token-notice.hidden {
+  display: none;
+}
+
+.secrets-token-warning {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--aw-color-text-primary);
+}
+
+.secrets-token-value {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--aw-color-border-medium, #d1d5db);
+  border-radius: 6px;
+  background: var(--aw-color-code-bg, #f3f4f6);
+  font-size: 0.9rem;
+  word-break: break-all;
+  user-select: all;
+}
+
+.secrets-load-error {
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--aw-color-error-border, #fecaca);
+  border-radius: 8px;
+  background: var(--aw-color-error-bg, #fef2f2);
+  color: var(--aw-color-error, #dc2626);
+  font-size: 0.85rem;
+}
