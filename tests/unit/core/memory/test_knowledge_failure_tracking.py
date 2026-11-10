@@ -336,12 +336,9 @@ class TestIndexerMetadataExtraction:
     def test_extracts_failure_tracking_fields(self, tmp_path: Path) -> None:
         """Verify that indexing picks up the new tracking fields in ChromaDB."""
         pytest.importorskip("chromadb")
-        pytest.importorskip("sentence_transformers")
 
-        # Set up a full data dir structure for model loading
         data_dir = tmp_path / "data"
         data_dir.mkdir()
-        (data_dir / "models").mkdir()
         import os
 
         old = os.environ.get("ANIMAWORKS_DATA_DIR")
@@ -373,6 +370,9 @@ class TestIndexerMetadataExtraction:
 
             store = ChromaVectorStore(persist_dir=a_dir / "vectordb", allow_direct=OWNER_CAPABILITY)
             indexer = MemoryIndexer(store, "idx_test", a_dir)
+            # The metadata is under test, not the vectors: skip loading (and
+            # possibly downloading) the embedding model.
+            indexer._generate_embeddings = MagicMock(side_effect=lambda texts, **_kwargs: [[0.1] * 384 for _ in texts])
             total = indexer.index_directory(a_dir / "knowledge", "knowledge").chunks_indexed
             assert total > 0
 
