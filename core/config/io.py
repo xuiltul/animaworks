@@ -13,7 +13,7 @@ import json
 import logging
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -326,7 +326,9 @@ def _prepare_disk_payload(
         existing,
         loaded_values=loaded_values,
     )
-    return _reference_plaintext_credentials(disk_payload, data_dir, vault_updates)
+    disk_payload, vault_updates = _reference_plaintext_credentials(disk_payload, data_dir, vault_updates)
+    _guard_onepassword_config_keys(data_dir, vault_updates)
+    return disk_payload, vault_updates
 
 
 def _reference_plaintext_credentials(
@@ -345,9 +347,21 @@ def _reference_plaintext_credentials(
 
     shared = _load_shared_section(vault)
     updates = dict(vault_updates)
-    for path, vault_key, _value in _plan_credential_moves(leaves, shared, updates, vault):
+    moves = _plan_credential_moves(leaves, shared, updates, vault)
+    _guard_onepassword_config_keys(data_dir, (vault_key for _, vault_key, _ in moves))
+    for path, vault_key, _value in moves:
         _set_path(payload, path, {"$vault": vault_key})
     return payload, updates
+
+
+def _guard_onepassword_config_keys(data_dir: Path, keys: Iterable[str]) -> None:
+    """Reject config writes that would change a key managed by 1Password."""
+    from core.config.vault_sources import is_onepassword_managed
+    from core.i18n import t
+
+    for key in keys:
+        if is_onepassword_managed(data_dir, key, section="shared"):
+            raise ConfigError(t("vault.managed_config", name=key))
 
 
 def _plan_credential_moves(

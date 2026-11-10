@@ -18,6 +18,7 @@ Usage via animaworks-tool:
     animaworks-tool vault delete KEY [--shared]
     animaworks vault status
     animaworks vault init
+    animaworks vault migrate-config [--commit]
     printf 'VALUE' | animaworks vault store --shared KEY
 """
 
@@ -29,6 +30,7 @@ import sys
 from pathlib import Path
 
 from cli._anima_tool import run_and_print
+from core.config.io import find_plaintext_credentials, get_config_path, update_config
 from core.config.onepassword import OnePasswordClient, OnePasswordError
 from core.config.vault import SHARED_VAULT_SECTION as SHARED_SECTION
 from core.config.vault import VaultAccessError, resolve_vault_sections
@@ -67,6 +69,16 @@ def cmd_vault(args: argparse.Namespace) -> None:
             _cmd_tool_store(args, shared)
         else:
             _cmd_tool_list(shared)
+        return
+
+    if sub == "migrate-config":
+        if anima_dir_env() is not None:
+            print(
+                f"Error: {t('vault.operator_only', command='animaworks vault migrate-config')}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        _cmd_migrate_config(args)
         return
 
     from core.config.vault import get_vault_manager
@@ -504,6 +516,44 @@ def _cmd_init(vm) -> None:
     print(json.dumps({"initialized": True}, ensure_ascii=False, indent=2))
 
 
+def _read_plaintext_credentials(config_path: Path, data_dir: Path) -> list[dict[str, str]]:
+    if not config_path.is_file():
+        raw = {}
+    else:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        return []
+    return [dataclasses.asdict(item) for item in find_plaintext_credentials(raw, data_dir)]
+
+
+def _cmd_migrate_config(args: argparse.Namespace) -> None:
+    config_path = get_config_path()
+    data_dir = config_path.parent
+    try:
+        before = _read_plaintext_credentials(config_path, data_dir)
+    except Exception:
+        print(f"Error: {t('vault.migrate_failed')}", file=sys.stderr)
+        sys.exit(1)
+
+    if not getattr(args, "commit", False):
+        print(json.dumps({"credentials": before, "committed": False}, ensure_ascii=False, indent=2))
+        return
+
+    try:
+        update_config(lambda config: None, path=config_path)
+        after = _read_plaintext_credentials(config_path, data_dir)
+    except PermissionError:
+        print(f"Error: {t('vault.migrate_server_running')}", file=sys.stderr)
+        sys.exit(1)
+    except Exception:
+        print(f"Error: {t('vault.migrate_failed')}", file=sys.stderr)
+        sys.exit(1)
+
+    remaining = {(item["path"], item["vault_key"]) for item in after}
+    moved = [item for item in before if (item["path"], item["vault_key"]) not in remaining]
+    print(json.dumps({"moved": moved, "committed": True}, ensure_ascii=False, indent=2))
+
+
 def register_vault_command(subparsers) -> None:
     """Register the vault subcommand under animaworks-tool."""
     p_vault = subparsers.add_parser("vault", help="Manage encrypted vault values")
@@ -511,6 +561,9 @@ def register_vault_command(subparsers) -> None:
 
     vault_sub.add_parser("status", help="Show key and encryption status without values")
     vault_sub.add_parser("init", help="Generate a vault key if one does not exist")
+
+    p_migrate = vault_sub.add_parser("migrate-config", help="Move plaintext config credentials into the vault")
+    p_migrate.add_argument("--commit", action="store_true", help="Move the listed credentials now")
 
     p_get = vault_sub.add_parser("get", help="Get a value by key")
     p_get.add_argument("key", help="Key to retrieve")

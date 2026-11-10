@@ -1627,7 +1627,7 @@ Show tmp usage summary
 Manage encrypted vault values
 
 `usage: animaworks vault [-h]
-                        {status,init,get,store,list,delete,sources,sync,rollback,register-1p}
+                        {status,init,migrate-config,get,store,list,delete,sources,sync,rollback,register-1p}
                         ...`
 
 | Name | Type | Default | Choices | Description |
@@ -1675,6 +1675,16 @@ List keys in the own and shared namespaces
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | --shared | flag | false | — | List only the shared section (does not require ANIMAWORKS_ANIMA_DIR) |
+
+## `vault migrate-config`
+
+Move plaintext config credentials into the vault
+
+`usage: animaworks vault migrate-config [-h] [--commit]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| --commit | flag | false | — | Move the listed credentials now |
 
 ## `vault register-1p`
 

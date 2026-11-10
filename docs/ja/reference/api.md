@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: 2d88eb76cf5ada3c9b8bbdf355db2c7d3dda05eae677a7821b519990e93cd144 -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 0edb2a980a55c3a4b8daf71a93fb9cdd2980ec095916c673b16734f98d85c14d -->
 
 # API リファレンス
 
@@ -294,6 +294,18 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 | POST | `/api/users` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Add a new user (owner only). | `server/routes/users.py:add_user` |
 | PUT | `/api/users/me/password` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Change (or initially set) the current user's password. | `server/routes/users.py:change_password` |
 | DELETE | `/api/users/{username}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | Delete a user (owner only, cannot delete self). | `server/routes/users.py:delete_user` |
+
+## `server/routes/vault_routes.py`
+
+| POST | `/api/vault/check` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_check` |
+| POST | `/api/vault/hub-members/{member_id}/reissue-token` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_reissue_hub_token` |
+| POST | `/api/vault/migrate-config` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_migrate_config` |
+| GET | `/api/vault/overview` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_overview` |
+| PUT | `/api/vault/shared/{key}` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_set_shared` |
+| POST | `/api/vault/shared/{key}/delete` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_delete_shared` |
+| POST | `/api/vault/shared/{key}/rollback` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_rollback_shared` |
+| POST | `/api/vault/sync/apply` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_sync_apply` |
+| POST | `/api/vault/sync/plan` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/vault_routes.py:vault_sync_plan` |
 
 ## `server/routes/voice.py`
 

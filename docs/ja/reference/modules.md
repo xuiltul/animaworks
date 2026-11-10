@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 8ad8368d655fa0c00bcc7fda9fc8dd7712d8e5b9c41a82ba9f6af97a4f5acdf9 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 25fa050170defcd66219729b982c93dce11cf0db6b046b531b0aef6bae5e8dc4 -->
 
 # モジュール一覧
 
@@ -58,7 +58,7 @@
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
 | `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
-| `cli.commands.vault_cmd` | 573 | — |
+| `cli.commands.vault_cmd` | 626 | — |
 
 ## `cli.tui`
 
@@ -204,7 +204,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 497 | — |
-| `core.config.io` | 516 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.io` | 530 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |
@@ -428,7 +428,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
 | `core.i18n.strings.tooling_schema` | 542 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
-| `core.i18n.strings.vault` | 58 | Domain-specific i18n strings for vault and 1Password operations. |
+| `core.i18n.strings.vault` | 103 | Domain-specific i18n strings for vault and 1Password operations. |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -1123,7 +1123,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1605 | — |
+| `server.app` | 1641 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1155,7 +1155,7 @@ LLM 利用量とコストの記録・集計。
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `server.routes` | 65 | — |
+| `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1189,6 +1189,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
+| `server.routes.vault_routes` | 520 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |

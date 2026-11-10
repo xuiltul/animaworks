@@ -1266,6 +1266,8 @@ def create_app(
         path = request.url.path
         if path.endswith((".js", ".css", ".html")) or path == "/" or path.startswith("/workspace"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        if path.startswith("/api/vault/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     def _base_prefixed(path: str) -> str:
@@ -1302,6 +1304,22 @@ def create_app(
                 return RedirectResponse(_base_prefixed("/setup/"))
             # Block all other API/dashboard routes
             if path.startswith("/api/"):
+                vault_write = path.startswith("/api/vault/") and (
+                    (request.method == "PUT" and path.startswith("/api/vault/shared/"))
+                    or (
+                        request.method == "POST"
+                        and (
+                            path in {"/api/vault/sync/apply", "/api/vault/migrate-config"}
+                            or path.endswith(("/delete", "/rollback", "/reissue-token"))
+                        )
+                    )
+                )
+                if vault_write:
+                    return JSONResponse(
+                        {"error": t("vault.write_setup")},
+                        status_code=403,
+                        headers={"Cache-Control": "no-store"},
+                    )
                 return JSONResponse(
                     {"error": "Setup not yet complete"},
                     status_code=503,
@@ -1326,7 +1344,11 @@ def create_app(
         path = request.url.path
 
         # Skip during setup
-        if not request.app.state.setup_complete or path in _HEALTH_PATHS:
+        if not request.app.state.setup_complete:
+            request.state.auth_via = "setup"
+            return await call_next(request)
+        if path in _HEALTH_PATHS:
+            request.state.auth_via = "health"
             return await call_next(request)
 
         # Load auth config off the loop; if the disk does not answer, fail closed
@@ -1337,6 +1359,7 @@ def create_app(
 
         # Skip if local_trust mode
         if auth_config.auth_mode == "local_trust":
+            request.state.auth_via = "local_trust"
             return await call_next(request)
 
         # Internal API caller verification: a valid internal token lets an
@@ -1348,10 +1371,12 @@ def create_app(
             and getattr(request.app.state, "internal_auth", None) is not None
             and request.app.state.internal_auth.verify(request.headers.get("X-AnimaWorks-Internal-Auth")) is not None
         ):
+            request.state.auth_via = "internal"
             return await call_next(request)
 
         # Localhost trust: skip auth for verified local connections
         if auth_config.trust_localhost and _is_safe_localhost_request(request):
+            request.state.auth_via = "localhost"
             # Set owner as authenticated user so /api/auth/me and other routes work
             if auth_config.owner:
                 request.state.user = auth_config.owner
@@ -1359,14 +1384,17 @@ def create_app(
 
         # Skip whitelisted paths
         if any(path.startswith(prefix) for prefix in _AUTH_WHITELIST_PREFIXES):
+            request.state.auth_via = "whitelist"
             return await call_next(request)
 
         # Public icon PNGs (GET/HEAD from asset route only)
         if request.method in ("GET", "HEAD") and _PUBLIC_ICON_ASSET_PATH.match(path):
+            request.state.auth_via = "public_asset"
             return await call_next(request)
 
         # Only protect /api/ and /ws paths
         if not path.startswith("/api/") and path != "/ws" and not path.startswith("/ws/"):
+            request.state.auth_via = "public_path"
             return await call_next(request)
 
         # Validate session token from cookie
@@ -1389,6 +1417,7 @@ def create_app(
                 status_code=401,
             )
         request.state.user = user
+        request.state.auth_via = "session"
         return await call_next(request)
 
     # ── Startup readiness gate ─────────────────────────────
@@ -1431,6 +1460,13 @@ def create_app(
             status_code=503,
             headers=headers,
         )
+
+    @app.middleware("http")
+    async def vault_response_cache_control(request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        if request.url.path.startswith("/api/vault/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/startup-status", include_in_schema=False)
     async def _startup_status():

@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: 3d943dc631b769315069c08cd02b20835592ef3405c5104fb996aa535c96bf44 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: 992e2c80dba3ef2990d67f77449a691c5325e07cc07a66e3ce876852dfdd98f0 -->
 
 # CLI リファレンス: `animaworks`
 
@@ -1627,7 +1627,7 @@ Show tmp usage summary
 Manage encrypted vault values
 
 `usage: animaworks vault [-h]
-                        {status,init,get,store,list,delete,sources,sync,rollback,register-1p}
+                        {status,init,migrate-config,get,store,list,delete,sources,sync,rollback,register-1p}
                         ...`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
@@ -1675,6 +1675,16 @@ List keys in the own and shared namespaces
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
 | --shared | flag | false | — | List only the shared section (does not require ANIMAWORKS_ANIMA_DIR) |
+
+## `vault migrate-config`
+
+Move plaintext config credentials into the vault
+
+`usage: animaworks vault migrate-config [-h] [--commit]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| --commit | flag | false | — | Move the listed credentials now |
 
 ## `vault register-1p`
 
