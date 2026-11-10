@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=58ad9fce7a5643b700c610524327733f9d822af40957a9cf4ed4bfb0b9af25e9 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # API 참조
 
@@ -294,6 +294,18 @@ FastAPI의 OpenAPI 정의, WebSocket 및 `server/app.py`에 직접 작성된 라
 | POST | `/api/users` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 새 사용자를 추가합니다(소유자만 가능). | `server/routes/users.py:add_user` |
 | PUT | `/api/users/me/password` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 현재 사용자의 비밀번호를 변경하거나 최초 설정합니다. | `server/routes/users.py:change_password` |
 | DELETE | `/api/users/{username}` | 세션 필수(local_trust 모드 또는 localhost 신뢰가 활성화된 경우 생략 가능) | 사용자를 삭제합니다(소유자만 가능하며 본인은 삭제할 수 없음). | `server/routes/users.py:delete_user` |
+
+## `server/routes/vault_routes.py`
+
+| POST | `/api/vault/check` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_check` |
+| POST | `/api/vault/hub-members/{member_id}/reissue-token` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_reissue_hub_token` |
+| POST | `/api/vault/migrate-config` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_migrate_config` |
+| GET | `/api/vault/overview` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_overview` |
+| PUT | `/api/vault/shared/{key}` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_set_shared` |
+| POST | `/api/vault/shared/{key}/delete` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_delete_shared` |
+| POST | `/api/vault/shared/{key}/rollback` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_rollback_shared` |
+| POST | `/api/vault/sync/apply` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_sync_apply` |
+| POST | `/api/vault/sync/plan` | 세션 필수 (local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/vault_routes.py:vault_sync_plan` |
 
 ## `server/routes/voice.py`
 

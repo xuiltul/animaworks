@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/security.md -->
-<!-- i18n: source-sha256=34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 > 확인된 커밋: 581e20f1
 
@@ -60,6 +60,13 @@ AnimaWorks는 외부 입력을 명령으로 신뢰하지 않으며, 권한 경�
 ## 외부 전송 및 수신
 
 외부 전송에서는 전송 대상의 해석, 조작 권한, 외부 서비스의 전달 결과를 확인한다. 동일한 run 내에서는 같은 대상으로의 두 번째 전송을 방지하지만, 대상 수·시간·일 단위 전송 예산이나 대화 깊이에 따른 거부는 없다. 수신 측은 Inbox 파일 변경 알림으로 시작되며, 동시에 하나만 처리한다. Provider 오류 시에는 `rate_guard`이 재시도까지의 대기를 조정한다. 인증 정보를 코드나 문서에 기재하지 말고, 허용된 연동만 활성화한다. 자세한 내용은 [메시징](architecture/messaging.md)을 참조한다.
+
+## 1Password 연동
+
+- `shared` 섹션의 키는 1Password의 `op://` 참조에서 단방향으로 읽는다. animaworks에서 1Password를 덮어쓰지 않는다.
+- 대응표는 `vault_sources.json`, 업데이트 시각과 대조 결과는 `vault_meta.json`, 직전 값은 암호화하여 `vault.previous.json`에 둔다. 어느 것도 비밀값이나 값의 해시를 포함하지 않는다(비교는 메모리상에서 수행한다).
+- 신규 항목 생성은 사람이 `animaworks vault register-1p --commit`를 명시했을 때만 수행하며, 기존 항목은 변경하지 않는다.
+- 동기화·대조·등록은 오퍼레이터 전용이며, Anima의 도구 컨텍스트에서는 실행할 수 없다.
 
 ## 적대적 위협 분석
 

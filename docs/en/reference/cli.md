@@ -1,11 +1,11 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=ddb8566c643f0429ef232f44cca58443c7c9c62f41c1b8d9ebfa7bc58bd94d96 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
-# CLI reference: `animaworks`
+# CLI Reference: `animaworks`
 
-Generated from the argparse definition of the `animaworks` command.
+Generated from the argparse definitions of the `animaworks` command.
 
-## Global options
+## Global Options
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
@@ -20,7 +20,7 @@ Manage anima processes
                         {restart,status,create,export,delete,disable,enable,list,info,permissions,set-model,set-background-model,reload,set-role,rename,audit}
                         ...`
 
-| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
@@ -70,7 +70,7 @@ Delete an anima (with optional archive)
 
 ## `anima disable`
 
-Disable (休養) an anima
+Disable (rest) an anima
 
 `usage: animaworks anima disable [-h] anima`
 
@@ -80,7 +80,7 @@ Disable (休養) an anima
 
 ## `anima enable`
 
-Enable (復帰) an anima
+Enable (return) an anima
 
 `usage: animaworks anima enable [-h] anima`
 
@@ -90,11 +90,11 @@ Enable (復帰) an anima
 
 ## `anima export`
 
-Export an Anima workspace in OpenClaw / Hermes Agent format
+Export an Anima's workspace in OpenClaw / Hermes Agent format
 
 `usage: animaworks anima export [-h] --format {openclaw,hermes} --out DIR anima`
 
-| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | anima | positional | — | — | Anima name to export |
 | --format | option | — | openclaw, hermes | Target workspace format |
@@ -123,7 +123,7 @@ List all animas with status
 
 ## `anima permissions`
 
-Display an Anima's permission configuration
+Display an Anima's permission settings
 
 `usage: animaworks anima permissions [-h] anima`
 
@@ -182,7 +182,7 @@ Set heartbeat/cron model
 
 ## `anima set-model`
 
-Change the main model of the specified anima.
+Change the primary model of the specified anima.
 
 `usage: animaworks anima set-model [-h] [--credential CREDENTIAL] [--all]
                                   [anima] [model]`
@@ -249,14 +249,14 @@ Read DM history with peer
 
 ## `board post`
 
-Posts to a channel. Format: board post <channel> [<text> | -]. If the body is omitted or '-' is specified, it is read from standard input. Legacy format: board post <from> <channel> <text>.
+Post to a channel. Format: board post <channel> [<text> | -]. If the body is omitted or '-' is specified, it is read from standard input. Legacy format: board post <from> <channel> <text>.
 
 `usage: animaworks board post [-h] [--as NAME] ARG [ARG ...]`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | post_args | positional | — | — | <channel> [<text> \| -], or legacy format <from> <channel> <text> |
-| --as | option | — | — | Poster name (post as the host) |
+| --as | option | — | — | Poster name (post from the host) |
 
 ## `board read`
 
@@ -455,27 +455,27 @@ Check the status of the isolated enclave and aggregate audit data.
 
 `usage: animaworks enclave [-h] {doctor,status} ...`
 
-| Name | Type | Default | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
 ## `enclave doctor`
 
-Inspect the enclave’s startup guards, sockets, and egress configuration.
+Inspect the enclave's startup guard, socket, and egress configuration.
 
 `usage: animaworks enclave doctor [-h] [--json]`
 
-| Name | Type | Default | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | --json | flag | false | — | Output in machine-readable JSON format |
 
 ## `enclave status`
 
-Display the number of successful and blocked egress requests today.
+Display the number of successful and blocked egress events for the day.
 
 `usage: animaworks enclave status [-h]`
 
-| Name | Type | Default | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
@@ -492,7 +492,7 @@ Trigger heartbeat
 
 ## `hub`
 
-Manage the hub's roster and external AI members
+Manage the hub roster and external AI members
 
 `usage: animaworks hub [-h] {setup-prompt,member} ...`
 
@@ -525,11 +525,11 @@ Add a member to the roster
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
-| --company | option | — | — | The member's company ID |
+| --company | option | — | — | Member's company ID |
 | --route | option | — | webhook, poll | Contact method (webhook or poll) |
 | --url-ref | option | — | — | Vault key name for the webhook URL (shared section) |
 | --key-ref | option | — | — | Vault key name for the webhook authentication key (shared section) |
-| --expect-every | option | — | — | Expected contact interval (e.g., 30m / 3h / 1d) |
+| --expect-every | option | — | — | Expected contact interval (e.g. 30m / 3h / 1d) |
 | --display-name | option | — | — | Display name (defaults to the ID) |
 | --kind | option | "vendor_bot" | — | Member type (default: vendor_bot) |
 
@@ -555,7 +555,7 @@ Enable a member
 
 ## `hub member list`
 
-Display the list of hub members (tokens are not shown)
+Display the hub member list (tokens are not shown)
 
 `usage: animaworks hub member list [-h]`
 
@@ -588,14 +588,14 @@ Register the SHA-256 of a bearer token from an environment variable
 
 ## `hub setup-prompt`
 
-Display setup text for external AIs
+Display setup text for external AI
 
 `usage: animaworks hub setup-prompt [-h] [--url URL] ID`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | member_id | positional | — | — | Member ID (2–32 characters starting with a lowercase letter) |
-| --url | option | — | — | Connection URL (default: the first entry in public_hosts) |
+| --url | option | — | — | Connection URL (default: first entry in public_hosts) |
 
 ## `import`
 
@@ -657,7 +657,7 @@ Index memory files into vector database for hybrid search.
 
 ## `init`
 
-Initialize the runtime directory and create animas as needed.
+Initialize the runtime directory and create an anima as needed.
 
 `usage: animaworks init [-h]
                        [--force | --template NAME | --from-md PATH | --blank NAME | --skip-anima]
@@ -794,7 +794,7 @@ Check and maintain memories
 
 ## `memory forgetting-dry-run`
 
-Show the number of targets for deactivation and full forgetting without updating
+Show the number of items subject to low activation and complete forgetting without updating.
 
 `usage: animaworks memory forgetting-dry-run [-h] --anima ANIMA`
 
@@ -804,12 +804,12 @@ Show the number of targets for deactivation and full forgetting without updating
 
 ## `migrate`
 
-Run required migrations for runtime data.
+Run the migrations required for runtime data.
 
 `usage: animaworks migrate [-h] [--dry-run] [--verbose] [--list] [--force]
                           [--rollback-standard-files] [--anima NAME]`
 
-| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | --dry-run | flag | false | — | Preview changes without modifying anything |
 | --verbose | flag | false | — | Show detailed file-level changes |
@@ -824,17 +824,17 @@ Model information and catalog
 
 `usage: animaworks models [-h] {list,info,helpers,show} ...`
 
-| Name | Type | Default value | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
 ## `models helpers`
 
-Displays the resolved model, credential name, fallback candidates, and resolution source for each auxiliary model role.
+For each helper model role, show the resolved model, authentication credential name, alternative candidates, and resolution source.
 
 `usage: animaworks models helpers [-h] [--anima ANIMA] [--json]`
 
-| Name | Type | Default value | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | --anima | option | — | — | Resolve per-anima helper overrides for this Anima |
 | --json | flag | false | — | Output as JSON |
@@ -845,7 +845,7 @@ Show resolved mode and context for a model
 
 `usage: animaworks models info [-h] model`
 
-| Name | Type | Default | Options | Description |
+| Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
 | model | positional | — | — | Model name (e.g. claude-sonnet-5-5) |
 
@@ -1213,7 +1213,7 @@ Remove an installed or quarantined skill
 
 ## `skills rollback`
 
-Rollback one skill content change by ledger ID
+Roll back one skill content change by ledger ID
 
 `usage: animaworks skills rollback [-h] --anima ANIMA id`
 
@@ -1336,19 +1336,19 @@ Publishes an executable TaskExec task; backlog_task only queues tracking work.
 
 ## `task autonomy`
 
-Aggregate delegation-related autonomy metrics (read-only)
+Aggregate autonomy metrics around delegation (read-only)
 
 `usage: animaworks task autonomy [-h] [--days DAYS] [--json] [--anima ANIMA]`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
-| --days | option | 7 | — | Aggregation period (days; default: 7) |
+| --days | option | 7 | — | Aggregation period (days, default: 7) |
 | --json | flag | false | — | Output as JSON |
 | --anima | option | — | — | Show only this Anima |
 
 ## `task board`
 
-View and manage task board items.
+View and operate on task board items.
 
 `usage: animaworks task board [-h] [--anima ANIMA | --all] [--stale STALE]
                              [--limit LIMIT] [--json]`
@@ -1476,7 +1476,7 @@ Update task status
 
 ## `task-store`
 
-Maintenance and migration of the task ledger per assignee
+Maintenance and migration of the per-assignee task source of truth
 
 `usage: animaworks task-store [-h]
                              {status,quiesce,resume,migrate,backup,export} ...`
@@ -1499,7 +1499,7 @@ Create a new DB backup including the WAL
 
 ## `task-store export`
 
-Write the current shutdown state to a new directory
+Write the current status during shutdown to a new directory
 
 `usage: animaworks task-store export [-h] --anima ANIMA --destination
                                     DESTINATION`
@@ -1511,7 +1511,7 @@ Write the current shutdown state to a new directory
 
 ## `task-store migrate`
 
-Import the old ledger while shutdown (backup required)
+Import the old ledger during shutdown (backup required)
 
 `usage: animaworks task-store migrate [-h] --anima ANIMA --backup BACKUP`
 
@@ -1522,7 +1522,7 @@ Import the old ledger while shutdown (backup required)
 
 ## `task-store quiesce`
 
-Permanently stop fetching new executions
+Permanently stop acquiring new runs
 
 `usage: animaworks task-store quiesce [-h] --anima ANIMA`
 
@@ -1532,7 +1532,7 @@ Permanently stop fetching new executions
 
 ## `task-store resume`
 
-Resume fetching new executions
+Resume acquiring new runs
 
 `usage: animaworks task-store resume [-h] --anima ANIMA`
 
@@ -1542,7 +1542,7 @@ Resume fetching new executions
 
 ## `task-store status`
 
-Show the shutdown gate and execution count
+Show the shutdown gate and run count
 
 `usage: animaworks task-store status [-h] --anima ANIMA`
 
@@ -1552,7 +1552,7 @@ Show the shutdown gate and execution count
 
 ## `timeline`
 
-Append "done" or "decided" to the company timeline
+Append "done" and "decided" entries to the company timeline
 
 `usage: animaworks timeline [-h] {add,read} ...`
 
@@ -1562,18 +1562,18 @@ Append "done" or "decided" to the company timeline
 
 ## `timeline add`
 
-Append "done" or "decided" to the company timeline
+Append "done" and "decided" entries to the company timeline
 
 `usage: animaworks timeline add [-h] --kind {done,decided} --text TEXT
                                [--about ABOUT] [--ref REF] [--from NAME]`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
-| --kind | option | — | done, decided | Item type (done or decided) |
+| --kind | option | — | done, decided | Entry type (done or decided) |
 | --text | option | — | — | Body text to post to the timeline |
-| --about | option | — | — | ID of the original item to update (tl_...) |
+| --about | option | — | — | Original entry ID to update (tl_...) |
 | --ref | option | — | — | Reference URL, etc. |
-| --from | option | — | — | Recorder name (only when run by an operator) |
+| --from | option | — | — | Recorder name (only when run by the operator) |
 
 ## `timeline read`
 
@@ -1583,7 +1583,7 @@ Read the company timeline (last 24 hours)
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
-| --limit | option | 20 | — | Maximum number of items to retrieve |
+| --limit | option | 20 | — | Maximum number of entries to retrieve |
 
 ## `tmp`
 
@@ -1626,7 +1626,9 @@ Show tmp usage summary
 
 Manage encrypted vault values
 
-`usage: animaworks vault [-h] {status,init,get,store,list,delete} ...`
+`usage: animaworks vault [-h]
+                        {status,init,migrate-config,get,store,list,delete,sources,sync,rollback,register-1p}
+                        ...`
 
 | Name | Type | Default | Choices | Description |
 |---|---|---|---|---|
@@ -1674,6 +1676,83 @@ List keys in the own and shared namespaces
 |---|---|---|---|---|
 | --shared | flag | false | — | List only the shared section (does not require ANIMAWORKS_ANIMA_DIR) |
 
+## `vault migrate-config`
+
+Move plaintext config credentials into the vault
+
+`usage: animaworks vault migrate-config [-h] [--commit]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| --commit | flag | false | — | Move the listed credentials now |
+
+## `vault register-1p`
+
+Register a shared key with 1Password
+
+`usage: animaworks vault register-1p [-h] --vault VAULT [--title TITLE]
+                                    [--field FIELD] [--commit]
+                                    key`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+| --vault | option | — | — | 1Password vault name |
+| --title | option | — | — | 1Password item title (default: the key) |
+| --field | option | "credential" | — | 1Password field name (default: credential) |
+| --commit | flag | false | — | Create the item (default: preview only) |
+
+## `vault rollback`
+
+Restore the previous shared value for a key
+
+`usage: animaworks vault rollback [-h] key`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+
+## `vault sources`
+
+Manage the shared-key to 1Password reference mapping
+
+`usage: animaworks vault sources [-h] {list,add,remove} ...`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `vault sources add`
+
+Register a 1Password reference for a shared key
+
+`usage: animaworks vault sources add [-h] key ref`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+| ref | positional | — | — | 1Password reference (op://Vault/Item/field) |
+
+## `vault sources list`
+
+List registered 1Password references
+
+`usage: animaworks vault sources list [-h] [--json]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| --json | flag | false | — | Emit JSON (the default) |
+
+## `vault sources remove`
+
+Remove a 1Password reference
+
+`usage: animaworks vault sources remove [-h] key`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+
 ## `vault status`
 
 Show key and encryption status without values
@@ -1695,3 +1774,16 @@ Store a key-value pair
 | key | positional | — | — | Key to store |
 | value | positional | — | — | Value to store in the anima namespace |
 | --shared | flag | false | — | Operator-only: store in shared via stdin or a hidden prompt |
+
+## `vault sync`
+
+Sync shared keys from 1Password
+
+`usage: animaworks vault sync [-h] [--check] [--yes] [--json] [keys ...]`
+
+| Name | Type | Default | Choices | Description |
+|---|---|---|---|---|
+| keys | positional | — | — | Only sync these keys (default: all registered keys) |
+| --check | flag | false | — | Only compare values; do not write |
+| --yes | flag | false | — | Apply changes without prompting |
+| --json | flag | false | — | Emit JSON without secret values |

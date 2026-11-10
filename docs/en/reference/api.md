@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=58ad9fce7a5643b700c610524327733f9d822af40957a9cf4ed4bfb0b9af25e9 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # API Reference
 
@@ -294,6 +294,18 @@ Generated from FastAPI’s OpenAPI definitions, WebSocket, and handwritten route
 | POST | `/api/users` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Add a new user (owner only). | `server/routes/users.py:add_user` |
 | PUT | `/api/users/me/password` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Change (or initially set) the current user's password. | `server/routes/users.py:change_password` |
 | DELETE | `/api/users/{username}` | Session required (may be omitted in local_trust mode or when localhost trust is enabled) | Delete a user (owner only, cannot delete self). | `server/routes/users.py:delete_user` |
+
+## `server/routes/vault_routes.py`
+
+| POST | `/api/vault/check` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_check` |
+| POST | `/api/vault/hub-members/{member_id}/reissue-token` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_reissue_hub_token` |
+| POST | `/api/vault/migrate-config` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_migrate_config` |
+| GET | `/api/vault/overview` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_overview` |
+| PUT | `/api/vault/shared/{key}` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_set_shared` |
+| POST | `/api/vault/shared/{key}/delete` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_delete_shared` |
+| POST | `/api/vault/shared/{key}/rollback` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_rollback_shared` |
+| POST | `/api/vault/sync/apply` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_sync_apply` |
+| POST | `/api/vault/sync/plan` | Session required (local_trust mode, or optional if localhost trust is enabled) | — | `server/routes/vault_routes.py:vault_sync_plan` |
 
 ## `server/routes/voice.py`
 

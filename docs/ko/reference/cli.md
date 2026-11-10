@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/cli.md -->
-<!-- i18n: source-sha256=7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026 generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=ddb8566c643f0429ef232f44cca58443c7c9c62f41c1b8d9ebfa7bc58bd94d96 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # CLI 참조: `animaworks`
 
@@ -1624,11 +1624,13 @@ tmp 사용량 요약 표시
 
 ## `vault`
 
-암호화된 볼트 값 관리
+암호화된 vault 값 관리
 
-`usage: animaworks vault [-h] {status,init,get,store,list,delete} ...`
+`usage: animaworks vault [-h]
+                        {status,init,migrate-config,get,store,list,delete,sources,sync,rollback,register-1p}
+                        ...`
 
-| 이름 | 유형 | 기본값 | 선택지 | 설명 |
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
 |---|---|---|---|---|
 | — | — | — | — | — |
 
@@ -1674,6 +1676,83 @@ tmp 사용량 요약 표시
 |---|---|---|---|---|
 | --shared | flag | false | — | 공유 섹션만 조회 (ANIMAWORKS_ANIMA_DIR가 필요하지 않음) |
 
+## `vault migrate-config`
+
+평문 설정 자격 증명을 vault로 이동
+
+`usage: animaworks vault migrate-config [-h] [--commit]`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| --commit | flag | false | — | 나열된 자격 증명을 지금 이동 |
+
+## `vault register-1p`
+
+1Password에 공유 키 등록
+
+`usage: animaworks vault register-1p [-h] --vault VAULT [--title TITLE]
+                                    [--field FIELD] [--commit]
+                                    key`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| key | positional | — | — | 공유 vault 키 |
+| --vault | option | — | — | 1Password vault 이름 |
+| --title | option | — | — | 1Password 항목 제목 (기본값: 키) |
+| --field | option | "credential" | — | 1Password 필드 이름 (기본값: credential) |
+| --commit | flag | false | — | 항목 생성 (기본값: 미리보기만) |
+
+## `vault rollback`
+
+키의 이전 공유 값 복원
+
+`usage: animaworks vault rollback [-h] key`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| key | positional | — | — | 공유 vault 키 |
+
+## `vault sources`
+
+공유 키와 1Password 참조 매핑 관리
+
+`usage: animaworks vault sources [-h] {list,add,remove} ...`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `vault sources add`
+
+공유 키에 대한 1Password 참조 등록
+
+`usage: animaworks vault sources add [-h] key ref`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| key | positional | — | — | 공유 vault 키 |
+| ref | positional | — | — | 1Password 참조 (op://Vault/Item/field) |
+
+## `vault sources list`
+
+등록된 1Password 참조 목록
+
+`usage: animaworks vault sources list [-h] [--json]`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| --json | flag | false | — | JSON 출력 (기본값) |
+
+## `vault sources remove`
+
+1Password 참조 제거
+
+`usage: animaworks vault sources remove [-h] key`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| key | positional | — | — | 공유 vault 키 |
+
 ## `vault status`
 
 값 없이 키와 암호화 상태 표시
@@ -1695,3 +1774,16 @@ tmp 사용량 요약 표시
 | key | positional | — | — | 저장할 키 |
 | value | positional | — | — | 아니마 네임스페이스에 저장할 값 |
 | --shared | flag | false | — | 운영자 전용: stdin 또는 숨겨진 프롬프트를 통해 공유 섹션에 저장 |
+
+## `vault sync`
+
+1Password에서 공유 키 동기화
+
+`usage: animaworks vault sync [-h] [--check] [--yes] [--json] [keys ...]`
+
+| 이름 | 종류 | 기본값 | 선택지 | 설명 |
+|---|---|---|---|---|
+| keys | positional | — | — | 이 키만 동기화 (기본값: 등록된 모든 키) |
+| --check | flag | false | — | 값만 비교; 쓰지 않음 |
+| --yes | flag | false | — | 프롬프트 없이 변경 적용 |
+| --json | flag | false | — | 비밀 값 없이 JSON 출력 |

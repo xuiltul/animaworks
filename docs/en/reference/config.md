@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=985318166f6470319e9c533e165e0fb4603a2a220f308007ca7e6814b8fb0b2e generated=2026-11-08 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
+<!-- i18n: source-sha256=985318166f6470319e9c533e165e0fb4603a2a220f308007ca7e6814b8fb0b2e generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Configuration Reference
 

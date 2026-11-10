@@ -1,4 +1,4 @@
-// ── Settings Page (tab host: general | activity | api | users) ─
+// ── Settings Page (tab host: general | activity | api | secrets | users) ─
 import { api } from "../modules/api.js";
 import { escapeHtml } from "../modules/state.js";
 import { createPageTabs } from "../shared/page-tabs.js";
@@ -17,13 +17,14 @@ const _TABS = [
   { id: "general", labelKey: "settings.tab_general" },
   { id: "activity", labelKey: "settings.tab_activity" },
   { id: "api", labelKey: "settings.tab_api" },
+  { id: "secrets", labelKey: "settings.tab_secrets" },
   { id: "users", labelKey: "settings.tab_users" },
 ];
 
 /**
  * Resolve settings tab from router subPath.
  * @param {string} [subPath]
- * @returns {"general"|"activity"|"api"|"users"}
+ * @returns {"general"|"activity"|"api"|"secrets"|"users"}
  */
 function resolveSettingsTab(subPath) {
   const head = String(subPath || "")
@@ -110,6 +111,21 @@ export async function render(container, { subPath } = {}) {
   const content = document.getElementById("settingsTabContent");
   if (!content) return;
 
+  if (_activeTab === "secrets") {
+    try {
+      const mod = await import("./settings-secrets.js");
+      _activeTabModule = mod;
+      content.innerHTML = "";
+      if (typeof mod.render === "function") {
+        await mod.render(content);
+      }
+    } catch (err) {
+      console.error("[Settings] Failed to load secrets tab:", err);
+      content.innerHTML = `<div class="page-error">${t("router.page_load_failed")}</div>`;
+    }
+    return;
+  }
+
   if (_activeTab === "users") {
     try {
       const mod = await import("./users.js");
@@ -148,6 +164,9 @@ function _renderApiAuth(container) {
       <div class="settings-auth-block" id="settingsApiKeys">
         <div class="loading-placeholder">${t("common.loading")}</div>
       </div>
+      <p class="settings-section-desc">
+        <a href="#/settings/secrets">${t("settings.api_auth.secrets_link")}</a>
+      </p>
 
       <h4 class="settings-subsection-title">${t("settings.api_auth.anthropic_title")}</h4>
       <div class="settings-auth-block" id="anthropicAuthSettings">

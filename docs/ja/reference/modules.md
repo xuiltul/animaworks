@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: f2f3a74e75916201e2fed8d2c3530d20d139c2ad70b573170e681088104efd11 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: cb789767a2f2b6bd155ef7a6a0f40cdf3f3eecd79c8df338899afed82fe9916d -->
 
 # モジュール一覧
 
@@ -58,7 +58,7 @@
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
 | `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
-| `cli.commands.vault_cmd` | 309 | — |
+| `cli.commands.vault_cmd` | 626 | — |
 
 ## `cli.tui`
 
@@ -204,7 +204,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 497 | — |
-| `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.io` | 530 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |
@@ -212,10 +212,13 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
 | `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
 | `core.config.models` | 101 | Central configuration module — facade re-exporting split modules. |
+| `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
 | `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
-| `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
+| `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
 
 ## `core.enclave`
 
@@ -425,6 +428,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
 | `core.i18n.strings.tooling_schema` | 542 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
+| `core.i18n.strings.vault` | 103 | Domain-specific i18n strings for vault and 1Password operations. |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -433,7 +437,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `core.i18n.strings` | 63 | Merge all domain string modules into a single dict. |
+| `core.i18n.strings` | 65 | Merge all domain string modules into a single dict. |
 
 ## `core.infra`
 
@@ -1119,7 +1123,7 @@ LLM 利用量とコストの記録・集計。
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1605 | — |
+| `server.app` | 1641 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1151,7 +1155,7 @@ LLM 利用量とコストの記録・集計。
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `server.routes` | 65 | — |
+| `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1185,6 +1189,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
+| `server.routes.vault_routes` | 536 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |

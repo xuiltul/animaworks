@@ -162,6 +162,10 @@ class VaultManager:
         return self._key_path.is_file()
 
     @property
+    def data_dir(self) -> Path:
+        return self._data_dir
+
+    @property
     def key_path(self) -> Path:
         return self._key_path
 
@@ -330,6 +334,7 @@ class VaultManager:
                 data[section] = {}
             data[section][key] = self.encrypt(value)
             self._save_vault_unlocked(data)
+        self._record_metadata_write(section, key)
 
     def get(self, section: str, key: str) -> str | None:
         """Retrieve and decrypt a single value from vault.json.
@@ -359,7 +364,17 @@ class VaultManager:
             if not section_data:
                 del data[section]
             self._save_vault_unlocked(data)
-            return True
+        self._record_metadata_write(section, key)
+        return True
+
+    def _record_metadata_write(self, section: str, key: str) -> None:
+        """Mirror a successful write into vault metadata (best effort)."""
+        try:
+            from core.config.vault_ops import record_direct_write
+
+            record_direct_write(self._data_dir, section, key)
+        except Exception as exc:  # pragma: no cover - metadata must not fail the vault write
+            logger.warning("Failed to record vault metadata for %s/%s: %s", section, key, exc)
 
     def _save_vault_unlocked(self, data: dict[str, Any]) -> None:
         """Internal save without acquiring lock (caller must hold it)."""
