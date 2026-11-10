@@ -126,11 +126,15 @@ async def test_system_notifications_trail_into_one_batch(tmp_path: Path, monkeyp
 
 @pytest.mark.asyncio
 async def test_system_notifications_trigger_at_max_wait(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every arrival extends the quiet window, so only max_wait can end it. The
+    # two deadlines are far apart: the four sends fit well inside max_wait even
+    # when each disk write is slow, and the run still comes long before the
+    # quiet window could have ended.
     limiter, _receiver, sender, run_batches, inbox_ran = _make_limiter(
         tmp_path,
         monkeypatch,
-        quiet_seconds=0.4,
-        max_wait_seconds=0.2,
+        quiet_seconds=3.0,
+        max_wait_seconds=0.8,
     )
     task = await _start_watcher(limiter)
     try:
@@ -140,8 +144,8 @@ async def test_system_notifications_trigger_at_max_wait(tmp_path: Path, monkeypa
             if index < 3:
                 await asyncio.sleep(0.05)
 
-        await asyncio.wait_for(inbox_ran.wait(), timeout=0.4)
-        assert time.monotonic() - started_at < 0.35
+        await asyncio.wait_for(inbox_ran.wait(), timeout=2.0)
+        assert time.monotonic() - started_at < 2.0
         assert run_batches == [4]
     finally:
         await _stop_watcher(limiter, task)
