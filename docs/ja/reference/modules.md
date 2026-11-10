@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: f3ec4bdc9616b30e3684425c43a772b97236aa8b6c5baf5dbe8f33ddc150f218 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: f0ae52b50ced7aef38629f9d312f24029f115c6deeed72b96b4a4cfa6aaf86e7 -->
 
 # モジュール一覧
 
@@ -272,7 +272,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.execution._streaming（非公開）` | 303 | — |
 | `core.execution._tool_summary（非公開）` | 99 | — |
 | `core.execution.base` | 934 | — |
-| `core.execution.busy_probe` | 68 | Congestion probe for self-hosted fallback models (vLLM ``/metrics``). |
+| `core.execution.busy_probe` | 99 | Congestion probe for self-hosted fallback models (vLLM ``/metrics`` or llm-gate). |
 | `core.execution.cli_stream` | 328 | — |
 | `core.execution.engine_base` | 76 | — |
 | `core.execution.engines.agy.executor` | 795 | — |

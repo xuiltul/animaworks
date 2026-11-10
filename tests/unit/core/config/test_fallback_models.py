@@ -577,3 +577,29 @@ class TestBusyProbe:
         busy_probe._cache.clear()
         entry = {"busy_probe": {"metrics_url": "http://127.0.0.1:9/metrics"}}
         assert busy_probe.is_model_busy(entry) is False
+        gate = {"busy_probe": {"gate_status_url": "http://127.0.0.1:9/gate/status"}}
+        assert busy_probe.is_model_busy(gate) is False
+
+    def test_gate_status(self) -> None:
+        from core.execution import busy_probe
+
+        def status(waiting: int, *backends: tuple[int, int, bool]) -> str:
+            rows = [{"name": f"b{i}", "busy": b, "slots": s, "up": up} for i, (b, s, up) in enumerate(backends)]
+            return json.dumps({"waiting": waiting, "waiting_dsh": 0, "backends": rows})
+
+        # Seats counted on up backends only; a down backend's slots are not free.
+        assert busy_probe._parse_gate_load(status(0, (4, 4, True), (2, 4, True), (0, 1, False))) == (2.0, 0.0)
+
+        entry = {"busy_probe": {"gate_status_url": "http://gate/gate/status"}}
+
+        def busy(body: str) -> bool:
+            with patch.object(busy_probe, "_fetch_load", side_effect=lambda url, parse: parse(body)):
+                return busy_probe.is_model_busy(entry)
+
+        assert busy(status(0, (3, 4, True), (4, 4, True))) is False
+        assert busy(status(0, (4, 4, True), (4, 4, True), (1, 1, True))) is True
+        assert busy(status(1, (3, 4, True))) is True
+        assert busy(status(0, (0, 4, False))) is True
+        tolerant = {"busy_probe": {"gate_status_url": "http://gate/gate/status", "max_waiting": 2}}
+        with patch.object(busy_probe, "_fetch_load", side_effect=lambda url, parse: parse(status(2, (3, 4, True)))):
+            assert busy_probe.is_model_busy(tolerant) is False
