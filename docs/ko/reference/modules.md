@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017 translator=2 -->
 
 # 모듈 목록
 
@@ -72,7 +72,7 @@
 | `cli.tui.commands` | 251 | — |
 | `cli.tui.keybindings` | 90 | TUI용 키 바인딩 설정. |
 | `cli.tui.markdown` | 535 | 터미널 대화 기록에 맞게 조정한 Markdown → Rich 렌더링 객체. |
-| `cli.tui.session` | 216 | TUI 세션 유지 기능. |
+| `cli.tui.session` | 219 | TUI 세션 유지 기능. |
 | `cli.tui.sse` | 98 | — |
 | `cli.tui.state` | 280 | TUI 사이드바, 활동 피드 및 팔레트의 클라이언트 전용 UI 상태. |
 | `cli.tui.widgets.call_human` | 85 | 대화 기록에 표시되는 call_human 알림 카드. |

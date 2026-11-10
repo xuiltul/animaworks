@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 7eba0cc99bd4dcfcb17bb016f0ba68f8679bc49b3ac96169041e759af6042df3 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: cb789767a2f2b6bd155ef7a6a0f40cdf3f3eecd79c8df338899afed82fe9916d -->
 
 # モジュール一覧
 
@@ -72,7 +72,7 @@
 | `cli.tui.commands` | 251 | — |
 | `cli.tui.keybindings` | 90 | Keybinding configuration for the TUI. |
 | `cli.tui.markdown` | 535 | Markdown → Rich renderables, tuned for a terminal transcript. |
-| `cli.tui.session` | 216 | Session persistence for the TUI. |
+| `cli.tui.session` | 219 | Session persistence for the TUI. |
 | `cli.tui.sse` | 98 | — |
 | `cli.tui.state` | 280 | Pure client-side UI state for the TUI sidebar, activity feed and palette. |
 | `cli.tui.widgets.call_human` | 85 | A call_human notification card rendered in the transcript. |

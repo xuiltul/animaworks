@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -72,7 +72,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.tui.commands` | 251 | — |
 | `cli.tui.keybindings` | 90 | Keybinding configuration for the TUI. |
 | `cli.tui.markdown` | 535 | Markdown → Rich renderables, tuned for a terminal transcript. |
-| `cli.tui.session` | 216 | Session persistence for the TUI. |
+| `cli.tui.session` | 219 | Session persistence for the TUI. |
 | `cli.tui.sse` | 98 | — |
 | `cli.tui.state` | 280 | Pure client-side UI state for the TUI sidebar, activity feed and palette. |
 | `cli.tui.widgets.call_human` | 85 | A call_human notification card rendered in the transcript. |

@@ -698,7 +698,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "c905ed3d6e29d5d2d187729e3aaa2aef8726a95f5ec086ff18ab46a08259de47",
+      "source_sha256": "46d9e37a45777df79a2491c8e8b4283b620ca8ffccd840e2bdc40b4b15d98828",
       "statuses": [
         "translated"
       ],
@@ -1188,7 +1188,7 @@
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "b3857dc2b024c17bd07540f1ac645d192039c1b495a44d2c9b2bc3c2fe1e5c6d",
         "7349763e5afd83d54af1632ecd32eebec74ee45f49da0b7dfedf0098e83a5472",
-        "9bc8f4e99054207316ec9d309c17b077d92f0f8f08b11af6bd1f39068da916e2",
+        "8acc156e42dcee7d33150836c500a307474d2767844db831cf1afe0a7c96cbd4",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
         "49fb3403315219d172892947da335cce64b0b3e2991b643e5e1b802244db4318",
         "8d99f241f3238793fb143901fd329828883f20a25755c8b772acc87613490b31",
@@ -1258,7 +1258,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61",
+      "source_sha256": "17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8",
       "statuses": [
         "translated",
         "translated",
@@ -2142,7 +2142,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "c905ed3d6e29d5d2d187729e3aaa2aef8726a95f5ec086ff18ab46a08259de47",
+      "source_sha256": "46d9e37a45777df79a2491c8e8b4283b620ca8ffccd840e2bdc40b4b15d98828",
       "statuses": [
         "translated"
       ],
@@ -2627,12 +2627,12 @@
     "docs/ko/reference/modules.md": {
       "engine": "local",
       "generated": "2026-11-10",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "model": "deepseek-v4.1-flash-1017",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "b3857dc2b024c17bd07540f1ac645d192039c1b495a44d2c9b2bc3c2fe1e5c6d",
         "7349763e5afd83d54af1632ecd32eebec74ee45f49da0b7dfedf0098e83a5472",
-        "9bc8f4e99054207316ec9d309c17b077d92f0f8f08b11af6bd1f39068da916e2",
+        "8acc156e42dcee7d33150836c500a307474d2767844db831cf1afe0a7c96cbd4",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
         "49fb3403315219d172892947da335cce64b0b3e2991b643e5e1b802244db4318",
         "8d99f241f3238793fb143901fd329828883f20a25755c8b772acc87613490b31",
@@ -2702,7 +2702,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61",
+      "source_sha256": "17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8",
       "statuses": [
         "translated",
         "translated",
