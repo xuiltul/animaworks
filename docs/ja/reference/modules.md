@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: f3ec4bdc9616b30e3684425c43a772b97236aa8b6c5baf5dbe8f33ddc150f218 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: bfbde885c7613b7a76ee09f560d050aa8510f6d2db58192de0d3264643ed7e4a -->
 
 # モジュール一覧
 
@@ -204,7 +204,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 497 | — |
-| `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.io` | 516 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |

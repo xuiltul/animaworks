@@ -11,17 +11,34 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from core.config.schemas import AnimaWorksConfig
-from core.config.vault import resolve_vault_references
+from core.config.vault import VaultManager, resolve_vault_references
 from core.exceptions import ConfigError
 from core.platform.atomic_io import update_json
 from core.platform.process_role import assert_settings_write_allowed
 
 logger = logging.getLogger("animaworks.config")
+
+_SENSITIVE_KEY_PARTS = ("key", "secret", "token", "password")
+_MISSING = object()
+_vault_unavailable_warned = False
+_vault_unavailable_warn_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class PlaintextCredential:
+    """A credential leaf that will be moved to the vault on the next save."""
+
+    path: str
+    vault_key: str
+
 
 # ---------------------------------------------------------------------------
 # Singleton cache
@@ -134,10 +151,11 @@ def save_config(config: AnimaWorksConfig, path: Path | None = None) -> None:
     payload = config.model_dump(mode="json")
 
     def replace_config(existing: dict[str, Any]) -> dict[str, Any]:
-        disk_payload, vault_updates = _preserve_vault_references(
+        disk_payload, vault_updates = _prepare_disk_payload(
             payload,
             existing,
             loaded_values=_config_vault_values if _config_path == path else {},
+            data_dir=path.parent,
         )
         if vault_updates:
             _apply_vault_updates(path.parent, vault_updates)
@@ -190,10 +208,11 @@ def update_config(
             updated_config = AnimaWorksConfig.model_validate(resolved_payload)
         else:
             raise TypeError("update_config callback must return None, AnimaWorksConfig, or a JSON object")
-        disk_payload, vault_updates = _preserve_vault_references(
+        disk_payload, vault_updates = _prepare_disk_payload(
             payload,
             raw_data,
             loaded_values=loaded_values,
+            data_dir=path.parent,
         )
         if vault_updates:
             _apply_vault_updates(path.parent, vault_updates)
@@ -294,21 +313,201 @@ def _preserve_vault_references(
     return value, {}
 
 
-def _apply_vault_updates(data_dir: Path, updates: dict[str, str]) -> None:
-    """Atomically update changed values in the vault's shared section."""
-    from core.config.vault import VaultManager
+def _prepare_disk_payload(
+    payload: dict[str, Any],
+    existing: dict[str, Any],
+    *,
+    loaded_values: dict[tuple[str | int, ...], Any],
+    data_dir: Path,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Preserve existing references and move plaintext credentials into the vault."""
+    disk_payload, vault_updates = _preserve_vault_references(
+        payload,
+        existing,
+        loaded_values=loaded_values,
+    )
+    return _reference_plaintext_credentials(disk_payload, data_dir, vault_updates)
+
+
+def _reference_plaintext_credentials(
+    payload: dict[str, Any],
+    data_dir: Path,
+    vault_updates: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, str]]:
+    leaves = _plaintext_credential_leaves(payload)
+    if not leaves:
+        return payload, vault_updates
 
     vault = VaultManager(data_dir)
-    data = vault.load_vault()
-    shared = data.setdefault("shared", {})
+    if not _vault_store_available(vault):
+        _warn_vault_unavailable_once()
+        return payload, vault_updates
+
+    shared = _load_shared_section(vault)
+    updates = dict(vault_updates)
+    for path, vault_key, _value in _plan_credential_moves(leaves, shared, updates, vault):
+        _set_path(payload, path, {"$vault": vault_key})
+    return payload, updates
+
+
+def _plan_credential_moves(
+    leaves: list[tuple[tuple[str, ...], str, str, str]],
+    shared: dict[str, Any],
+    pending: dict[str, str],
+    vault: VaultManager,
+) -> list[tuple[tuple[str, ...], str, str]]:
+    moves: list[tuple[tuple[str, ...], str, str]] = []
+    for path, name, leaf, value in leaves:
+        vault_key = _choose_vault_key(name, leaf, value, shared, pending, vault)
+        current = _existing_vault_value(vault_key, shared, pending, vault)
+        if current is _MISSING or current != value:
+            if vault_key in pending and pending[vault_key] != value:
+                raise ConfigError(f"Conflicting updates for vault key: {vault_key}")
+            pending[vault_key] = value
+        moves.append((path, vault_key, value))
+    return moves
+
+
+def _plaintext_credential_leaves(raw: dict[str, Any]) -> list[tuple[tuple[str, ...], str, str, str]]:
+    """Return ``(path, credential name, leaf name, value)`` for plaintext secrets."""
+    credentials = raw.get("credentials")
+    if not isinstance(credentials, dict):
+        return []
+
+    leaves: list[tuple[tuple[str, ...], str, str, str]] = []
+    for name, entry in credentials.items():
+        if not isinstance(name, str) or not isinstance(entry, dict):
+            continue
+        api_key = entry.get("api_key")
+        if isinstance(api_key, str) and api_key:
+            leaves.append((("credentials", name, "api_key"), name, "api_key", api_key))
+        keys = entry.get("keys")
+        if isinstance(keys, dict):
+            for key_name, value in keys.items():
+                if not isinstance(key_name, str) or not _is_sensitive_key_name(key_name):
+                    continue
+                if isinstance(value, str) and value:
+                    leaves.append((("credentials", name, "keys", key_name), name, key_name, value))
+    return leaves
+
+
+def _is_sensitive_key_name(name: str) -> bool:
+    lowered = name.lower()
+    return any(part in lowered for part in _SENSITIVE_KEY_PARTS)
+
+
+def _env_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9]+", "_", value).upper().strip("_")
+
+
+def _base_vault_key(name: str, leaf: str) -> str:
+    return f"{_env_name(name)}_{_env_name(leaf)}".strip("_")
+
+
+def _vault_store_available(vault: VaultManager) -> bool:
+    from core.config.vault import _HAS_NACL
+
+    return bool(_HAS_NACL) and vault.has_key
+
+
+def _load_shared_section(vault: VaultManager) -> dict[str, Any]:
+    shared = vault.load_vault().get("shared", {})
+    if not isinstance(shared, dict):
+        raise ConfigError("vault.json shared section must be an object")
+    return shared
+
+
+def _existing_vault_value(
+    key: str,
+    shared: dict[str, Any],
+    pending: dict[str, str],
+    vault: VaultManager,
+) -> Any:
+    if key in pending:
+        return pending[key]
+    stored = shared.get(key, _MISSING)
+    if stored is _MISSING or not isinstance(stored, str):
+        return _MISSING
+    return vault.decrypt(stored)
+
+
+def _choose_vault_key(
+    name: str,
+    leaf: str,
+    value: str,
+    shared: dict[str, Any],
+    pending: dict[str, str],
+    vault: VaultManager,
+) -> str:
+    base = _base_vault_key(name, leaf)
+    existing = _existing_vault_value(base, shared, pending, vault)
+    if existing is not _MISSING and existing != value:
+        return f"CONFIG_{base}"
+    return base
+
+
+def _set_path(data: dict[str, Any], path: tuple[str, ...], value: Any) -> None:
+    target: Any = data
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = value
+
+
+def find_plaintext_credentials(
+    raw: dict[str, Any],
+    data_dir: Path | None = None,
+) -> list[PlaintextCredential]:
+    """List credential leaves that a save would move into the vault.
+
+    Only paths and planned vault key names are returned, never the values.
+    """
+    leaves = _plaintext_credential_leaves(raw)
+    if not leaves:
+        return []
+
+    if data_dir is None:
+        from core.paths import get_data_dir
+
+        data_dir = get_data_dir()
+
+    vault = VaultManager(data_dir)
+    if not _vault_store_available(vault):
+        return [
+            PlaintextCredential(path=".".join(path), vault_key=_base_vault_key(name, leaf))
+            for path, name, leaf, _value in leaves
+        ]
+
+    shared = _load_shared_section(vault)
+    pending: dict[str, str] = {}
+    moves = _plan_credential_moves(leaves, shared, pending, vault)
+    return [PlaintextCredential(path=".".join(path), vault_key=vault_key) for path, vault_key, _value in moves]
+
+
+def _warn_vault_unavailable_once() -> None:
+    global _vault_unavailable_warned
+    with _vault_unavailable_warn_lock:
+        if _vault_unavailable_warned:
+            return
+        _vault_unavailable_warned = True
+    logger.warning(
+        "Vault is unavailable (PyNaCl missing or vault.key not found); "
+        "credential values in config.json will be stored in plaintext"
+    )
+
+
+def _apply_vault_updates(data_dir: Path, updates: dict[str, str]) -> None:
+    """Atomically update changed values in the vault's shared section."""
+    vault = VaultManager(data_dir)
+    shared = vault.load_vault().get("shared", {})
     if not isinstance(shared, dict):
         raise ConfigError("vault.json shared section must be an object")
     for key, value in updates.items():
-        shared[key] = vault.encrypt(value)
-    vault.save_vault(data)
+        vault.store("shared", key, value)
 
 
 __all__ = [
+    "PlaintextCredential",
+    "find_plaintext_credentials",
     "get_config_path",
     "invalidate_cache",
     "load_config",
