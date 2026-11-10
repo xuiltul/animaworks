@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: bcd0be23e4899be0494cabd22a50c13dba732310eb1686c87092b7939e4f201a -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 8ad8368d655fa0c00bcc7fda9fc8dd7712d8e5b9c41a82ba9f6af97a4f5acdf9 -->
 
 # モジュール一覧
 
@@ -204,7 +204,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 497 | — |
-| `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.io` | 516 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |
@@ -217,7 +217,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
 | `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
-| `core.config.vault_ops` | 586 | Core operator operations for the vault and its 1Password mapping. |
+| `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
 
 ## `core.enclave`
