@@ -457,7 +457,7 @@ class HelperModelsConfig(BaseModel):
 class ImageGenConfig(BaseModel):
     """Configuration for image generation and style consistency."""
 
-    backend: Literal["api", "diffusers", "atlascloud"] = "api"
+    backend: Literal["api", "diffusers", "atlascloud", "uberllm"] = "api"
     image_style: Literal["anime", "realistic"] = "realistic"
     prefer_codex: bool = True  # codex CLIがあれば画像生成に最優先で使う
     style_reference: str | None = None  # Path to organization-wide style reference image

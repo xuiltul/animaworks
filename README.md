@@ -291,6 +291,14 @@ Three principles support this:
 | `FAL_KEY` | fal.ai (Flux) | Photorealistic / stylized avatar generation |
 | Codex Image / Local Diffusers | OpenAI / Local | Full-body, bust-up, and pixel-art sprite sheet (`pixel_sheet.png`) generation |
 | `MESHY_API_KEY` | Meshy | Rigged 3D character model generation (`.glb`) |
+| `UBERLLM_API_KEY` | UberLLM (Seedream 4.5) | Character images and reference edits (`image_gen.backend: "uberllm"`) |
+
+To use UberLLM for character images, set `image_gen.backend` to `"uberllm"` in `config.json` and
+configure `UBERLLM_API_KEY` (or `credentials.uberllm.api_key`). Full-body images use Seedream 4.5 and
+bust-ups, icons and other reference-based images use Seedream v4 edit, each as one request that returns
+the picture inline. Sizes snap to the closest of 1:1, 4:3, 3:4, 3:2 and 2:3 (up to 1536 px). Seed, negative
+prompt, guidance and NovelAI sampler/vibe settings are not supported, and failed requests are not resubmitted.
+The same key also serves chat, video and music models. Meshy remains responsible for 3D assets.
 
 #### Voice Call & Emergency Phone Alerts (Optional)
 

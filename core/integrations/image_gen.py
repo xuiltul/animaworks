@@ -87,6 +87,7 @@ from core.integrations._image_pipeline import ImageGenPipeline, PipelineResult
 # ── Re-exports: _image_schemas ─────────────────────────────
 from core.integrations._image_schemas import get_tool_schemas
 from core.integrations.image.atlascloud import AtlasCloudImageClient
+from core.integrations.image.uberllm import UberLLMImageClient
 from core.schemas import VALID_EMOTIONS as _VALID_EXPRESSION_NAMES
 
 _MUTABLE_GLB_ATTRS = {"_FBX2GLTF_PATH", "_GLTF_MODULES_DIR"}
@@ -161,6 +162,8 @@ def _build_fullbody_api_client(image_config: Any) -> Any:
 def _build_fullbody_client(image_config: Any) -> Any:
     if getattr(image_config, "backend", "api") == "atlascloud":
         return AtlasCloudImageClient()
+    if getattr(image_config, "backend", "api") == "uberllm":
+        return UberLLMImageClient()
     if _use_diffusers_backend(image_config):
         return LocalDiffusersClient(image_config)
     if getattr(image_config, "prefer_codex", True) and codex_available():
@@ -174,6 +177,8 @@ def _build_fullbody_client(image_config: Any) -> Any:
 def _build_reference_client(image_config: Any) -> Any:
     if getattr(image_config, "backend", "api") == "atlascloud":
         return AtlasCloudImageClient()
+    if getattr(image_config, "backend", "api") == "uberllm":
+        return UberLLMImageClient()
     if _use_diffusers_backend(image_config):
         return LocalDiffusersClient(image_config)
     if getattr(image_config, "prefer_codex", True) and codex_available():
