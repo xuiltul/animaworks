@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=8cca5d8f6438e30b53480d83881cc3878b873a057653952ff9c8316d2a3e61fe generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -24,7 +24,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `cli.commands` | 5 | — |
 | `cli.commands.anima` | 303 | — |
@@ -58,7 +58,7 @@ The Python files tracked in `git ls-files core cli server` are listed here. Priv
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
 | `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
-| `cli.commands.vault_cmd` | 309 | — |
+| `cli.commands.vault_cmd` | 626 | — |
 
 ## `cli.tui`
 
@@ -194,9 +194,9 @@ Shared send clients and token resolution for Slack, Discord, and Chatwork.
 
 ## `core.config`
 
-Application configuration schemas, loading, validation, and migration.
+Application configuration schema, loading, validation, and migration.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.config` | 42 | — |
 | `core.config.anima_registry` | 314 | Anima registration in config.json: register, unregister, rename. |
@@ -204,7 +204,7 @@ Application configuration schemas, loading, validation, and migration.
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
 | `core.config.helper_models` | 497 | — |
-| `core.config.io` | 317 | Configuration I/O: singleton cache, load, and save. |
+| `core.config.io` | 530 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
 | `core.config.model_catalog` | 197 | Static model catalog and per-request model override validation. |
@@ -212,10 +212,13 @@ Application configuration schemas, loading, validation, and migration.
 | `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
 | `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
 | `core.config.models` | 101 | Central configuration module — facade re-exporting split modules. |
+| `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
 | `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
-| `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
+| `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
 
 ## `core.enclave`
 
@@ -402,7 +405,7 @@ Company timeline storage and read position.
 
 Translation catalog and language selection.
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
@@ -425,15 +428,16 @@ Translation catalog and language selection.
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
 | `core.i18n.strings.tooling_schema` | 542 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
+| `core.i18n.strings.vault` | 103 | Domain-specific i18n strings for vault and 1Password operations. |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
 
 —
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring first line |
 |---|---:|---|
-| `core.i18n.strings` | 63 | Merge all domain string modules into a single dict. |
+| `core.i18n.strings` | 65 | Merge all domain string modules into a single dict. |
 
 ## `core.infra`
 
@@ -1119,7 +1123,7 @@ Voice input/output and voice dialogue.
 | Module | Lines | docstring first line |
 |---|---:|---|
 | `server` | 7 | — |
-| `server.app` | 1605 | — |
+| `server.app` | 1641 | — |
 | `server.board_hooks` | 168 | — |
 | `server.enclave_delivery` | 327 | Collect completed enclave ask jobs and deliver them to host inboxes. |
 | `server.events` | 56 | — |
@@ -1149,9 +1153,9 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring 1st line |
+| Module | Lines | docstring first line |
 |---|---:|---|
-| `server.routes` | 65 | — |
+| `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
 | `server.routes.approve` | 89 | — |
 | `server.routes.assets` | 1738 | — |
@@ -1185,6 +1189,7 @@ Voice input/output and voice dialogue.
 | `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
+| `server.routes.vault_routes` | 536 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |

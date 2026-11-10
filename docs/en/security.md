@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/security.md -->
-<!-- i18n: source-sha256=ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6 generated=2026-11-10 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Verified commit: 581e20f1
 
@@ -29,44 +29,44 @@ Rather than relying solely on the model's response, the host records the origin 
 
 ### External Tools and Operations with Side Effects
 
-`check_tool_access` of `core/tooling/permissions.py` handles access to external tools and per-operation permissions through a common decision path. The per-Anima `permissions.json` defines allow and deny rules for commands and external tools, as well as file access scope. Deny takes precedence over allow. Even when `allow_all` is enabled, operations individually restricted by the execution profile require explicit permission. The same decision applies to core, shared, and personal tools.
+`core/tooling/permissions.py`’s `check_tool_access` handles external tool access and operation-level permissions through a shared decision path. Each Anima’s `permissions.json` defines permitted and denied commands and external tools, as well as file access scopes. Deny rules take precedence over allow rules. Even when `allow_all` is enabled, operations individually restricted by the execution profile require explicit permission. The same checks apply to core, shared, and personal tools.
 
-The `permissions.global.json` applied to all Anima instances defines command deny patterns and input detection patterns. `GlobalPermissionsCache` of `core/config/global_permissions.py` loads at startup, and when periodic integrity checks detect runtime changes, it reverts to the startup content. It is also protected from file operations intended for Anima.
+The `permissions.global.json` applies to all Anima and defines command-denial patterns and input-detection patterns. `core/config/global_permissions.py`’s `GlobalPermissionsCache` loads it at startup and restores its startup contents if periodic integrity checks detect runtime changes. It is also protected from file operations initiated by Anima.
 
-If problems occur in configuration loading, schema validation, or profile loading, the operation is denied. It never falls back to allowing when the decision cannot be confirmed.
+If a problem occurs while loading configuration, validating the schema, or loading a profile, the operation is denied. When a decision cannot be verified, the system does not fail open.
 
 ### Bash Commands
 
-The pure function `evaluate_command` of `core/tooling/command_policy.py` makes centralized command decisions. ToolHandler, the Claude Agent SDK hook, and the Codex hook all call the same policy. The evaluation includes shell injection detection, common deny rules for all Anima instances, a recursive search guard (Layer 2.6), per-Anima deny and allowlists, path traversal checks, and prevention of writes to other Anima directories. The recursive search guard rejects operations that scan the entire runtime or large log areas in one pass and encourages targeted searches.
+The pure function `evaluate_command` in `core/tooling/command_policy.py` evaluates commands centrally. ToolHandler, the Claude Agent SDK hook, and the Codex hook all call the same policy. Evaluation includes shell-injection detection, rules that prohibit actions across all Anima, a recursive-search guard (Layer 2.6), Anima-specific deny rules and allowlists, path-traversal checks, and protection against writes to other Anima’s directories. The recursive-search guard denies operations that scan the entire runtime or large log areas at once, encouraging more targeted searches.
 
-If the common policy cannot be loaded, the caller is also rejected as an error. The decision must not differ when the execution engine changes.
+If the shared policy cannot be loaded, the caller also denies the request with an error. This ensures that changing the execution engine does not change the decision.
 
-### Files and Company Boundaries
+### File and Company Boundaries
 
-`core/config/file_access_policy.py` checks read and write targets resolved to real paths and applies per-Anima allow, read-only, and deny routes. It also inspects the targets of resolved symbolic links and hides protected paths such as runtime control information from model-facing file operations.
+`core/config/file_access_policy.py` checks read and write targets after resolving them to their actual paths, then applies each Anima’s allowed, read-only, and denied routes. It also checks the targets of resolved symbolic links and hides protected paths, such as runtime control information, from model-directed file operations.
 
-When the affiliated company differs, other companies' areas are excluded from access. Limited write routes are provided for the company's `shared/`. Operations whose company boundary cannot be confirmed are denied on the safe side. An Anima without an affiliation does not have the same boundaries as a company-affiliated Anima, so configure an affiliation when company separation is required.
+When Anima belong to different companies, other companies’ company areas are excluded from access. Company `shared/` has limited write routes. Operations whose company boundaries cannot be verified are denied as a precaution. Anima without a company affiliation do not share the same boundaries as company-affiliated Anima, so set an affiliation when company separation is required.
 
 ## Skill Trust Model
 
-Skills distinguish between their registration source and inspection status. Skills outside the runtime are enumerated read-only from the configured host-side external roots. They do not have the same write permissions as skills copied into Anima-managed areas. Skill creation and promotion are separate permission operations and follow trust level, scan results, and explicit human-initiated operation conditions.
+Skills distinguish their source from their inspection status. Skills outside the runtime are listed read-only from the configured host-side external roots. They do not have the same write permissions as skills copied into areas managed by Anima. Creating and promoting skills are separate permissioned operations, subject to trust level, scan results, and explicit human-initiated operation requirements.
 
-## Processes and Internal API
+## Processes and Internal APIs
 
-Each Anima runs in a separate child process managed by the supervisor. Inter-process requests go through the internal API, which validates per-Anima or per-operator call tokens derived from a secret generated at each server startup. Tokens are generated in-process, and no private key is stored on disk. After validation, it confirms whether the requested operation can target the caller itself or only its descendants in the hierarchy.
+Each Anima runs in its own child process managed by the supervisor. Inter-process requests go through an internal API, which validates caller tokens specific to an Anima or operator using a secret generated each time the server starts. Tokens are generated in-process, and no secret keys are stored on disk. After validation, the system checks whether the caller may act only on itself or also on its descendants in the hierarchy, according to the requested operation.
 
-When authentication configuration is required, `auth_guard` of `server/app.py` checks the session cookie. For exception conditions such as secure localhost connections and the list of paths that do not require authentication, see the [authentication categories in the API Reference](reference/api.md). Webhooks use signature validation per service rather than session cookies.
+When authentication configuration is required, `server/app.py`’s `auth_guard` checks the session cookie. For exception conditions such as secure localhost connections, and for a list of paths that do not require authentication, see [the authentication categories in the API reference](reference/api.md). Webhooks use each service’s signature verification instead of a session cookie.
 
-## External Sending and Receiving
+## Outbound Sending and Receiving
 
-External sending verifies recipient resolution, operation permissions, and delivery results from external services. Within the same run, a second message to the same destination is prevented, but there is no rejection based on the number of destinations, time-based or daily sending budgets, or conversation depth. On the receiving side, startup is triggered by Inbox file change notifications, and only one message is processed at a time. In the event of a Provider error, `rate_guard` adjusts the wait time before retry. Do not include authentication information in code or documentation, and enable only permitted integrations. For details, refer to [Messaging](architecture/messaging.md).
+For outbound sending, the system checks the destination resolution, operation permissions, and delivery result from the external service. It prevents a second message to the same destination within the same run, but does not deny sends based on recipient counts, time-based or daily send budgets, or conversation depth. On the receiving side, processing starts on an Inbox file-change notification, with only one item processed at a time. On Provider errors, `rate_guard` adjusts the wait before retrying. Do not include credentials in code or documentation, and enable only approved integrations. See [Messaging](architecture/messaging.md) for details.
 
 ## 1Password Integration
 
-- Keys in the `shared` section are read one-way from 1Password `op://` references. animaworks never overwrites 1Password.
-- The mapping lives in `vault_sources.json`; timestamps and check results live in `vault_meta.json`; the previous value is encrypted in `vault.previous.json`. None contain secret values or value hashes (comparisons run in memory).
-- New items are created only when a person explicitly runs `animaworks vault register-1p --commit`; existing items are never changed.
-- Synchronization, checks, and registration are operator-only and cannot be run from an Anima tool context.
+- Keys in the `shared` section are read one-way from 1Password’s `op://` references. animaworks does not overwrite 1Password.
+- The mapping table is stored in `vault_sources.json`, update times and comparison results in `vault_meta.json`, and previous values encrypted in `vault.previous.json`. None contain secret values or hashes of values (comparisons are performed in memory).
+- New items are created only when a person explicitly requests `animaworks vault register-1p --commit`; existing items are not changed.
+- Synchronization, comparison, and registration are operator-only and cannot be performed from Anima’s tool context.
 
 ## Adversarial Threat Analysis
 

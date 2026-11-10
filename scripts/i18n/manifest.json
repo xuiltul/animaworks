@@ -698,7 +698,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "46d9e37a45777df79a2491c8e8b4283b620ca8ffccd840e2bdc40b4b15d98828",
+      "source_sha256": "716d547336affc8a4be667b55d31d6af1bce4c00a13925eb79b9c9964bc6c1e2",
       "statuses": [
         "translated"
       ],
@@ -706,7 +706,7 @@
     },
     "docs/en/reference/api.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "1fe0ea496cefc0d345c8bf349423560f2187e00c5b485750d072bbb1e16e2ed0",
@@ -734,13 +734,15 @@
         "9637f014b8d3f344e20c8a0d315b08a83ae5dafa5523bde825e8d04a8cc403c1",
         "749afe13a7b4693795378988e11bb210fa4d1653434632a194d8ff8cda3ba89f",
         "1d9cc5204915c9fb9ef32ba9b695767775b7980da3c5bf801f09313a96c26ba9",
+        "9e718c0b5ab940356fd373f9f719240b97f97087e1b173928a6b0aad16bd9303",
         "ac648fca49279687adf97af934748df99c60aca7d96959334220a30d6e50464f",
         "8777a30cfb9800efe64d552509f3154783cb2a30a497f184c305e03b89519d03",
         "feaa16a661d0c291622ddb8ff28a7d114e918463e63bec767a09ac096f3a43db"
       ],
       "source": "docs/ja/reference/api.md",
-      "source_sha256": "eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07",
+      "source_sha256": "58ad9fce7a5643b700c610524327733f9d822af40957a9cf4ed4bfb0b9af25e9",
       "statuses": [
+        "translated",
         "translated",
         "translated",
         "translated",
@@ -774,7 +776,7 @@
     },
     "docs/en/reference/cli.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "cd0fe5af9c4fa5a24a4f71e50cf0fd4c5fd80945ee9817e6ab7882fb80bc7088",
@@ -909,17 +911,33 @@
         "119718a524bd7457196d113f7fbb5bc343ed607d6e8b63c5dba8fcb04cb86d6b",
         "52fd3f5fd3efd2e8687f0ecdf3c606575b8de85066ca3cdd4eb4eb9b423a249b",
         "dc90aa38078b53e5af6e36f28674a9c4050463aab47432e6942f187d055b343f",
-        "0564f661b65aa28db4f1b7f404462874a4558dcfb44052010d358fab0f239dca",
+        "36d2df02329266d7e6673ac75f8de99a2c790738c0b280b81eae9aa6c8b890ea",
         "226a91cff8f545325a7a571c57b81c858ee17241051b814a989329943a35708a",
         "7d0fb0d08c8c83ef09706729a4f64ddb0994579899f7b4465019978242f0e8d0",
         "a2ecb1490b8a59d9fe7003d309604cfe7412234cbbac4cbe74251bd062d3e95a",
         "abc6117ec328d1fa66b791a13d3afe9c2efe2ad15b1606ee344251c3eb7d76b1",
+        "b944e7516ce4ce22c04c7c4976c26ed8068e3799f6be0009e905947c22c6ca54",
+        "0a033511c1a935913909f038de8ab2459b3a1ca2356f46af32753f07a83c50c4",
+        "aa24073b8f805179a3ecdf45e9b90b5a8ef6feea55800dc0b6b0551abc61fe8e",
+        "5635a5d96fe05e080c316e785c760fcad771122021ca90996d0cbe6823492371",
+        "812a252e0e7f806ec76d42dc91484613d848152d0a599bebb7454aa799f8ef2e",
+        "c286df0f6951da7313142cd881f63d338fcae23837b9f060d7fcc1fbd58abb91",
+        "b54b1e8d9ccc990d7e70a5d5a473351015ac7aa0bb33311a12cec0c7bd5ff79f",
         "9099741d0338436d3cf13cf5778aa4a525cee4f2ad5cb28fc46ed906b6dfea29",
-        "c16fd6ac6a68bdd6b13afa06a6d5e8b479378403f4863fc030dfb77c62e54732"
+        "c16fd6ac6a68bdd6b13afa06a6d5e8b479378403f4863fc030dfb77c62e54732",
+        "f328facc7d958c5500821685a80edba2866091546eb0860dc433770aa72559c8"
       ],
       "source": "docs/ja/reference/cli.md",
       "source_sha256": "ddb8566c643f0429ef232f44cca58443c7c9c62f41c1b8d9ebfa7bc58bd94d96",
       "statuses": [
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
         "translated",
         "translated",
         "translated",
@@ -1064,7 +1082,7 @@
     },
     "docs/en/reference/config.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "a0b9dc46470423ca1cbb1378367859e04d8af300406f30128dbd4e40021044b3",
@@ -1187,7 +1205,7 @@
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "b3857dc2b024c17bd07540f1ac645d192039c1b495a44d2c9b2bc3c2fe1e5c6d",
-        "7349763e5afd83d54af1632ecd32eebec74ee45f49da0b7dfedf0098e83a5472",
+        "02d0876a10c500689a3f1b82d104c9f239c9d00c5e27e8ee6f673895d059c01f",
         "8acc156e42dcee7d33150836c500a307474d2767844db831cf1afe0a7c96cbd4",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
         "49fb3403315219d172892947da335cce64b0b3e2991b643e5e1b802244db4318",
@@ -1196,7 +1214,7 @@
         "dd21c3ed8c62860433eebacbb34e0862f2dbe33b8ceb1f15eec20f47c025b597",
         "8adb5ee73d2b5cce7dc58972e49f859cec2f49afb0cf6bb429550388f6b857bc",
         "810bafb84ae797e5cb2eecd2b73e7739ac144a116de206945dc099d88594da1b",
-        "d9f595fda1f9c3e306200c03257bc76c53689dd7dce6a7f743457650578fbe77",
+        "6643648619828f0cdea1cda83fdb6242e21ef327d4f9797c735b85d31858c27f",
         "4d0315e4aeaa790d543694a8c687f833aa166aeb568e764432222abf5e12575b",
         "252bf5183ffc86b550636f1867659fb64f56144899ff0a96fae09948d933a06c",
         "43e14a07b686b10cf2b1070d11b3026fc008ad4522e79633ccb4e6c5e7ed1456",
@@ -1211,8 +1229,8 @@
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
         "20efb067119d5a6915d2dbe710f680451b62d98e8100e87e791ed1722882741a",
-        "febccdb329d220670e5a515c248b7252bc94547b36692b27f1475553f9c53a1a",
-        "a96116b8867f9b9c700623c95cd30479136b453d5b5c83fd857f5effb6d3a819",
+        "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
+        "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
         "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
@@ -1251,14 +1269,14 @@
         "4f6523217b12b27df9e9acc5aaa9fe847f07a6d0f8f63847287f72b4820d0608",
         "def37e21efc0a41b5f6d3413ec7542e985ea1e85a70d9117327e56f05e03df9a",
         "bad289edd06e78c4c6e128c7d2a9cd7371b518d7adf8711c1476b0cc165d353b",
-        "94a30d1228f1d272a6853d8ccad1a3ac9e2887720775c44286e5368854145ac0",
+        "1b662f43da607a56a911aa5d21fdca6a0e8041437ee6473a70319b91b7031c0c",
         "fedeafc75a524a93826f5b3cae50f710c84b3bee53b0af8f1977350027bbcb1b",
-        "6a57bcfead180ef3d7f86f130aed285f882da63953d083c9760faea8e41146df",
+        "11efe370833080ab03948d5c3d9f87bd0c9d90ffb213e64b3ff47e44b8c9cc3d",
         "37068781c363ef65bd9e2c66bcd951a9b6996a0624028972e1e7c4069d8b8e40",
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8",
+      "source_sha256": "8cca5d8f6438e30b53480d83881cc3878b873a057653952ff9c8316d2a3e61fe",
       "statuses": [
         "translated",
         "translated",
@@ -1336,7 +1354,7 @@
     },
     "docs/en/reference/tool-cli.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "65d9351f3b425f27f858e62bfb900ea492d25a7fe9cc14344a86c7410a1b6283",
@@ -1373,9 +1391,9 @@
       "translator_version": "2"
     },
     "docs/en/security.md": {
-      "engine": "local",
-      "generated": "2026-11-08",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "engine": "luna",
+      "generated": "2026-11-10",
+      "model": "gpt-6-luna-2026-09-22",
       "section_hashes": [
         "0c4148331d5c29ab9aeffff9b0007b45d3bc298b67317e65a4ed1ce72ef4fcb6",
         "1344f3c3ba0a3b4312137fdf098ba23700145144645b1bf38f4e0f76ffaf70a0",
@@ -1388,6 +1406,7 @@
         "288a14e3f8fd4222015eff2ef2abcf28a751464b9e2485104f9a428fa482625c",
         "19dfdbd46ded0a6bfa058f4d408c87966a225f64858cb55dc8fe84be904b8272",
         "e47cfaceea1b3eff5eb8bbf65702b75e7590352d395cdf2357d7dffe4d8b5f94",
+        "7534dad6da06470ed19dbd51403a8f56634c4d0013ff9ce0d68ef848f6ebe4cd",
         "45d2f62d963132ee569b78e0fe5ee8072059b6ad3bde2adec2aad3a16bd92172",
         "a68186808b8dd139e20d6a27b35684dc557f84cacf2b1d41c7de29a44d7651ce",
         "e816475c8000bdf822150b31f32558c6d095e2ed05a977d3ca613f7ada0dfde6",
@@ -1396,6 +1415,7 @@
       "source": "docs/ja/security.md",
       "source_sha256": "ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6",
       "statuses": [
+        "translated",
         "translated",
         "translated",
         "translated",
@@ -2137,12 +2157,12 @@
     "docs/ko/reference/README.md": {
       "engine": "local",
       "generated": "2026-11-10",
-      "model": "deepseek-v4.1-flash-1017",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "46d9e37a45777df79a2491c8e8b4283b620ca8ffccd840e2bdc40b4b15d98828",
+      "source_sha256": "716d547336affc8a4be667b55d31d6af1bce4c00a13925eb79b9c9964bc6c1e2",
       "statuses": [
         "translated"
       ],
@@ -2150,7 +2170,7 @@
     },
     "docs/ko/reference/api.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "1fe0ea496cefc0d345c8bf349423560f2187e00c5b485750d072bbb1e16e2ed0",
@@ -2178,13 +2198,15 @@
         "9637f014b8d3f344e20c8a0d315b08a83ae5dafa5523bde825e8d04a8cc403c1",
         "749afe13a7b4693795378988e11bb210fa4d1653434632a194d8ff8cda3ba89f",
         "1d9cc5204915c9fb9ef32ba9b695767775b7980da3c5bf801f09313a96c26ba9",
+        "9e718c0b5ab940356fd373f9f719240b97f97087e1b173928a6b0aad16bd9303",
         "ac648fca49279687adf97af934748df99c60aca7d96959334220a30d6e50464f",
         "8777a30cfb9800efe64d552509f3154783cb2a30a497f184c305e03b89519d03",
         "feaa16a661d0c291622ddb8ff28a7d114e918463e63bec767a09ac096f3a43db"
       ],
       "source": "docs/ja/reference/api.md",
-      "source_sha256": "eecd5aa839d848fdd180a4e4d5687a779052513399cf6b82e0b3002f9f029f07",
+      "source_sha256": "58ad9fce7a5643b700c610524327733f9d822af40957a9cf4ed4bfb0b9af25e9",
       "statuses": [
+        "translated",
         "translated",
         "translated",
         "translated",
@@ -2218,7 +2240,7 @@
     },
     "docs/ko/reference/cli.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "cd0fe5af9c4fa5a24a4f71e50cf0fd4c5fd80945ee9817e6ab7882fb80bc7088",
@@ -2353,17 +2375,33 @@
         "119718a524bd7457196d113f7fbb5bc343ed607d6e8b63c5dba8fcb04cb86d6b",
         "52fd3f5fd3efd2e8687f0ecdf3c606575b8de85066ca3cdd4eb4eb9b423a249b",
         "dc90aa38078b53e5af6e36f28674a9c4050463aab47432e6942f187d055b343f",
-        "0564f661b65aa28db4f1b7f404462874a4558dcfb44052010d358fab0f239dca",
+        "36d2df02329266d7e6673ac75f8de99a2c790738c0b280b81eae9aa6c8b890ea",
         "226a91cff8f545325a7a571c57b81c858ee17241051b814a989329943a35708a",
         "7d0fb0d08c8c83ef09706729a4f64ddb0994579899f7b4465019978242f0e8d0",
         "a2ecb1490b8a59d9fe7003d309604cfe7412234cbbac4cbe74251bd062d3e95a",
         "abc6117ec328d1fa66b791a13d3afe9c2efe2ad15b1606ee344251c3eb7d76b1",
+        "b944e7516ce4ce22c04c7c4976c26ed8068e3799f6be0009e905947c22c6ca54",
+        "0a033511c1a935913909f038de8ab2459b3a1ca2356f46af32753f07a83c50c4",
+        "aa24073b8f805179a3ecdf45e9b90b5a8ef6feea55800dc0b6b0551abc61fe8e",
+        "5635a5d96fe05e080c316e785c760fcad771122021ca90996d0cbe6823492371",
+        "812a252e0e7f806ec76d42dc91484613d848152d0a599bebb7454aa799f8ef2e",
+        "c286df0f6951da7313142cd881f63d338fcae23837b9f060d7fcc1fbd58abb91",
+        "b54b1e8d9ccc990d7e70a5d5a473351015ac7aa0bb33311a12cec0c7bd5ff79f",
         "9099741d0338436d3cf13cf5778aa4a525cee4f2ad5cb28fc46ed906b6dfea29",
-        "c16fd6ac6a68bdd6b13afa06a6d5e8b479378403f4863fc030dfb77c62e54732"
+        "c16fd6ac6a68bdd6b13afa06a6d5e8b479378403f4863fc030dfb77c62e54732",
+        "f328facc7d958c5500821685a80edba2866091546eb0860dc433770aa72559c8"
       ],
       "source": "docs/ja/reference/cli.md",
-      "source_sha256": "7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026",
+      "source_sha256": "ddb8566c643f0429ef232f44cca58443c7c9c62f41c1b8d9ebfa7bc58bd94d96",
       "statuses": [
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
+        "translated",
         "translated",
         "translated",
         "translated",
@@ -2508,7 +2546,7 @@
     },
     "docs/ko/reference/config.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "a0b9dc46470423ca1cbb1378367859e04d8af300406f30128dbd4e40021044b3",
@@ -2627,11 +2665,11 @@
     "docs/ko/reference/modules.md": {
       "engine": "local",
       "generated": "2026-11-10",
-      "model": "deepseek-v4.1-flash-1017",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
         "b3857dc2b024c17bd07540f1ac645d192039c1b495a44d2c9b2bc3c2fe1e5c6d",
-        "7349763e5afd83d54af1632ecd32eebec74ee45f49da0b7dfedf0098e83a5472",
+        "02d0876a10c500689a3f1b82d104c9f239c9d00c5e27e8ee6f673895d059c01f",
         "8acc156e42dcee7d33150836c500a307474d2767844db831cf1afe0a7c96cbd4",
         "18909cfc681b6aac93aac8e22b62ad839fad82ee7b4671b605e498bedb8faa89",
         "49fb3403315219d172892947da335cce64b0b3e2991b643e5e1b802244db4318",
@@ -2640,7 +2678,7 @@
         "dd21c3ed8c62860433eebacbb34e0862f2dbe33b8ceb1f15eec20f47c025b597",
         "8adb5ee73d2b5cce7dc58972e49f859cec2f49afb0cf6bb429550388f6b857bc",
         "810bafb84ae797e5cb2eecd2b73e7739ac144a116de206945dc099d88594da1b",
-        "d9f595fda1f9c3e306200c03257bc76c53689dd7dce6a7f743457650578fbe77",
+        "6643648619828f0cdea1cda83fdb6242e21ef327d4f9797c735b85d31858c27f",
         "4d0315e4aeaa790d543694a8c687f833aa166aeb568e764432222abf5e12575b",
         "252bf5183ffc86b550636f1867659fb64f56144899ff0a96fae09948d933a06c",
         "43e14a07b686b10cf2b1070d11b3026fc008ad4522e79633ccb4e6c5e7ed1456",
@@ -2655,8 +2693,8 @@
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
         "20efb067119d5a6915d2dbe710f680451b62d98e8100e87e791ed1722882741a",
-        "febccdb329d220670e5a515c248b7252bc94547b36692b27f1475553f9c53a1a",
-        "a96116b8867f9b9c700623c95cd30479136b453d5b5c83fd857f5effb6d3a819",
+        "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
+        "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
         "52b85de6441082fd6c0acb78dc7e491f869800f4d995e2c4f016cf006dcd0441",
         "291b5524f7f28aff94167cdc4c077d5649ed529f1558bcc868204ed1d07d2291",
@@ -2695,14 +2733,14 @@
         "4f6523217b12b27df9e9acc5aaa9fe847f07a6d0f8f63847287f72b4820d0608",
         "def37e21efc0a41b5f6d3413ec7542e985ea1e85a70d9117327e56f05e03df9a",
         "bad289edd06e78c4c6e128c7d2a9cd7371b518d7adf8711c1476b0cc165d353b",
-        "94a30d1228f1d272a6853d8ccad1a3ac9e2887720775c44286e5368854145ac0",
+        "1b662f43da607a56a911aa5d21fdca6a0e8041437ee6473a70319b91b7031c0c",
         "fedeafc75a524a93826f5b3cae50f710c84b3bee53b0af8f1977350027bbcb1b",
-        "6a57bcfead180ef3d7f86f130aed285f882da63953d083c9760faea8e41146df",
+        "11efe370833080ab03948d5c3d9f87bd0c9d90ffb213e64b3ff47e44b8c9cc3d",
         "37068781c363ef65bd9e2c66bcd951a9b6996a0624028972e1e7c4069d8b8e40",
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "17d4ad2547716146c18892f2932c8d91cd4b4867fea34d99e98fe7b3595442c8",
+      "source_sha256": "8cca5d8f6438e30b53480d83881cc3878b873a057653952ff9c8316d2a3e61fe",
       "statuses": [
         "translated",
         "translated",
@@ -2780,7 +2818,7 @@
     },
     "docs/ko/reference/tool-cli.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "65d9351f3b425f27f858e62bfb900ea492d25a7fe9cc14344a86c7410a1b6283",
@@ -2818,7 +2856,7 @@
     },
     "docs/ko/security.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-10",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "0c4148331d5c29ab9aeffff9b0007b45d3bc298b67317e65a4ed1ce72ef4fcb6",
@@ -2832,6 +2870,7 @@
         "288a14e3f8fd4222015eff2ef2abcf28a751464b9e2485104f9a428fa482625c",
         "19dfdbd46ded0a6bfa058f4d408c87966a225f64858cb55dc8fe84be904b8272",
         "e47cfaceea1b3eff5eb8bbf65702b75e7590352d395cdf2357d7dffe4d8b5f94",
+        "7534dad6da06470ed19dbd51403a8f56634c4d0013ff9ce0d68ef848f6ebe4cd",
         "45d2f62d963132ee569b78e0fe5ee8072059b6ad3bde2adec2aad3a16bd92172",
         "a68186808b8dd139e20d6a27b35684dc557f84cacf2b1d41c7de29a44d7651ce",
         "e816475c8000bdf822150b31f32558c6d095e2ed05a977d3ca613f7ada0dfde6",
@@ -2840,6 +2879,7 @@
       "source": "docs/ja/security.md",
       "source_sha256": "ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6",
       "statuses": [
+        "translated",
         "translated",
         "translated",
         "translated",
