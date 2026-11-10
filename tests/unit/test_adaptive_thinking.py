@@ -22,6 +22,7 @@ from core.execution.base import (
     is_bedrock_glm,
     is_bedrock_kimi,
     is_bedrock_qwen,
+    is_openai_hosted_model,
     resolve_thinking_effort,
 )
 from core.schemas import ModelConfig
@@ -172,6 +173,45 @@ class TestIsBedrockKimi:
 
     def test_non_bedrock_kimi(self):
         assert is_bedrock_kimi("ollama/kimi-k2:latest") is False
+
+
+# ── is_openai_hosted_model ────────────────────────────────────
+
+
+class TestIsOpenaiHostedModel:
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openai/gpt-4.1",
+            "openai/gpt-4.1-mini",
+            "openai/gpt-4o",
+            "openai/gpt-5.4",
+            "openai/o3",
+            "openai/o4-mini-2025-04-16",
+            "openai/chatgpt-4o-latest",
+            "openai/GPT-4.1",
+        ],
+    )
+    def test_openai_hosted(self, model):
+        assert is_openai_hosted_model(model) is True
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "openai/gpt-oss-120b",
+            "openai/openai/gpt-oss-20b",
+            "openai/qwen3.5-9b",
+            "openai/deepseek-v4.1-flash-1017",
+            "openai/glm-4.7-flash",
+            "openai/Qwen/Qwen3-32B",
+            "openai/olmo-2-13b",
+            "azure/gpt-4.1",
+            "codex/gpt-5.4",
+            "gpt-4.1",
+        ],
+    )
+    def test_not_openai_hosted(self, model):
+        assert is_openai_hosted_model(model) is False
 
 
 # ── resolve_thinking_effort ───────────────────────────────────
@@ -647,12 +687,12 @@ class TestLiteLLMAdaptiveThinking:
         assert "enable_thinking" not in kwargs
         assert "reasoning_effort" not in kwargs
 
-    def test_openai_gpt_with_thinking_uses_extra_body(self, anima_dir, tool_handler, memory):
-        """Non-Qwen openai/* models also use extra_body when thinking is set."""
+    def test_openai_self_hosted_non_qwen_with_thinking_uses_extra_body(self, anima_dir, tool_handler, memory):
+        """Non-Qwen self-hosted openai/* models also use extra_body when thinking is set."""
         from core.execution.engines.litellm.executor import LiteLLMExecutor
 
         cfg = ModelConfig(
-            model="openai/gpt-4o",
+            model="openai/glm-4.7-flash",
             thinking=True,
             api_key="k",
         )
@@ -665,4 +705,43 @@ class TestLiteLLMAdaptiveThinking:
         )
         kwargs = ex._build_llm_kwargs()
         assert kwargs["extra_body"]["enable_thinking"] is True
+        assert "think" not in kwargs
+
+    def test_openai_gpt_oss_keeps_template_thinking(self, anima_dir, tool_handler, memory):
+        """gpt-oss is self-hosted, so it keeps the chat-template toggle."""
+        from core.execution.engines.litellm.executor import LiteLLMExecutor
+
+        cfg = ModelConfig(model="openai/gpt-oss-120b", api_key="k")
+        ex = LiteLLMExecutor(
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
+        )
+        kwargs = ex._build_llm_kwargs()
+        assert kwargs["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+
+    @pytest.mark.parametrize("thinking", [None, True, False])
+    @pytest.mark.parametrize(
+        "model",
+        ["openai/gpt-4.1", "openai/gpt-5.4", "openai/o4-mini-2025-04-16", "openai/chatgpt-4o-latest"],
+    )
+    def test_openai_hosted_gets_no_template_fields(self, anima_dir, tool_handler, memory, model, thinking):
+        """OpenAI rejects enable_thinking / chat_template_kwargs with 400 (#414)."""
+        from core.execution.engines.litellm.executor import LiteLLMExecutor
+
+        cfg = ModelConfig(model=model, thinking=thinking, api_key="k")
+        ex = LiteLLMExecutor(
+            model_config=cfg,
+            anima_dir=anima_dir,
+            tool_handler=tool_handler,
+            tool_registry=[],
+            memory=memory,
+        )
+        kwargs = ex._build_llm_kwargs()
+        extra_body = kwargs.get("extra_body", {})
+        assert "enable_thinking" not in extra_body
+        assert "chat_template_kwargs" not in extra_body
+        assert "enable_thinking" not in kwargs
         assert "think" not in kwargs

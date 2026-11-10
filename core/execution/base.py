@@ -107,6 +107,25 @@ def is_bedrock_kimi(model: str) -> bool:
     return model.startswith("bedrock/") and ("kimi" in model.lower() or "moonshot" in model.lower())
 
 
+# OpenAI's own model families (gpt-4.1, gpt-5.4, o3, o4-mini, chatgpt-4o-latest).
+# gpt-oss is open-weight and usually served by vLLM / llama.cpp.
+_OPENAI_HOSTED_RE = re.compile(r"^(?:gpt-(?!oss)|o\d|chatgpt-)", re.IGNORECASE)
+
+
+def is_openai_hosted_model(model: str) -> bool:
+    """Return True if *model* is an ``openai/`` model that OpenAI itself serves.
+
+    The ``openai/`` prefix also covers self-hosted OpenAI-compatible servers
+    (vLLM, llama.cpp). Those take chat-template fields such as
+    ``enable_thinking``; the OpenAI API rejects them with 400.
+    """
+    if not model.startswith("openai/"):
+        return False
+    name = model[len("openai/") :]
+    # Hugging Face style ids (org/model) are self-hosted.
+    return "/" not in name and _OPENAI_HOSTED_RE.match(name) is not None
+
+
 def supports_streaming_tool_use(model: str) -> bool:
     """Return True if *model* supports tool use in streaming mode.
 

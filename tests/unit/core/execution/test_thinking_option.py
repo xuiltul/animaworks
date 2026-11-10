@@ -140,8 +140,8 @@ class TestLiteLLMThinkingOption:
         tool_handler,
         memory,
     ):
-        """openai/* model + thinking=True → extra_body.enable_thinking=True."""
-        cfg = ModelConfig(model="openai/gpt-4o", thinking=True, api_key="k")
+        """Self-hosted openai/* model + thinking=True → extra_body.enable_thinking=True."""
+        cfg = ModelConfig(model="openai/qwen3.5-9b", thinking=True, api_key="k")
         ex = _make_litellm_executor(cfg, anima_dir, tool_handler, memory)
         kwargs = ex._build_llm_kwargs()
         assert kwargs["extra_body"]["enable_thinking"] is True

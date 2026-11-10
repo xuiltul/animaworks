@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 279c333f6fe9e869ebaab5521b9f8d37d063189b8e0af3febc4cb6a5f895c4cb -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: f3ec4bdc9616b30e3684425c43a772b97236aa8b6c5baf5dbe8f33ddc150f218 -->
 
 # モジュール一覧
 
@@ -271,7 +271,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
 | `core.execution._streaming（非公開）` | 303 | — |
 | `core.execution._tool_summary（非公開）` | 99 | — |
-| `core.execution.base` | 915 | — |
+| `core.execution.base` | 934 | — |
 | `core.execution.busy_probe` | 68 | Congestion probe for self-hosted fallback models (vLLM ``/metrics``). |
 | `core.execution.cli_stream` | 328 | — |
 | `core.execution.engine_base` | 76 | — |
@@ -290,7 +290,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.execution.engines.cursor.executor` | 682 | — |
 | `core.execution.engines.gemini.executor` | 461 | — |
 | `core.execution.engines.grok.executor` | 1033 | — |
-| `core.execution.engines.litellm._litellm_context（非公開）` | 526 | — |
+| `core.execution.engines.litellm._litellm_context（非公開）` | 528 | — |
 | `core.execution.engines.litellm._litellm_tools（非公開）` | 404 | — |
 | `core.execution.engines.litellm._llm_call（非公開）` | 326 | — |
 | `core.execution.engines.litellm.executor` | 1068 | — |

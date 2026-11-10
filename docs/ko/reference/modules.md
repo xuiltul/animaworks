@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=f1d34b8cdb6a749722f6cb680a042e8238cb43cc8f92633de94178c4a24de851 generated=2026-11-09 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -265,14 +265,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 도구 실행, 명령 실행, 안전 제어.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
 | `core.execution._streaming（非公開）` | 303 | — |
 | `core.execution._tool_summary（非公開）` | 99 | — |
-| `core.execution.base` | 915 | — |
-| `core.execution.busy_probe` | 68 | 자체 호스팅 폴백 모델(vLLM ``/metrics``)의 혼잡도 탐침. |
+| `core.execution.base` | 934 | — |
+| `core.execution.busy_probe` | 68 | 자체 호스팅 폴백 모델(vLLM ``/metrics``)을 위한 혼잡 프로브. |
 | `core.execution.cli_stream` | 328 | — |
 | `core.execution.engine_base` | 76 | — |
 | `core.execution.engines.agy.executor` | 795 | — |
@@ -290,14 +290,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.execution.engines.cursor.executor` | 682 | — |
 | `core.execution.engines.gemini.executor` | 461 | — |
 | `core.execution.engines.grok.executor` | 1033 | — |
-| `core.execution.engines.litellm._litellm_context（非公開）` | 526 | — |
+| `core.execution.engines.litellm._litellm_context（非公開）` | 528 | — |
 | `core.execution.engines.litellm._litellm_tools（非公開）` | 404 | — |
 | `core.execution.engines.litellm._llm_call（非公開）` | 326 | — |
 | `core.execution.engines.litellm.executor` | 1068 | — |
 | `core.execution.events` | 255 | — |
-| `core.execution.fallback_activity` | 290 | 일시적 런타임 모델 폴백을 위한 활동 로그 통합. |
-| `core.execution.github_identity` | 162 | 실행기 환경을 위한 GitHub ID 확인. |
-| `core.execution.loop_guards` | 411 | 자체 호스팅 실행 루프(모드 A/B)를 위한 루프 내부 가드 메커니즘. |
+| `core.execution.fallback_activity` | 290 | 임시 런타임 모델 폴백을 위한 활동 로그 통합. |
+| `core.execution.github_identity` | 162 | 실행기 환경을 위한 GitHub 신원 확인. |
+| `core.execution.loop_guards` | 411 | 자체 호스팅 실행 루프(Mode A/B)를 위한 루프 내 가드 메커니즘. |
 | `core.execution.mcp_env` | 39 | — |
 | `core.execution.process_runner` | 184 | — |
 | `core.execution.reminder` | 128 | — |
