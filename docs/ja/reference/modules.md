@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 25fa050170defcd66219729b982c93dce11cf0db6b046b531b0aef6bae5e8dc4 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 7eba0cc99bd4dcfcb17bb016f0ba68f8679bc49b3ac96169041e759af6042df3 -->
 
 # モジュール一覧
 
@@ -1189,7 +1189,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.timeline` | 241 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
-| `server.routes.vault_routes` | 520 | — |
+| `server.routes.vault_routes` | 536 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |

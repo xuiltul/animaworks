@@ -297,3 +297,30 @@ def test_sync_apply_uses_fresh_server_plan(data_dir: Path, monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["applied"] == ["MANAGED"]
     assert vault.get("shared", "MANAGED") == "fresh-remote-value"
+
+
+def test_localhost_trust_with_signed_in_session_can_write(data_dir: Path) -> None:
+    """Behind a local reverse proxy every request is "localhost"; a real sign-in still counts."""
+    _setup_vault(data_dir, FakeOp(data_dir))
+    app = _app(data_dir, trust_localhost=True)
+    client = TestClient(app)
+    _login(client)
+
+    with patch("server.app._is_safe_localhost_request", return_value=True):
+        overview = client.get("/api/vault/overview")
+        wrong = client.put("/api/vault/shared/LOCAL", json={"value": "local-secret", "password": "wrong"})
+        correct = client.put(
+            "/api/vault/shared/LOCAL",
+            json={"value": "local-secret", "password": "correct-password"},
+        )
+        client.cookies.clear()
+        no_cookie = client.put(
+            "/api/vault/shared/LOCAL",
+            json={"value": "local-secret", "password": "correct-password"},
+        )
+
+    assert overview.status_code == 200
+    assert overview.json()["write"]["allowed"] is True
+    assert wrong.status_code == 403
+    assert correct.status_code == 200
+    assert no_cookie.status_code == 403

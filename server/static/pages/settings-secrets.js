@@ -129,6 +129,8 @@ function _renderOnepassword(op, blocked) {
   const count = Number(op.sources_count || 0);
   const lastCheck = _formatDate(op.last_check_at);
   const syncPanelHtml = _renderSyncPanel(blocked);
+  // Reading 1Password needs the same signed-in owner as writing does.
+  const opDisabledAttr = blocked ? " disabled" : "";
 
   return `
     <div class="secrets-op-block">
@@ -145,8 +147,8 @@ function _renderOnepassword(op, blocked) {
         <span>${escapeHtml(lastCheck)}</span>
       </div>
       <div class="secrets-form-actions">
-        <button type="button" class="preset-btn" data-action="check">${t("secrets.check.button")}</button>
-        <button type="button" class="preset-btn" data-action="sync-plan">${t("secrets.sync.button")}</button>
+        <button type="button" class="preset-btn" data-action="check"${opDisabledAttr}>${t("secrets.check.button")}</button>
+        <button type="button" class="preset-btn" data-action="sync-plan"${opDisabledAttr}>${t("secrets.sync.button")}</button>
       </div>
     </div>
     ${syncPanelHtml}
@@ -960,6 +962,7 @@ function _formatDate(value) {
 }
 
 function _formatUpdated(entry) {
+  if (!entry.updated_at && !entry.updated_by) return t("secrets.unknown");
   const time = _formatDate(entry.updated_at);
   const by = entry.updated_by ? String(entry.updated_by) : t("secrets.unknown");
   return t("secrets.updated_format", { time, by });

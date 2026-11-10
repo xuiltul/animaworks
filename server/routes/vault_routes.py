@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from core.auth.manager import load_auth, verify_password
+from core.auth.manager import find_user, load_auth, validate_session, verify_password
 from core.config.io import find_plaintext_credentials, update_config
 from core.config.onepassword import OnePasswordClient
 from core.config.vault import SHARED_VAULT_SECTION
@@ -73,6 +73,27 @@ def _data_dir(request: Request) -> Path:
     return get_data_dir()
 
 
+def _session_user(request: Request, auth_config: Any) -> Any:
+    """Return the signed-in user behind this request, or ``None``.
+
+    A request let through by localhost trust carries the owner identity
+    without proving a sign-in, so it only counts when it also brings a valid
+    session cookie.
+    """
+    via = getattr(request.state, "auth_via", None)
+    if via == "session":
+        return getattr(request.state, "user", None)
+    if via != "localhost":
+        return None
+    token = request.cookies.get("session_token")
+    if not token:
+        return None
+    session = validate_session(token)
+    if session is None:
+        return None
+    return find_user(auth_config, session.username)
+
+
 def _require_vault_writer(request: Request, password: str | None) -> str:
     """Return the audit actor or reject a write with a localized 403."""
     if not getattr(request.app.state, "setup_complete", True):
@@ -82,14 +103,8 @@ def _require_vault_writer(request: Request, password: str | None) -> str:
     if auth_config.auth_mode == "local_trust":
         return "local_trust"
 
-    user = getattr(request.state, "user", None)
-    if (
-        getattr(request.state, "auth_via", None) != "session"
-        or user is None
-        or user.role != "owner"
-        or not isinstance(password, str)
-        or not isinstance(user.password_hash, str)
-    ):
+    user = _session_user(request, auth_config)
+    if user is None or user.role != "owner" or not isinstance(password, str) or not isinstance(user.password_hash, str):
         raise HTTPException(status_code=403, detail=t("vault.write_forbidden"))
 
     try:
@@ -110,8 +125,8 @@ def _writer_capability(request: Request, auth_config: Any) -> dict[str, Any]:
         }
     if auth_config.auth_mode == "local_trust":
         return {"allowed": True, "requires_password": False, "reason": None}
-    user = getattr(request.state, "user", None)
-    allowed = getattr(request.state, "auth_via", None) == "session" and bool(user) and user.role == "owner"
+    user = _session_user(request, auth_config)
+    allowed = bool(user) and user.role == "owner"
     return {
         "allowed": allowed,
         "requires_password": True,
@@ -132,8 +147,8 @@ def _read_authorized(request: Request, auth_config: Any) -> bool:
 def _op_read_authorized(request: Request, auth_config: Any) -> bool:
     if auth_config.auth_mode == "local_trust":
         return True
-    user = getattr(request.state, "user", None)
-    return bool(user and user.role == "owner") and getattr(request.state, "auth_via", None) == "session"
+    user = _session_user(request, auth_config)
+    return bool(user and user.role == "owner")
 
 
 async def _writer_actor(request: Request, password: str | None) -> tuple[str | None, JSONResponse | None]:
@@ -149,7 +164,8 @@ async def _require_reader(request: Request, *, onepassword: bool = False) -> JSO
         auth_config = await asyncio.to_thread(load_auth)
     except Exception:
         return _error(t("vault.read_forbidden"), 403)
-    authorized = _op_read_authorized(request, auth_config) if onepassword else _read_authorized(request, auth_config)
+    check_access = _op_read_authorized if onepassword else _read_authorized
+    authorized = await asyncio.to_thread(check_access, request, auth_config)
     if authorized:
         return None
     message = t("vault.op_forbidden") if onepassword else t("vault.read_forbidden")
@@ -291,7 +307,7 @@ def create_vault_router() -> APIRouter:
                     ],
                     "hub_members": hub_members,
                     "plaintext_config": await asyncio.to_thread(_plaintext_config, data_dir),
-                    "write": _writer_capability(request, auth_config),
+                    "write": await asyncio.to_thread(_writer_capability, request, auth_config),
                 }
             )
         except Exception:

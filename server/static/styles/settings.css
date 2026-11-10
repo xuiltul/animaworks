@@ -479,7 +479,7 @@
 
 .secrets-key-cell code {
   font-size: 0.85rem;
-  color: var(--aw-color-code-text, inherit);
+  color: inherit;
   background: var(--aw-color-code-inline-bg, transparent);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
@@ -696,7 +696,8 @@
   margin-bottom: 0.6rem;
   border: 1px solid var(--aw-color-border-medium, #d1d5db);
   border-radius: 6px;
-  background: var(--aw-color-code-bg, #f3f4f6);
+  background: var(--aw-color-code-inline-bg, #f3f4f6);
+  color: inherit;
   font-size: 0.9rem;
   word-break: break-all;
   user-select: all;

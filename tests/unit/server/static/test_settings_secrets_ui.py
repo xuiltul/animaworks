@@ -51,6 +51,7 @@ _ALLOWED_INTERPOLATIONS = {
     "urlHtml",
     "keyHtml",
     "enabledHtml",
+    "opDisabledAttr",
     "errorText",
     "passwordFieldHtml",
     "editFormHtml",
