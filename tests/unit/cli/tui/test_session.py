@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
+from cli.tui import session as session_mod
 from cli.tui.session import (
     MAX_SESSIONS,
     SessionInfo,
@@ -32,6 +34,21 @@ def test_new_session_has_unique_ids(monkeypatch):
     assert a.session_id != b.session_id
     assert a.in_flight is False
     assert a.recent_animas == ["sora"]
+
+
+def test_sessions_made_in_the_same_second_get_distinct_ids(monkeypatch, tmp_path):
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 10, 12, 0, 0, tzinfo=tz)
+
+    monkeypatch.setattr(session_mod, "datetime", _FrozenDatetime)
+    sessions = [new_session(anima=f"a{i}") for i in range(200)]
+    assert len({s.session_id for s in sessions}) == 200
+
+    for s in sessions[:20]:
+        save_session(s, base_dir=tmp_path)
+    assert len(list_sessions(base_dir=tmp_path)) == 20
 
 
 def test_save_and_load_roundtrip(tmp_path):

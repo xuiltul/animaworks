@@ -18,8 +18,7 @@ from __future__ import annotations
 
 import json
 import os
-import random
-import string
+import secrets
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -110,9 +109,13 @@ class SessionInfo:
 
 
 def new_session_id() -> str:
+    """Return a sortable session id: local time to the second plus 32 random bits.
+
+    Sessions made in the same second must not share an id, because the id is
+    the file name and a later save would overwrite the earlier session.
+    """
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    rnd = "".join(random.choices(string.digits, k=4))
-    return f"{ts}-{rnd}"
+    return f"{ts}-{secrets.token_hex(4)}"
 
 
 def new_session(
