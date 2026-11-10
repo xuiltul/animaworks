@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=f1d34b8cdb6a749722f6cb680a042e8238cb43cc8f92633de94178c4a24de851 generated=2026-11-09 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=7953e5836bcfe415d767e0fc6cfc3c8489b5edd97092716c8ed30527902e7c61 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -263,15 +263,15 @@ Configuration models and startup security guards for isolated enclave mode.
 
 ## `core.execution`
 
-Tool execution, command execution, and safety controls.
+Tool execution, command execution, safety control.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.execution` | 60 | — |
 | `core.execution._shortterm_handoff（非公開）` | 145 | — |
 | `core.execution._streaming（非公開）` | 303 | — |
 | `core.execution._tool_summary（非公開）` | 99 | — |
-| `core.execution.base` | 915 | — |
+| `core.execution.base` | 934 | — |
 | `core.execution.busy_probe` | 68 | Congestion probe for self-hosted fallback models (vLLM ``/metrics``). |
 | `core.execution.cli_stream` | 328 | — |
 | `core.execution.engine_base` | 76 | — |
@@ -290,7 +290,7 @@ Tool execution, command execution, and safety controls.
 | `core.execution.engines.cursor.executor` | 682 | — |
 | `core.execution.engines.gemini.executor` | 461 | — |
 | `core.execution.engines.grok.executor` | 1033 | — |
-| `core.execution.engines.litellm._litellm_context（非公開）` | 526 | — |
+| `core.execution.engines.litellm._litellm_context（非公開）` | 528 | — |
 | `core.execution.engines.litellm._litellm_tools（非公開）` | 404 | — |
 | `core.execution.engines.litellm._llm_call（非公開）` | 326 | — |
 | `core.execution.engines.litellm.executor` | 1068 | — |
