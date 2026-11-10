@@ -22,14 +22,36 @@ Usage via animaworks-tool:
 """
 
 import argparse
+import dataclasses
 import getpass
 import json
 import sys
 from pathlib import Path
 
 from cli._anima_tool import run_and_print
+from core.config.onepassword import OnePasswordClient, OnePasswordError
 from core.config.vault import SHARED_VAULT_SECTION as SHARED_SECTION
 from core.config.vault import VaultAccessError, resolve_vault_sections
+from core.config.vault_ops import (
+    CHECK_ERROR,
+    CHECK_SAME,
+    STATUS_CHANGED,
+    STATUS_ERROR,
+    STATUS_NEW,
+    VaultOpsError,
+    VaultOwnershipError,
+    apply_sync,
+    check,
+    delete_value,
+    entries_overview,
+    last_check_summary,
+    plan_sync,
+    register_onepassword,
+    rollback,
+    set_value,
+)
+from core.config.vault_sources import VaultSourceError, add_source, is_onepassword_managed, load_sources, remove_source
+from core.i18n import t
 from core.platform.env import anima_dir_env
 
 
@@ -50,6 +72,14 @@ def cmd_vault(args: argparse.Namespace) -> None:
     from core.config.vault import get_vault_manager
 
     vm = get_vault_manager()
+    operator_commands = {"sources", "sync", "rollback", "register-1p"}
+    if sub in operator_commands and anima_dir_env():
+        print(
+            f"Error: {t('vault.operator_only', command=f'animaworks vault {sub}')}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if sub == "status":
         _cmd_status(vm)
     elif sub == "init":
@@ -66,8 +96,19 @@ def cmd_vault(args: argparse.Namespace) -> None:
         anima_name = _get_anima_namespace(required=False)
         namespace = SHARED_SECTION if shared else (anima_name or _get_anima_namespace())
         _cmd_delete(args, vm, namespace, anima_name)
+    elif sub == "sources":
+        _cmd_sources(args, vm)
+    elif sub == "sync":
+        _cmd_sync(args, vm)
+    elif sub == "rollback":
+        _cmd_rollback(args, vm)
+    elif sub == "register-1p":
+        _cmd_register_1p(args, vm)
     else:
-        print("Usage: animaworks vault {status|init|get|store|list|delete}", file=sys.stderr)
+        print(
+            "Usage: animaworks vault {status|init|get|store|list|delete|sources|sync|rollback|register-1p}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -159,6 +200,10 @@ def _cmd_store(args: argparse.Namespace, vm, namespace: str, anima_name: str | N
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    if namespace == SHARED_SECTION and is_onepassword_managed(vm.data_dir, key):
+        print(f"Error: {t('vault.managed_store', name=key)}", file=sys.stderr)
+        sys.exit(1)
+
     value = getattr(args, "value", None)
     if getattr(args, "shared", False):
         if value is not None:
@@ -172,7 +217,11 @@ def _cmd_store(args: argparse.Namespace, vm, namespace: str, anima_name: str | N
         print("Error: value is required", file=sys.stderr)
         sys.exit(1)
 
-    vm.store(namespace, key, value)
+    try:
+        set_value(vm.data_dir, namespace, key, value, actor="cli")
+    except (VaultOwnershipError, VaultOpsError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     result = {"key": key, "section": namespace, "stored": True}
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -195,7 +244,16 @@ def _cmd_delete(args: argparse.Namespace, vm, namespace: str, anima_name: str | 
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    if not vm.delete(namespace, key):
+    if namespace == SHARED_SECTION and is_onepassword_managed(vm.data_dir, key):
+        print(f"Error: {t('vault.managed_delete', name=key)}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        deleted = delete_value(vm.data_dir, namespace, key, actor="cli")
+    except (VaultOwnershipError, VaultOpsError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if not deleted:
         print(f"Error: key not found in section '{namespace}': {key}", file=sys.stderr)
         sys.exit(1)
 
@@ -244,12 +302,192 @@ def _cmd_status(vm) -> None:
             "invalid": 0,
         }
 
+    overview = entries_overview(vm.data_dir)
+    managed_by_section: dict[str, int] = {}
+    for entry in overview:
+        if entry.owner == "onepassword":
+            managed_by_section[entry.section] = managed_by_section.get(entry.section, 0) + 1
+    for section, row in sections.items():
+        row["onepassword_managed"] = managed_by_section.get(section, 0)
+
     result = {
         "key_present": vm.has_key,
         "entry_count": entry_count,
         "sections": sections,
+        "onepassword": {
+            "managed_count": sum(managed_by_section.values()),
+            "last_check": last_check_summary(vm.data_dir),
+        },
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def _make_client(vm) -> OnePasswordClient:
+    try:
+        settings = load_sources(vm.data_dir).onepassword
+    except VaultSourceError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    client = OnePasswordClient(settings.command, settings.timeout_s, write_command=settings.write_command)
+    if not client.available():
+        print(
+            f"Error: {t('vault.op_not_found', command=' '.join(settings.command))}",
+            file=sys.stderr,
+        )
+        sys.exit(3)
+    return client
+
+
+def _plan_payload(plan) -> list[dict[str, object]]:
+    return [{"key": item.key, "status": item.status, "error": item.error} for item in plan]
+
+
+def _cmd_sources(args: argparse.Namespace, vm) -> None:
+    sub = getattr(args, "sources_command", None)
+    try:
+        if sub == "list":
+            sources = load_sources(vm.data_dir)
+            payload = {
+                "version": sources.version,
+                "onepassword": {
+                    "command": list(sources.onepassword.command),
+                    "write_command": (
+                        list(sources.onepassword.write_command)
+                        if sources.onepassword.write_command is not None
+                        else None
+                    ),
+                    "timeout_s": sources.onepassword.timeout_s,
+                },
+                "entries": [
+                    {"key": key, "ref": entry.ref, "added_at": entry.added_at}
+                    for key, entry in sorted(sources.entries.items())
+                ],
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        elif sub == "add":
+            entry = add_source(vm.data_dir, args.key, args.ref)
+            print(json.dumps({"key": args.key, "ref": entry.ref, "added_at": entry.added_at}, indent=2))
+        elif sub == "remove":
+            if not remove_source(vm.data_dir, args.key):
+                print(f"Error: source not found: {args.key}", file=sys.stderr)
+                sys.exit(1)
+            print(json.dumps({"key": args.key, "removed": True}, indent=2))
+        else:
+            print("Usage: animaworks vault sources {list|add|remove}", file=sys.stderr)
+            sys.exit(1)
+    except VaultSourceError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _cmd_sync(args: argparse.Namespace, vm) -> None:
+    client = _make_client(vm)
+    keys = list(getattr(args, "keys", []) or [])
+
+    if getattr(args, "check", False):
+        try:
+            results = check(vm.data_dir, client, keys or None)
+        except VaultSourceError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if getattr(args, "json", False):
+            print(
+                json.dumps(
+                    {"results": results, "request_count": client.request_count},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+        else:
+            for key, status in results.items():
+                print(f"{key}: {status}")
+            print(f"1Password requests: {client.request_count}")
+        if CHECK_ERROR in results.values():
+            sys.exit(3)
+        if any(status != CHECK_SAME for status in results.values()):
+            sys.exit(2)
+        return
+
+    try:
+        plan = plan_sync(vm.data_dir, client, keys or None)
+    except VaultSourceError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    pending = [item for item in plan if item.status in (STATUS_NEW, STATUS_CHANGED)]
+    applied: list[str] = []
+    cancelled = False
+    exit_code = 0
+    if pending:
+        if getattr(args, "yes", False):
+            applied = apply_sync(vm.data_dir, plan)
+        elif sys.stdin.isatty():
+            try:
+                answer = input(t("vault.sync_confirm", count=len(pending)))
+            except EOFError:
+                answer = ""
+            if answer.strip().lower() in {"y", "yes"}:
+                applied = apply_sync(vm.data_dir, plan)
+            else:
+                cancelled = True
+        else:
+            exit_code = 1
+
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {
+                    "items": _plan_payload(plan),
+                    "applied": applied,
+                    "cancelled": cancelled,
+                    "request_count": client.request_count,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        for item in plan:
+            print(f"{item.key}: {item.status}")
+            if item.error:
+                print(f"  error: {item.error}")
+        if applied:
+            print(f"applied: {', '.join(applied)}")
+        if cancelled:
+            print(t("vault.sync_cancelled"))
+        print(f"1Password requests: {client.request_count}")
+
+    if exit_code == 1:
+        print(f"Error: {t('vault.non_tty_pending')}", file=sys.stderr)
+        sys.exit(1)
+    if any(item.status == STATUS_ERROR for item in plan):
+        sys.exit(3)
+
+
+def _cmd_rollback(args: argparse.Namespace, vm) -> None:
+    key = getattr(args, "key", "")
+    if not rollback(vm.data_dir, key, actor="cli"):
+        print(f"Error: {t('vault.rollback_missing', name=key)}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps({"key": key, "rolled_back": True}, ensure_ascii=False, indent=2))
+
+
+def _cmd_register_1p(args: argparse.Namespace, vm) -> None:
+    client = _make_client(vm)
+    try:
+        result = register_onepassword(
+            vm.data_dir,
+            client,
+            args.key,
+            vault=args.vault,
+            title=args.title,
+            field=args.field,
+            commit=bool(args.commit),
+        )
+    except (VaultSourceError, VaultOpsError, VaultOwnershipError, OnePasswordError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(dataclasses.asdict(result), ensure_ascii=False, indent=2))
 
 
 def _cmd_init(vm) -> None:
@@ -305,5 +543,31 @@ def register_vault_command(subparsers) -> None:
         action="store_true",
         help="Operator-only: delete from shared (never cascades)",
     )
+
+    p_sources = vault_sub.add_parser("sources", help="Manage the shared-key to 1Password reference mapping")
+    sources_sub = p_sources.add_subparsers(dest="sources_command")
+    p_sources_list = sources_sub.add_parser("list", help="List registered 1Password references")
+    p_sources_list.add_argument("--json", action="store_true", help="Emit JSON (the default)")
+    p_sources_add = sources_sub.add_parser("add", help="Register a 1Password reference for a shared key")
+    p_sources_add.add_argument("key", help="Shared vault key")
+    p_sources_add.add_argument("ref", help="1Password reference (op://Vault/Item/field)")
+    p_sources_remove = sources_sub.add_parser("remove", help="Remove a 1Password reference")
+    p_sources_remove.add_argument("key", help="Shared vault key")
+
+    p_sync = vault_sub.add_parser("sync", help="Sync shared keys from 1Password")
+    p_sync.add_argument("keys", nargs="*", help="Only sync these keys (default: all registered keys)")
+    p_sync.add_argument("--check", action="store_true", help="Only compare values; do not write")
+    p_sync.add_argument("--yes", action="store_true", help="Apply changes without prompting")
+    p_sync.add_argument("--json", action="store_true", help="Emit JSON without secret values")
+
+    p_rollback = vault_sub.add_parser("rollback", help="Restore the previous shared value for a key")
+    p_rollback.add_argument("key", help="Shared vault key")
+
+    p_register = vault_sub.add_parser("register-1p", help="Register a shared key with 1Password")
+    p_register.add_argument("key", help="Shared vault key")
+    p_register.add_argument("--vault", required=True, help="1Password vault name")
+    p_register.add_argument("--title", default=None, help="1Password item title (default: the key)")
+    p_register.add_argument("--field", default="credential", help="1Password field name (default: credential)")
+    p_register.add_argument("--commit", action="store_true", help="Create the item (default: preview only)")
 
     p_vault.set_defaults(func=cmd_vault)

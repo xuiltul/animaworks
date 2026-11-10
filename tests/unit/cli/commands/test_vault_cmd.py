@@ -68,9 +68,10 @@ def test_vault_status_summarizes_sections_without_values(tmp_path: Path, capsys)
         "key_present": True,
         "entry_count": 3,
         "sections": {
-            "shared": {"entries": 2, "encrypted": 1, "plaintext_like": 1, "invalid": 0},
-            "sakura": {"entries": 1, "encrypted": 0, "plaintext_like": 1, "invalid": 0},
+            "shared": {"entries": 2, "encrypted": 1, "plaintext_like": 1, "invalid": 0, "onepassword_managed": 0},
+            "sakura": {"entries": 1, "encrypted": 0, "plaintext_like": 1, "invalid": 0, "onepassword_managed": 0},
         },
+        "onepassword": {"managed_count": 0, "last_check": None},
     }
     assert "test-value" not in output
     assert "plain-value" not in output

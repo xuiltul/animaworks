@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: f3ec4bdc9616b30e3684425c43a772b97236aa8b6c5baf5dbe8f33ddc150f218 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: bcd0be23e4899be0494cabd22a50c13dba732310eb1686c87092b7939e4f201a -->
 
 # モジュール一覧
 
@@ -58,7 +58,7 @@
 | `cli.commands.task_store_cmd` | 259 | Operator-only, cohort-scoped task migration and current-state export. |
 | `cli.commands.timeline` | 81 | — |
 | `cli.commands.tmp_cmd` | 173 | — |
-| `cli.commands.vault_cmd` | 309 | — |
+| `cli.commands.vault_cmd` | 573 | — |
 
 ## `cli.tui`
 
@@ -212,10 +212,13 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.model_discovery` | 581 | Dynamic discovery of the "mode + model" catalog from the installed CLIs. |
 | `core.config.model_mode` | 458 | Model execution mode resolution for canonical S/C/D/G/X/Y/A modes. |
 | `core.config.models` | 101 | Central configuration module — facade re-exporting split modules. |
+| `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
 | `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
-| `core.config.vault` | 461 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
+| `core.config.vault_ops` | 586 | Core operator operations for the vault and its 1Password mapping. |
+| `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
 
 ## `core.enclave`
 
@@ -425,6 +428,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.tooling` | 175 | Domain-specific i18n strings (tool prompts and tooling). |
 | `core.i18n.strings.tooling_schema` | 542 | Domain-specific i18n strings (schema.*). |
 | `core.i18n.strings.tooling_schema_ext` | 167 | Domain-specific i18n strings (schema.* part 2). |
+| `core.i18n.strings.vault` | 58 | Domain-specific i18n strings for vault and 1Password operations. |
 | `core.i18n.strings.zoom` | 26 | — |
 
 ## `core.i18n.strings`
@@ -433,7 +437,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 
 | モジュール | 行数 | docstring 1行目 |
 |---|---:|---|
-| `core.i18n.strings` | 63 | Merge all domain string modules into a single dict. |
+| `core.i18n.strings` | 65 | Merge all domain string modules into a single dict. |
 
 ## `core.infra`
 

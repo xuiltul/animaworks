@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py cli -->
-<!-- generator: gen_reference/1  kind: cli  source-sha256: edbd2303bf77bdfa6ef3ed57261ea89b5db12ddc815813f38a0025d032b87ec3 -->
+<!-- generator: gen_reference/1  kind: cli  source-sha256: 3d943dc631b769315069c08cd02b20835592ef3405c5104fb996aa535c96bf44 -->
 
 # CLI リファレンス: `animaworks`
 
@@ -1626,7 +1626,9 @@ Show tmp usage summary
 
 Manage encrypted vault values
 
-`usage: animaworks vault [-h] {status,init,get,store,list,delete} ...`
+`usage: animaworks vault [-h]
+                        {status,init,get,store,list,delete,sources,sync,rollback,register-1p}
+                        ...`
 
 | 名前 | 種別 | 既定値 | 選択肢 | 説明 |
 |---|---|---|---|---|
@@ -1674,6 +1676,73 @@ List keys in the own and shared namespaces
 |---|---|---|---|---|
 | --shared | flag | false | — | List only the shared section (does not require ANIMAWORKS_ANIMA_DIR) |
 
+## `vault register-1p`
+
+Register a shared key with 1Password
+
+`usage: animaworks vault register-1p [-h] --vault VAULT [--title TITLE]
+                                    [--field FIELD] [--commit]
+                                    key`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+| --vault | option | — | — | 1Password vault name |
+| --title | option | — | — | 1Password item title (default: the key) |
+| --field | option | "credential" | — | 1Password field name (default: credential) |
+| --commit | flag | false | — | Create the item (default: preview only) |
+
+## `vault rollback`
+
+Restore the previous shared value for a key
+
+`usage: animaworks vault rollback [-h] key`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+
+## `vault sources`
+
+Manage the shared-key to 1Password reference mapping
+
+`usage: animaworks vault sources [-h] {list,add,remove} ...`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| — | — | — | — | — |
+
+## `vault sources add`
+
+Register a 1Password reference for a shared key
+
+`usage: animaworks vault sources add [-h] key ref`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+| ref | positional | — | — | 1Password reference (op://Vault/Item/field) |
+
+## `vault sources list`
+
+List registered 1Password references
+
+`usage: animaworks vault sources list [-h] [--json]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| --json | flag | false | — | Emit JSON (the default) |
+
+## `vault sources remove`
+
+Remove a 1Password reference
+
+`usage: animaworks vault sources remove [-h] key`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| key | positional | — | — | Shared vault key |
+
 ## `vault status`
 
 Show key and encryption status without values
@@ -1695,3 +1764,16 @@ Store a key-value pair
 | key | positional | — | — | Key to store |
 | value | positional | — | — | Value to store in the anima namespace |
 | --shared | flag | false | — | Operator-only: store in shared via stdin or a hidden prompt |
+
+## `vault sync`
+
+Sync shared keys from 1Password
+
+`usage: animaworks vault sync [-h] [--check] [--yes] [--json] [keys ...]`
+
+| 名前 | 種別 | 既定値 | 選択肢 | 説明 |
+|---|---|---|---|---|
+| keys | positional | — | — | Only sync these keys (default: all registered keys) |
+| --check | flag | false | — | Only compare values; do not write |
+| --yes | flag | false | — | Apply changes without prompting |
+| --json | flag | false | — | Emit JSON without secret values |

@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/security.md -->
-<!-- i18n: source-sha256=34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
+<!-- i18n: source-sha256=ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6 generated=2026-10-31 engine=luna model=gpt-6-luna-2026-09-22 translator=2 -->
 
 > Verified commit: 581e20f1
 
@@ -60,6 +60,13 @@ When authentication configuration is required, `auth_guard` of `server/app.py` c
 ## External Sending and Receiving
 
 External sending verifies recipient resolution, operation permissions, and delivery results from external services. Within the same run, a second message to the same destination is prevented, but there is no rejection based on the number of destinations, time-based or daily sending budgets, or conversation depth. On the receiving side, startup is triggered by Inbox file change notifications, and only one message is processed at a time. In the event of a Provider error, `rate_guard` adjusts the wait time before retry. Do not include authentication information in code or documentation, and enable only permitted integrations. For details, refer to [Messaging](architecture/messaging.md).
+
+## 1Password Integration
+
+- Keys in the `shared` section are read one-way from 1Password `op://` references. animaworks never overwrites 1Password.
+- The mapping lives in `vault_sources.json`; timestamps and check results live in `vault_meta.json`; the previous value is encrypted in `vault.previous.json`. None contain secret values or value hashes (comparisons run in memory).
+- New items are created only when a person explicitly runs `animaworks vault register-1p --commit`; existing items are never changed.
+- Synchronization, checks, and registration are operator-only and cannot be run from an Anima tool context.
 
 ## Adversarial Threat Analysis
 

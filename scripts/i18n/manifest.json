@@ -918,7 +918,7 @@
         "c16fd6ac6a68bdd6b13afa06a6d5e8b479378403f4863fc030dfb77c62e54732"
       ],
       "source": "docs/ja/reference/cli.md",
-      "source_sha256": "7b0199bdaf95678f9fbabdf17c43937004ded8e21db9b1a80d2cfc9c1459b026",
+      "source_sha256": "39df88e064ebd11e78ff3c0675ec039baeb44b5584a45ea43f74be6c307149ab",
       "statuses": [
         "translated",
         "translated",
@@ -1394,7 +1394,7 @@
         "9675cf0ee6026ce2446feb77ebe855e68e6333bec41f3ae15db4a31567003798"
       ],
       "source": "docs/ja/security.md",
-      "source_sha256": "34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30",
+      "source_sha256": "ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6",
       "statuses": [
         "translated",
         "translated",
@@ -2838,7 +2838,7 @@
         "9675cf0ee6026ce2446feb77ebe855e68e6333bec41f3ae15db4a31567003798"
       ],
       "source": "docs/ja/security.md",
-      "source_sha256": "34c34a676a45cd171ae5f13268b722e6309e16be7ca5692e7d681c63756cba30",
+      "source_sha256": "ee45e223668f7d5fc4077d6187f1bf3e606e8dafa0fca4557bf71e7ad61943c6",
       "statuses": [
         "translated",
         "translated",
