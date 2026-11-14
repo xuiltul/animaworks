@@ -71,6 +71,14 @@ Configuration: `pyproject.toml` — line length 120, target Python 3.12.
 
 Look for issues labeled [`good first issue`](https://github.com/xuiltul/animaworks/labels/good%20first%20issue) — these are great starting points for new contributors.
 
+## Third-Party Service Integrations
+
+We don't accept pull requests that add a backend, provider, or preset for a hosted gateway, aggregator, or reseller of AI models (LLM, image, video, or audio). This includes optional ones that are off by default. Each one is code we would maintain against an API we don't use, and anyone who turns it on sends their Animas' prompts, memories, or images to that service. We close these PRs without a code review (see #438 and #445).
+
+If AnimaWorks is missing something you need from a model or service, open an issue that describes the problem first.
+
+If you work for or are paid by a service your change touches, say so in the PR description.
+
 ## Pull Request Process
 
 ### Branch Naming
