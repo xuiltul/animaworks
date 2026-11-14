@@ -3,15 +3,41 @@
    ============================================ */
 
 .sidebar-nav {
-  width: 184px;
-  min-width: 184px;
-  background: var(--aw-color-sidebar-bg);
+  /* Local tokens: themes only provide the sidebar background and text. */
+  --nav-accent: #a5b4fc;
+  --nav-fg: var(--aw-color-sidebar-muted);
+  --nav-fg-strong: var(--aw-color-sidebar-text);
+  --nav-hover-bg: rgba(255, 255, 255, 0.06);
+  --nav-active-bg: rgba(255, 255, 255, 0.1);
+  --nav-line: rgba(255, 255, 255, 0.07);
+
+  width: 208px;
+  min-width: 208px;
+  background-color: var(--aw-color-sidebar-bg);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 160px);
+  border-right: 1px solid var(--nav-line);
   color: var(--aw-color-sidebar-text);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   flex-shrink: 0;
   transition: width 0.18s ease, min-width 0.18s ease;
+}
+
+/* Named themes already define a bright accent for the dark sidebar. */
+body[class*="theme-"]:not(.theme-business) .sidebar-nav {
+  --nav-accent: var(--aw-color-sidebar-active-text);
+}
+
+.theme-business .sidebar-nav {
+  --nav-accent: #93c5fd;
+}
+
+.nav-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 /* ── Brand ───────────────────────────────────── */
@@ -30,75 +56,170 @@
 .nav-list {
   list-style: none;
   margin: 0;
-  padding: 8px 0;
-  flex: 1;
+  padding: 12px 10px 14px;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .nav-list li {
   margin: 0;
 }
 
+.nav-spacer {
+  flex: 1 1 auto;
+  min-height: 16px;
+}
+
 /* ── Nav Item ────────────────────────────────── */
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  color: var(--aw-color-sidebar-muted);
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--nav-fg);
   text-decoration: none;
-  font-size: 0.9rem;
-  border-left: 3px solid transparent;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.nav-item:hover,
+.nav-item:hover {
+  background: var(--nav-hover-bg);
+  color: var(--nav-fg-strong);
+}
+
 .nav-item:active {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--aw-color-sidebar-hover-bg);
+  background: var(--nav-active-bg);
 }
 
 .nav-item:focus-visible {
-  outline: 2px solid var(--aw-color-accent-light);
-  outline-offset: -2px;
+  outline: 2px solid var(--nav-accent);
+  outline-offset: 1px;
 }
 
 .nav-item.active {
-  background: var(--aw-color-sidebar-active-bg, rgba(37, 99, 235, 0.15));
-  color: var(--aw-color-sidebar-active-text);
-  border-left-color: var(--aw-color-accent);
+  background: var(--nav-active-bg);
+  color: var(--nav-fg-strong);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Slim indicator on the sidebar edge for the current page. */
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 0 3px 3px 0;
+  background: var(--nav-accent);
+}
+
+.nav-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Nav Icon ────────────────────────────────── */
 
 .nav-icon {
-  font-size: 1.1rem;
-  width: 24px;
-  text-align: center;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
+  transition: color 0.15s ease, opacity 0.15s ease, transform 0.2s ease;
 }
 
-.nav-emoji { display: var(--aw-emoji-display); }
-.nav-lucide { display: var(--aw-icon-display); }
+.nav-item:hover .nav-icon {
+  opacity: 1;
+  transform: translateY(-0.5px);
+}
+
+.nav-item.active .nav-icon {
+  --nav-duo: 0.2;
+  color: var(--nav-accent);
+  opacity: 1;
+}
+
+/* ── Badge ───────────────────────────────────── */
+
+.nav-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--nav-accent);
+  color: #0f172a;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.nav-badge[hidden] {
+  display: none;
+}
 
 /* ── External Link ───────────────────────────── */
 
-.nav-external {
-  opacity: 0.75;
+.nav-external-mark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
-.nav-external:hover,
-.nav-external:active {
-  opacity: 1;
+.nav-external:hover .nav-external-mark,
+.nav-external:focus-visible .nav-external-mark {
+  opacity: 0.6;
 }
 
 /* ── Divider ─────────────────────────────────── */
 
 .nav-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: 8px 16px;
+  background: var(--nav-line);
+  margin: 8px 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-item,
+  .nav-icon {
+    transition: none;
+  }
+
+  .nav-item:hover .nav-icon {
+    transform: none;
+  }
 }
 
 /* ── Theme Picker ────────────── */
