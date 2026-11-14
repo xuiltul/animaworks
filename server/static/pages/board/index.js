@@ -18,6 +18,9 @@ export function createBoardPage(container, options = {}) {
   const store = createBoardStore();
   const mentionCard = createMentionCard();
   const abort = new AbortController();
+  const pinnedChannel = typeof options.pinnedChannel === "string" && options.pinnedChannel
+    ? options.pinnedChannel
+    : null;
   let stream = null;
   let composer = null;
   let unsubscribeStore = null;
@@ -26,7 +29,7 @@ export function createBoardPage(container, options = {}) {
   let composingSearch = false;
 
   container.innerHTML = `
-    <div class="board-layout" id="boardLayout">
+    <div class="board-layout${pinnedChannel ? " board-layout--pinned" : ""}" id="boardLayout">
       <aside class="board-rail" id="boardRail" aria-label="${escapeHtml(t("board.channels"))}"></aside>
       <section class="board-main">
         <section class="board-home" id="boardHome" hidden></section>
@@ -63,20 +66,24 @@ export function createBoardPage(container, options = {}) {
   });
   view.append(composer.element);
   stream = createStream({ element: messagesElement, store });
-  const home = createHomeView({ element: homeElement, store });
-  const flows = createFlowsView({ element: flowsElement, store });
-  const palette = createPalette({
-    root: paletteRoot,
-    store,
-    onSelect: (type, name) => {
-      store.select(type, name);
-      closeRailOnMobile();
-    },
-    onView: (next) => {
-      store.setView(next);
-      closeRailOnMobile();
-    },
-  });
+  // A pinned board owns a single channel, so the home/flows views and the
+  // channel palette (including the home timeline poller) are not needed.
+  const home = pinnedChannel ? null : createHomeView({ element: homeElement, store });
+  const flows = pinnedChannel ? null : createFlowsView({ element: flowsElement, store });
+  const palette = pinnedChannel
+    ? null
+    : createPalette({
+      root: paletteRoot,
+      store,
+      onSelect: (type, name) => {
+        store.select(type, name);
+        closeRailOnMobile();
+      },
+      onView: (next) => {
+        store.setView(next);
+        closeRailOnMobile();
+      },
+    });
 
   function updateDrawerToggle() {
     const button = headerElement.querySelector("[data-board-info]");
@@ -147,10 +154,12 @@ export function createBoardPage(container, options = {}) {
   }
 
   function refresh(reason) {
-    renderRail(railElement, store);
+    if (!pinnedChannel) renderRail(railElement, store);
     syncRailToggles();
 
-    const hasSelection = Boolean(store.state.selectedType && store.state.selectedName);
+    const hasSelection = pinnedChannel
+      ? true
+      : Boolean(store.state.selectedType && store.state.selectedName);
     const activeView = hasSelection ? null : (store.state.view || "home");
     placeholder.hidden = hasSelection || activeView === "home" || activeView === "flows";
     view.hidden = !hasSelection;
@@ -158,8 +167,8 @@ export function createBoardPage(container, options = {}) {
     flowsElement.hidden = hasSelection || activeView !== "flows";
     if (!hasSelection) {
       drawer.close();
-      if (activeView === "flows") flows.show();
-      else home.render();
+      if (activeView === "flows") flows?.show();
+      else home?.render();
       syncRailToggles();
       return;
     }
@@ -298,7 +307,12 @@ export function createBoardPage(container, options = {}) {
 
     const channelLink = event.target.closest("[data-board-channel]");
     if (channelLink) {
-      store.select("channel", channelLink.dataset.boardChannel);
+      const name = channelLink.dataset.boardChannel;
+      if (pinnedChannel && name !== pinnedChannel) {
+        window.location.hash = "#/board/" + encodeURIComponent(name);
+        return;
+      }
+      store.select("channel", name);
       closeRailOnMobile();
       return;
     }
@@ -458,7 +472,7 @@ export function createBoardPage(container, options = {}) {
     const timelineItem =
       data && data.id !== undefined && ["notified", "done", "decided"].includes(data.kind);
     if (timelineItem) {
-      home.handleTimelineItem(data);
+      home?.handleTimelineItem(data);
       return;
     }
     if (
@@ -477,7 +491,7 @@ export function createBoardPage(container, options = {}) {
   window.__boardReadWsHandler = (data) => {
     void store.handleBoardRead(data);
   };
-  window.__boardTimelineWsHandler = (data) => home.handleTimelineItem(data);
+  window.__boardTimelineWsHandler = (data) => home?.handleTimelineItem(data);
 
   function parseSubPath(subPath) {
     const text = String(subPath || "").replace(/^\/+|\/+$/g, "");
@@ -497,6 +511,16 @@ export function createBoardPage(container, options = {}) {
   }
 
   function render() {
+    if (pinnedChannel) {
+      store.select("channel", pinnedChannel);
+      const target = parseSubPath(options.subPath);
+      if (target) {
+        const postId = target.id || target.channel;
+        if (postId) void store.jumpTo(postId);
+      }
+      store.start();
+      return;
+    }
     const target = parseSubPath(options.subPath);
     if (target) {
       store.select("channel", target.channel);
@@ -505,6 +529,12 @@ export function createBoardPage(container, options = {}) {
       refresh("selection");
     }
     store.start();
+  }
+
+  function insertMention(name) {
+    const target = String(name || "").trim();
+    if (!target || !composer) return;
+    composer.insertText(`@${target} `);
   }
 
   function destroy() {
@@ -519,12 +549,12 @@ export function createBoardPage(container, options = {}) {
     mentionCard.destroy();
     stream.destroy();
     composer.destroy();
-    home.destroy();
-    flows.destroy();
-    palette.destroy();
+    home?.destroy();
+    flows?.destroy();
+    palette?.destroy();
     drawer.destroy();
     container.innerHTML = "";
   }
 
-  return { render, destroy };
+  return { render, destroy, store, insertMention };
 }

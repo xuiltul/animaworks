@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 984256bf657492166387ec9ebf2a0e489d6566785feef2e07397296154d105ee -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 2d3969cd19bad337b8cd566695ccb8d647548d15292032e704d69ac3fb5d4737 -->
 
 # モジュール一覧
 
@@ -397,7 +397,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.hub.mcp_app` | 468 | — |
 | `core.hub.members` | 279 | — |
 | `core.hub.setup_prompt` | 154 | — |
-| `core.hub.silence` | 107 | — |
+| `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 298 | — |
 | `core.hub.wake` | 378 | — |
 
@@ -1174,7 +1174,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.hub` | 67 | — |
+| `server.routes.hub` | 99 | — |
 | `server.routes.internal` | 1604 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |

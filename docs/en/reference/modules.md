@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=8cca5d8f6438e30b53480d83881cc3878b873a057653952ff9c8316d2a3e61fe generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -388,7 +388,7 @@ Tool execution, command execution, safety control.
 
 ## `core.hub`
 
-Company timeline storage and read position.
+Company timeline storage and read-position tracking.
 
 | Module | Lines | docstring 1st line |
 |---|---:|---|
@@ -397,7 +397,7 @@ Company timeline storage and read position.
 | `core.hub.mcp_app` | 468 | — |
 | `core.hub.members` | 279 | — |
 | `core.hub.setup_prompt` | 154 | — |
-| `core.hub.silence` | 107 | — |
+| `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 298 | — |
 | `core.hub.wake` | 378 | — |
 
@@ -869,7 +869,7 @@ System prompt and context construction.
 
 Anima main runtime components, inter-process communication, and task execution.
 
-| Module | Lines | First line of docstring |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `core.runtime` | 1 | Runtime components owned by an individual Anima process. |
 | `core.runtime.cron_diagnostics` | 85 | Registration-time diagnostics for cron schedules that waste LLM runs. |
@@ -885,8 +885,8 @@ Anima main runtime components, inter-process communication, and task execution.
 | `core.runtime.scheduler_manager` | 1059 | APScheduler management for heartbeat and cron tasks. |
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 445 | Streaming IPC message handler. |
-| `core.runtime.task_runner` | 1054 | Disposable task runner entry point. |
-| `core.runtime.task_runner_supervisor` | 1450 | Anima-main-side lifecycle manager for disposable task runner processes. |
+| `core.runtime.task_runner` | 1112 | Disposable task runner entry point. |
+| `core.runtime.task_runner_supervisor` | 1513 | Anima-main-side lifecycle manager for disposable task runner processes. |
 | `core.runtime.transport` | 240 | Transport helpers for IPC server/client communication. |
 
 ## `core.skills`
@@ -1153,7 +1153,7 @@ Voice input/output and voice dialogue.
 
 —
 
-| Module | Lines | docstring first line |
+| Module | Lines | docstring 1st line |
 |---|---:|---|
 | `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
@@ -1174,7 +1174,7 @@ Voice input/output and voice dialogue.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.hub` | 67 | — |
+| `server.routes.hub` | 99 | — |
 | `server.routes.internal` | 1604 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |

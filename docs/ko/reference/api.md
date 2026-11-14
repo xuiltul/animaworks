@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/api.md -->
-<!-- i18n: source-sha256=58ad9fce7a5643b700c610524327733f9d822af40957a9cf4ed4bfb0b9af25e9 generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=326ecb533f7b68687bf6ccd4c1082eaa68d6eac7bf0162c4d52d9cb86bc93ebb generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # API 참조
 
@@ -140,8 +140,9 @@ FastAPI의 OpenAPI 정의, WebSocket 및 `server/app.py`에 직접 작성된 라
 
 ## `server/routes/hub.py`
 
-| GET | `/api/hub/members` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화되어 있으면 생략 가능) | — | `server/routes/hub.py:list_hub_members` |
-| GET | `/api/hub/members/{member_id}/avatar` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화되어 있으면 생략 가능) | — | `server/routes/hub.py:hub_member_avatar` |
+| GET | `/api/hub/info` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/hub.py:hub_info` |
+| GET | `/api/hub/members` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/hub.py:list_hub_members` |
+| GET | `/api/hub/members/{member_id}/avatar` | 세션 필수(local_trust 모드, 또는 localhost 신뢰가 활성화된 경우 생략 가능) | — | `server/routes/hub.py:hub_member_avatar` |
 
 ## `server/routes/internal.py`
 
