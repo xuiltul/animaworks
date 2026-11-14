@@ -117,3 +117,14 @@ def test_board_store_prefers_hub_roster_avatars() -> None:
 def test_board_posts_show_hub_display_names() -> None:
     assert "displayName: (name) => store.hubMember(name)?.display_name" in _read("pages/board/stream.js")
     assert "ctx.displayName?.(from)" in _read("pages/board/post.js")
+
+
+def test_hub_avatar_urls_keep_the_base_path() -> None:
+    # Behind a proxy the app lives under a base path (e.g. /app); a bare
+    # /api/... avatar URL 404s there.
+    store = _read("pages/board/store.js")
+    members = _read("pages/hub/members.js")
+    assert 'import { basePath } from "/shared/base-path.js";' in store
+    assert "`${basePath}${url}`" in store
+    assert 'import { basePath } from "/shared/base-path.js";' in members
+    assert "`${basePath}${member.avatar_url}`" in members

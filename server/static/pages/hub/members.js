@@ -1,6 +1,7 @@
 // ── Hub roster ───────────────────────────────
 // Cards for external AIs: avatar, last visit, delivery route, overdue state,
 // and a button that asks the pinned board composer to mention them.
+import { basePath } from "/shared/base-path.js";
 import { t } from "/shared/i18n.js";
 import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { clockTime, relativeTime } from "../board/time.js";
@@ -62,7 +63,7 @@ function _avatar(member, name, extraClass = "") {
   if (member.overdue) classes.push("is-overdue");
   const style = `background: linear-gradient(135deg, hsl(${hue} 62% 58%), hsl(${next} 66% 42%))`;
   const url = typeof member.avatar_url === "string" && member.avatar_url.startsWith("/api/")
-    ? member.avatar_url
+    ? `${basePath}${member.avatar_url}`
     : "";
   const body = url
     ? `<img class="hub-member-avatar-img" src="${escapeAttr(url)}" alt="${escapeAttr(name)}" loading="lazy">`
