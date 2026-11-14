@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: cba2aaf745eb9a1741cb155640194705ea1a682fb7120aff97a85544e92b9766 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 2cf99fa7db2f29177959733e68fc74680778ed8e2ac3b2dc57767f918d62ee21 -->
 
 # 設定リファレンス
 
@@ -392,7 +392,7 @@
 | キー | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `image_gen` | `ImageGenConfig` | `{ImageGenConfig}` | 画像生成プロバイダーと既定パラメーター。 |
-| `image_gen.backend` | `Literal['api', 'diffusers', 'atlascloud']` | `"api"` | — |
+| `image_gen.backend` | `Literal['api', 'diffusers']` | `"api"` | — |
 | `image_gen.image_style` | `Literal['anime', 'realistic']` | `"realistic"` | — |
 | `image_gen.prefer_codex` | `bool` | `true` | codex CLIがあれば画像生成に最優先で使う |
 | `image_gen.style_reference` | `str \| None` | `null` | Path to organization-wide style reference image |

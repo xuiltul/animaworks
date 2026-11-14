@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=6dff1740fb65de0dd2567baad3ffd75d60f0e684c12d5405fbf2dd4bc30d949b generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -215,7 +215,7 @@ Application configuration schema, loading, validation, and migration.
 | `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1587 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
 | `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
@@ -503,7 +503,6 @@ Implementation of external service integrations and animaworks-tool.
 | `core.integrations.google_calendar` | 615 | — |
 | `core.integrations.google_sheets` | 470 | — |
 | `core.integrations.google_tasks` | 445 | AnimaWorks Google Tasks tool -- Google Tasks API access. |
-| `core.integrations.image.atlascloud` | 156 | Optional Atlas Cloud backend for character images and reference edits. |
 | `core.integrations.image.codex` | 370 | Codex CLI image generation client (image_gen tool via local codex). |
 | `core.integrations.image.constants` | 57 | URL constants, timeouts, and execution profiles for image/3D generation. |
 | `core.integrations.image.diffusers_local` | 905 | Local Diffusers-backed image generation helpers. |
@@ -512,7 +511,7 @@ Implementation of external service integrations and animaworks-tool.
 | `core.integrations.image.novelai` | 193 | NovelAI V4.5 API client for anime full-body image generation. |
 | `core.integrations.image.prompts` | 279 | Prompt constants for bustup, chibi, and expression variants. |
 | `core.integrations.image.utils` | 169 | Shared utilities for image/3D generation clients. |
-| `core.integrations.image_gen` | 425 | Character image & 3-D model generation tool for AnimaWorks. |
+| `core.integrations.image_gen` | 420 | Character image & 3-D model generation tool for AnimaWorks. |
 | `core.integrations.local_llm` | 552 | AnimaWorks local LLM tool -- Ollama API client. |
 | `core.integrations.notion` | 862 | Notion integration for AnimaWorks. |
 | `core.integrations.slack` | 352 | Slack integration for AnimaWorks. |

@@ -457,7 +457,7 @@ class HelperModelsConfig(BaseModel):
 class ImageGenConfig(BaseModel):
     """Configuration for image generation and style consistency."""
 
-    backend: Literal["api", "diffusers", "atlascloud"] = "api"
+    backend: Literal["api", "diffusers"] = "api"
     image_style: Literal["anime", "realistic"] = "realistic"
     prefer_codex: bool = True  # codex CLIがあれば画像生成に最優先で使う
     style_reference: str | None = None  # Path to organization-wide style reference image
@@ -480,6 +480,15 @@ class ImageGenConfig(BaseModel):
     diffusers_img2img_strength: float = 0.55
     ip_adapter_model: str = "h94/IP-Adapter"
     ip_adapter_scale: float = 0.6  # IP-Adapter face reference blend weight (0.0-1.0)
+
+    @field_validator("backend", mode="before")
+    @classmethod
+    def _map_removed_backend(cls, v: object) -> object:
+        """Load configs that still name the removed Atlas Cloud backend as the default one."""
+        if v == "atlascloud":
+            logger.warning('image_gen.backend "atlascloud" was removed; using "api". Update config.json.')
+            return "api"
+        return v
 
 
 class NotificationChannelConfig(BaseModel):
