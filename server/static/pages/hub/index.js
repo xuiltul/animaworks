@@ -1,38 +1,39 @@
 // ── Hub page assembly ────────────────────────
 // One screen for external AIs: the #hub board, the company timeline, and the
 // roster of members (who visited, how they receive messages, who is overdue).
+// The roster lives in a dropdown opened from the board header so the
+// conversation keeps the full height of the page.
 import { api } from "../../modules/api.js";
 import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { t } from "/shared/i18n.js";
 import { createBoardPage } from "../board/index.js";
 import { createTimelineView } from "../board/timeline.js";
 import { numberText } from "../board/time.js";
-import { renderMembers } from "./members.js";
+import { renderAvatarStack, renderMembers } from "./members.js";
 
 const MEMBERS_REFRESH_MS = 60_000;
 
 const HUB_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="4.2" r="1.9"/><circle cx="4.6" cy="17.6" r="1.9"/><circle cx="19.4" cy="17.6" r="1.9"/><path d="M12 6.1v3.3M6.3 16.4l3.4-2.4M17.7 16.4l-3.4-2.4"/></svg>`;
 
-function _pageMarkup(info, timelineEnabled) {
-  const board = String(info.board || "hub");
+const CHEVRON = `<svg class="hub-switch-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>`;
+
+function _pageMarkup(timelineEnabled) {
   return `<div class="hub-page${timelineEnabled ? "" : " hub-page--no-timeline"}" data-hub-tab="chat">
     <header class="hub-head">
       <button type="button" class="hub-nav-toggle" data-hub-nav aria-label="${escapeAttr(t("common.aria_menu"))}" title="${escapeAttr(t("common.aria_menu"))}">☰</button>
-      <div class="hub-head-main">
-        <span class="hub-head-icon" aria-hidden="true">${HUB_ICON}</span>
-        <div class="hub-head-text">
-          <h1 class="hub-head-title" data-hub-title>${escapeHtml(t("hub.title"))}</h1>
-          <p class="hub-head-sub">#${escapeHtml(board)} · <span data-hub-member-count>${escapeHtml(t("hub.member_count", { count: "0" }))}</span></p>
-        </div>
-      </div>
       <div class="hub-tabs" role="tablist" aria-label="${escapeAttr(t("hub.title"))}">
         <button type="button" role="tab" class="hub-tab" data-hub-tab-button="chat" aria-selected="true">${escapeHtml(t("hub.tab_chat"))}</button>
         <button type="button" role="tab" class="hub-tab" data-hub-tab-button="timeline" aria-selected="false">${escapeHtml(t("hub.tab_timeline"))}<span class="hub-tab-badge" data-hub-timeline-badge hidden></span></button>
       </div>
     </header>
-    <section class="hub-members" aria-label="${escapeAttr(t("hub.members_label"))}"></section>
     <div class="hub-body">
-      <section class="hub-pane hub-chat" data-hub-pane="chat" role="tabpanel"></section>
+      <section class="hub-pane hub-chat" data-hub-pane="chat" role="tabpanel">
+        <div class="hub-chat-board" data-hub-board></div>
+        <div class="hub-roster" id="hubRoster" data-hub-roster role="dialog" aria-label="${escapeAttr(t("hub.members_label"))}" hidden>
+          <div class="hub-roster-head" data-hub-member-count>${escapeHtml(t("hub.member_count", { count: "0" }))}</div>
+          <section class="hub-members"></section>
+        </div>
+      </section>
       <aside class="hub-pane hub-timeline" data-hub-pane="timeline" role="tabpanel" aria-label="${escapeAttr(t("board.timeline_title"))}"></aside>
     </div>
   </div>`;
@@ -55,6 +56,34 @@ export function createHubPage(container, options = {}) {
   let timeline = null;
   let membersTimer = null;
   let destroyed = false;
+  let members = [];
+  let rosterOpen = false;
+
+  /** Header title for the pinned board: the roster switch and the channel. */
+  function switchMarkup(channel) {
+    const label = t("hub.members_label");
+    return `<button type="button" class="hub-switch" data-hub-switch aria-haspopup="dialog" aria-controls="hubRoster" aria-expanded="${rosterOpen ? "true" : "false"}" title="${escapeAttr(label)}">
+        <span class="hub-switch-icon" aria-hidden="true">${HUB_ICON}</span>
+        <span class="hub-switch-title">${escapeHtml(t("hub.title"))}</span>
+        <span class="hub-switch-stack" data-hub-switch-stack>${renderAvatarStack(members)}</span>
+        ${CHEVRON}
+      </button>
+      <span class="hub-switch-channel">#${escapeHtml(channel?.name || "")}</span>`;
+  }
+
+  function setRosterOpen(open) {
+    const panel = container.querySelector("[data-hub-roster]");
+    if (!panel) return;
+    rosterOpen = Boolean(open);
+    panel.hidden = !rosterOpen;
+    for (const button of container.querySelectorAll("[data-hub-switch]")) {
+      button.setAttribute("aria-expanded", rosterOpen ? "true" : "false");
+    }
+    if (rosterOpen) {
+      const first = panel.querySelector("[data-hub-call]");
+      (first || panel).focus?.({ preventScroll: true });
+    }
+  }
 
   function setTab(tab) {
     const page = container.querySelector(".hub-page");
@@ -66,7 +95,10 @@ export function createHubPage(container, options = {}) {
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", active ? "true" : "false");
     }
-    if (tab === "timeline") timeline?.render();
+    if (tab === "timeline") {
+      setRosterOpen(false);
+      timeline?.render();
+    }
   }
 
   function updateUnread(count) {
@@ -77,11 +109,14 @@ export function createHubPage(container, options = {}) {
     badge.textContent = value > 0 ? numberText(value) : "";
   }
 
-  function updateMemberCount(members) {
+  function updateMemberSummary() {
     const node = container.querySelector("[data-hub-member-count]");
-    if (!node) return;
-    const enabled = members.filter((member) => member && member.enabled !== false).length;
-    node.textContent = t("hub.member_count", { count: numberText(enabled) });
+    if (node) {
+      const enabled = members.filter((member) => member && member.enabled !== false).length;
+      node.textContent = t("hub.member_count", { count: numberText(enabled) });
+    }
+    const stack = container.querySelector("[data-hub-switch-stack]");
+    if (stack) stack.innerHTML = renderAvatarStack(members);
   }
 
   async function loadMembers() {
@@ -89,18 +124,19 @@ export function createHubPage(container, options = {}) {
     try {
       const data = await api("/api/hub/members", { signal });
       if (destroyed) return;
-      const members = Array.isArray(data) ? data : [];
-      renderMembers(container.querySelector(".hub-members"), members, {
-        onMention: (id) => {
-          boardPage?.insertMention(id);
-          setTab("chat");
-        },
-      });
-      updateMemberCount(members);
+      members = Array.isArray(data) ? data : [];
     } catch {
       if (destroyed) return;
-      renderMembers(container.querySelector(".hub-members"), [], {});
+      members = [];
     }
+    renderMembers(container.querySelector(".hub-members"), members, {
+      onMention: (id) => {
+        setRosterOpen(false);
+        setTab("chat");
+        boardPage?.insertMention(id);
+      },
+    });
+    updateMemberSummary();
   }
 
   container.addEventListener("click", (event) => {
@@ -109,8 +145,25 @@ export function createHubPage(container, options = {}) {
       document.body.classList.toggle("mobile-nav-open");
       return;
     }
+    if (event.target.closest("[data-hub-switch]")) {
+      setRosterOpen(!rosterOpen);
+      return;
+    }
     const button = event.target.closest("[data-hub-tab-button]");
     if (button) setTab(button.dataset.hubTabButton);
+  }, { signal });
+
+  // Close the roster on any click outside it (the switch toggles it itself).
+  document.addEventListener("click", (event) => {
+    if (!rosterOpen) return;
+    if (event.target.closest?.("[data-hub-roster], [data-hub-switch]")) return;
+    setRosterOpen(false);
+  }, { signal });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !rosterOpen) return;
+    setRosterOpen(false);
+    container.querySelector("[data-hub-switch]")?.focus();
   }, { signal });
 
   document.addEventListener("visibilitychange", () => {
@@ -131,13 +184,14 @@ export function createHubPage(container, options = {}) {
     }
 
     const timelineEnabled = info.timeline_enabled === true;
-    container.innerHTML = _pageMarkup(info, timelineEnabled);
+    container.innerHTML = _pageMarkup(timelineEnabled);
 
-    const chatElement = container.querySelector("[data-hub-pane='chat']");
+    const boardElement = container.querySelector("[data-hub-board]");
     const timelineElement = container.querySelector("[data-hub-pane='timeline']");
-    boardPage = createBoardPage(chatElement, {
+    boardPage = createBoardPage(boardElement, {
       subPath: options.subPath || "",
       pinnedChannel: String(info.board || "hub"),
+      pinnedTitle: switchMarkup,
     });
     boardPage.render();
 

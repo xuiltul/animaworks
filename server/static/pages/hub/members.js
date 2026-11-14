@@ -54,10 +54,11 @@ function _tags(member) {
   return tags.join("");
 }
 
-function _avatar(member, name) {
+function _avatar(member, name, extraClass = "") {
   const hue = _hue(member.id);
   const next = (hue + 42) % 360;
   const classes = ["hub-member-avatar"];
+  if (extraClass) classes.push(extraClass);
   if (member.overdue) classes.push("is-overdue");
   const style = `background: linear-gradient(135deg, hsl(${hue} 62% 58%), hsl(${next} 66% 42%))`;
   const url = typeof member.avatar_url === "string" && member.avatar_url.startsWith("/api/")
@@ -115,6 +116,25 @@ function _card(member) {
     </div>
     ${call}
   </article>`;
+}
+
+/**
+ * Small overlapping avatars for the header switch: enabled members only,
+ * newest visitor first, with the same presence/overdue cues as the cards.
+ */
+export function renderAvatarStack(members, limit = 4) {
+  const rows = _sorted((Array.isArray(members) ? members : [])
+    .filter((member) => member && member.id && member.enabled !== false));
+  const shown = rows.slice(0, limit).map((member) => {
+    const name = String(member.display_name || member.id);
+    return `<span class="hub-stack-item" title="${escapeAttr(name)}">
+      ${_avatar(member, name, "hub-stack-avatar")}
+      <span class="hub-member-presence${_isRecent(member.last_seen) ? " is-recent" : ""}" aria-hidden="true"></span>
+    </span>`;
+  });
+  const rest = rows.length - shown.length;
+  if (rest > 0) shown.push(`<span class="hub-stack-more">+${rest}</span>`);
+  return shown.join("");
 }
 
 export function renderMembers(element, members, { onMention } = {}) {

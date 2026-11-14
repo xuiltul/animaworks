@@ -92,3 +92,15 @@ def test_members_escapes_html() -> None:
     members = _read("pages/hub/members.js")
 
     assert "import { escapeAttr, escapeHtml }" in members
+
+
+def test_roster_is_a_dropdown_in_the_board_header() -> None:
+    board = _read("pages/board/index.js")
+    header = _read("pages/board/header.js")
+    hub = _read("pages/hub/index.js")
+    assert "options.pinnedTitle" in board
+    assert "titleHtml" in header
+    assert "pinnedTitle: switchMarkup" in hub
+    assert 'data-hub-roster role="dialog"' in hub
+    assert 'aria-haspopup="dialog"' in hub
+    assert "export function renderAvatarStack" in _read("pages/hub/members.js")

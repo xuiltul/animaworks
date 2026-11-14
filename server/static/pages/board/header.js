@@ -69,7 +69,11 @@ function _infoButton() {
   </button>`;
 }
 
-export function renderChannelHeader(element, channel, store) {
+/**
+ * Render the channel header. A pinned board may pass ``titleHtml`` (already
+ * escaped markup) to replace the "# name" title with its own control.
+ */
+export function renderChannelHeader(element, channel, store, { titleHtml = "" } = {}) {
   if (!channel) {
     element.innerHTML = `<div class="board-header-title">${escapeHtml(t("board.loading"))}</div>`;
     element.classList.remove("board-is-filters-open");
@@ -85,7 +89,7 @@ export function renderChannelHeader(element, channel, store) {
     && document.activeElement === previousInput;
   const caret = hadFocus ? previousInput.selectionStart : null;
 
-  const title = `<span class="board-header-hash" aria-hidden="true">#</span>
+  const title = titleHtml || `<span class="board-header-hash" aria-hidden="true">#</span>
     <span class="board-header-name" title="${escapeAttr(channel.name)}">${escapeHtml(channel.name)}</span>`;
 
   element.innerHTML = `${boardTopBar({

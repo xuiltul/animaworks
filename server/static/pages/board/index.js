@@ -21,6 +21,10 @@ export function createBoardPage(container, options = {}) {
   const pinnedChannel = typeof options.pinnedChannel === "string" && options.pinnedChannel
     ? options.pinnedChannel
     : null;
+  // Optional (channel) => markup for the pinned channel's header title.
+  const pinnedTitle = pinnedChannel && typeof options.pinnedTitle === "function"
+    ? options.pinnedTitle
+    : null;
   let stream = null;
   let composer = null;
   let unsubscribeStore = null;
@@ -175,7 +179,9 @@ export function createBoardPage(container, options = {}) {
 
     if (store.state.selectedType === "channel") {
       const channel = store.channel(store.state.selectedName);
-      renderChannelHeader(headerElement, channel, store);
+      renderChannelHeader(headerElement, channel, store, {
+        titleHtml: pinnedTitle && channel ? pinnedTitle(channel) : "",
+      });
       const writable = !channel || channel.writable !== false;
       composer.setContext({ type: "channel", name: store.state.selectedName, writable, channel });
       readonlyElement.hidden = writable;
