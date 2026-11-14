@@ -9,6 +9,7 @@ import { state } from "./state.js";
 import { connectWebSocket } from "./websocket.js";
 // state.authMode is set by login.js checkAuth()
 import { loadSystemStatus } from "./status.js";
+import { initHubNav } from "./nav-hub.js";
 
 // ── Display Mode ─────────────────────────────
 
@@ -117,6 +118,7 @@ async function startDashboard() {
   initRouter("pageContent");
   connectWebSocket();
   loadSystemStatus();
+  initHubNav();
   showAuthBannerIfNeeded();
   if (state.demoMode) showDemoSplashIfNeeded();
 }

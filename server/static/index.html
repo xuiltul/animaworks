@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/avatar.css">
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/assets.css">
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/board.css">
+  <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/hub.css">
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/task-board.css">
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/responsive.css">
   <link rel="stylesheet" href="__AW_BASE__/_v/__AW_VERSION__/styles/chat-memory.css">
@@ -82,36 +83,77 @@
     <div class="mobile-nav-backdrop" id="mobileNavBackdrop"></div>
     <!-- Left Sidebar Navigation -->
     <nav class="sidebar-nav" id="sidebarNav">
+      <!-- One stroke icon set for every theme and display mode. Symbols read
+           --nav-duo so the active item can tint its fill (duotone). -->
+      <svg class="nav-sprite" aria-hidden="true" focusable="false">
+        <symbol id="nav-i-home" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="2.2" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <rect x="13.5" y="3.5" width="7" height="7" rx="2.2"/>
+          <rect x="3.5" y="13.5" width="7" height="7" rx="2.2"/>
+          <circle cx="17" cy="17" r="3.6"/>
+        </symbol>
+        <symbol id="nav-i-chat" viewBox="0 0 24 24">
+          <path d="M20.5 11.6a8 8 0 0 1-11.9 7l-4.6 1.4 1.4-4.3A8 8 0 1 1 20.5 11.6Z" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <path d="M8.6 10.4h6.8M8.6 13.6h4.4"/>
+        </symbol>
+        <symbol id="nav-i-board" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <path d="M10.4 7.6 9.4 16.4M14.6 7.6l-1 8.8M7.6 10.2h9M7.2 13.8h9"/>
+        </symbol>
+        <symbol id="nav-i-hub" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="2.8" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <circle cx="12" cy="4.2" r="1.9"/>
+          <circle cx="4.6" cy="17.6" r="1.9"/>
+          <circle cx="19.4" cy="17.6" r="1.9"/>
+          <path d="M12 6.1v3.1M6.3 16.4l3.4-2.4M17.7 16.4l-3.4-2.4"/>
+        </symbol>
+        <symbol id="nav-i-tasks" viewBox="0 0 24 24">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="4.5" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <path d="M8.5 7.8v7.4M12 7.8v4.4M15.5 7.8v8.6"/>
+        </symbol>
+        <symbol id="nav-i-activity" viewBox="0 0 24 24">
+          <path d="M3 12.5h3.6l2.6-6.8 4.4 12.8 2.6-6h4.8"/>
+        </symbol>
+        <symbol id="nav-i-workspace" viewBox="0 0 24 24">
+          <path d="M5 20V6.6A2.1 2.1 0 0 1 7.1 4.5h6.8A2.1 2.1 0 0 1 16 6.6V20" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <path d="M16 10h1.9A2.1 2.1 0 0 1 20 12.1V20M3 20h18M8.6 8.4h3.8M8.6 12h3.8M8.6 15.6h3.8"/>
+        </symbol>
+        <symbol id="nav-i-settings" viewBox="0 0 24 24">
+          <path d="M4 7.5h8.5M18.5 7.5H20M4 16.5h1.5M11.5 16.5H20"/>
+          <circle cx="15.5" cy="7.5" r="2.6" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+          <circle cx="8.5" cy="16.5" r="2.6" style="fill:currentColor;fill-opacity:var(--nav-duo,0)"/>
+        </symbol>
+        <symbol id="nav-i-external" viewBox="0 0 24 24">
+          <path d="M8 16 16 8M9.5 8H16v6.5"/>
+        </symbol>
+      </svg>
       <ul class="nav-list">
         <li><a href="#/" class="nav-item" data-route="/">
-          <span class="nav-emoji">&#x1F9E9;</span>
-          <i data-lucide="layout-dashboard" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-home"></use></svg>
           <span class="nav-label" data-i18n="nav.dashboard">Home</span></a></li>
         <li><a href="#/chat" class="nav-item active" data-route="/chat">
-          <span class="nav-emoji">&#x1F4AC;</span>
-          <i data-lucide="message-circle" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-chat"></use></svg>
           <span class="nav-label" data-i18n="nav.chat">Chat</span></a></li>
         <li><a href="#/board" class="nav-item" data-route="/board">
-          <span class="nav-emoji">&#x1F4CB;</span>
-          <i data-lucide="clipboard-list" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-board"></use></svg>
           <span class="nav-label" data-i18n="nav.board">Board</span></a></li>
+        <li id="navHubItem" hidden><a href="#/hub" class="nav-item" data-route="/hub">
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-hub"></use></svg>
+          <span class="nav-label" data-i18n="nav.hub">External agents</span>
+          <span class="nav-badge" id="navHubBadge" hidden></span></a></li>
         <li><a href="#/task-board" class="nav-item" data-route="/task-board">
-          <span class="nav-emoji">&#x1F5C2;</span>
-          <i data-lucide="kanban" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-tasks"></use></svg>
           <span class="nav-label" data-i18n="nav.task_board">Tasks</span></a></li>
         <li><a href="#/activity" class="nav-item" data-route="/activity">
-          <span class="nav-emoji">&#x1F4CA;</span>
-          <i data-lucide="activity" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-activity"></use></svg>
           <span class="nav-label" data-i18n="nav.activity">Activity</span></a></li>
-        <li class="nav-divider"></li>
+        <li class="nav-spacer" aria-hidden="true"></li>
         <li><a href="__AW_BASE__/workspace/" class="nav-item nav-external" target="_blank">
-          <span class="nav-emoji">&#x1F3AE;</span>
-          <i data-lucide="building-2" class="nav-lucide"></i>
-          <span class="nav-label" data-i18n="nav.workspace">Workspace</span></a></li>
-        <li class="nav-divider"></li>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-workspace"></use></svg>
+          <span class="nav-label" data-i18n="nav.workspace">Workspace</span>
+          <svg class="nav-external-mark" aria-hidden="true" focusable="false"><use href="#nav-i-external"></use></svg></a></li>
         <li><a href="#/settings" class="nav-item" data-route="/settings">
-          <span class="nav-emoji">&#x2699;</span>
-          <i data-lucide="sliders-horizontal" class="nav-lucide"></i>
+          <svg class="nav-icon" aria-hidden="true" focusable="false"><use href="#nav-i-settings"></use></svg>
           <span class="nav-label" data-i18n="nav.settings">Settings</span></a></li>
       </ul>
     </nav>
