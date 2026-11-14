@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -817,6 +818,79 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
     cancelled = False
     graced = False
     root_lost = False
+
+    # Steer/inject handlers run as their own tasks.  Awaiting them directly in
+    # this loop deadlocks: their state writes (`link.request`) need response
+    # frames that only this loop's `connection.receive()` can deliver, and a
+    # blocked loop also stops ACK processing (progress sends then time out).
+    # Strong references are kept until the loop drains so tasks are never
+    # garbage collected mid-flight (ruff RUF006).
+    control_tasks: set[asyncio.Task[Any]] = set()
+    # Injections leave the control loop but must still run one at a time in
+    # arrival order: each one persists the conversation, and two concurrent
+    # persists of the same thread could interleave.
+    inject_lock = asyncio.Lock()
+
+    async def _inject_message_event(data: dict[str, Any]) -> None:
+        injection_id = str(data.get("injection_id") or "")
+        accepted = False
+        error = ""
+        expires_at = data.get("expires_at")
+        async with inject_lock:
+            # Checked after waiting for the lock: time spent behind an earlier
+            # injection counts against this steer's deadline too.
+            expired = (
+                isinstance(expires_at, (int, float)) and not isinstance(expires_at, bool) and time.time() >= expires_at
+            )
+            if expired:
+                # The supervisor already gave up and queued the message for the
+                # lock; injecting it here too would process it twice.
+                error = "expired"
+            else:
+                anima_for_inject = execution_control.get("anima")
+                try:
+                    if anima_for_inject is not None and injection_id:
+                        accepted = await anima_for_inject.inject_message(
+                            str(data.get("message") or ""),
+                            from_person=str(data.get("from_person") or "human"),
+                            thread_id=str(data.get("thread_id") or "default"),
+                            attachment_paths=data.get("attachment_paths") or None,
+                        )
+                except Exception as exc:
+                    logger.warning("Chat message injection failed: %s", exc, exc_info=True)
+                    error = str(exc)
+        try:
+            # Send through the link so the result still lands after a reconnect
+            # that happened while the injection was in flight.
+            await link.send_event(
+                "inject_result",
+                {"injection_id": injection_id, "accepted": accepted, "error": error},
+            )
+        except Exception as exc:
+            logger.warning("Chat inject_result send failed: %s", exc, exc_info=True)
+
+    async def _interrupt_event(data: dict[str, Any]) -> None:
+        anima_for_interrupt = execution_control.get("anima")
+        if anima_for_interrupt is not None:
+            await anima_for_interrupt.interrupt(thread_id=data.get("thread_id") or None)
+
+    def _start_control_task(coro: Any) -> None:
+        task = asyncio.create_task(coro)
+        control_tasks.add(task)
+
+    async def _drain_control_tasks() -> None:
+        tasks = tuple(control_tasks)
+        control_tasks.clear()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if not tasks:
+            return
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning("Chat control task failed: %s", result)
+
     try:
         while not execution.done():
             waiters: set[asyncio.Task[Any]] = {execution, parent_monitor}
@@ -869,37 +943,18 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
                     cancelled = True
                     break
                 if control.kind == "event" and control.body["event"] == "interrupt":
-                    anima = execution_control.get("anima")
                     data = control.body.get("data") or {}
-                    if anima is not None:
-                        await anima.interrupt(thread_id=data.get("thread_id") or None)
+                    _start_control_task(_interrupt_event(data))
                     receiver = asyncio.create_task(connection.receive())
                     continue
                 if control.kind == "event" and control.body["event"] == "inject_message":
                     data = control.body.get("data") or {}
-                    injection_id = str(data.get("injection_id") or "")
-                    accepted = False
-                    error = ""
-                    anima = execution_control.get("anima")
-                    try:
-                        if anima is not None and injection_id:
-                            accepted = await anima.inject_message(
-                                str(data.get("message") or ""),
-                                from_person=str(data.get("from_person") or "human"),
-                                thread_id=str(data.get("thread_id") or "default"),
-                                attachment_paths=data.get("attachment_paths") or None,
-                            )
-                    except Exception as exc:
-                        logger.warning("Chat message injection failed: %s", exc, exc_info=True)
-                        error = str(exc)
-                    await connection.send_event(
-                        "inject_result",
-                        {"injection_id": injection_id, "accepted": accepted, "error": error},
-                    )
+                    _start_control_task(_inject_message_event(data))
                     receiver = asyncio.create_task(connection.receive())
                     continue
                 receiver = asyncio.create_task(connection.receive())
 
+        await _drain_control_tasks()
         connection = link.connection
         if cancelled or root_lost:
             try:
@@ -958,6 +1013,9 @@ async def run_task(args: argparse.Namespace, socket_path: Path, identity: IPCV2I
         )
         return 0
     finally:
+        # Control tasks may still be in flight when the loop exits early
+        # (cancel/grace/root_lost/execution error); never leave them dangling.
+        await _drain_control_tasks()
         progress.cancel()
         parent_monitor.cancel()
         if receiver is not None:

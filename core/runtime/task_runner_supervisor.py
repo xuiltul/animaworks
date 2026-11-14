@@ -11,6 +11,7 @@ import logging
 import os
 import signal
 import sys
+import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -58,8 +59,28 @@ _HANG_CHECK_INTERVAL_MAX = 5.0
 # on the next loop iteration.
 _CANCEL_CHECK_INTERVAL = 30.0
 _STATE_WRITE_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
+# Budget for one chat steer round-trip.  The runner-side injection deadline is
+# this value minus _CHAT_STEER_EXPIRY_MARGIN seconds, so a steer the supervisor
+# has already abandoned for the lock queue is not injected a second time.
+_CHAT_STEER_TIMEOUT = 30.0
+_CHAT_STEER_EXPIRY_MARGIN = 5.0
 
 OnSpawned = Callable[["TaskRunnerJob"], Awaitable[None] | None]
+
+
+def _chat_keepalive_interval() -> float:
+    """Return the keep-alive cadence used while a chat turn waits for its slot."""
+    from core.runtime.streaming_handler import _DEFAULT_KEEPALIVE_INTERVAL
+
+    try:
+        from core.config import load_config
+
+        interval = float(load_config().server.keepalive_interval)
+    except Exception:
+        interval = float(_DEFAULT_KEEPALIVE_INTERVAL)
+    if interval <= 0:
+        interval = float(_DEFAULT_KEEPALIVE_INTERVAL)
+    return interval
 
 
 class TaskRunnerError(RuntimeError):
@@ -450,7 +471,32 @@ class TaskRunnerSupervisor:
         if found:
             await self._interrupt_active_chat(thread_id)
 
-        async with self._chat_slot(thread_id):
+        # Acquire the thread lock and process-wide chat slot without going
+        # silent: the server closes the stream when no chunk arrives within
+        # first_chunk_timeout, so a queued turn must keep the connection warm.
+        slot = self._chat_slot(thread_id)
+        slot_acquire = asyncio.create_task(slot.__aenter__())
+        slot_entered = False
+        try:
+            keepalive_interval = _chat_keepalive_interval()
+            wait_started = time.monotonic()
+            while not slot_acquire.done():
+                done, _ = await asyncio.wait({slot_acquire}, timeout=keepalive_interval)
+                if slot_acquire in done:
+                    break
+                yield {
+                    "chunk": json.dumps(
+                        {
+                            "type": "keepalive",
+                            "elapsed_s": round(time.monotonic() - wait_started, 1),
+                            "queued": True,
+                        },
+                        ensure_ascii=False,
+                    )
+                }
+            await slot_acquire
+            slot_entered = True
+
             queue = asyncio.Queue()
 
             async def _produce() -> dict[str, Any]:
@@ -482,6 +528,22 @@ class TaskRunnerSupervisor:
                 if not producer.done():
                     producer.cancel()
                 await asyncio.gather(producer, return_exceptions=True)
+        finally:
+            # Closing while still queued must cancel the acquisition; if it has
+            # already acquired (or acquires while we are cleaning up) release
+            # the lock and semaphore so later turns are not blocked forever.
+            if not slot_acquire.done():
+                slot_acquire.cancel()
+                await asyncio.gather(slot_acquire, return_exceptions=True)
+            elif not slot_entered:
+                try:
+                    await slot_acquire
+                except Exception:
+                    logger.debug("Chat slot acquisition failed", exc_info=True)
+                else:
+                    slot_entered = True
+            if slot_entered:
+                await slot.__aexit__(None, None, None)
 
     async def _try_inject_active_chat(
         self,
@@ -529,9 +591,10 @@ class TaskRunnerSupervisor:
                     "from_person": str(payload.get("from_person") or "human"),
                     "thread_id": thread_id,
                     "attachment_paths": payload.get("attachment_paths") or [],
+                    "expires_at": time.time() + _CHAT_STEER_TIMEOUT - _CHAT_STEER_EXPIRY_MARGIN,
                 },
             )
-            result = await asyncio.wait_for(asyncio.shield(waiter), timeout=5.0)
+            result = await asyncio.wait_for(asyncio.shield(waiter), timeout=_CHAT_STEER_TIMEOUT)
             if result.get("accepted") is True:
                 return True, active, queue
             logger.info(
