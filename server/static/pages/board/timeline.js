@@ -8,7 +8,7 @@ import { escapeAttr, escapeHtml } from "../../modules/state.js";
 import { t } from "/shared/i18n.js";
 import { onEvent } from "../../modules/websocket.js";
 import { avatarMarkup } from "./avatar.js";
-import { clockTime, numberText, relativeTime } from "./time.js";
+import { clockTime, dayLabel, localDayKey, numberText, relativeTime } from "./time.js";
 
 const POLL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -147,9 +147,11 @@ function _itemMarkup(item, updates, { nested = false, store = null } = {}) {
   </article>`;
 }
 
-export function createTimelineView({ element, store }) {
+export function createTimelineView({ element, store, mode = "recent", scrollRoot = null, onUnreadChange = null }) {
   const state = {
     enabled: false,
+    mode: mode === "all" ? "all" : "recent",
+    filter: "all",
     company: "",
     items: [],
     unread: 0,
@@ -209,9 +211,7 @@ export function createTimelineView({ element, store }) {
     return value !== null && Date.now() - value <= DAY_MS;
   }
 
-  /** Build the top-level rows plus updates nested under their original. */
-  function _displayRows() {
-    if (!state.enabled) return [];
+  function _recentRows() {
     const byId = new Map(state.items.map((item) => [item.id, item]));
     const candidates = new Map();
     for (const item of state.items) {
@@ -244,6 +244,84 @@ export function createTimelineView({ element, store }) {
     }));
   }
 
+  function _allRows() {
+    const byId = new Map(state.items.map((item) => [item.id, item]));
+    const candidateIds = new Set();
+    for (const item of state.items) {
+      if (item.about) continue;
+      if (state.filter === "unread") {
+        const unreadUpdate = state.items.some(
+          (update) => String(update.about || "") === item.id && !update.read,
+        );
+        if (item.read && !unreadUpdate) continue;
+      }
+      candidateIds.add(item.id);
+    }
+    // A fetched update can outlive its original (or the original can be
+    // outside the fetched page). Keep the original as the parent when it is
+    // present; otherwise show the update itself rather than dropping it.
+    for (const item of state.items) {
+      const base = String(item.about || "");
+      if (!base) continue;
+      if (!byId.has(base)) {
+        if (state.filter !== "unread" || !item.read) candidateIds.add(item.id);
+        continue;
+      }
+      if (state.filter === "unread" && !item.read) candidateIds.add(base);
+    }
+    const updatesByBase = new Map();
+    for (const item of state.items) {
+      const base = String(item.about || "");
+      if (!base || !candidateIds.has(base) || !byId.has(base)) continue;
+      const list = updatesByBase.get(base) || [];
+      if (!list.some((update) => update.id === item.id)) list.push(item);
+      updatesByBase.set(base, list);
+    }
+    const rows = [...candidateIds]
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .sort((a, b) => _newer(b, a) || String(b.id).localeCompare(String(a.id)));
+    return rows.map((item) => ({
+      item,
+      updates: (updatesByBase.get(item.id) || []).sort((a, b) => _newer(b, a)),
+    }));
+  }
+
+  /** Build the top-level rows plus updates nested under their original. */
+  function _displayRows() {
+    if (!state.enabled) return [];
+    return state.mode === "all" ? _allRows() : _recentRows();
+  }
+
+  function _rowsMarkup(rows) {
+    if (state.mode !== "all") {
+      return rows.map(({ item, updates }) => _itemMarkup(item, updates, { store })).join("");
+    }
+    const parts = [];
+    let previousDay = null;
+    for (const { item, updates } of rows) {
+      const day = localDayKey(item.ts);
+      if (day && day !== previousDay) {
+        parts.push(`<div class="board-timeline-day" data-timeline-day>${escapeHtml(dayLabel(day))}</div>`);
+        previousDay = day;
+      }
+      parts.push(_itemMarkup(item, updates, { store }));
+    }
+    return parts.join("");
+  }
+
+  function _filtersMarkup() {
+    if (state.mode !== "all") return "";
+    const button = (value, key) => {
+      const active = state.filter === value;
+      return `<button type="button" class="board-timeline-filter${active ? " is-active" : ""}" data-timeline-filter="${value}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(t(key))}</button>`;
+    };
+    return `<div class="board-timeline-filters" role="group">
+      ${button("all", "hub.timeline_filter_all")}
+      ${button("unread", "hub.timeline_filter_unread")}
+    </div>`;
+  }
+
   function _visibleItems() {
     if (state.destroyed || element.hidden || !element.isConnected) return [];
     if (!element.getClientRects().length) return [];
@@ -251,7 +329,7 @@ export function createTimelineView({ element, store }) {
     const viewportHeight = window.innerHeight || 0;
     // The board home is its own scroll container; clipping by it matters just
     // as much as clipping by the browser viewport.
-    const scroller = element.closest(".board-home") || element;
+    const scroller = scrollRoot || element.closest(".board-home") || element;
     const bounds = scroller.getBoundingClientRect();
     const top = Math.max(bounds.top, 0);
     const bottom = Math.min(bounds.bottom, viewportHeight);
@@ -333,11 +411,21 @@ export function createTimelineView({ element, store }) {
       .catch(() => {});
   }
 
+  function _notifyUnread(unread) {
+    if (typeof onUnreadChange !== "function") return;
+    try {
+      onUnreadChange(unread);
+    } catch {
+      // A badge refresh must never break the timeline column.
+    }
+  }
+
   function render() {
     if (state.destroyed) return;
     if (!state.enabled) {
       element.hidden = true;
       element.innerHTML = "";
+      _notifyUnread(0);
       return;
     }
     element.hidden = false;
@@ -346,14 +434,19 @@ export function createTimelineView({ element, store }) {
     const unreadMarkup = unread > 0
       ? `<span class="board-timeline-unread-count" data-timeline-unread data-timeline-unread-count>${escapeHtml(t("board.timeline_unread_count", { count: numberText(unread) }))}</span>`
       : "";
+    const emptyKey = state.mode === "all" && state.filter === "unread" && state.items.length > 0
+      ? "hub.timeline_no_unread"
+      : "board.timeline_empty";
     const body = rows.length
-      ? rows.map(({ item, updates }) => _itemMarkup(item, updates, { store })).join("")
-      : `<div class="board-timeline-empty" data-timeline-empty>${escapeHtml(t("board.timeline_empty"))}</div>`;
+      ? _rowsMarkup(rows)
+      : `<div class="board-timeline-empty" data-timeline-empty>${escapeHtml(t(emptyKey))}</div>`;
     element.innerHTML = `<header class="board-timeline-head">
       <h2 class="board-timeline-title" data-timeline-title>${escapeHtml(t("board.timeline_title"))}</h2>
       ${unreadMarkup}
+      ${_filtersMarkup()}
     </header>
     <div class="board-timeline-list" data-timeline-list>${body}</div>`;
+    _notifyUnread(unread);
     _scheduleRead();
   }
 
@@ -407,6 +500,15 @@ export function createTimelineView({ element, store }) {
   }
 
   element.addEventListener("click", (event) => {
+    const filter = event.target.closest("[data-timeline-filter]");
+    if (filter) {
+      const next = filter.dataset.timelineFilter;
+      if (next && next !== state.filter) {
+        state.filter = next;
+        render();
+      }
+      return;
+    }
     const expand = event.target.closest("[data-timeline-expand]");
     if (!expand) return;
     const wrap = expand.closest(".board-timeline-text-wrap");

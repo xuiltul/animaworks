@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=8cca5d8f6438e30b53480d83881cc3878b873a057653952ff9c8316d2a3e61fe generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -390,14 +390,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 회사 타임라인 저장 및 읽음 위치.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 159 | — |
 | `core.hub.mcp_app` | 468 | — |
 | `core.hub.members` | 279 | — |
 | `core.hub.setup_prompt` | 154 | — |
-| `core.hub.silence` | 107 | — |
+| `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 298 | — |
 | `core.hub.wake` | 378 | — |
 
@@ -867,26 +867,26 @@ Twilio 전화 채널의 음성 합성, 통화 상태, Webhook 관리.
 
 ## `core.runtime`
 
-Anima 메인 런타임 구성 요소, 프로세스 간 통신, 작업 실행.
+Anima 메인의 런타임 컴포넌트, 프로세스 간 통신, 작업 실행.
 
 | 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
-| `core.runtime` | 1 | 개별 Anima 프로세스가 소유하는 런타임 구성 요소. |
+| `core.runtime` | 1 | 개별 Anima 프로세스가 소유하는 런타임 컴포넌트. |
 | `core.runtime.cron_diagnostics` | 85 | LLM 실행을 낭비하는 cron 스케줄에 대한 등록 시점 진단. |
-| `core.runtime.cron_followup` | 169 | 레거시 및 격리된 러너가 공유하는 command-cron 후속 정책. |
-| `core.runtime.event_bus` | 88 | Anima 메인 러너가 발생시킨 이벤트를 위한 프로세스 내 버퍼. |
-| `core.runtime.inbox_rate_limiter` | 371 | 이벤트 기반 받은 편지함 깨우기 및 지연 트리거 관리. |
-| `core.runtime.ipc` | 508 | 플랫폼별 전송 계층을 통해 JSON Lines를 사용하는 IPC 통신 계층. |
-| `core.runtime.ipc_v2` | 414 | Anima 메인과 작업 러너 간에 사용되는 영속적 양방향 IPC v2. |
+| `core.runtime.cron_followup` | 169 | 레거시 및 격리 러너를 위한 공유 명령-cron 후속 정책. |
+| `core.runtime.event_bus` | 88 | Anima 메인 러너가 발생시키는 이벤트를 위한 인프로세스 이벤트 버퍼. |
+| `core.runtime.inbox_rate_limiter` | 371 | 이벤트 기반 인박스 웨이크업 및 지연 트리거 관리. |
+| `core.runtime.ipc` | 508 | 플랫폼별 전송을 통한 JSON Lines 기반 IPC 통신 계층. |
+| `core.runtime.ipc_v2` | 414 | Anima 메인과 작업 러너 간에 사용되는 영속 양방향 IPC v2. |
 | `core.runtime.memory_service` | 774 | Anima 메인이 소유하는 벡터 메모리 서비스. |
 | `core.runtime.process_role` | 25 | AnimaWorks 프로세스 진입점이 공유하는 프로세스 역할 메타데이터. |
-| `core.runtime.runner` | 1409 | Anima 하위 프로세스의 자식 프로세스 진입점. |
+| `core.runtime.runner` | 1409 | Anima 서브프로세스의 자식 프로세스 진입점. |
 | `core.runtime.schedule_parser` | 484 | — |
 | `core.runtime.scheduler_manager` | 1059 | 하트비트 및 cron 작업을 위한 APScheduler 관리. |
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 445 | 스트리밍 IPC 메시지 핸들러. |
-| `core.runtime.task_runner` | 1054 | 일회용 작업 러너 진입점. |
-| `core.runtime.task_runner_supervisor` | 1450 | 일회용 작업 러너 프로세스를 관리하는 Anima 메인 측 라이프사이클 관리자. |
+| `core.runtime.task_runner` | 1112 | 일회성 작업 러너 진입점. |
+| `core.runtime.task_runner_supervisor` | 1513 | 일회성 작업 러너 프로세스를 위한 Anima 메인 측 수명 주기 관리자. |
 | `core.runtime.transport` | 240 | IPC server/client 통신을 위한 전송 헬퍼. |
 
 ## `core.skills`
@@ -1153,7 +1153,7 @@ LLM 사용량 및 비용 기록·집계.
 
 —
 
-| 모듈 | 행 수 | docstring 1행째 |
+| 모듈 | 줄 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
@@ -1174,7 +1174,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.hub` | 67 | — |
+| `server.routes.hub` | 99 | — |
 | `server.routes.internal` | 1604 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
@@ -1190,7 +1190,7 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
 | `server.routes.vault_routes` | 536 | — |
-| `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
+| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용. |
 | `server.routes.webhooks` | 503 | — |
 | `server.routes.websocket_route` | 50 | — |
 
