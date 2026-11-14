@@ -37,23 +37,21 @@ function _everyLabel(value) {
   return key ? t(key, { n: match[1] }) : "";
 }
 
-function _chips(member) {
-  const chips = [];
+function _routeText(member) {
   const routeKey = ROUTE_KEYS[member.route_type];
-  if (routeKey) {
-    const every = _everyLabel(member.expect_every);
-    const text = every
-      ? `${escapeHtml(t(routeKey))} · ${escapeHtml(every)}`
-      : escapeHtml(t(routeKey));
-    chips.push(`<span class="hub-member-chip hub-chip-route">${text}</span>`);
-  }
+  if (!routeKey) return "";
+  const every = _everyLabel(member.expect_every);
+  return every ? `${t(routeKey)} · ${every}` : t(routeKey);
+}
+
+function _tags(member) {
+  const tags = [];
   if (member.enabled === false) {
-    chips.push(`<span class="hub-member-chip hub-chip-disabled">${escapeHtml(t("hub.disabled_chip"))}</span>`);
+    tags.push(`<span class="hub-member-tag hub-tag-disabled">${escapeHtml(t("hub.disabled_chip"))}</span>`);
+  } else if (member.overdue) {
+    tags.push(`<span class="hub-member-tag hub-tag-overdue">${escapeHtml(t("hub.overdue"))}</span>`);
   }
-  if (member.overdue) {
-    chips.push(`<span class="hub-member-chip hub-chip-overdue">${escapeHtml(t("hub.overdue"))}</span>`);
-  }
-  return chips.join("");
+  return tags.join("");
 }
 
 function _avatar(member, name) {
@@ -71,6 +69,21 @@ function _avatar(member, name) {
   return `<span class="${classes.join(" ")}" style="${escapeAttr(style)}">${body}</span>`;
 }
 
+function _seenTs(member) {
+  const parsed = Date.parse(String(member.last_seen || ""));
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Enabled members first, most recently seen first; disabled ones last. */
+function _sorted(rows) {
+  return [...rows].sort((a, b) => {
+    const enabledA = a.enabled === false ? 1 : 0;
+    const enabledB = b.enabled === false ? 1 : 0;
+    if (enabledA !== enabledB) return enabledA - enabledB;
+    return _seenTs(b) - _seenTs(a) || String(a.id).localeCompare(String(b.id));
+  });
+}
+
 function _card(member) {
   const id = String(member.id || "");
   const name = String(member.display_name || id || "?");
@@ -81,9 +94,11 @@ function _card(member) {
     ? t("hub.last_seen", { time: relativeTime(member.last_seen) })
     : t("hub.never_seen");
   const seenTitle = member.last_seen ? clockTime(member.last_seen) : "";
+  const route = _routeText(member);
+  const callLabel = `@${id} ${t("hub.call")}`;
   const call = member.enabled === false
     ? ""
-    : `<button type="button" class="hub-member-call" data-hub-call="${escapeAttr(id)}">@ ${escapeHtml(t("hub.call"))}</button>`;
+    : `<button type="button" class="hub-member-call" data-hub-call="${escapeAttr(id)}" aria-label="${escapeAttr(callLabel)}" title="${escapeAttr(callLabel)}">@</button>`;
   return `<article class="${classes.join(" ")}" data-hub-member="${escapeAttr(id)}">
     <div class="hub-member-avatar-wrap">
       ${_avatar(member, name)}
@@ -93,9 +108,10 @@ function _card(member) {
       <div class="hub-member-line">
         <b class="hub-member-name">${escapeHtml(name)}</b>
         <span class="hub-member-id">@${escapeHtml(id)}</span>
+        ${_tags(member)}
       </div>
       <p class="hub-member-seen"${seenTitle ? ` title="${escapeAttr(seenTitle)}"` : ""}>${escapeHtml(seen)}</p>
-      <p class="hub-member-chips">${_chips(member)}</p>
+      ${route ? `<p class="hub-member-route" title="${escapeAttr(route)}">${escapeHtml(route)}</p>` : ""}
     </div>
     ${call}
   </article>`;
@@ -109,7 +125,7 @@ export function renderMembers(element, members, { onMention } = {}) {
     element.onclick = null;
     return;
   }
-  element.innerHTML = rows.map(_card).join("");
+  element.innerHTML = _sorted(rows).map(_card).join("");
   element.onclick = (event) => {
     const button = event.target.closest("[data-hub-call]");
     if (!button || typeof onMention !== "function") return;

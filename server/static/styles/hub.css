@@ -160,41 +160,43 @@
 
 .hub-member {
   display: grid;
-  width: 280px;
-  flex: 0 0 280px;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-  padding: 12px;
+  width: 316px;
+  flex: 0 0 316px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--aw-color-border);
   border-radius: 14px;
   background: var(--aw-color-bg-primary);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.035);
   scroll-snap-align: start;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
 }
 
-.hub-member:hover {
+.hub-member:hover,
+.hub-member:active {
   transform: translateY(-1px);
-  box-shadow: 0 2px 3px rgba(15, 23, 42, 0.07), 0 6px 18px rgba(15, 23, 42, 0.05);
+  border-color: var(--aw-color-border-medium);
+  box-shadow: 0 2px 3px rgba(15, 23, 42, 0.06), 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
 .hub-member.is-disabled {
-  filter: saturate(0.35);
-  opacity: 0.78;
+  filter: saturate(0.2);
+  opacity: 0.7;
 }
 
 .hub-member-avatar-wrap {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   flex: none;
 }
 
 .hub-member-avatar {
   display: flex;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
@@ -205,8 +207,7 @@
 }
 
 .hub-member-avatar.is-overdue {
-  outline: 2px solid var(--aw-color-warning);
-  outline-offset: 1px;
+  box-shadow: 0 0 0 2px var(--aw-color-bg-primary), 0 0 0 4px #f59e0b;
 }
 
 .hub-member-avatar-img {
@@ -223,11 +224,11 @@
   position: absolute;
   right: -1px;
   bottom: -1px;
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border: 2px solid var(--aw-color-bg-primary);
   border-radius: 50%;
-  background: var(--aw-color-text-muted);
+  background: var(--aw-color-border-dark);
 }
 
 .hub-member-presence.is-recent {
@@ -241,81 +242,92 @@
 .hub-member-line {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 5px;
+  align-items: center;
+  gap: 6px;
 }
 
 .hub-member-name {
   overflow: hidden;
   color: var(--aw-color-text-primary);
-  font-size: 0.84rem;
+  font-size: 0.88rem;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .hub-member-id {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--aw-color-text-muted);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-member-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.hub-tag-overdue {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  color: #b45309;
+}
+
+.hub-tag-disabled {
+  background: var(--aw-color-bg-tertiary);
+  color: var(--aw-color-text-secondary);
+}
+
+[data-theme="dark"] .hub-tag-overdue {
+  color: #fbbf24;
+}
+
+.hub-member-seen,
+.hub-member-route {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--aw-color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .hub-member-seen {
-  margin: 2px 0 4px;
-  overflow: hidden;
-  color: var(--aw-color-text-muted);
-  font-size: 0.7rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hub-member-chips {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 3px;
-  margin: 0;
-}
-
-.hub-member-chip {
-  padding: 0 6px;
-  border: 1px solid var(--aw-color-border-subtle);
-  border-radius: 999px;
   color: var(--aw-color-text-secondary);
-  font-size: 0.68rem;
-  line-height: 1.55;
-}
-
-.hub-chip-overdue {
-  border-color: var(--aw-color-warning-border);
-  background: var(--aw-color-warning-bg);
-  color: var(--aw-color-warning-text);
-  font-weight: 700;
-}
-
-.hub-chip-disabled {
-  opacity: 0.66;
 }
 
 .hub-member-call {
-  align-self: center;
-  padding: 4px 9px;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border: 1px solid var(--aw-color-border);
-  border-radius: 999px;
-  background: var(--aw-color-bg-subtle);
-  color: var(--aw-color-text-link);
+  border-radius: 50%;
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-text-secondary);
   font: inherit;
-  font-size: 0.68rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
   cursor: pointer;
-  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
-.hub-member-call:hover {
-  border-color: var(--aw-color-accent-light);
-  background: var(--aw-color-accent-bg);
+.hub-member-call:hover,
+.hub-member-call:active,
+.hub-member-call:focus-visible {
+  border-color: var(--aw-color-accent);
+  background: var(--aw-color-accent);
+  color: var(--aw-color-bg-primary);
 }
 
 /* ── Body: chat + timeline ─────────────────── */
@@ -504,7 +516,8 @@
 
 /* A pinned board has one channel and no rail toggle. */
 .board-layout--pinned .board-rail,
-.board-layout--pinned .board-mobile-toggle {
+.board-layout--pinned .board-mobile-toggle,
+.board-layout--pinned .board-nav-toggle {
   display: none !important;
 }
 

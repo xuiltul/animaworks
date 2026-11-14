@@ -199,6 +199,7 @@ body[class*="theme-"]:not(.theme-business) .sidebar-nav {
 }
 
 .nav-external:hover .nav-external-mark,
+.nav-external:active .nav-external-mark,
 .nav-external:focus-visible .nav-external-mark {
   opacity: 0.6;
 }
