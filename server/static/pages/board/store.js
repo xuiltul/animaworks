@@ -3,6 +3,7 @@
 // (initial fetch / incremental refetch / WebSocket / optimistic send) go
 // through mergeMessages(), keyed by server id (falling back to ts+from), so
 // the same post can never be rendered twice.
+import { basePath } from "/shared/base-path.js";
 import { api } from "../../modules/api.js";
 import { bustupCandidates, resolveCachedAvatar } from "../../modules/avatar-resolver.js";
 import { animaHashColor } from "../../shared/avatar-utils.js";
@@ -159,10 +160,17 @@ export function createBoardStore() {
     return true;
   }
 
+  // The API returns a root-relative path; deployments under a base path
+  // (e.g. /app behind a proxy) only route it with the prefix.
+  function _hubAvatarUrl(member) {
+    const url = typeof member?.avatar_url === "string" ? member.avatar_url : "";
+    return url.startsWith("/api/") ? `${basePath}${url}` : null;
+  }
+
   function avatarUrl(name) {
     // The roster wins over a late anima-asset probe for the same name.
     const member = state.hubMembers.get(name);
-    if (member) return member.avatar_url || null;
+    if (member) return _hubAvatarUrl(member);
     return state.avatars.get(name) || null;
   }
 
