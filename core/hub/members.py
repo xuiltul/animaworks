@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -201,6 +202,54 @@ def save_member(shared_dir: Path, member: HubMember) -> None:
     """Persist one member record atomically."""
     validate_member(member)
     atomic_write_json(member_path(shared_dir, member.id), member.to_dict())
+
+
+DISPLAY_NAME_MAX_CHARS = 32
+
+
+def normalize_display_name(value: object) -> str:
+    """Return *value* with whitespace collapsed, or raise ``ValueError``."""
+    text = " ".join(str(value or "").split())
+    if not text:
+        raise ValueError("name is empty")
+    if len(text) > DISPLAY_NAME_MAX_CHARS:
+        raise ValueError(f"name is longer than {DISPLAY_NAME_MAX_CHARS} characters")
+    if "@" in text or any(unicodedata.category(char).startswith("C") for char in text):
+        raise ValueError("name must not contain @ or control characters")
+    return text
+
+
+def _taken_names(shared_dir: Path, member_id: str) -> set[str]:
+    """Names another anima, human user, or hub member already goes by."""
+    taken = {name.casefold() for name in RESERVED_IDS | _anima_names(shared_dir)}
+    try:
+        taken.update(path.name.casefold() for path in (Path(shared_dir) / "users").iterdir() if path.is_dir())
+    except OSError:
+        pass
+    for other in load_members(shared_dir).values():
+        if other.id != member_id:
+            taken.update({other.id.casefold(), other.display_name.casefold()})
+    return taken
+
+
+def set_display_name(shared_dir: Path, member_id: str, value: object) -> str:
+    """Store a member's display name, keeping every other field of its record.
+
+    The member id (used for @mentions and routing) never changes.
+    """
+    name = normalize_display_name(value)
+    if name.casefold() in _taken_names(shared_dir, member_id):
+        raise ValueError("name is already used by someone else")
+    path = member_path(shared_dir, member_id)
+    lock_path = path.with_name(f"{path.name}.lock")
+    with locked_path(lock_path, exclusive=True, thread_lock=True):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("member record must be an object")
+        data["display_name"] = name
+        _parse_member(data)
+        atomic_write_json(path, data)
+    return name
 
 
 def _read_state(shared_dir: Path, member_id: str) -> dict[str, Any]:

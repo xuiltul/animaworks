@@ -125,6 +125,8 @@ export function createHubPage(container, options = {}) {
       const data = await api("/api/hub/members", { signal });
       if (destroyed) return;
       members = Array.isArray(data) ? data : [];
+      // Posts and mention chips read names/avatars from the board store.
+      boardPage?.store?.setHubMembers(members);
     } catch {
       if (destroyed) return;
       members = [];

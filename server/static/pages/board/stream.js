@@ -48,7 +48,9 @@ export function createStream({ element, store }) {
     const notified = message?.delivery?.notified;
     if (Array.isArray(notified)) names.push(...notified);
     names.push(...store.readersForMessage(message));
-    return names.map((name) => store.avatarUrl(name) || "").join(",");
+    // A hub member's display name is part of the header too.
+    const shown = store.hubMember(message.from)?.display_name || "";
+    return `${shown}|${names.map((name) => store.avatarUrl(name) || "").join(",")}`;
   }
 
   const markdownCtx = {
@@ -57,6 +59,7 @@ export function createStream({ element, store }) {
     isAnima: (name) => store.hasAnima(name),
     hasChannel: (name) => store.hasChannel(name),
     avatarUrl: (name) => store.avatarUrl(name),
+    displayName: (name) => store.hubMember(name)?.display_name || "",
     // The server records the signed-in username, or "human" when unauthenticated.
     isMine: (name) => name === currentUser() || Boolean(appState.currentUser && name === appState.currentUser),
     statusOf: (name) => store.statusOf(name),

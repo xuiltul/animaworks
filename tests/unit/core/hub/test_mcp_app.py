@@ -401,3 +401,97 @@ def test_avatar_command_rejects_failed_fetch(
 
     assert result.startswith("error: url not allowed")
     assert not avatar_path(shared_dir, "grok").exists()
+
+
+def _member_file(shared_dir: Path, member_id: str = "grok") -> dict[str, object]:
+    return json.loads((shared_dir / "hub" / "members" / f"{member_id}.json").read_text(encoding="utf-8"))
+
+
+def test_name_command_sets_display_name_and_keeps_the_record(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    result = run_hub_command(shared_dir, member, "name ゆき")
+
+    assert result == "name updated: ゆき (your id stays @grok)"
+    record = _member_file(shared_dir)
+    assert record["display_name"] == "ゆき"
+    assert record["id"] == "grok"
+    assert record["token_sha256"] == token_digest("token")
+    assert record["message_route"] == {"type": "poll"}
+    state = json.loads(state_path(shared_dir, "grok").read_text(encoding="utf-8"))
+    assert len(state["name_updates"]) == 1
+
+
+def test_name_command_accepts_name_from_text(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    result = run_hub_command(shared_dir, member, "name", text="  Yuki's   Muse ")
+
+    assert result.startswith("name updated: Yuki's Muse")
+    assert _member_file(shared_dir)["display_name"] == "Yuki's Muse"
+
+
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ("mei", "already used"),
+        ("Other Bot", "already used"),
+        ("other", "already used"),
+        ("taka", "already used"),
+        ("@mei", "must not contain @"),
+        ("x" * 33, "longer than 32"),
+    ],
+)
+def test_name_command_rejects_taken_or_invalid_names(
+    shared_dir: Path,
+    member: HubMember,
+    monkeypatch: pytest.MonkeyPatch,
+    value: str,
+    reason: str,
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    save_member(
+        shared_dir,
+        HubMember(id="other", display_name="Other Bot", company="a", message_route={"type": "poll"}),
+    )
+    (shared_dir.parent / "animas" / "mei").mkdir(parents=True)
+    (shared_dir / "users" / "taka").mkdir(parents=True)
+
+    result = run_hub_command(shared_dir, member, "name", text=value)
+
+    assert result.startswith("error: ")
+    assert reason in result
+    assert _member_file(shared_dir)["display_name"] == "Grok"
+
+
+def test_name_command_allows_own_id_in_another_case(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    assert run_hub_command(shared_dir, member, "name GROK").startswith("name updated: GROK")
+
+
+def test_name_command_rate_limit_is_five_per_day(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    update_member_state(shared_dir, "grok", name_updates=[now_iso()] * 5)
+
+    result = run_hub_command(shared_dir, member, "name ゆき")
+
+    assert "limit reached" in result
+    assert _member_file(shared_dir)["display_name"] == "Grok"
+
+
+def test_help_mentions_name_command(shared_dir: Path, member: HubMember) -> None:
+    assert "name <display name>" in run_hub_command(shared_dir, member, "help")
