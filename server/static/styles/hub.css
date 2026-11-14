@@ -26,16 +26,18 @@
   display: none;
 }
 
-/* ── Header ─────────────────────────────────── */
+/* ── Narrow-screen bar (menu + tabs) ───────── */
 
+/* Wide screens need no bar: the roster switch sits in the board header. */
 .hub-head {
-  display: flex;
-  height: 60px;
+  display: none;
+  height: 46px;
   flex: none;
   align-items: center;
-  gap: 14px;
-  padding: 0 20px;
+  gap: 10px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--aw-color-border);
+  background: var(--aw-color-bg-primary);
 }
 
 .hub-nav-toggle {
@@ -50,14 +52,6 @@
   font-size: 0.9rem;
   line-height: 1;
   cursor: pointer;
-}
-
-.hub-head-main {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 11px;
 }
 
 .hub-head-icon {
@@ -77,33 +71,9 @@
   height: 20px;
 }
 
-.hub-head-text {
-  min-width: 0;
-}
-
-.hub-head-title {
-  margin: 0;
-  overflow: hidden;
-  color: var(--aw-color-text-primary);
-  font-size: 1.05rem;
-  font-weight: 700;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hub-head-sub {
-  margin: 1px 0 0;
-  overflow: hidden;
-  color: var(--aw-color-text-muted);
-  font-size: 0.8rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Tabs are a narrow-screen navigation device; wide screens show both panes. */
 .hub-tabs {
-  display: none;
+  display: flex;
   flex: none;
   gap: 2px;
 }
@@ -140,16 +110,179 @@
   display: none;
 }
 
-/* ── Roster strip ──────────────────────────── */
+/* ── Roster switch (board header title) ────── */
+
+.hub-switch {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: -6px;
+  padding: 5px 8px 5px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--aw-color-text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.hub-switch:hover,
+.hub-switch:active,
+.hub-switch[aria-expanded="true"] {
+  border-color: var(--aw-color-border);
+  background: var(--aw-color-bg-secondary);
+}
+
+.hub-switch:focus-visible {
+  outline: 2px solid var(--aw-color-accent);
+  outline-offset: 1px;
+}
+
+.hub-switch-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--aw-color-accent) 12%, transparent);
+  color: var(--aw-color-accent);
+}
+
+.hub-switch-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.hub-switch-title {
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-switch-stack {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding-left: 6px;
+}
+
+.hub-switch-stack:empty {
+  display: none;
+}
+
+.hub-stack-item {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  margin-left: -6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--aw-color-bg-primary);
+}
+
+.hub-switch .hub-member-avatar.hub-stack-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 0.66rem;
+}
+
+.hub-stack-item .hub-member-presence {
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-width: 2px;
+}
+
+.hub-stack-more {
+  margin-left: 4px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.hub-switch-chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: var(--aw-color-text-muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  transition: transform 140ms ease;
+}
+
+.hub-switch[aria-expanded="true"] .hub-switch-chevron {
+  transform: rotate(180deg);
+}
+
+.hub-switch-channel {
+  overflow: hidden;
+  color: var(--aw-color-text-muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Roster dropdown ───────────────────────── */
+
+.hub-roster {
+  position: absolute;
+  z-index: 40;
+  top: 52px;
+  left: 14px;
+  display: flex;
+  width: min(380px, calc(100% - 28px));
+  max-height: calc(100% - 72px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 14px;
+  background: var(--aw-color-bg-primary);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.08);
+  animation: hub-roster-in 140ms ease-out;
+}
+
+.hub-roster[hidden] {
+  display: none;
+}
+
+@keyframes hub-roster-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hub-roster-head {
+  flex: none;
+  padding: 10px 14px 6px;
+  color: var(--aw-color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 .hub-members {
   display: flex;
-  flex: none;
-  gap: 12px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  padding: 12px 20px;
-  scroll-snap-type: x mandatory;
+  min-height: 0;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 6px 6px;
 }
 
 .hub-members-empty {
@@ -160,25 +293,17 @@
 
 .hub-member {
   display: grid;
-  width: 316px;
-  flex: 0 0 316px;
   grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--aw-color-border);
-  border-radius: 14px;
-  background: var(--aw-color-bg-primary);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 14px rgba(15, 23, 42, 0.035);
-  scroll-snap-align: start;
-  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  padding: 9px 8px;
+  border-radius: 10px;
+  transition: background-color 120ms ease;
 }
 
 .hub-member:hover,
 .hub-member:active {
-  transform: translateY(-1px);
-  border-color: var(--aw-color-border-medium);
-  box-shadow: 0 2px 3px rgba(15, 23, 42, 0.06), 0 8px 20px rgba(15, 23, 42, 0.05);
+  background: var(--aw-color-bg-secondary);
 }
 
 .hub-member.is-disabled {
@@ -521,12 +646,20 @@
   display: none !important;
 }
 
+/* The dropdown is anchored to the chat pane. */
+.hub-chat {
+  position: relative;
+}
+
+.hub-chat-board {
+  height: 100%;
+}
+
 /* ── Responsive ────────────────────────────── */
 
 @media (max-width: 1024px) {
-  .hub-tabs {
+  .hub-head {
     display: flex;
-    margin-left: auto;
   }
 
   .hub-body {
@@ -556,16 +689,12 @@
     padding: 0 12px;
   }
 
-  .hub-head-title {
-    font-size: 1rem;
+  .hub-roster {
+    left: 10px;
+    width: calc(100% - 20px);
   }
 
-  .hub-members {
-    padding: 10px 12px;
-  }
-
-  .hub-member {
-    width: 82vw;
-    flex-basis: 82vw;
+  .hub-switch-channel {
+    display: none;
   }
 }
