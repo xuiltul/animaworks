@@ -81,51 +81,55 @@
         "reason": "wget --post is blocked for security"
       },
       {
-        "pattern": "\\baws\\s+sso\\s+login\\b",
-        "reason": "AWS SSO login is blocked (credential escalation)"
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+sso(?:-oidc)?\\s+[a-z]",
+        "reason": "AWS SSO login and SSO token use are blocked (credential escalation)"
       },
       {
-        "pattern": "\\baws\\s+sts\\s+assume-role\\b",
+        "pattern": "\\.aws/(?:sso|cli/cache)\\b",
+        "reason": "The AWS SSO/CLI credential cache is off limits (credential escalation)"
+      },
+      {
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+sts\\s+(?:assume-role[\\w-]*|get-federation-token)\\b",
         "reason": "AWS STS assume-role is blocked (credential escalation)"
       },
       {
-        "pattern": "\\baws\\s+configure\\s+(?:set|import)\\b",
-        "reason": "AWS configure modification is blocked"
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+configure\\s+(?:set|import|export-credentials)\\b",
+        "reason": "AWS configure modification and credential export are blocked"
       },
       {
-        "pattern": "\\baws\\s+ecs\\s+execute-command\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+ecs\\s+execute-command\\b",
         "reason": "AWS ECS execute-command is blocked (remote code execution)"
       },
       {
-        "pattern": "\\baws\\s+ssm\\s+send-command\\b",
-        "reason": "AWS SSM send-command is blocked (remote code execution)"
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+ssm\\s+(?:send-command|start-session)\\b",
+        "reason": "AWS SSM send-command / start-session is blocked (remote code execution)"
       },
       {
-        "pattern": "\\baws\\s+lambda\\s+invoke\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+lambda\\s+invoke\\b",
         "reason": "AWS Lambda invoke is blocked"
       },
       {
-        "pattern": "\\baws\\s+\\S+\\s+(?:delete|terminate|stop|destroy|deregister)-\\S+",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+[a-z0-9-]+\\s+(?:delete|terminate|stop|destroy|deregister)-\\S+",
         "reason": "AWS destructive operation is blocked"
       },
       {
-        "pattern": "\\baws\\s+ecs\\s+(?:run-task|update-service)\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+ecs\\s+(?:run-task|update-service)\\b",
         "reason": "AWS ECS mutating operation is blocked"
       },
       {
-        "pattern": "\\baws\\s+s3\\s+r[mb]\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+s3\\s+r[mb]\\b",
         "reason": "AWS S3 delete operation (rm/rb) is blocked"
       },
       {
-        "pattern": "\\baws\\s+s3\\s+mv\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+s3\\s+mv\\b",
         "reason": "AWS S3 mv is blocked"
       },
       {
-        "pattern": "\\baws\\s+cloudformation\\s+(?:delete-stack|update-stack)\\b",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+cloudformation\\s+(?:delete-stack|update-stack)\\b",
         "reason": "AWS CloudFormation mutating operation is blocked"
       },
       {
-        "pattern": "\\baws\\s+iam\\s+(?:create|delete|put|attach|detach)-\\S+",
+        "pattern": "(?:^|[\\n;&|]|\\$\\(|\\b(?:ba|z|da)?sh\\s+-\\w*c\\s+['\\\"])\\s*(?:(?:sudo|env|nohup|time|exec|command|xargs|caffeinate)(?:\\s+-\\S+)*\\s+|timeout(?:\\s+-\\S+)*\\s+\\S+\\s+|script(?:\\s+-\\S+)*\\s+\\S+\\s+|\\w+=(?:'[^']*'|\\\"[^\\\"]*\\\"|\\S*)\\s+)*(?:\\S*/)?aws(?:\\s+--?[a-z][\\w-]*(?:[= ](?!-)(?:'[^']*'|\\\"[^\\\"]*\\\"|[^\\s'\\\"]+))?)*\\s+iam\\s+(?:create|delete|put|attach|detach)-\\S+",
         "reason": "AWS IAM mutating operation is blocked"
       },
       {
