@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: cb789767a2f2b6bd155ef7a6a0f40cdf3f3eecd79c8df338899afed82fe9916d -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 984256bf657492166387ec9ebf2a0e489d6566785feef2e07397296154d105ee -->
 
 # モジュール一覧
 
@@ -885,8 +885,8 @@ anima メインの実行時コンポーネント、プロセス間通信、タ�
 | `core.runtime.scheduler_manager` | 1059 | APScheduler management for heartbeat and cron tasks. |
 | `core.runtime.state_writer` | 27 | — |
 | `core.runtime.streaming_handler` | 445 | Streaming IPC message handler. |
-| `core.runtime.task_runner` | 1054 | Disposable task runner entry point. |
-| `core.runtime.task_runner_supervisor` | 1450 | Anima-main-side lifecycle manager for disposable task runner processes. |
+| `core.runtime.task_runner` | 1112 | Disposable task runner entry point. |
+| `core.runtime.task_runner_supervisor` | 1513 | Anima-main-side lifecycle manager for disposable task runner processes. |
 | `core.runtime.transport` | 240 | Transport helpers for IPC server/client communication. |
 
 ## `core.skills`
