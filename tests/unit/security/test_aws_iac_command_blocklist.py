@@ -1,8 +1,10 @@
 """Tests for AWS CLI / IaC destructive command blocklist patterns.
 
 Covers:
-- 16 deny patterns (Tier 1-7: credential escalation, RCE, destructive ops, IaC)
-- 18 read-only commands NOT blocked (false-positive prevention)
+- deny patterns (Tier 1-7: credential escalation, RCE, destructive ops, IaC)
+- read-only commands NOT blocked (false-positive prevention)
+- aws behind global options / wrappers is still blocked (2026-11-14: `aws --profile X ecs stop-task` passed)
+- aws command names quoted in message text are NOT blocked (2026-11-04/13: Slack posts were refused)
 - animaworks-tool aws_collector passthrough
 - rin incident commands (2026-03-20/21)
 - DataTalks.Club terraform destroy scenario
@@ -258,6 +260,88 @@ class TestReadOnlyCommandsNotBlocked:
     )
     def test_readonly_not_blocked(self, deny_patterns, cmd):
         assert not _blocked(deny_patterns, cmd), f"Read-only command wrongly blocked: {cmd!r}"
+
+
+# ── aws behind global options and wrappers ───────────────────
+
+
+class TestGlobalOptionsAndWrappers:
+    """The service/operation is found even when options or wrappers come first."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "aws --profile prod-admin ecs stop-task --cluster c --task t",
+            "aws --region ap-northeast-1 ecs update-service --cluster c --service s --desired-count 0",
+            "aws --profile=prod --output json ecs execute-command --cluster c --task t --interactive --command sh",
+            "aws --debug ecs run-task --cluster c --task-definition td:1",
+            "aws --no-cli-pager --profile 'p' rds delete-db-instance --db-instance-identifier x",
+            "AWS_PROFILE=prod aws ecs stop-task --cluster c --task t",
+            "cd /work && aws --profile p ecs stop-task --cluster c --task t",
+            "timeout 30 aws ecs stop-task --cluster c --task t",
+            "sudo -E aws iam attach-user-policy --user-name u --policy-arn arn:aws:iam::aws:policy/AdministratorAccess",
+            "bash -c 'aws ecs stop-task --cluster c --task t'",
+            "script -q /dev/null aws ecs execute-command --cluster c --task t --interactive --command sh",
+            "/opt/homebrew/bin/aws ecs stop-task --cluster c --task t",
+            "echo $(aws --profile p sts assume-role --role-arn arn:aws:iam::1:role/Admin --role-session-name x)",
+        ],
+    )
+    def test_blocked(self, deny_patterns, cmd):
+        assert _blocked(deny_patterns, cmd), f"not blocked: {cmd!r}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "aws --profile logs-reader ecs describe-tasks --cluster c --tasks t",
+            "aws --region ap-northeast-1 logs start-query --log-group-name /ecs/app --start-time 1 --end-time 2 --query-string 'x'",
+            "AWS_PROFILE=logs-reader aws --output json ecs list-tasks --cluster c",
+            "aws --profile logs-reader cloudtrail lookup-events --max-results 5",
+        ],
+    )
+    def test_readonly_with_options_not_blocked(self, deny_patterns, cmd):
+        assert not _blocked(deny_patterns, cmd), f"wrongly blocked: {cmd!r}"
+
+
+# ── SSO token use and the credential cache ───────────────────
+
+
+class TestSsoTokenUse:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "aws sso get-role-credentials --role-name AdministratorAccess --account-id 1 --access-token x",
+            "aws --region ap-northeast-1 sso list-accounts --access-token x",
+            "aws sso-oidc create-token --client-id x --client-secret y --grant-type refresh_token",
+            "aws configure export-credentials --profile admin",
+            "cat ~/.aws/sso/cache/abc.json",
+            "ls /home/user/.aws/cli/cache",
+            "aws ssm start-session --target i-1234",
+        ],
+    )
+    def test_blocked(self, deny_patterns, cmd):
+        assert _blocked(deny_patterns, cmd), f"not blocked: {cmd!r}"
+
+    def test_reading_aws_config_not_blocked(self, deny_patterns):
+        assert not _blocked(deny_patterns, "cat ~/.aws/config")
+
+
+# ── aws command names inside message text ────────────────────
+
+
+class TestCommandNamesInMessageText:
+    """Quoting a command in a report or chat message is not running it."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "animaworks-tool slack send C123 '推奨: 止める（`aws ecs stop-task --cluster prod --task abc`）'",
+            "animaworks-tool slack send C123 'コマンド: aws ecs stop-task --cluster prod --task abc'",
+            'gh issue comment 1 --body "taka さんにお願い: `aws ecs update-service --cluster c --service s --force-new-deployment`"',
+            "echo '手順: aws ecs execute-command で入る' >> notes.md",
+        ],
+    )
+    def test_not_blocked(self, deny_patterns, cmd):
+        assert not _blocked(deny_patterns, cmd), f"message text wrongly blocked: {cmd!r}"
 
 
 # ── animaworks-tool passthrough ───────────────────────────────
