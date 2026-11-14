@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=6dff1740fb65de0dd2567baad3ffd75d60f0e684c12d5405fbf2dd4bc30d949b generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -215,7 +215,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1587 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
 | `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
@@ -503,7 +503,6 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.integrations.google_calendar` | 615 | — |
 | `core.integrations.google_sheets` | 470 | — |
 | `core.integrations.google_tasks` | 445 | AnimaWorks Google Tasks 도구 -- Google Tasks API 액세스. |
-| `core.integrations.image.atlascloud` | 156 | 캐릭터 이미지 및 참조 이미지 편집을 위한 선택적 Atlas Cloud 백엔드. |
 | `core.integrations.image.codex` | 370 | Codex CLI 이미지 생성 클라이언트(로컬 codex를 통한 image_gen 도구). |
 | `core.integrations.image.constants` | 57 | image/3D 생성을 위한 URL 상수, 시간 제한 및 실행 프로필. |
 | `core.integrations.image.diffusers_local` | 905 | Diffusers 기반 로컬 이미지 생성 헬퍼. |
@@ -512,7 +511,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.integrations.image.novelai` | 193 | 애니메이션 전신 이미지 생성을 위한 NovelAI V4.5 API 클라이언트. |
 | `core.integrations.image.prompts` | 279 | 상반신, 치비 및 표정 변형을 위한 프롬프트 상수. |
 | `core.integrations.image.utils` | 169 | image/3D 생성 클라이언트를 위한 공유 유틸리티. |
-| `core.integrations.image_gen` | 425 | AnimaWorks용 캐릭터 이미지 및 3D 모델 생성 도구. |
+| `core.integrations.image_gen` | 420 | AnimaWorks용 캐릭터 이미지 및 3D 모델 생성 도구. |
 | `core.integrations.local_llm` | 552 | AnimaWorks 로컬 LLM 도구 -- Ollama API 클라이언트. |
 | `core.integrations.notion` | 862 | AnimaWorks용 Notion 통합. |
 | `core.integrations.slack` | 352 | AnimaWorks용 Slack 통합. |

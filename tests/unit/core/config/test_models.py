@@ -225,6 +225,14 @@ class TestImageGenConfig:
         assert isinstance(config.image_gen, ImageGenConfig)
         assert config.image_gen.style_reference is None
 
+    def test_removed_atlascloud_backend_loads_as_api(self):
+        config = AnimaWorksConfig.model_validate({"image_gen": {"backend": "atlascloud"}})
+        assert config.image_gen.backend == "api"
+
+    def test_unknown_backend_is_rejected(self):
+        with pytest.raises(ValueError):
+            ImageGenConfig(backend="uberllm")
+
 
 class TestFormatPermissionsForPrompt:
     def test_file_roots_denied_defaults_empty(self):

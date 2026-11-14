@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=985318166f6470319e9c533e165e0fb4603a2a220f308007ca7e6814b8fb0b2e generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=ee60555182064bdba002ab8b3f958a80b4e8a1b16696077c8f1d058316fe0461 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 설정 참조
 
@@ -392,7 +392,7 @@
 | 키 | 유형 | 기본값 | 설명 |
 |---|---|---|---|
 | `image_gen` | `ImageGenConfig` | `{ImageGenConfig}` | 이미지 생성 공급자 및 기본 매개변수. |
-| `image_gen.backend` | `Literal['api', 'diffusers', 'atlascloud']` | `"api"` | — |
+| `image_gen.backend` | `Literal['api', 'diffusers']` | `"api"` | — |
 | `image_gen.image_style` | `Literal['anime', 'realistic']` | `"realistic"` | — |
 | `image_gen.prefer_codex` | `bool` | `true` | codex CLI가 있으면 이미지 생성에 최우선으로 사용 |
 | `image_gen.style_reference` | `str \| None` | `null` | 조직 전체에서 사용할 스타일 참조 이미지 경로 |

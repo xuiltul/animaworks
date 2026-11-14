@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 9472b0c158fe9d71c2165bc609dcd989bcebc464cebe83edd1131e387e28e87f -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 03b0b8ef86baf2b5e8348f336337fe4d19532d7eae337d7a5a02010cd5bde3bb -->
 
 # モジュール一覧
 
@@ -215,7 +215,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1578 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1587 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
 | `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
@@ -503,7 +503,6 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.integrations.google_calendar` | 615 | — |
 | `core.integrations.google_sheets` | 470 | — |
 | `core.integrations.google_tasks` | 445 | AnimaWorks Google Tasks tool -- Google Tasks API access. |
-| `core.integrations.image.atlascloud` | 156 | Optional Atlas Cloud backend for character images and reference edits. |
 | `core.integrations.image.codex` | 370 | Codex CLI image generation client (image_gen tool via local codex). |
 | `core.integrations.image.constants` | 57 | URL constants, timeouts, and execution profiles for image/3D generation. |
 | `core.integrations.image.diffusers_local` | 905 | Local Diffusers-backed image generation helpers. |
@@ -512,7 +511,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.integrations.image.novelai` | 193 | NovelAI V4.5 API client for anime full-body image generation. |
 | `core.integrations.image.prompts` | 279 | Prompt constants for bustup, chibi, and expression variants. |
 | `core.integrations.image.utils` | 169 | Shared utilities for image/3D generation clients. |
-| `core.integrations.image_gen` | 425 | Character image & 3-D model generation tool for AnimaWorks. |
+| `core.integrations.image_gen` | 420 | Character image & 3-D model generation tool for AnimaWorks. |
 | `core.integrations.local_llm` | 552 | AnimaWorks local LLM tool -- Ollama API client. |
 | `core.integrations.notion` | 862 | Notion integration for AnimaWorks. |
 | `core.integrations.slack` | 352 | Slack integration for AnimaWorks. |

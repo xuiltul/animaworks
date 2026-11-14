@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=985318166f6470319e9c533e165e0fb4603a2a220f308007ca7e6814b8fb0b2e generated=2026-11-10 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=ee60555182064bdba002ab8b3f958a80b4e8a1b16696077c8f1d058316fe0461 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Configuration Reference
 
@@ -392,7 +392,7 @@ Generated from the definitions of `AnimaWorksConfig`, per-anima `ModelConfig`, a
 | Key | Type | Default value | Description |
 |---|---|---|---|
 | `image_gen` | `ImageGenConfig` | `{ImageGenConfig}` | Image generation provider and default parameters. |
-| `image_gen.backend` | `Literal['api', 'diffusers', 'atlascloud']` | `"api"` | — |
+| `image_gen.backend` | `Literal['api', 'diffusers']` | `"api"` | — |
 | `image_gen.image_style` | `Literal['anime', 'realistic']` | `"realistic"` | — |
 | `image_gen.prefer_codex` | `bool` | `true` | Prioritize codex CLI for image generation when available |
 | `image_gen.style_reference` | `str \| None` | `null` | Path to organization-wide style reference image |
