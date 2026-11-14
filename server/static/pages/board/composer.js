@@ -306,6 +306,25 @@ export function createComposer({ store, onSubmit }) {
     textarea.setSelectionRange(caret, caret);
   }
 
+  /** Insert plain text at the caret, keeping the usual input updates. */
+  function insertText(text) {
+    const value = String(text || "");
+    if (!value) return;
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? start;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    // A mention needs a separating space unless it starts a line / follows
+    // whitespace, so the inserted token is parsed as a mention.
+    const leading = value.startsWith("@") && before && !/\s$/.test(before) ? " " : "";
+    const inserted = `${leading}${value}`;
+    textarea.value = `${before}${inserted}${after}`;
+    const caret = before.length + inserted.length;
+    textarea.setSelectionRange(caret, caret);
+    textarea.focus();
+    handleInput();
+  }
+
   // ── Wiring ───────────────────────────────
   form.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -394,6 +413,7 @@ export function createComposer({ store, onSubmit }) {
     setContext,
     refresh,
     quote,
+    insertText,
     focus: () => textarea.focus(),
     destroy: () => {
       form.remove();

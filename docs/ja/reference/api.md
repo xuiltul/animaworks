@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py api -->
-<!-- generator: gen_reference/1  kind: api  source-sha256: 0edb2a980a55c3a4b8daf71a93fb9cdd2980ec095916c673b16734f98d85c14d -->
+<!-- generator: gen_reference/1  kind: api  source-sha256: 84fb5774850ff0d2ea50c28e70d7939fe755caf4272fab42d907996614ec1681 -->
 
 # API リファレンス
 
@@ -140,6 +140,7 @@ FastAPI の OpenAPI 定義、WebSocket、`server/app.py` の直書きルート�
 
 ## `server/routes/hub.py`
 
+| GET | `/api/hub/info` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/hub.py:hub_info` |
 | GET | `/api/hub/members` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/hub.py:list_hub_members` |
 | GET | `/api/hub/members/{member_id}/avatar` | セッション必須（local_trust モード、または localhost 信頼が有効なら省略可） | — | `server/routes/hub.py:hub_member_avatar` |
 

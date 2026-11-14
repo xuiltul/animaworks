@@ -125,6 +125,7 @@ function registerRoutes() {
   routes["/activity"] = () => import("../pages/activity.js" + _v);
   routes["/chat"] = () => import("../pages/chat.js" + _v);
   routes["/board"] = () => import("../pages/board.js" + _v);
+  routes["/hub"] = () => import("../pages/hub.js" + _v);
   routes["/task-board"] = () => import("../pages/task-board.js" + _v);
   // /users removed — redirected to #/settings/users (see REDIRECTS)
   routes["/animas"] = () => import("../pages/animas.js" + _v);

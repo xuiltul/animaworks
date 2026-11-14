@@ -1,0 +1,558 @@
+/* ============================================
+   Hub — external AIs, #hub board and company timeline
+
+   The hub owns the whole main area. Board classes are reused read-only and
+   overridden only below .hub-timeline / .board-layout--pinned so #/board
+   keeps its existing appearance.
+   ============================================ */
+
+.main-content:has(.hub-page) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.hub-page {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--aw-color-bg-secondary);
+}
+
+.hub-page[hidden] {
+  display: none;
+}
+
+/* ── Header ─────────────────────────────────── */
+
+.hub-head {
+  display: flex;
+  height: 60px;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--aw-color-border);
+}
+
+.hub-nav-toggle {
+  display: none;
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 8px;
+  background: var(--aw-color-bg-primary);
+  color: var(--aw-color-text-secondary);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hub-head-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 11px;
+}
+
+.hub-head-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--aw-color-accent) 12%, transparent);
+  color: var(--aw-color-accent);
+}
+
+.hub-head-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hub-head-text {
+  min-width: 0;
+}
+
+.hub-head-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--aw-color-text-primary);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-head-sub {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--aw-color-text-muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tabs are a narrow-screen navigation device; wide screens show both panes. */
+.hub-tabs {
+  display: none;
+  flex: none;
+  gap: 2px;
+}
+
+.hub-tab {
+  padding: 6px 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hub-tab[aria-selected="true"] {
+  border-bottom-color: var(--aw-color-accent);
+  color: var(--aw-color-text-primary);
+}
+
+.hub-tab-badge {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--aw-color-warning-bg);
+  color: var(--aw-color-warning-text);
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hub-tab-badge[hidden] {
+  display: none;
+}
+
+/* ── Roster strip ──────────────────────────── */
+
+.hub-members {
+  display: flex;
+  flex: none;
+  gap: 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 12px 20px;
+  scroll-snap-type: x mandatory;
+}
+
+.hub-members-empty {
+  padding: 8px 0;
+  color: var(--aw-color-text-muted);
+  font-size: 0.8rem;
+}
+
+.hub-member {
+  display: grid;
+  width: 280px;
+  flex: 0 0 280px;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 14px;
+  background: var(--aw-color-bg-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.04);
+  scroll-snap-align: start;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.hub-member:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 3px rgba(15, 23, 42, 0.07), 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.hub-member.is-disabled {
+  filter: saturate(0.35);
+  opacity: 0.78;
+}
+
+.hub-member-avatar-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+.hub-member-avatar {
+  display: flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.hub-member-avatar.is-overdue {
+  outline: 2px solid var(--aw-color-warning);
+  outline-offset: 1px;
+}
+
+.hub-member-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hub-member-initial {
+  line-height: 1;
+}
+
+.hub-member-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--aw-color-bg-primary);
+  border-radius: 50%;
+  background: var(--aw-color-text-muted);
+}
+
+.hub-member-presence.is-recent {
+  background: #22c55e;
+}
+
+.hub-member-body {
+  min-width: 0;
+}
+
+.hub-member-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.hub-member-name {
+  overflow: hidden;
+  color: var(--aw-color-text-primary);
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-member-id {
+  overflow: hidden;
+  color: var(--aw-color-text-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-member-seen {
+  margin: 2px 0 4px;
+  overflow: hidden;
+  color: var(--aw-color-text-muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-member-chips {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+}
+
+.hub-member-chip {
+  padding: 0 6px;
+  border: 1px solid var(--aw-color-border-subtle);
+  border-radius: 999px;
+  color: var(--aw-color-text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
+.hub-chip-overdue {
+  border-color: var(--aw-color-warning-border);
+  background: var(--aw-color-warning-bg);
+  color: var(--aw-color-warning-text);
+  font-weight: 700;
+}
+
+.hub-chip-disabled {
+  opacity: 0.66;
+}
+
+.hub-member-call {
+  align-self: center;
+  padding: 4px 9px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 999px;
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-color-text-link);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hub-member-call:hover {
+  border-color: var(--aw-color-accent-light);
+  background: var(--aw-color-accent-bg);
+}
+
+/* ── Body: chat + timeline ─────────────────── */
+
+.hub-body {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+
+.hub-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.hub-chat {
+  overflow: hidden;
+}
+
+.hub-chat .board-layout {
+  height: 100%;
+}
+
+.hub-timeline {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px;
+  border-left: 1px solid var(--aw-color-border);
+  background: var(--aw-color-bg-secondary);
+}
+
+.hub-timeline[hidden] {
+  display: none;
+}
+
+.hub-page--no-timeline .hub-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hub-page--no-timeline .hub-timeline {
+  display: none;
+}
+
+.hub-page--no-timeline .hub-tabs [data-hub-tab-button="timeline"] {
+  display: none;
+}
+
+/* ── Timeline overrides (scoped to the hub) ── */
+
+.hub-timeline .board-timeline {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.hub-timeline .board-timeline-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: -14px -16px 8px;
+  padding: 14px 16px 8px;
+  background: var(--aw-color-bg-secondary);
+}
+
+.hub-timeline .board-timeline-title {
+  margin: 0;
+  color: var(--aw-color-text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.hub-timeline .board-timeline-filters {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--aw-color-border);
+  border-radius: 999px;
+  background: var(--aw-color-bg-primary);
+}
+
+.hub-timeline .board-timeline-filter {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--aw-color-text-muted);
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hub-timeline .board-timeline-filter[aria-pressed="true"] {
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-text-link);
+}
+
+.hub-timeline .board-timeline-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hub-timeline .board-timeline-day {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 3px;
+  padding: 2px 0;
+  color: var(--aw-color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.hub-timeline .board-timeline-day::before,
+.hub-timeline .board-timeline-day::after {
+  height: 1px;
+  flex: 1 1 auto;
+  background: var(--aw-color-border-light);
+  content: "";
+}
+
+.hub-timeline .board-timeline-item {
+  padding: 7px 4px 7px 8px;
+}
+
+.hub-timeline .board-timeline-empty {
+  padding: 12px 0;
+}
+
+/* ── Empty / disabled state ────────────────── */
+
+.hub-page--disabled {
+  align-items: center;
+  justify-content: center;
+}
+
+.hub-empty {
+  display: flex;
+  max-width: 520px;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 32px;
+  text-align: center;
+}
+
+.hub-empty .hub-head-icon {
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+  border-radius: 14px;
+}
+
+.hub-empty .hub-head-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.hub-empty-title {
+  margin: 0;
+  color: var(--aw-color-text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.hub-empty-text {
+  margin: 0;
+  color: var(--aw-color-text-secondary);
+  font-size: 0.8rem;
+}
+
+/* ── Board pinned mode ─────────────────────── */
+
+/* A pinned board has one channel and no rail toggle. */
+.board-layout--pinned .board-rail,
+.board-layout--pinned .board-mobile-toggle {
+  display: none !important;
+}
+
+/* ── Responsive ────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .hub-tabs {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .hub-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* Narrow screens switch panes with data-hub-tab. */
+  .hub-page[data-hub-tab="chat"] .hub-timeline {
+    display: none;
+  }
+
+  .hub-page[data-hub-tab="timeline"] .hub-chat {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .hub-nav-toggle {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 760px) {
+  .hub-head {
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .hub-head-title {
+    font-size: 1rem;
+  }
+
+  .hub-members {
+    padding: 10px 12px;
+  }
+
+  .hub-member {
+    width: 82vw;
+    flex-basis: 82vw;
+  }
+}

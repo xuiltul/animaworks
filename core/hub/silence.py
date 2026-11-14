@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from core.hub.members import (
+    HubMember,
     expect_every_seconds,
     last_seen,
     load_members,
@@ -45,6 +46,29 @@ def _effective_last_seen(shared_dir: Path, member_id: str) -> str | None:
     return _member_created_at(shared_dir, member_id)
 
 
+def is_overdue(shared_dir: Path, member: HubMember, now: datetime | None = None) -> bool:
+    """Return whether an enabled member missed its expected visit window.
+
+    The reference point is the recorded ``last_seen``; when none is available
+    the member file's modification time is used, matching the silence check.
+    """
+    if not member.enabled or not member.expect_every:
+        return False
+    expected = expect_every_seconds(member.expect_every)
+    if expected is None:
+        return False
+    effective = _effective_last_seen(shared_dir, member.id)
+    if effective is None:
+        return False
+    seen_at = parse_iso(effective)
+    if seen_at is None:
+        return False
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=UTC)
+    return (current - seen_at).total_seconds() > expected
+
+
 def check_silent_members(
     shared_dir: Path,
     *,
@@ -62,18 +86,10 @@ def check_silent_members(
         current = current.replace(tzinfo=UTC)
     alerted: list[str] = []
     for member_id, member in sorted(load_members(shared_dir).items()):
-        if not member.enabled or not member.expect_every:
-            continue
-        expected = expect_every_seconds(member.expect_every)
-        if expected is None:
+        if not is_overdue(shared_dir, member, current):
             continue
         effective = _effective_last_seen(shared_dir, member_id)
-        if effective is None:
-            continue
-        seen_at = parse_iso(effective)
-        if seen_at is None:
-            continue
-        if (current - seen_at).total_seconds() <= expected:
+        if effective is None:  # pragma: no cover - is_overdue already checked it
             continue
 
         if member_state(shared_dir, member_id).get("silence_alerted_for") == effective:
