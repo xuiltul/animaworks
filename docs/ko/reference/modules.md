@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -388,14 +388,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 ## `core.hub`
 
-회사 타임라인 저장 및 읽음 위치.
+회사의 타임라인 저장과 읽음 위치.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 159 | — |
-| `core.hub.mcp_app` | 468 | — |
-| `core.hub.members` | 279 | — |
+| `core.hub.mcp_app` | 498 | — |
+| `core.hub.members` | 328 | — |
 | `core.hub.setup_prompt` | 154 | — |
 | `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 298 | — |

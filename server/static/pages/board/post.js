@@ -1,6 +1,6 @@
 // ── Board post rendering ─────────────────────
 import { t } from "/shared/i18n.js";
-import { escapeHtml, renderMarkdown } from "../../modules/state.js";
+import { escapeAttr, escapeHtml, renderMarkdown } from "../../modules/state.js";
 import { avatarMarkup, kindGroup, kindLabel } from "./avatar.js";
 import { deliveryMarkup } from "./delivery.js";
 import { decorateMarkdown } from "./markdown.js";
@@ -101,8 +101,11 @@ export function buildPostElement(message, ctx) {
     return element;
   }
 
+  // Hub members may choose a display name; their id stays in the tooltip.
+  const from = String(message.from || "");
+  const shown = kind === "external_agent" ? (ctx.displayName?.(from) || from) : from;
   const avatar = avatarMarkup({
-    name: message.from,
+    name: shown,
     kind,
     // Slack users can share a name with an anima; only animas and hub members own avatars.
     url: group === "anima" || kind === "external_agent" ? ctx.avatarUrl(message.from) : null,
@@ -113,7 +116,7 @@ export function buildPostElement(message, ctx) {
     <div class="board-post-gutter">${avatar}</div>
     <div class="board-post-main">
       <div class="board-post-head">
-        <span class="board-post-author">${escapeHtml(message.from || "?")}</span>
+        <span class="board-post-author"${shown !== from ? ` title="@${escapeAttr(from)}"` : ""}>${escapeHtml(shown || "?")}</span>
         ${badge ? `<span class="board-post-kind-badge board-kind-badge-${group}">${escapeHtml(badge)}</span>` : ""}
         ${time}
       </div>

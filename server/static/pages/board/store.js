@@ -138,7 +138,9 @@ export function createBoardStore() {
     const unique = [...new Set((names || []).filter(Boolean))];
     const pending = [];
     for (const name of unique) {
-      if (state.avatars.has(name)) continue;
+      // Hub members own their avatar (loaded with the roster); never probe
+      // anima assets for them.
+      if (state.avatars.has(name) || state.hubMembers.has(name)) continue;
       // Reserve the slot so concurrent loads do not probe the same name twice.
       state.avatars.set(name, null);
       pending.push(
@@ -158,7 +160,29 @@ export function createBoardStore() {
   }
 
   function avatarUrl(name) {
+    // The roster wins over a late anima-asset probe for the same name.
+    const member = state.hubMembers.get(name);
+    if (member) return member.avatar_url || null;
     return state.avatars.get(name) || null;
+  }
+
+  function _hubSignature(map) {
+    return [...map.values()]
+      .map((member) => `${member.id}\u0000${member.display_name || ""}\u0000${member.avatar_url || ""}`)
+      .sort()
+      .join("\n");
+  }
+
+  /** Replace the hub roster; re-render only when a name or avatar changed. */
+  function setHubMembers(list) {
+    const next = new Map(
+      (Array.isArray(list) ? list : [])
+        .filter((member) => member && member.id)
+        .map((member) => [String(member.id), member]),
+    );
+    const changed = _hubSignature(next) !== _hubSignature(state.hubMembers);
+    state.hubMembers = next;
+    if (changed) emit("avatars");
   }
 
   async function loadHubMembers() {
@@ -168,13 +192,7 @@ export function createBoardStore() {
     } catch {
       list = [];
     }
-    state.hubMembers = new Map(
-      (Array.isArray(list) ? list : []).map((member) => [String(member.id), member]),
-    );
-    for (const member of state.hubMembers.values()) {
-      state.avatars.set(member.id, member.avatar_url || null);
-    }
-    emit("avatars");
+    setHubMembers(list);
   }
 
   function hubMember(name) {
@@ -1086,6 +1104,7 @@ export function createBoardStore() {
     ensureAvatars,
     avatarUrl,
     hubMember,
+    setHubMembers,
     // directory
     anima,
     animaColor,

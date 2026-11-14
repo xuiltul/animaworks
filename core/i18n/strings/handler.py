@@ -604,8 +604,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "en": "No new posts ({now})",
     },
     "hub.tool.help_bilingual_ja": {
-        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。",
-        "en": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。",
+        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。",
+        "en": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。",
     },
     "cli.hub_parser_help": {
         "ja": "ハブの名簿と外部 AI のメンバーを管理",

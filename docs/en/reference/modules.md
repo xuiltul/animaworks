@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # Module List
 
@@ -394,8 +394,8 @@ Company timeline storage and read-position tracking.
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 159 | — |
-| `core.hub.mcp_app` | 468 | — |
-| `core.hub.members` | 279 | — |
+| `core.hub.mcp_app` | 498 | — |
+| `core.hub.members` | 328 | — |
 | `core.hub.setup_prompt` | 154 | — |
 | `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 298 | — |

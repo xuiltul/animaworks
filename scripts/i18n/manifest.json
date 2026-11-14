@@ -698,7 +698,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "7435dfe422f6927cf9b6297468142c1e240ce79650278fa49f8418e20544d973",
+      "source_sha256": "94e5e56f2062ab5ee8d42168524b26168bc18139d4d9bae4b0d67cb3472bbc8b",
       "statuses": [
         "translated"
       ],
@@ -1228,7 +1228,7 @@
         "447c4826f680c855349edbb477d3302db7bc114fc4d66d889b963ff31dce2098",
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
-        "df6ac13f7d4d903baf7da2a418efdd0184ec6bee6c5c2906bcfcfe19b3b6e52f",
+        "7c4b0865bfa3c79b71042c35d304a95666c7176b27bee1c67a0fdb280f27ef71",
         "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
@@ -1276,7 +1276,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3",
+      "source_sha256": "72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92",
       "statuses": [
         "translated",
         "translated",
@@ -2157,12 +2157,12 @@
     "docs/ko/reference/README.md": {
       "engine": "local",
       "generated": "2026-11-14",
-      "model": "deepseek-v4.1-flash-1017-abl",
+      "model": "deepseek-v4.1-flash-1017",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "7435dfe422f6927cf9b6297468142c1e240ce79650278fa49f8418e20544d973",
+      "source_sha256": "94e5e56f2062ab5ee8d42168524b26168bc18139d4d9bae4b0d67cb3472bbc8b",
       "statuses": [
         "translated"
       ],
@@ -2692,7 +2692,7 @@
         "447c4826f680c855349edbb477d3302db7bc114fc4d66d889b963ff31dce2098",
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
-        "df6ac13f7d4d903baf7da2a418efdd0184ec6bee6c5c2906bcfcfe19b3b6e52f",
+        "7c4b0865bfa3c79b71042c35d304a95666c7176b27bee1c67a0fdb280f27ef71",
         "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
@@ -2740,7 +2740,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "3f52a962eada1445f856bf0f385fdf0f03c757e60039722db30dfc2f3ffdc2a3",
+      "source_sha256": "72a1c4b53747c742b10805214fcd159ab72efa5ae4ba2ef408af2c771f7b5b92",
       "statuses": [
         "translated",
         "translated",
@@ -5922,13 +5922,13 @@
     },
     "templates/en/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-14",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "8419aec0442aa63a7e54ba5deb594ccd3422dd8152423d443a254534b2a9aa65"
+        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "2da7729796fa8dee9e06e288f3562256f5d6e42de6108fdf925db5f14beaced1",
+      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
       "statuses": [
         "translated"
       ],
@@ -11850,13 +11850,13 @@
     },
     "templates/ko/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-14",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "8419aec0442aa63a7e54ba5deb594ccd3422dd8152423d443a254534b2a9aa65"
+        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "2da7729796fa8dee9e06e288f3562256f5d6e42de6108fdf925db5f14beaced1",
+      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
       "statuses": [
         "translated"
       ],
@@ -17778,13 +17778,13 @@
     },
     "templates/zh/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-08",
+      "generated": "2026-11-14",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "8419aec0442aa63a7e54ba5deb594ccd3422dd8152423d443a254534b2a9aa65"
+        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "2da7729796fa8dee9e06e288f3562256f5d6e42de6108fdf925db5f14beaced1",
+      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
       "statuses": [
         "translated"
       ],

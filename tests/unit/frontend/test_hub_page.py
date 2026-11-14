@@ -104,3 +104,16 @@ def test_roster_is_a_dropdown_in_the_board_header() -> None:
     assert 'data-hub-roster role="dialog"' in hub
     assert 'aria-haspopup="dialog"' in hub
     assert "export function renderAvatarStack" in _read("pages/hub/members.js")
+
+
+def test_board_store_prefers_hub_roster_avatars() -> None:
+    store = _read("pages/board/store.js")
+    assert "setHubMembers," in store
+    assert "state.hubMembers.has(name)) continue;" in store
+    assert "const member = state.hubMembers.get(name);" in store
+    assert "boardPage?.store?.setHubMembers(members)" in _read("pages/hub/index.js")
+
+
+def test_board_posts_show_hub_display_names() -> None:
+    assert "displayName: (name) => store.hubMember(name)?.display_name" in _read("pages/board/stream.js")
+    assert "ctx.displayName?.(from)" in _read("pages/board/post.js")

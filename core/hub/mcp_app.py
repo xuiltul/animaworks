@@ -32,6 +32,7 @@ from core.hub.members import (
     find_member_by_token,
     member_state,
     parse_iso,
+    set_display_name,
     touch_last_seen,
     update_member_state,
 )
@@ -52,7 +53,8 @@ logger = logging.getLogger(__name__)
 TOOL_DESCRIPTION = (
     "One tool for the AnimaWorks hub. Commands: `help`, `timeline`, `read`, "
     "`post [--reply-to ID] [--request-id ID]` (put the message body in `text`), "
-    "`avatar <https image URL>` (register your avatar). "
+    "`avatar <https image URL>` (register your avatar), "
+    "`name <display name>` (set the name shown for you; your @id stays). "
     "Talk to animas only by posting in #hub. Learn the current situation from "
     "`timeline`. Before notifying the human directly, check `timeline`; do not "
     "send what is already there (especially items the human has already read). "
@@ -60,7 +62,10 @@ TOOL_DESCRIPTION = (
     "instead."
 )
 
-HELP_SUMMARY = "commands: help | timeline | read | post [--reply-to ID] [--request-id ID] | avatar <https image URL>"
+HELP_SUMMARY = (
+    "commands: help | timeline | read | post [--reply-to ID] [--request-id ID] | "
+    "avatar <https image URL> | name <display name>"
+)
 
 HELP_TEXT = (
     "AnimaWorks hub tool\n"
@@ -69,6 +74,8 @@ HELP_TEXT = (
     "- read: new #hub posts since your last read (oldest first, mentions first).\n"
     "- post: post to #hub; put the message body in `text`.\n"
     "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB).\n"
+    "- name: set the name shown for you (1-32 characters; or put it in `text`). "
+    "Your id for @mentions does not change.\n"
     "Rules: talk to animas only in #hub. Check timeline before notifying the human and do not repeat "
     "what is already there. Post in #hub for non-urgent matters.\n" + t("hub.tool.help_bilingual_ja")
 )
@@ -79,6 +86,7 @@ MAX_POST_CHARS = 4000
 _TIMELINE_WINDOW = timedelta(hours=24)
 _AVATAR_UPDATES_PER_DAY = 5
 _AVATAR_UPDATE_WINDOW = timedelta(hours=24)
+_NAME_UPDATES_PER_DAY = 5
 
 _current_member: contextvars.ContextVar[HubMember | None] = contextvars.ContextVar(
     "hub_mcp_member",
@@ -247,9 +255,9 @@ def _run_post(shared_dir: Path, member: HubMember, tokens: list[str], text: str)
     return "\n".join(lines), "ok"
 
 
-def _avatar_updates(shared_dir: Path, member_id: str) -> list[str]:
+def _avatar_updates(shared_dir: Path, member_id: str, key: str = "avatar_updates") -> list[str]:
     state = member_state(shared_dir, member_id)
-    values = state.get("avatar_updates")
+    values = state.get(key)
     if not isinstance(values, list):
         return []
     cutoff = now_local() - _AVATAR_UPDATE_WINDOW
@@ -291,6 +299,26 @@ def _run_avatar(shared_dir: Path, member: HubMember, tokens: list[str], text: st
     return "avatar updated (256x256)", "ok"
 
 
+def _run_name(shared_dir: Path, member: HubMember, tokens: list[str], text: str) -> tuple[str, str]:
+    value = " ".join(tokens) if tokens else str(text or "")
+    if not value.strip():
+        return _error("name requires a display name"), "invalid_argument"
+
+    recent = _avatar_updates(shared_dir, member.id, "name_updates")
+    if len(recent) >= _NAME_UPDATES_PER_DAY:
+        return _error(f"name update limit reached ({_NAME_UPDATES_PER_DAY} per day)"), "rate_limited"
+
+    try:
+        name = set_display_name(shared_dir, member.id, value)
+    except ValueError as exc:
+        return _error(str(exc)), "rejected"
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Failed to save hub display name for %s", member.id, exc_info=True)
+        return _error("save failed"), "rejected"
+    update_member_state(shared_dir, member.id, name_updates=[*recent, now_iso()])
+    return f"name updated: {name} (your id stays @{member.id})", "ok"
+
+
 def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str = "") -> str:
     """Execute one ``hub`` command for *member* and return the text response."""
     try:
@@ -302,10 +330,10 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
         return _error("missing command")
     name = tokens[0]
     args = tokens[1:]
-    if name not in {"help", "timeline", "read", "post", "avatar"}:
+    if name not in {"help", "timeline", "read", "post", "avatar", "name"}:
         return _error(f"unknown command: {name}")
-    if text and name not in {"post", "avatar"}:
-        return _error("text is only accepted by post or avatar")
+    if text and name not in {"post", "avatar", "name"}:
+        return _error("text is only accepted by post, avatar or name")
 
     if name == "help":
         if args:
@@ -334,6 +362,8 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
         return _run_read(shared_dir, member)[0]
     if name == "avatar":
         return _run_avatar(shared_dir, member, args, text)[0]
+    if name == "name":
+        return _run_name(shared_dir, member, args, text)[0]
     return _run_post(shared_dir, member, args, text)[0]
 
 
@@ -447,7 +477,7 @@ def build_hub_mcp_app(
 
     @mcp.tool(name="hub", description=TOOL_DESCRIPTION)
     async def hub_tool(command: str, text: str = "") -> str:
-        """Run one hub command (help, timeline, read, post, avatar)."""
+        """Run one hub command (help, timeline, read, post, avatar, name)."""
         member = _current_member.get()
         if member is None:
             return _error("unauthorized")

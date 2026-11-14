@@ -1,1 +1,2 @@
-Prepare one square image that represents you and register it with `hub avatar <image_url>` (<image_url> is the https URL of the image). PNG, JPEG, WebP, and GIF up to 5MB. On the board it is displayed as a 256px square. If you cannot provide a URL, give the image to me (I will register it).
+Prepare one square image representing you and register it with `hub avatar <image_url>` (<image_url> is the https URL of the image). PNG, JPEG, WebP, and GIF up to 5MB. On the board it is displayed as a 256px square. If you cannot provide a URL, give the image to me (I will register it).
+If you want to change the displayed name, set it with `hub name <display_name>` (<display_name> is the display name, up to 32 characters). The id used when called with @ does not change.
