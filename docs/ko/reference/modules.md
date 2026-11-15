@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=3ce9acfe92e6a2c402c4cd78f416ce6c04e594b771b8d431994bab180b727dd4 generated=2026-11-15 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=0e36e7467717a0b45f1fd958c210fe46c0bda93bed58641f621fbed7d568df92 generated=2026-11-15 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -64,22 +64,22 @@
 
 —
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `cli.tui` | 207 | — |
 | `cli.tui.app` | 1936 | — |
-| `cli.tui.client` | 394 | — |
+| `cli.tui.client` | 395 | — |
 | `cli.tui.commands` | 251 | — |
-| `cli.tui.keybindings` | 90 | TUI용 키 바인딩 설정. |
-| `cli.tui.markdown` | 535 | 터미널 대화 기록에 맞게 조정한 Markdown → Rich 렌더링 객체. |
-| `cli.tui.session` | 219 | TUI 세션 유지 기능. |
+| `cli.tui.keybindings` | 90 | Keybinding configuration for the TUI. |
+| `cli.tui.markdown` | 535 | Markdown → Rich renderables, tuned for a terminal transcript. |
+| `cli.tui.session` | 219 | Session persistence for the TUI. |
 | `cli.tui.sse` | 98 | — |
-| `cli.tui.state` | 280 | TUI 사이드바, 활동 피드 및 팔레트의 클라이언트 전용 UI 상태. |
-| `cli.tui.widgets.call_human` | 85 | 대화 기록에 표시되는 call_human 알림 카드. |
+| `cli.tui.state` | 280 | Pure client-side UI state for the TUI sidebar, activity feed and palette. |
+| `cli.tui.widgets.call_human` | 85 | A call_human notification card rendered in the transcript. |
 | `cli.tui.widgets.chat_input` | 152 | — |
-| `cli.tui.widgets.palette` | 115 | 슬래시 명령 자동 완성 팔레트. |
+| `cli.tui.widgets.palette` | 115 | Slash-command completion palette. |
 | `cli.tui.widgets.response_status` | 63 | — |
-| `cli.tui.widgets.sidebar` | 248 | 사이드바 위젯: Anima 목록 및 활동 피드. |
+| `cli.tui.widgets.sidebar` | 248 | Sidebar widget: list of animas + activity feed. |
 | `cli.tui.widgets.status_bar` | 160 | — |
 | `cli.tui.widgets.thinking` | 98 | — |
 | `cli.tui.widgets.tool_card` | 140 | — |
@@ -111,13 +111,13 @@
 
 ## `core.activity`
 
-활동 로그의 기록, 재생, 타임라인 표시.
+액티비티 로그의 기록, 재생, 타임라인 표시.
 
 | 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.activity` | 24 | — |
 | `core.activity.audit` | 290 | — |
-| `core.activity.conversation` | 1421 | — |
+| `core.activity.conversation` | 1422 | — |
 | `core.activity.event_export` | 33 | — |
 | `core.activity.format` | 571 | — |
 | `core.activity.logger` | 584 | — |
@@ -144,25 +144,25 @@ LLM 에이전트 실행, 대화 제어, 엔진 연동.
 
 ## `core.anima`
 
-디지털 Anima의 수명 주기와 런타임 객체.
+Digital Anima의 라이프사이클과 런타임 객체.
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.anima` | 23 | — |
-| `core.anima._mixin_protocols（非公開）` | 130 | 조합형 믹스인을 위한 구조적 호스트 프로토콜. |
+| `core.anima._mixin_protocols（非公開）` | 130 | Structural host protocols for the compositional mixins. |
 | `core.anima.admin` | 144 | — |
 | `core.anima.asset_reconciler` | 787 | — |
 | `core.anima.bootstrap_state` | 592 | — |
 | `core.anima.chat_attachments` | 253 | — |
 | `core.anima.digital_anima` | 702 | — |
-| `core.anima.emotion_tag` | 84 | LLM 응답에서 감정 태그를 추출하는 공통 기능. |
-| `core.anima.export` | 234 | Anima 워크스페이스를 OpenClaw 또는 Hermes Agent 레이아웃으로 내보냅니다. |
-| `core.anima.factory` | 876 | Anima 생성 팩터리: 템플릿, 빈 항목 또는 MD 파일에서 새 디지털 Anima를 생성합니다. |
-| `core.anima.heartbeat` | 1022 | — |
+| `core.anima.emotion_tag` | 84 | Shared emotion-tag extraction for LLM responses. |
+| `core.anima.export` | 234 | Export an Anima workspace in OpenClaw or Hermes Agent layout. |
+| `core.anima.factory` | 876 | Anima creation factory: create new Digital Animas from templates, blank, or MD files. |
+| `core.anima.heartbeat` | 1035 | — |
 | `core.anima.image_artifacts` | 219 | — |
-| `core.anima.inbox` | 1089 | — |
+| `core.anima.inbox` | 1130 | — |
 | `core.anima.inbox_overflow` | 100 | — |
-| `core.anima.lifecycle` | 1662 | — |
+| `core.anima.lifecycle` | 1683 | — |
 | `core.anima.messaging` | 1332 | — |
 | `core.anima.response_normalize` | 141 | — |
 | `core.anima.roster` | 83 | — |
@@ -390,15 +390,17 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 
 회사의 타임라인 저장과 읽음 위치.
 
-| 모듈 | 행 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 1행째 |
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 167 | — |
-| `core.hub.mcp_app` | 588 | — |
+| `core.hub.mcp_app` | 660 | — |
 | `core.hub.members` | 328 | — |
 | `core.hub.setup_prompt` | 163 | — |
 | `core.hub.silence` | 123 | — |
-| `core.hub.timeline` | 298 | — |
+| `core.hub.timeline` | 361 | — |
+| `core.hub.timeline_activity` | 159 | — |
+| `core.hub.timeline_human` | 297 | — |
 | `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
@@ -409,14 +411,14 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
-| `core.i18n.strings.company` | 14 | Localized strings for company management. |
+| `core.i18n.strings.company` | 18 | Localized strings for company management. |
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 820 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 828 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
-| `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 452 | Domain-specific i18n strings. |
 | `core.i18n.strings.migrate` | 124 | — |
 | `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
@@ -571,7 +573,7 @@ Model Context Protocol 서버 및 클라이언트.
 
 대화·에피소드 기억의 저장, 검색, 정리.
 
-| 모듈 | 행수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
@@ -582,7 +584,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
 | `core.memory.conversation.shortterm` | 313 | Short-term memory (短期記憶) management. |
-| `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
+| `core.memory.conversation.state_update` | 55 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
 | `core.memory.facts.config` | 85 | — |
@@ -604,7 +606,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.maintenance.background_review` | 565 | — |
 | `core.memory.maintenance.consolidation` | 1190 | — |
 | `core.memory.maintenance.cron_logger` | 159 | — |
-| `core.memory.maintenance.cron_noop` | 241 | — |
+| `core.memory.maintenance.cron_noop` | 325 | — |
 | `core.memory.maintenance.distillation` | 548 | — |
 | `core.memory.maintenance.forgetting` | 588 | — |
 | `core.memory.maintenance.housekeeping` | 1952 | — |
@@ -623,7 +625,7 @@ Model Context Protocol 서버 및 클라이언트.
 | `core.memory.priming.engine` | 503 | — |
 | `core.memory.priming.format` | 124 | — |
 | `core.memory.priming.items` | 59 | — |
-| `core.memory.priming.outbound` | 194 | — |
+| `core.memory.priming.outbound` | 245 | — |
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
@@ -771,19 +773,19 @@ anima 간 및 외부와의 메시지 전달.
 
 알림의 생성과 전달.
 
-| 모듈 | 행수 | docstring 1행째 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `core.notification` | 40 | — |
 | `core.notification.channels.chatwork` | 79 | — |
 | `core.notification.channels.discord` | 251 | — |
 | `core.notification.channels.line` | 86 | — |
 | `core.notification.channels.ntfy` | 87 | — |
-| `core.notification.channels.slack` | 261 | — |
+| `core.notification.channels.slack` | 263 | — |
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
-| `core.notification.interactive` | 613 | — |
-| `core.notification.notifier` | 312 | — |
-| `core.notification.reply_routing` | 535 | — |
+| `core.notification.interactive` | 630 | — |
+| `core.notification.notifier` | 318 | — |
+| `core.notification.reply_routing` | 584 | — |
 | `core.notification.slack_names` | 67 | — |
 
 ## `core.notification.channels`
@@ -949,32 +951,32 @@ Anima 메인의 런타임 컴포넌트, 프로세스 간 통신, 작업 실행.
 
 ## `core.tasks`
 
-작업 등록, 상태 관리, 실행 제어.
+작업의 등록, 상태 관리, 실행 제어.
 
 | 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
-| `core.tasks` | 1 | 작업 큐, TaskBoard, delegated/background 작업 실행 및 외부 작업 소스. |
+| `core.tasks` | 1 | Task queue, task board, delegated/background task execution and external task sources. |
 | `core.tasks.autonomy_report` | 475 | — |
 | `core.tasks.background` | 521 | — |
 | `core.tasks.board.board_actions` | 260 | — |
 | `core.tasks.board.housekeeping` | 188 | — |
-| `core.tasks.board.models` | 39 | 단일 TaskBoard 뷰를 위한 Pydantic 모델(TaskStore에서 바로 읽음). |
+| `core.tasks.board.models` | 39 | Pydantic models for the single TaskBoard view (read straight from TaskStore). |
 | `core.tasks.board.notices` | 120 | — |
-| `core.tasks.board.readiness` | 31 | 레거시 작업 파일과 정식 실행 사이의 읽기 전용 경계. |
-| `core.tasks.board.tasks` | 1619 | 영구 실행 레코드. TaskBoard의 단일 진실 공급원. |
-| `core.tasks.board.view` | 119 | 정식 TaskStore에서 직접 구성한 단일 TaskBoard 뷰. |
+| `core.tasks.board.readiness` | 31 | Read-only boundary between legacy task files and canonical execution. |
+| `core.tasks.board.tasks` | 1619 | Durable execution records; the single source of truth for the TaskBoard. |
+| `core.tasks.board.view` | 119 | Single TaskBoard view built directly from the canonical TaskStore. |
 | `core.tasks.dispatch` | 521 | — |
-| `core.tasks.external.collector` | 211 | 소스별 장애 격리가 적용된 다중 소스 외부 작업 수집기. |
-| `core.tasks.external.models` | 47 | 외부 작업 스냅샷 저장소용 데이터 모델. |
-| `core.tasks.external.sources.chatwork` | 228 | Chatwork 외부 작업 수집기(열린 내 작업 + 미답변 To). |
-| `core.tasks.external.sources.github` | 182 | ``gh`` CLI를 통한 GitHub 외부 작업 수집기. |
-| `core.tasks.external.sources.gmail` | 124 | Gmail 외부 작업 수집기(읽지 않은 받은편지함, 최근 7일). |
-| `core.tasks.external.sources.slack` | 184 | Slack 외부 작업 수집기(메시지 캐시를 통한 미답변 멘션). |
-| `core.tasks.external.store` | 51 | 외부 작업을 위한 원자적 JSON 스냅샷 저장소. |
-| `core.tasks.pending_executor` | 1708 | 할당된 TaskStore 작업을 백그라운드 레인에서 실행. |
+| `core.tasks.external.collector` | 211 | Multi-source external tasks collector with per-source fault isolation. |
+| `core.tasks.external.models` | 47 | Data models for the external tasks snapshot store. |
+| `core.tasks.external.sources.chatwork` | 228 | Chatwork external tasks collector (open my-tasks + unreplied To). |
+| `core.tasks.external.sources.github` | 182 | GitHub external tasks collector via ``gh`` CLI. |
+| `core.tasks.external.sources.gmail` | 124 | Gmail external tasks collector (unread inbox, last 7 days). |
+| `core.tasks.external.sources.slack` | 184 | Slack external tasks collector (unreplied mentions via message cache). |
+| `core.tasks.external.store` | 51 | Atomic JSON snapshot store for external tasks. |
+| `core.tasks.pending_executor` | 1719 | Execute claimed TaskStore work in background lanes. |
 | `core.tasks.queue` | 516 | — |
 | `core.tasks.waiting` | 81 | — |
-| `core.tasks.wake` | 70 | PendingTaskExecutor를 위한 프로세스 간 깨우기 신호 팬아웃. |
+| `core.tasks.wake` | 70 | Cross-process wake fan-out for the PendingTaskExecutor. |
 
 ## `core.tasks.board`
 
@@ -1141,18 +1143,18 @@ LLM 사용량 및 비용 기록·집계.
 |---|---:|---|
 | `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
 | `server.gateways.discord_channel_sync` | 278 | — |
-| `server.gateways.discord_gateway` | 738 | — |
+| `server.gateways.discord_gateway` | 753 | — |
 | `server.gateways.github_gateway` | 534 | — |
 | `server.gateways.slack_channel_sync` | 515 | — |
 | `server.gateways.slack_interactive` | 239 | — |
-| `server.gateways.slack_socket` | 1183 | — |
+| `server.gateways.slack_socket` | 1243 | — |
 | `server.gateways.zoom_gateway` | 700 | — |
 
 ## `server.routes`
 
 —
 
-| 모듈 | 줄 수 | docstring 첫 줄 |
+| 모듈 | 행 수 | docstring 첫 줄 |
 |---|---:|---|
 | `server.routes` | 67 | — |
 | `server.routes.animas` | 1299 | — |
@@ -1160,37 +1162,37 @@ LLM 사용량 및 비용 기록·집계.
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 914 | — |
-| `server.routes.chat` | 459 | — |
+| `server.routes.channels` | 937 | — |
+| `server.routes.chat` | 496 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |
 | `server.routes.chat_files` | 99 | — |
 | `server.routes.chat_images` | 80 | — |
 | `server.routes.chat_models` | 60 | — |
-| `server.routes.chat_producer` | 346 | — |
+| `server.routes.chat_producer` | 364 | — |
 | `server.routes.chat_resume` | 114 | — |
 | `server.routes.chat_ui_state` | 101 | — |
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
 | `server.routes.hub` | 99 | — |
-| `server.routes.internal` | 1604 | — |
+| `server.routes.internal` | 1606 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
-| `server.routes.sessions` | 949 | — |
+| `server.routes.sessions` | 951 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1217 | — |
 | `server.routes.taskboard` | 237 | — |
-| `server.routes.timeline` | 241 | — |
+| `server.routes.timeline` | 249 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
 | `server.routes.vault_routes` | 536 | — |
-| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용. |
-| `server.routes.webhooks` | 503 | — |
+| `server.routes.voice` | 227 | 음성 채팅 WebSocket 엔드포인트; Anima별 status.json 설정은 공유 헬퍼를 사용한다. |
+| `server.routes.webhooks` | 518 | — |
 | `server.routes.websocket_route` | 50 | — |
 
 ## `server.services`
