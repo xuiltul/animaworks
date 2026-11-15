@@ -139,6 +139,7 @@ def test_setup_prompt_url_override(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     text = build_setup_prompt(shared, "muse", url="https://custom.example.com/hub/mcp")
 
     assert "https://custom.example.com/hub/mcp" in text
+    assert "https://custom.example.com/hub/avatar" in text
 
 
 def test_setup_prompt_requires_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

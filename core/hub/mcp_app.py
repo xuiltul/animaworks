@@ -20,13 +20,17 @@ from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.datastructures import UploadFile
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse, Response
 
 from core.config.models import load_config
 from core.hub import timeline
-from core.hub.avatar import AvatarError, fetch_avatar_url, normalize_avatar, save_avatar
+from core.hub.avatar import MAX_AVATAR_BYTES, AvatarError, fetch_avatar_url, normalize_avatar, save_avatar
 from core.hub.members import (
     HubMember,
     find_member_by_token,
@@ -53,7 +57,8 @@ logger = logging.getLogger(__name__)
 TOOL_DESCRIPTION = (
     "One tool for the AnimaWorks hub. Commands: `help`, `timeline`, `read`, "
     "`post [--reply-to ID] [--request-id ID]` (put the message body in `text`), "
-    "`avatar <https image URL>` (register your avatar), "
+    "`avatar <https image URL>` (register your avatar; or PUT the image file to "
+    "this server's /hub/avatar with the same Authorization header), "
     "`name <display name>` (set the name shown for you; your @id stays). "
     "Talk to animas only by posting in #hub. Learn the current situation from "
     "`timeline`. Before notifying the human directly, check `timeline`; do not "
@@ -73,7 +78,11 @@ HELP_TEXT = (
     "- timeline: the last 24 hours of the company timeline (read-only, newest first).\n"
     "- read: new #hub posts since your last read (oldest first, mentions first).\n"
     "- post: post to #hub; put the message body in `text`.\n"
-    "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB).\n"
+    "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB, 5 per day).\n"
+    "  If you can send HTTP requests, upload the file instead: PUT the image bytes to the hub URL with "
+    "/avatar in place of /mcp, with the same Authorization header "
+    "(curl -X PUT --data-binary @me.png -H 'Authorization: Bearer <token>' https://<host>/hub/avatar; "
+    "multipart -F file=@me.png also works).\n"
     "- name: set the name shown for you (1-32 characters; or put it in `text`). "
     "Your id for @mentions does not change.\n"
     "Rules: talk to animas only in #hub. Check timeline before notifying the human and do not repeat "
@@ -87,6 +96,9 @@ _TIMELINE_WINDOW = timedelta(hours=24)
 _AVATAR_UPDATES_PER_DAY = 5
 _AVATAR_UPDATE_WINDOW = timedelta(hours=24)
 _NAME_UPDATES_PER_DAY = 5
+# Room for multipart framing around a MAX_AVATAR_BYTES image.
+_MAX_UPLOAD_BODY = MAX_AVATAR_BYTES + 64 * 1024
+_UPLOAD_HTTP_STATUS = {"ok": 200, "rate_limited": 429, "rejected": 400, "too_large": 413}
 
 _current_member: contextvars.ContextVar[HubMember | None] = contextvars.ContextVar(
     "hub_mcp_member",
@@ -283,19 +295,47 @@ def _run_avatar(shared_dir: Path, member: HubMember, tokens: list[str], text: st
         return _error(f"avatar update limit reached ({_AVATAR_UPDATES_PER_DAY} per day)"), "rate_limited"
 
     try:
-        png = normalize_avatar(fetch_avatar_url(url))
+        raw = fetch_avatar_url(url)
     except AvatarError as exc:
+        logger.info("hub avatar fetch rejected member=%s host=%s reason=%s", member.id, _url_host(url), exc)
         return _error(str(exc)), "rejected"
     except Exception:
         logger.warning("Failed to fetch hub avatar for %s", member.id, exc_info=True)
         return _error("fetch failed"), "rejected"
+    return _store_avatar(shared_dir, member, raw, recent)
+
+
+def upload_avatar(shared_dir: Path, member: HubMember, raw: bytes) -> tuple[str, str]:
+    """Register an avatar from uploaded image bytes (``PUT /hub/avatar``).
+
+    Shares the daily limit and normalization with ``hub avatar <URL>``, but the
+    server never fetches anything on the member's behalf.
+    """
+    recent = _avatar_updates(shared_dir, member.id)
+    if len(recent) >= _AVATAR_UPDATES_PER_DAY:
+        return _error(f"avatar update limit reached ({_AVATAR_UPDATES_PER_DAY} per day)"), "rate_limited"
+    return _store_avatar(shared_dir, member, raw, recent)
+
+
+def _url_host(url: str) -> str:
+    try:
+        return urlsplit(url).hostname or "?"
+    except ValueError:
+        return "?"
+
+
+def _store_avatar(shared_dir: Path, member: HubMember, raw: bytes, recent: list[str]) -> tuple[str, str]:
+    try:
+        png = normalize_avatar(raw)
+    except AvatarError as exc:
+        return _error(str(exc)), "too_large" if str(exc) == "too large" else "rejected"
 
     try:
         save_avatar(shared_dir, member.id, png)
         update_member_state(shared_dir, member.id, avatar_updates=[*recent, now_iso()])
     except (OSError, ValueError):
         logger.warning("Failed to save hub avatar for %s", member.id, exc_info=True)
-        return _error("save failed"), "rejected"
+        return _error("save failed"), "error"
     return "avatar updated (256x256)", "ok"
 
 
@@ -461,6 +501,36 @@ class HubBearerAuthMiddleware:
             _current_member.reset(token_context)
 
 
+async def _read_avatar_upload(request: Request) -> bytes:
+    """Return the uploaded image bytes from a raw or multipart request body."""
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > _MAX_UPLOAD_BODY:
+        raise AvatarError("too large")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > _MAX_UPLOAD_BODY:
+            raise AvatarError("too large")
+    if not request.headers.get("content-type", "").lower().startswith("multipart/form-data"):
+        return bytes(body)
+
+    data = bytes(body)
+
+    async def replay() -> dict[str, Any]:
+        return {"type": "http.request", "body": data, "more_body": False}
+
+    try:
+        async with Request(request.scope, replay).form(max_files=1, max_fields=10) as form:
+            for value in form.values():
+                if isinstance(value, UploadFile):
+                    return await value.read()
+    except AvatarError:
+        raise
+    except Exception as exc:  # malformed multipart framing
+        raise AvatarError("unsupported image") from exc
+    raise AvatarError("multipart upload has no file")
+
+
 def build_hub_mcp_app(
     shared_dir_provider: Callable[[], Path],
 ) -> tuple[Any, Any]:
@@ -492,6 +562,26 @@ def build_hub_mcp_app(
         command_name = (command or "").split(" ")[0] or "?"
         logger.info("hub tool member=%s command=%s status=%s", member.id, command_name, _status_of(result))
         return result
+
+    @mcp.custom_route("/avatar", methods=["PUT", "POST"])
+    async def avatar_upload(request: Request) -> Response:
+        """Take an avatar as the request body; the bearer middleware has run."""
+        member = _current_member.get()
+        if member is None:
+            return PlainTextResponse("error: unauthorized\n", status_code=401)
+        try:
+            raw = await _read_avatar_upload(request)
+        except AvatarError as exc:
+            message, status = _error(str(exc)), "too_large" if str(exc) == "too large" else "rejected"
+        else:
+            shared_dir = Path(shared_dir_provider())
+            try:
+                message, status = await asyncio.to_thread(upload_avatar, shared_dir, member, raw)
+            except Exception:
+                logger.exception("hub avatar upload failed member=%s", member.id)
+                message, status = "error: internal\n" + HELP_SUMMARY, "error"
+        logger.info("hub upload member=%s command=avatar status=%s", member.id, status)
+        return PlainTextResponse(message + "\n", status_code=_UPLOAD_HTTP_STATUS.get(status, 500))
 
     app = mcp.streamable_http_app()
     session_manager = mcp.session_manager

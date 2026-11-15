@@ -292,20 +292,20 @@
         "1088999c6055705461da9518bd888799a0b63518c30fadadedbc6d18ef71cf53",
         "a59976722af7dfadaa760fc02ba3f0e59f629203dbe9828aac8b95df1418d071",
         "880747bb00bbb3e37ef086cc13566d43d00ef4f32be4dff1dfd0b5fed8549a86",
-        "dd2fec32161e6d8ed5906f6edf2e860fb42d2872e821c289f8acfcb9cff66f72",
+        "72387cc92d33dedbfb10016c349f3949885541726dbdd9c70e0ef949986899a5",
         "9b8d3c54b2138dadb8162d6f2941c604556970ac565aa069e3af441e00aebbee",
         "50952c1444e8f43a72e5f1762cb7a6f7104b05efc317155d5d09406221f81e17",
         "07f96eade159d39fcbcd0408d54d55a7494b70a3181da28079487fe562844106",
         "c93dcb1c88090959f48d30a08a7e582698f0f1f3b7f5eb73968808abda1cdcad",
-        "65b28b7d3d13194b9ecc56cdacd71ddda2fb2275ffaf98a9138e7fc7024fb21a",
+        "32f088b31fecd95b9d9a11c9af7847aa3f81e10acdd82c132407c488af2649c6",
         "bc19fc586531b31bd569b6f01b11710bfb8392f55936fb3ed2489d2872002518",
         "36e04214149dd84de47fbc00c7f89fb7d6b71bc83989eedb36fda8b3c34f2e91",
         "a204f0a5641ee2f803dd83362eacbaff95899acbb68567c26cf5b3af94de6356",
         "5aaec52d69461830dea25835abd59902a24767d2ebe0f2296b25569de1e8c2ab",
-        "6bc98d5d367d2f2aee15d16cf22250702907a5785989fdef427f050df0598e77"
+        "b715a8781299418644f66a37d544283cd39579ab2997f24c100a491d53f82e4b"
       ],
       "source": "docs/ja/integrations/hub.md",
-      "source_sha256": "d21807380fbdd0d54696e5dc07f98e2510d8478140623ede4200c957d08b5de6",
+      "source_sha256": "56b71fa0c0f60eaa309acb899bcad33e6fb2aad94291b3c64293066e6cbcdaa6",
       "statuses": [
         "translated",
         "translated",
@@ -694,13 +694,13 @@
     },
     "docs/en/reference/README.md": {
       "engine": "local",
-      "generated": "2026-11-14",
-      "model": "deepseek-v4.1-flash-1017",
+      "generated": "2026-11-15",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "937cc51717a5531e70cfee15c12cdb60ab9fb69109bf5f223f4a8576c8d1dad3",
+      "source_sha256": "60c5096e14ed32d06f0682160ac7e478d24e0466ef1da96534590ecfb8521199",
       "statuses": [
         "translated"
       ],
@@ -1202,7 +1202,7 @@
     },
     "docs/en/reference/modules.md": {
       "engine": "local",
-      "generated": "2026-11-14",
+      "generated": "2026-11-15",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
@@ -1230,7 +1230,7 @@
         "447c4826f680c855349edbb477d3302db7bc114fc4d66d889b963ff31dce2098",
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
-        "7c4b0865bfa3c79b71042c35d304a95666c7176b27bee1c67a0fdb280f27ef71",
+        "35492ffd2117c81d1b59ec98f7275f52c7b1472c4042ac1c4dcd6dadf5998703",
         "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
@@ -1278,7 +1278,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "6dff1740fb65de0dd2567baad3ffd75d60f0e684c12d5405fbf2dd4bc30d949b",
+      "source_sha256": "3ce9acfe92e6a2c402c4cd78f416ce6c04e594b771b8d431994bab180b727dd4",
       "statuses": [
         "translated",
         "translated",
@@ -1758,20 +1758,20 @@
         "1088999c6055705461da9518bd888799a0b63518c30fadadedbc6d18ef71cf53",
         "a59976722af7dfadaa760fc02ba3f0e59f629203dbe9828aac8b95df1418d071",
         "880747bb00bbb3e37ef086cc13566d43d00ef4f32be4dff1dfd0b5fed8549a86",
-        "dd2fec32161e6d8ed5906f6edf2e860fb42d2872e821c289f8acfcb9cff66f72",
+        "72387cc92d33dedbfb10016c349f3949885541726dbdd9c70e0ef949986899a5",
         "9b8d3c54b2138dadb8162d6f2941c604556970ac565aa069e3af441e00aebbee",
         "50952c1444e8f43a72e5f1762cb7a6f7104b05efc317155d5d09406221f81e17",
         "07f96eade159d39fcbcd0408d54d55a7494b70a3181da28079487fe562844106",
         "c93dcb1c88090959f48d30a08a7e582698f0f1f3b7f5eb73968808abda1cdcad",
-        "65b28b7d3d13194b9ecc56cdacd71ddda2fb2275ffaf98a9138e7fc7024fb21a",
+        "32f088b31fecd95b9d9a11c9af7847aa3f81e10acdd82c132407c488af2649c6",
         "bc19fc586531b31bd569b6f01b11710bfb8392f55936fb3ed2489d2872002518",
         "36e04214149dd84de47fbc00c7f89fb7d6b71bc83989eedb36fda8b3c34f2e91",
         "a204f0a5641ee2f803dd83362eacbaff95899acbb68567c26cf5b3af94de6356",
         "5aaec52d69461830dea25835abd59902a24767d2ebe0f2296b25569de1e8c2ab",
-        "6bc98d5d367d2f2aee15d16cf22250702907a5785989fdef427f050df0598e77"
+        "b715a8781299418644f66a37d544283cd39579ab2997f24c100a491d53f82e4b"
       ],
       "source": "docs/ja/integrations/hub.md",
-      "source_sha256": "d21807380fbdd0d54696e5dc07f98e2510d8478140623ede4200c957d08b5de6",
+      "source_sha256": "56b71fa0c0f60eaa309acb899bcad33e6fb2aad94291b3c64293066e6cbcdaa6",
       "statuses": [
         "translated",
         "translated",
@@ -2160,13 +2160,13 @@
     },
     "docs/ko/reference/README.md": {
       "engine": "local",
-      "generated": "2026-11-14",
-      "model": "deepseek-v4.1-flash-1017",
+      "generated": "2026-11-15",
+      "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "937cc51717a5531e70cfee15c12cdb60ab9fb69109bf5f223f4a8576c8d1dad3",
+      "source_sha256": "60c5096e14ed32d06f0682160ac7e478d24e0466ef1da96534590ecfb8521199",
       "statuses": [
         "translated"
       ],
@@ -2668,7 +2668,7 @@
     },
     "docs/ko/reference/modules.md": {
       "engine": "local",
-      "generated": "2026-11-14",
+      "generated": "2026-11-15",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "634f8af831c4c84dc0818d00f302b452444ae5feac0e7795950d99440e29cc3a",
@@ -2696,7 +2696,7 @@
         "447c4826f680c855349edbb477d3302db7bc114fc4d66d889b963ff31dce2098",
         "7f5392aea8c93316e5d5e9f75dd512f6ee2c137ba860e644c3f7fab9ec81bfdd",
         "4500ef4e6b6cab710de7f8f0c488851a96aa90081638c8839819cba895d144a1",
-        "7c4b0865bfa3c79b71042c35d304a95666c7176b27bee1c67a0fdb280f27ef71",
+        "35492ffd2117c81d1b59ec98f7275f52c7b1472c4042ac1c4dcd6dadf5998703",
         "5ec8328146602b735d1d26c9ed8eac179818ad79800902fb120a9b2166f8fde2",
         "3e886f5dad4fd80355dc9f01c039dde83c0f8b99a90b88e6009ab31f3d00ac5c",
         "6ded38aaf4970350426e5888240d6fe04aa0142ddb2e1225bde9212f8eb72871",
@@ -2744,7 +2744,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "6dff1740fb65de0dd2567baad3ffd75d60f0e684c12d5405fbf2dd4bc30d949b",
+      "source_sha256": "3ce9acfe92e6a2c402c4cd78f416ce6c04e594b771b8d431994bab180b727dd4",
       "statuses": [
         "translated",
         "translated",
@@ -3827,11 +3827,11 @@
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
         "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
-        "7b1f2ef6c2b098f41284499539c21091ee8e82b1d20452c0de3e78f0cdabe224",
+        "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "6c037970c52a585c1687393fbfd4976fba4c7b958b3fef92d4f309e43e51cb13",
+      "source_sha256": "37e8a301a78a6578130c30f828c3d0d441e98a76d5e96e3a6289646aaf57ac1e",
       "statuses": [
         "translated",
         "translated",
@@ -5926,13 +5926,13 @@
     },
     "templates/en/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-14",
+      "generated": "2026-11-15",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
+        "ab0b250a143151ddac4ef6242df0297de44686f8e679dea2a140373b1427a30b"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
+      "source_sha256": "bf5d86dafcc85e1becf9e92cf7a28d1d5ec179dbc8fdccd92b7ceabed9f72e02",
       "statuses": [
         "translated"
       ],
@@ -9755,11 +9755,11 @@
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
         "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
-        "7b1f2ef6c2b098f41284499539c21091ee8e82b1d20452c0de3e78f0cdabe224",
+        "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "6c037970c52a585c1687393fbfd4976fba4c7b958b3fef92d4f309e43e51cb13",
+      "source_sha256": "37e8a301a78a6578130c30f828c3d0d441e98a76d5e96e3a6289646aaf57ac1e",
       "statuses": [
         "translated",
         "translated",
@@ -11854,13 +11854,13 @@
     },
     "templates/ko/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-14",
+      "generated": "2026-11-15",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
+        "ab0b250a143151ddac4ef6242df0297de44686f8e679dea2a140373b1427a30b"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
+      "source_sha256": "bf5d86dafcc85e1becf9e92cf7a28d1d5ec179dbc8fdccd92b7ceabed9f72e02",
       "statuses": [
         "translated"
       ],
@@ -15683,11 +15683,11 @@
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
         "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
-        "7b1f2ef6c2b098f41284499539c21091ee8e82b1d20452c0de3e78f0cdabe224",
+        "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "6c037970c52a585c1687393fbfd4976fba4c7b958b3fef92d4f309e43e51cb13",
+      "source_sha256": "37e8a301a78a6578130c30f828c3d0d441e98a76d5e96e3a6289646aaf57ac1e",
       "statuses": [
         "translated",
         "translated",
@@ -17782,13 +17782,13 @@
     },
     "templates/zh/prompts/hub/setup_avatar.md": {
       "engine": "local",
-      "generated": "2026-11-14",
+      "generated": "2026-11-15",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "6fb7e6f0af5376c2167c5ce153697d09bfc3746847f9789ef98c21b601ffcb33"
+        "ab0b250a143151ddac4ef6242df0297de44686f8e679dea2a140373b1427a30b"
       ],
       "source": "templates/ja/prompts/hub/setup_avatar.md",
-      "source_sha256": "eabf33b39093cc3be79d0f5ad0f0b3b2f966bf8727540849f9137664af9b8208",
+      "source_sha256": "bf5d86dafcc85e1becf9e92cf7a28d1d5ec179dbc8fdccd92b7ceabed9f72e02",
       "statuses": [
         "translated"
       ],
