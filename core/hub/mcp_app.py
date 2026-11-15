@@ -328,14 +328,14 @@ def _store_avatar(shared_dir: Path, member: HubMember, raw: bytes, recent: list[
     try:
         png = normalize_avatar(raw)
     except AvatarError as exc:
-        return _error(str(exc)), "rejected"
+        return _error(str(exc)), "too_large" if str(exc) == "too large" else "rejected"
 
     try:
         save_avatar(shared_dir, member.id, png)
         update_member_state(shared_dir, member.id, avatar_updates=[*recent, now_iso()])
     except (OSError, ValueError):
         logger.warning("Failed to save hub avatar for %s", member.id, exc_info=True)
-        return _error("save failed"), "rejected"
+        return _error("save failed"), "error"
     return "avatar updated (256x256)", "ok"
 
 
