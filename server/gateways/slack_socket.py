@@ -325,6 +325,36 @@ async def _record_inbound_slack_mirror(
     )
 
 
+def _record_human_slack_delivery(
+    message: Any,
+    *,
+    anima_name: str,
+    text: str,
+    slack_user_id: str,
+) -> None:
+    """Record a delivered Slack message from a configured human alias."""
+    if message is None:
+        return
+    try:
+        from core.hub.timeline_human import record_human, resolve_person
+
+        person = resolve_person(
+            via="slack",
+            external_user_id=slack_user_id,
+            actor=get_cached_user_name(slack_user_id) or slack_user_id,
+        )
+        if person:
+            record_human(
+                person=person,
+                anima=anima_name,
+                text=text,
+                via="slack",
+                ref=str(getattr(message, "id", "") or "") or None,
+            )
+    except Exception:
+        logger.warning("Failed to record Slack human message on the timeline", exc_info=True)
+
+
 _THREAD_CTX_SUMMARY_LIMIT = 150
 
 
@@ -811,7 +841,7 @@ class SlackSocketModeManager:
 
                 shared_dir = get_data_dir() / "shared"
                 messenger = Messenger(shared_dir, anima_name)
-                await asyncio.to_thread(
+                message = await asyncio.to_thread(
                     messenger.receive_external,
                     content=annotated,
                     source="slack",
@@ -820,6 +850,12 @@ class SlackSocketModeManager:
                     external_channel_id=channel_id,
                     external_thread_ts=thread_ts,
                     intent=intent,
+                )
+                _record_human_slack_delivery(
+                    message,
+                    anima_name=anima_name,
+                    text=raw_text,
+                    slack_user_id=sender,
                 )
                 await _record_inbound_slack_mirror(
                     anima_name,
@@ -874,7 +910,7 @@ class SlackSocketModeManager:
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
-            await asyncio.to_thread(
+            message = await asyncio.to_thread(
                 messenger.receive_external,
                 content=text,
                 source="slack",
@@ -883,6 +919,12 @@ class SlackSocketModeManager:
                 external_channel_id=channel_id,
                 external_thread_ts=thread_ts,
                 intent="question",
+            )
+            _record_human_slack_delivery(
+                message,
+                anima_name=anima_name,
+                text=event.get("text", ""),
+                slack_user_id=sender,
             )
             await _record_inbound_slack_mirror(
                 anima_name,
@@ -1010,7 +1052,7 @@ class SlackSocketModeManager:
                 annotation = _build_slack_annotation(channel_id, True, channel_name=ch_name)
                 annotated = annotation + text
                 for target in plain_targets:
-                    await asyncio.to_thread(
+                    message = await asyncio.to_thread(
                         Messenger(shared_dir, target).receive_external,
                         content=annotated,
                         source="slack",
@@ -1022,6 +1064,12 @@ class SlackSocketModeManager:
                         external_channel_id=channel_id,
                         external_thread_ts=thread_ts or ts,
                         intent="question",
+                    )
+                    _record_human_slack_delivery(
+                        message,
+                        anima_name=target,
+                        text=raw_text,
+                        slack_user_id=sender,
                     )
                     await _record_inbound_slack_mirror(
                         target,
@@ -1049,7 +1097,7 @@ class SlackSocketModeManager:
             intent = mention_intent or _detect_slack_intent(annotated, channel_id, bot_user_id) or "observe"
 
             messenger = Messenger(shared_dir, anima_name)
-            await asyncio.to_thread(
+            message = await asyncio.to_thread(
                 messenger.receive_external,
                 content=annotated,
                 source="slack",
@@ -1058,6 +1106,12 @@ class SlackSocketModeManager:
                 external_channel_id=channel_id,
                 external_thread_ts=thread_ts,
                 intent=intent,
+            )
+            _record_human_slack_delivery(
+                message,
+                anima_name=anima_name,
+                text=raw_text,
+                slack_user_id=sender,
             )
             await _record_inbound_slack_mirror(
                 anima_name,
@@ -1110,7 +1164,7 @@ class SlackSocketModeManager:
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name_resolved)
-            await asyncio.to_thread(
+            message = await asyncio.to_thread(
                 messenger.receive_external,
                 content=text,
                 source="slack",
@@ -1119,6 +1173,12 @@ class SlackSocketModeManager:
                 external_channel_id=channel_id,
                 external_thread_ts=thread_ts,
                 intent="question",
+            )
+            _record_human_slack_delivery(
+                message,
+                anima_name=anima_name_resolved,
+                text=event.get("text", ""),
+                slack_user_id=event.get("user", ""),
             )
             await _record_inbound_slack_mirror(
                 anima_name_resolved,

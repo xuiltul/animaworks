@@ -55,6 +55,7 @@ def save_notification_mapping(
     *,
     notification_text: str = "",
     callback_id: str = "",
+    notification_key: str = "",
 ) -> bool:
     """Persist a Slack message ts → Anima mapping for reply routing.
 
@@ -65,6 +66,8 @@ def save_notification_mapping(
         notification_text: Original notification content (subject + body)
             so that thread replies can include context about what was notified.
         callback_id: When set, thread replies with a number resolve interactive approval.
+        notification_key: Fingerprint of the original notification, used to
+            link the reply to its ``notified`` timeline item.
 
     Returns:
         True when the mapping was written, False when the write failed
@@ -88,6 +91,8 @@ def save_notification_mapping(
                 entry["notification_text"] = notification_text[:2000]
             if callback_id:
                 entry["callback_id"] = callback_id
+            if notification_key:
+                entry["notification_key"] = notification_key
             data[ts] = entry
             _prune_old_entries_inplace(data)
 
@@ -108,6 +113,7 @@ def post_notification_mapping_via_api(
     *,
     notification_text: str = "",
     callback_id: str = "",
+    notification_key: str = "",
     timeout: float = 10.0,
 ) -> bool:
     """Save a notification mapping through the server's internal API.
@@ -127,6 +133,7 @@ def post_notification_mapping_via_api(
                 "anima_name": anima_name,
                 "notification_text": notification_text[:2000],
                 "callback_id": callback_id,
+                "notification_key": notification_key,
             },
             timeout=timeout,
         )
@@ -144,6 +151,7 @@ def save_notification_mapping_resilient(
     *,
     notification_text: str = "",
     callback_id: str = "",
+    notification_key: str = "",
 ) -> bool:
     """Save a mapping directly, falling back to the server internal API.
 
@@ -158,6 +166,7 @@ def save_notification_mapping_resilient(
         anima_name,
         notification_text=notification_text,
         callback_id=callback_id,
+        notification_key=notification_key,
     ):
         return True
     return post_notification_mapping_via_api(
@@ -166,14 +175,16 @@ def save_notification_mapping_resilient(
         anima_name,
         notification_text=notification_text,
         callback_id=callback_id,
+        notification_key=notification_key,
     )
 
 
 def lookup_notification_mapping(thread_ts: str) -> dict[str, str] | None:
     """Look up which Anima sent the notification with the given ts.
 
-    Returns ``{"anima": "...", "channel": "...", "notification_text": "...", "callback_id": "..."}``
-    or ``None``.  ``notification_text`` and ``callback_id`` may be empty for older mappings.
+    Returns ``{"anima": "...", "channel": "...", "notification_text": "...",
+    "callback_id": "...", "notification_key": "..."}`` or ``None``.
+    The latter fields may be empty for older mappings.
     """
     path = _map_path()
     if not path.exists():
@@ -191,6 +202,7 @@ def lookup_notification_mapping(thread_ts: str) -> dict[str, str] | None:
         "channel": entry["channel"],
         "notification_text": entry.get("notification_text", ""),
         "callback_id": entry.get("callback_id", ""),
+        "notification_key": entry.get("notification_key", ""),
     }
 
 
@@ -326,6 +338,7 @@ async def deliver_notification_reply(
     thread_context: str = "",
     notification_id: str = "",
     callback_id: str = "",
+    notification_key: str = "",
 ) -> bool:
     """Send a notification reply to the Anima and record it for chat history."""
     reply = (text or "").strip()[:_MAX_REPLY_LENGTH]
@@ -333,7 +346,7 @@ async def deliver_notification_reply(
         return False
     from core.messaging.messenger import Messenger
 
-    Messenger(shared_dir, target).receive_external(
+    message = Messenger(shared_dir, target).receive_external(
         content=(thread_context or "") + reply,
         source=source,
         source_message_id=source_message_id,
@@ -342,6 +355,40 @@ async def deliver_notification_reply(
         external_thread_ts=external_thread_ts or notification_id,
         intent="question",
     )
+
+    if message is not None:
+        try:
+            from core.hub.timeline_human import find_notified, record_human, resolve_person
+
+            if source == "slack":
+                person = resolve_person(
+                    via="slack",
+                    external_user_id=external_user_id,
+                    actor=actor,
+                )
+                human_via = "slack_thread"
+            elif source == "discord":
+                person = resolve_person(
+                    via="discord",
+                    external_user_id=external_user_id,
+                    actor=actor,
+                )
+                human_via = "notification_reply"
+            else:
+                person = resolve_person(via="notification_reply", actor=actor, anima=target)
+                human_via = "notification_reply"
+
+            if person:
+                record_human(
+                    person=person,
+                    anima=target,
+                    text=reply,
+                    via=human_via,
+                    about=find_notified(key=notification_key or None, callback_id=callback_id or None),
+                    ref=str(getattr(message, "id", "") or "") or None,
+                )
+        except Exception:
+            logger.warning("Failed to record notification reply on the timeline", exc_info=True)
 
     try:
         from core.activity.logger import ActivityLogger
@@ -404,6 +451,7 @@ async def route_thread_reply(
         return False
 
     callback_id = (mapping.get("callback_id") or "").strip()
+    notification_key = (mapping.get("notification_key") or "").strip()
     raw_reply = (event.get("text") or "").strip()
     user_id = str(event.get("user") or "")
     actor = user_id
@@ -450,6 +498,7 @@ async def route_thread_reply(
         external_thread_ts=thread_ts,
         thread_context=thread_ctx,
         callback_id=callback_id,
+        notification_key=notification_key,
     )
 
     logger.info(

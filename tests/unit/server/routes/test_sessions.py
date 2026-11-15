@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from httpx import ASGITransport, AsyncClient
 
@@ -635,3 +635,38 @@ class TestGetTranscript:
         assert data["anima"] == "alice"
         assert data["date"] == "2026-01-01"
         assert len(data["turns"]) == 1
+
+
+class TestNotificationReplyTimeline:
+    async def test_reply_passes_notification_key_to_delivery(self, tmp_path, monkeypatch):
+        from core.activity.logger import ActivityLogger
+
+        anima_dir = tmp_path / "alice"
+        activity = ActivityLogger(anima_dir)
+        notify = activity.log(
+            "human_notify",
+            content="Deploy?",
+            meta={"subject": "Deployment", "notification_key": "key-1"},
+            ctx="chat",
+        )
+        monkeypatch.setattr("core.paths.get_shared_dir", lambda: tmp_path / "shared")
+        monkeypatch.setattr("core.paths.get_animas_dir", lambda: tmp_path)
+
+        with (
+            patch("core.notification.reply_routing._resolve_callback_text_reply", return_value=False),
+            patch(
+                "core.notification.reply_routing.deliver_notification_reply",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as deliver,
+        ):
+            app = _make_test_app(animas_dir=tmp_path)
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/api/animas/alice/notifications/reply",
+                    json={"notification_id": notify.ts, "text": "Yes"},
+                )
+
+        assert response.status_code == 200
+        assert deliver.await_args.kwargs["notification_key"] == "key-1"

@@ -114,3 +114,50 @@ class TestDiscordGatewayManagerRouting:
         discord_cfg = _mock_config.external_messaging.discord
         result = manager._detect_target_anima("Sakuraに聞いて", "ch1", discord_cfg)
         assert result == "sakura"
+
+
+class TestDiscordHumanTimeline:
+    @pytest.mark.asyncio
+    async def test_discord_message_records_human(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        from server.gateways.discord_gateway import DiscordGatewayManager
+
+        discord_cfg = MagicMock(channel_members={"dm-sakura": ["sakura"]}, board_mapping={}, default_anima="sakura")
+        cfg = MagicMock()
+        cfg.external_messaging.discord = discord_cfg
+        monkeypatch.setattr("server.gateways.discord_gateway.load_config", lambda: cfg)
+        monkeypatch.setattr("server.gateways.discord_gateway.get_data_dir", lambda: tmp_path)
+        (tmp_path / "animas" / "sakura").mkdir(parents=True)
+
+        mgr = DiscordGatewayManager()
+        mgr._bot_user_id = "BOT"
+        mgr._known_anima_names = set()
+        mgr._anima_name_re = None
+        message = SimpleNamespace(
+            id="discord-msg-1",
+            content="hello from discord",
+            webhook_id=None,
+            guild=None,
+            mentions=[],
+            reference=None,
+            author=SimpleNamespace(id="D_ALICE", display_name="Alice", name="Alice", bot=False),
+            channel=SimpleNamespace(id="dm-sakura", name="dm-sakura"),
+        )
+
+        with (
+            patch("server.gateways.discord_gateway.Messenger") as messenger_cls,
+            patch("core.hub.timeline_human.resolve_person", return_value="alice"),
+            patch("core.hub.timeline_human.record_human") as record_human,
+        ):
+            messenger_cls.return_value.receive_external.return_value = SimpleNamespace(id="inbox-1")
+            await mgr._handle_message(message)
+
+        record_human.assert_called_once_with(
+            person="alice",
+            anima="sakura",
+            text="hello from discord",
+            via="discord",
+            ref="inbox-1",
+        )

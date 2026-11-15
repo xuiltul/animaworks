@@ -508,3 +508,30 @@ async def test_list_threads_error_raises():
     client = AnimaWorksClient("http://localhost:18500", transport=httpx.MockTransport(handler))
     with pytest.raises(AnimaWorksClientError):
         await client.list_threads("sora")
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_sends_tui_client_header():
+    captured = {}
+
+    def handler(request):
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, content=SSE_BODY.encode(), headers={"content-type": "text/event-stream"})
+
+    client = AnimaWorksClient("http://localhost:18500", timeout=None, transport=httpx.MockTransport(handler))
+    events = [ev async for ev in client.chat_stream("sora", "hi")]
+    assert events
+    assert captured["headers"]["x-animaworks-client"] == "tui"
+
+
+@pytest.mark.asyncio
+async def test_other_commands_do_not_send_tui_client_header():
+    captured = {}
+
+    def handler(request):
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, json={"messages": [], "total": 0})
+
+    client = AnimaWorksClient("http://localhost:18500", transport=httpx.MockTransport(handler))
+    await client.get_history("sora")
+    assert "x-animaworks-client" not in captured["headers"]

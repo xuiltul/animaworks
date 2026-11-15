@@ -326,7 +326,7 @@ class InteractionRouter:
         from core.messaging.messenger import Messenger
 
         messenger = Messenger(get_shared_dir(), req.anima_name)
-        await asyncio.to_thread(
+        message = await asyncio.to_thread(
             messenger.receive_external,
             content=content,
             source=source,
@@ -334,6 +334,23 @@ class InteractionRouter:
             external_user_id=actor,
             intent="question",
         )
+
+        if message is not None:
+            try:
+                from core.hub.timeline_human import find_notified, record_human, resolve_person
+
+                person = resolve_person(via="approval", actor=actor, anima=req.anima_name)
+                if person:
+                    record_human(
+                        person=person,
+                        anima=req.anima_name,
+                        text=f"{decision}: {comment}" if comment else decision,
+                        via="approval",
+                        about=find_notified(callback_id=callback_id),
+                        ref=str(getattr(message, "id", "") or "") or None,
+                    )
+            except Exception:
+                logger.warning("Failed to record interaction approval on the timeline", exc_info=True)
 
         # Main-thread conversation view: human_reply card for web/slack/text_reply.
         try:
