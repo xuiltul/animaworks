@@ -131,6 +131,123 @@ def test_timeline_marks_new_and_human_read(
     assert "human_read=yes" in third
 
 
+def test_timeline_list_truncates_text_and_includes_activity(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    long_item = timeline.append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="notified",
+        text="z" * 1000,
+        source="anima",
+    )
+    activity = timeline.append_item(
+        shared_dir,
+        from_name="bob",
+        company="a",
+        kind="activity",
+        text="heartbeat tick",
+        source="anima",
+        label="heartbeat",
+    )
+
+    output = run_hub_command(shared_dir, member, "timeline")
+
+    assert "z" * 300 in output
+    assert "z" * 301 not in output
+    assert f"hub timeline {long_item['id']}" in output
+    assert "kind=activity" in output
+    assert "label=heartbeat" in output
+    assert "heartbeat tick" in output
+    assert activity["id"] in output
+
+
+def test_timeline_list_is_capped_at_300_lines(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    for index in range(301):
+        timeline.append_item(
+            shared_dir,
+            from_name="alice",
+            company="a",
+            kind="activity",
+            text=f"tick {index}",
+            source="anima",
+        )
+
+    output = run_hub_command(shared_dir, member, "timeline")
+
+    assert len(output.splitlines()) == 300
+
+
+def test_timeline_detail_returns_full_thread_without_advancing_read(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    root = timeline.append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="notified",
+        text="root " + "R" * 500,
+        source="anima",
+    )
+    child = timeline.append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="answered",
+        text="child reply",
+        source="anima",
+        to="human",
+        about=root["id"],
+    )
+    grandchild = timeline.append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="decided",
+        text="grandchild follow-up",
+        source="anima",
+        about=child["id"],
+    )
+    unrelated = timeline.append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="done",
+        text="unrelated work",
+        source="anima",
+    )
+
+    output = run_hub_command(shared_dir, member, f"timeline {root['id']}")
+
+    assert "root " + "R" * 500 in output
+    assert "child reply" in output
+    assert "grandchild follow-up" in output
+    assert output.index(root["id"]) < output.index(child["id"]) < output.index(grandchild["id"])
+    assert unrelated["id"] not in output
+    reads = timeline.load_timeline_reads(shared_dir)
+    assert reads.get("readers", {}).get(f"hub:{member.id}") is None
+
+    listing = run_hub_command(shared_dir, member, "timeline")
+    assert "[新]" in listing and root["id"] in listing
+
+
+def test_timeline_detail_rejects_unknown_or_malformed_ids(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    missing = run_hub_command(shared_dir, member, "timeline tl_0123456789abcdef")
+    assert missing.startswith("error:")
+    assert "tl_0123456789abcdef" in missing
+    assert run_hub_command(shared_dir, member, "timeline not-an-id").startswith("error:")
+    assert run_hub_command(shared_dir, member, "timeline tl_0123456789abcdef extra").startswith("error:")
+
+
 def test_timeline_disabled_and_empty(shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch) -> None:
     _hub_config(monkeypatch, timeline_enabled=False)
     assert "無効" in run_hub_command(shared_dir, member, "timeline")

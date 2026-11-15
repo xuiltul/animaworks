@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,6 +15,9 @@ from core.config.models import (
     HumanNotificationConfig,
     NotificationChannelConfig,
 )
+from core.hub.timeline import list_items
+from core.notification import notification_key_for
+from core.notification.interactive import InteractionRequest
 from core.notification.notifier import (
     _CHANNEL_REGISTRY,
     PRIORITY_LEVELS,
@@ -127,6 +132,40 @@ class TestHumanNotifier:
         notifier = HumanNotifier([])
         results = await notifier.notify("Test", "Body")
         assert results == ["No notification channels configured"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("with_channel", [False, True])
+    async def test_notify_records_timeline_key_and_callback(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch, with_channel: bool
+    ):
+        shared = tmp_path / "shared"
+        shared.mkdir()
+        monkeypatch.setattr(
+            "core.config.models.load_config",
+            lambda: SimpleNamespace(hub=SimpleNamespace(timeline_enabled=True, company="a")),
+        )
+        monkeypatch.setattr("core.notification.notifier._shared_dir", lambda: shared)
+        interaction = InteractionRequest(
+            callback_id="cb-1",
+            anima_name="alice",
+            category="approval",
+            options=["yes", "no"],
+            created_at=datetime.now(timezone.utc),
+            approval_token="token",
+        )
+        notifier = HumanNotifier([MockChannel({})] if with_channel else [])
+
+        await notifier.notify("Subject", "Body", interaction=interaction)
+
+        items = list_items(shared, company="a")
+        assert len(items) == 1
+        item = items[0]
+        assert item["kind"] == "notified"
+        assert item["source"] == "system"
+        assert item["from"] == "system"
+        assert item["key"] == notification_key_for("Subject", "Body")
+        assert item["callback_id"] == "cb-1"
+        assert item["delivered"] is with_channel
 
     @pytest.mark.asyncio
     async def test_notify_handles_channel_failure(self):

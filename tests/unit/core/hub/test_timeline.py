@@ -14,7 +14,9 @@ from core.hub import timeline
 from core.hub.timeline import (
     advance_timeline_read,
     append_item,
+    count_unread,
     decorate_items,
+    find_latest,
     is_read_by_human,
     is_read_for_reader,
     list_items,
@@ -46,6 +48,11 @@ def test_append_item_shape_and_storage(tmp_path: Path) -> None:
     assert item["ref"] is None
     assert item["priority"] is None
     assert item["delivered"] is None
+    assert item["to"] is None
+    assert item["via"] is None
+    assert item["label"] is None
+    assert item["key"] is None
+    assert item["callback_id"] is None
     assert set(item) == {
         "id",
         "ts",
@@ -59,6 +66,11 @@ def test_append_item_shape_and_storage(tmp_path: Path) -> None:
         "source",
         "priority",
         "delivered",
+        "to",
+        "via",
+        "label",
+        "key",
+        "callback_id",
     }
 
     path = tmp_path / "timeline" / f"{item['ts'][:7]}.jsonl"
@@ -79,8 +91,31 @@ def test_append_item_validates_and_truncates(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="company"):
         _append(tmp_path, company=" ")
 
-    long_item = _append(tmp_path, text="x" * 500)
-    assert len(long_item["text"]) == 400
+    long_item = _append(tmp_path, text="x" * 5000)
+    assert len(long_item["text"]) == 4000
+
+    detailed = _append(
+        tmp_path,
+        to="bob",
+        via="web",
+        label="heartbeat",
+        key="fingerprint",
+        callback_id="cb-1",
+    )
+    assert detailed["to"] == "bob"
+    assert detailed["via"] == "web"
+    assert detailed["label"] == "heartbeat"
+    assert detailed["key"] == "fingerprint"
+    assert detailed["callback_id"] == "cb-1"
+    assert len(_append(tmp_path, label="y" * 300)["label"]) == 200
+
+    for bad_via in ("", "WEB", "with space", "x" * 33):
+        with pytest.raises(ValueError, match="via"):
+            _append(tmp_path, via=bad_via)
+    with pytest.raises(ValueError, match="human"):
+        _append(tmp_path, kind="human", source="anima")
+    with pytest.raises(ValueError, match="human"):
+        _append(tmp_path, kind="done", source="human")
 
 
 def test_append_item_about_validation(tmp_path: Path) -> None:
@@ -110,6 +145,38 @@ def test_list_items_filters_company_since_and_limit(tmp_path: Path, monkeypatch:
     since = f"{month}-06T10:30:00+09:00"
     assert [item["id"] for item in list_items(tmp_path, company="a", since=since)] == [second["id"]]
     assert [item["id"] for item in list_items(tmp_path, company="a", limit=1)] == [second["id"]]
+
+
+def test_find_latest_matches_every_condition(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    month = now_local().strftime("%Y-%m")
+    monkeypatch.setattr(timeline, "now_iso", lambda: f"{month}-06T10:00:00+09:00")
+    first = _append(tmp_path, kind="notified", key="same", ref="r", callback_id="cb-1", text="first")
+    monkeypatch.setattr(timeline, "now_iso", lambda: f"{month}-06T11:00:00+09:00")
+    second = _append(tmp_path, kind="notified", key="same", ref="r", callback_id="cb-2", text="second")
+
+    assert find_latest(tmp_path, company="a", key="same")["id"] == second["id"]
+    assert find_latest(tmp_path, company="a", key="same", callback_id="cb-1")["id"] == first["id"]
+    assert find_latest(tmp_path, company="a", ref="r", kind="notified")["id"] == second["id"]
+    assert find_latest(tmp_path, company="a", kind="activity") is None
+    assert find_latest(tmp_path, company="b", key="same") is None
+    assert find_latest(tmp_path, company="a") is None
+
+
+def test_human_items_are_read_by_their_writer(tmp_path: Path) -> None:
+    human = _append(tmp_path, kind="human", source="human", from_name="alice", to="bob")
+
+    assert is_read_by_human(human, {}) is True
+    assert is_read_for_reader(human, {}, "human:alice") is True
+    assert is_read_for_reader(human, {}, "human:bob") is False
+
+
+def test_count_unread_can_exclude_activity(tmp_path: Path) -> None:
+    notified = _append(tmp_path, kind="notified", text="notified")
+    activity = _append(tmp_path, kind="activity", text="activity")
+    items = [notified, activity]
+
+    assert count_unread(items, {}, "human:alice") == 2
+    assert count_unread(items, {}, "human:alice", exclude_kinds=frozenset({"activity"})) == 1
 
 
 def test_list_items_skips_corrupt_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

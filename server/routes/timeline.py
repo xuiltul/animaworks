@@ -18,6 +18,10 @@ from core.i18n import t
 
 logger = logging.getLogger(__name__)
 
+# Activity is informational noise for the badge; the person asked not to have
+# it push notifications out of the unread count.
+_UNREAD_EXCLUDED_KINDS: frozenset[str] = frozenset({"activity"})
+
 
 class TimelineReadRequest(BaseModel):
     upto_id: str = Field(min_length=1)
@@ -86,8 +90,8 @@ def create_timeline_router() -> APIRouter:
             return {"enabled": False, "items": [], "unread": 0}
 
         from core.hub.timeline import (
+            count_unread,
             decorate_items,
-            is_read_for_reader,
             list_items,
             load_timeline_reads,
         )
@@ -102,7 +106,7 @@ def create_timeline_router() -> APIRouter:
             reader=reader,
             reference_items=all_items,
         )
-        unread = sum(1 for item in all_items if not is_read_for_reader(item, reads, reader))
+        unread = count_unread(all_items, reads, reader, exclude_kinds=_UNREAD_EXCLUDED_KINDS)
         return {
             "enabled": True,
             "company": hub.company,
@@ -229,7 +233,11 @@ def create_timeline_router() -> APIRouter:
         for item in decorated:
             item["read"] = bool(item.get("read_by_human"))
         all_items = list_items(shared_dir, company=company, since=since, limit=100_000)
-        unread = sum(1 for item in all_items if not is_read_by_human(item, reads))
+        unread = sum(
+            1
+            for item in all_items
+            if item.get("kind") not in _UNREAD_EXCLUDED_KINDS and not is_read_by_human(item, reads)
+        )
         return {
             "enabled": True,
             "company": company,

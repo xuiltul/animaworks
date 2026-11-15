@@ -149,6 +149,39 @@ def test_public_timeline_marks_updates_and_changes(monkeypatch, tmp_path: Path) 
     assert by_id[update["id"]]["read"] is False
 
 
+def test_timeline_unread_excludes_activity(monkeypatch, tmp_path: Path) -> None:
+    client, shared_dir = _app(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
+    _set_hub(monkeypatch, timeline_enabled=True, company="a")
+    _set_company(tmp_path / "animas", "alice", "a")
+    month = now_local().strftime("%Y-%m")
+    monkeypatch.setattr(timeline, "now_iso", lambda: f"{month}-06T10:00:00+09:00")
+    notified = append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="notified",
+        text="Person-facing notification",
+        source="anima",
+    )
+    monkeypatch.setattr(timeline, "now_iso", lambda: f"{month}-06T11:00:00+09:00")
+    activity = append_item(
+        shared_dir,
+        from_name="alice",
+        company="a",
+        kind="activity",
+        text="heartbeat tick",
+        source="anima",
+    )
+
+    public = client.get("/api/timeline").json()
+    assert public["unread"] == 1
+    assert [item["id"] for item in public["items"]] == [activity["id"], notified["id"]]
+
+    internal = client.get("/api/internal/timeline").json()
+    assert internal["unread"] == 1
+    assert [item["id"] for item in internal["items"]] == [activity["id"], notified["id"]]
+
+
 def test_internal_add_uses_caller_identity(monkeypatch, tmp_path: Path) -> None:
     client, _shared_dir = _app(monkeypatch, tmp_path, InternalCaller(kind="anima", name="alice"))
     _set_hub(monkeypatch, timeline_enabled=True, company="a")

@@ -599,13 +599,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "直近24時間のタイムラインに項目はありません",
         "en": "No timeline items in the last 24 hours.",
     },
+    "hub.tool.timeline_continuation": {
+        "ja": "…（続き: hub timeline {item_id}）",
+        "en": "... (full text: hub timeline {item_id})",
+    },
+    "hub.tool.timeline_item_not_found": {
+        "ja": "タイムラインの項目が見つかりません: {item_id}",
+        "en": "Timeline item not found: {item_id}",
+    },
     "hub.tool.no_new_posts": {
         "ja": "新着なし ({now})",
         "en": "No new posts ({now})",
     },
     "hub.tool.help_bilingual_ja": {
-        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
-        "en": "日本語: 会社のタイムラインは timeline（読み取り専用）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
+        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
+        "en": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
     },
     "cli.hub_parser_help": {
         "ja": "ハブの名簿と外部 AI のメンバーを管理",

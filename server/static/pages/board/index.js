@@ -476,7 +476,9 @@ export function createBoardPage(container, options = {}) {
   unsubscribeStatus = onEvent("anima.status", (data) => store.handleAnimaStatus(data));
   window.__boardWsHandler = (data) => {
     const timelineItem =
-      data && data.id !== undefined && ["notified", "done", "decided"].includes(data.kind);
+      data &&
+      data.id !== undefined &&
+      ["notified", "done", "decided", "human", "answered", "activity"].includes(data.kind);
     if (timelineItem) {
       home?.handleTimelineItem(data);
       return;

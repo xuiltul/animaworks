@@ -33,6 +33,7 @@ def _record_timeline_notification(
     *,
     anima_name: str,
     delivered: bool,
+    callback_id: str | None = None,
 ) -> None:
     """Append a timeline ``notified`` item without affecting notification delivery."""
     try:
@@ -64,6 +65,7 @@ def _record_timeline_notification(
 
         normalized_priority = priority if priority in PRIORITY_LEVELS else "normal"
         from core.hub.timeline import append_item
+        from core.notification import notification_key_for
 
         append_item(
             _shared_dir(),
@@ -75,6 +77,8 @@ def _record_timeline_notification(
             urgent=normalized_priority in ("high", "urgent"),
             priority=normalized_priority,
             delivered=delivered,
+            key=notification_key_for(subject, body),
+            callback_id=callback_id,
         )
     except Exception:
         logger.warning("Failed to record timeline notification", exc_info=True)
@@ -243,6 +247,7 @@ class HumanNotifier:
                 priority,
                 anima_name=anima_name,
                 delivered=False,
+                callback_id=interaction.callback_id if interaction is not None else None,
             )
             return ["No notification channels configured"]
 
@@ -289,6 +294,7 @@ class HumanNotifier:
             priority,
             anima_name=anima_name,
             delivered=len(status) > failed_count,
+            callback_id=interaction.callback_id if interaction is not None else None,
         )
         return status
 

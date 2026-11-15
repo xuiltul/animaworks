@@ -15,6 +15,7 @@ import asyncio
 import contextvars
 import json
 import logging
+import re
 import shlex
 from collections.abc import Callable
 from datetime import timedelta
@@ -61,14 +62,15 @@ TOOL_DESCRIPTION = (
     "this server's /hub/avatar with the same Authorization header), "
     "`name <display name>` (set the name shown for you; your @id stays). "
     "Talk to animas only by posting in #hub. Learn the current situation from "
-    "`timeline`. Before notifying the human directly, check `timeline`; do not "
+    "`timeline` (use `timeline <item id>` for the full text and replies). "
+    "Before notifying the human directly, check `timeline`; do not "
     "send what is already there (especially items the human has already read). "
     "Except for urgent matters, do not message the human directly; post in #hub "
     "instead."
 )
 
 HELP_SUMMARY = (
-    "commands: help | timeline | read | post [--reply-to ID] [--request-id ID] | "
+    "commands: help | timeline [<item id>] | read | post [--reply-to ID] [--request-id ID] | "
     "avatar <https image URL> | name <display name>"
 )
 
@@ -76,6 +78,11 @@ HELP_TEXT = (
     "AnimaWorks hub tool\n"
     f"{HELP_SUMMARY}\n"
     "- timeline: the last 24 hours of the company timeline (read-only, newest first).\n"
+    "  Kinds: notified = something an anima told the person; human = something the person said "
+    "(including replies to notifications and approval choices); answered = how an anima responded; "
+    "activity = a scheduled/heartbeat/task result; done = finished work; decided = a decision. "
+    "`about` links a reply to the item it answers. Use `timeline <item id>` for the full text and "
+    "every reply/answer connected to that item.\n"
     "- read: new #hub posts since your last read (oldest first, mentions first).\n"
     "- post: post to #hub; put the message body in `text`.\n"
     "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB, 5 per day).\n"
@@ -89,10 +96,12 @@ HELP_TEXT = (
     "what is already there. Post in #hub for non-urgent matters.\n" + t("hub.tool.help_bilingual_ja")
 )
 
-_MAX_TIMELINE_LINES = 50
+_MAX_TIMELINE_LINES = 300
+_MAX_TIMELINE_TEXT = 300
 _MAX_READ_POSTS = 30
 MAX_POST_CHARS = 4000
 _TIMELINE_WINDOW = timedelta(hours=24)
+_TIMELINE_ITEM_RE = re.compile(r"^tl_[0-9a-f]{16}$")
 _AVATAR_UPDATES_PER_DAY = 5
 _AVATAR_UPDATE_WINDOW = timedelta(hours=24)
 _NAME_UPDATES_PER_DAY = 5
@@ -114,13 +123,26 @@ def _one_line(value: object) -> str:
     return str(value or "").replace("\r", " ").replace("\n", " ")
 
 
-def _timeline_line(item: dict[str, Any], *, is_new: bool, human_read: bool) -> str:
+def _timeline_line(
+    item: dict[str, Any],
+    *,
+    is_new: bool,
+    human_read: bool,
+    text_limit: int | None = _MAX_TIMELINE_TEXT,
+) -> str:
     prefix = "[新] " if is_new else ""
-    about = f" about={item['about']}" if item.get("about") else ""
+    extras = ""
+    for field in ("to", "via", "label", "about"):
+        value = item.get(field)
+        if value:
+            extras += f" {field}={_one_line(value)}"
+    text = _one_line(item.get("text"))
+    if text_limit is not None and len(text) > text_limit:
+        text = text[:text_limit] + t("hub.tool.timeline_continuation", item_id=item.get("id", "?"))
     return (
         f"{prefix}{item.get('id', '?')} {item.get('ts', '?')} "
         f"from={item.get('from', '?')} kind={item.get('kind', '?')} "
-        f"human_read={'yes' if human_read else 'no'}{about}: {_one_line(item.get('text'))}"
+        f"human_read={'yes' if human_read else 'no'}{extras}: {text}"
     )
 
 
@@ -159,6 +181,52 @@ def _run_timeline(shared_dir: Path, member: HubMember) -> tuple[str, str]:
     newest = items[0]
     if isinstance(newest.get("id"), str):
         timeline.advance_timeline_read(shared_dir, reader, newest["id"])
+    return "\n".join(lines), "ok"
+
+
+def _run_timeline_item(shared_dir: Path, member: HubMember, item_id: str) -> tuple[str, str]:
+    """Return one timeline item and every descendant linked through ``about``."""
+    config = load_config().hub
+    if not config.timeline_enabled:
+        return t("hub.tool.timeline_disabled"), "ok"
+    company = str(config.company or "")
+    root = timeline.find_item(shared_dir, item_id)
+    if root is None or root.get("company") != company:
+        return _error(t("hub.tool.timeline_item_not_found", item_id=item_id)), "rejected"
+
+    items = timeline.list_items(shared_dir, company=company, limit=100_000)
+    if not any(item.get("id") == root.get("id") for item in items):
+        items = [root, *items]
+
+    children: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        parent = item.get("about")
+        if isinstance(parent, str) and parent:
+            children.setdefault(parent, []).append(item)
+
+    ordered: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    queue: list[dict[str, Any]] = [root]
+    while queue:
+        current = queue.pop(0)
+        current_id = str(current.get("id") or "")
+        if not current_id or current_id in seen:
+            continue
+        seen.add(current_id)
+        ordered.append(current)
+        queue.extend(children.get(current_id, []))
+    ordered.sort(key=lambda item: str(item.get("ts") or ""))
+
+    reads = timeline.load_timeline_reads(shared_dir)
+    lines = [
+        _timeline_line(
+            item,
+            is_new=False,
+            human_read=timeline.is_read_by_human(item, reads),
+            text_limit=None,
+        )
+        for item in ordered
+    ]
     return "\n".join(lines), "ok"
 
 
@@ -393,8 +461,12 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
         if not decision.allowed:
             return _error(f"cannot read #{board} ({decision.reason})")
     if name == "timeline":
+        if len(args) > 1:
+            return _error("timeline takes at most one item id")
         if args:
-            return _error("timeline takes no arguments")
+            if not _TIMELINE_ITEM_RE.fullmatch(args[0]):
+                return _error(f"invalid timeline item id: {args[0]}")
+            return _run_timeline_item(shared_dir, member, args[0])[0]
         return _run_timeline(shared_dir, member)[0]
     if name == "read":
         if args:

@@ -236,9 +236,21 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "## 進行タイムライン（直近24時間）",
         "en": "## Company Timeline (last 24h)",
     },
+    "priming.timeline_activity_header": {
+        "ja": "## 他の anima の活動（直近24時間）",
+        "en": "## Other animas' activity (last 24h)",
+    },
     "priming.timeline_line": {
         "ja": "- [{time_str}] {kind} {from_name}: {text}{marks}",
         "en": "- [{time_str}] {kind} {from_name}: {text}{marks}",
+    },
+    "priming.timeline_direction_line": {
+        "ja": "- [{time_str}] {kind} {from_name}→{to_name}: {text}{marks}",
+        "en": "- [{time_str}] {kind} {from_name}->{to_name}: {text}{marks}",
+    },
+    "priming.timeline_labeled_line": {
+        "ja": "- [{time_str}] [{label}] {kind} {from_name}: {text}{marks}",
+        "en": "- [{time_str}] [{label}] {kind} {from_name}: {text}{marks}",
     },
     "priming.timeline_unread_mark": {
         "ja": "（未読）",
