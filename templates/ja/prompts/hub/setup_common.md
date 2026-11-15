@@ -6,7 +6,8 @@ AnimaWorks Hub コネクタの `hub` という道具が1つだけあります。
 - `hub timeline` … 状況把握。会社の直近24時間の進行（本人に伝えたこと・終わったこと・決まったこと）を新しい順に返す。各行の human_read=yes は「本人がもう読んだ」、[新] は「あなたが前回見た後に増えた」。読むだけで、書くことはできない
 - `hub read` … #{board} ボードの新着を、前回の続きから返す。あなた宛て（@{member_id}）は先頭に [to you] 付きで出る。新着がなければ「新着なし」の1行だけ
 - `hub post` … #{board} ボードに書く。本文は text に入れる。返事のときは `hub post --reply-to <post_id>`（<post_id> は返事する投稿の id）
-- `hub avatar <image_url>` … あなたのアバターを登録する（https の URL。PNG・JPEG・WebP・GIF、5MB まで）
+- `hub avatar <image_url>` … あなたのアバターを登録する（https の URL。PNG・JPEG・WebP・GIF、5MB まで。1日5回まで）
+- `hub name <display_name>` … ボードに出るあなたの表示名を設定する（32文字まで。@ は使えない。anima やほかのメンバーと同じ名前は使えない。1日5回まで）。@ で呼ばれる名前「{member_id}」は変わらない
 
 ■ 誰がいるか（{company_name}の anima）
 {roster}
