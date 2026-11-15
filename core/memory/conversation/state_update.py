@@ -39,6 +39,12 @@ def _record_resolutions(
         except Exception:
             logger.debug("Failed to log issue_resolved event", exc_info=True)
 
+        # Company timeline: this is the only writer of ``issue_resolved``
+        # (verified with grep), so the resolution is recorded exactly once.
+        from core.hub.timeline_activity import record_activity
+
+        record_activity(anima_dir.name, via="issue", text=item)
+
         # Layer 3: shared/resolutions.jsonl cross-org record
         try:
             memory_mgr.append_resolution(

@@ -14,7 +14,11 @@ from core.memory.maintenance.consolidation import (
     _NOOP_FILTER_KEY,
     ConsolidationEngine,
 )
-from core.memory.maintenance.cron_noop import NoopStats, filter_noop_cron_entries
+from core.memory.maintenance.cron_noop import (
+    NoopStats,
+    filter_noop_cron_entries,
+    is_noop_cron_execution,
+)
 from core.time_utils import now_local
 
 
@@ -155,6 +159,58 @@ def test_llm_bash_external_verb_kept() -> None:
     kept, _ = filter_noop_cron_entries([cron, tool_use])
 
     assert cron in kept
+
+
+def test_memory_write_is_activity_for_episode_summary_by_default() -> None:
+    day = date(2026, 9, 30)
+    cron = _entry(
+        _iso(day, 10, 0),
+        "cron_executed",
+        meta={"task_name": "watch", "duration_ms": 20000, "status": "completed"},
+    )
+    tool_use = _entry(_iso(day, 9, 59, 50), "tool_use", tool="write_memory_file")
+    memory_event = _entry(_iso(day, 9, 59, 55), "memory_write")
+
+    kept, _ = filter_noop_cron_entries([cron, tool_use, memory_event])
+
+    # Unchanged historical behaviour: writing memory counts as activity.
+    assert cron in kept
+
+
+def test_memory_write_is_noop_when_ignoring_memory_writes() -> None:
+    day = date(2026, 9, 30)
+    cron = _entry(
+        _iso(day, 10, 0),
+        "cron_executed",
+        meta={"task_name": "watch", "duration_ms": 20000, "status": "completed"},
+    )
+    tool_use = _entry(_iso(day, 9, 59, 50), "tool_use", tool="write_memory_file")
+    knowledge = _entry(_iso(day, 9, 59, 52), "knowledge_outcome")
+    memory_event = _entry(_iso(day, 9, 59, 55), "memory_write")
+
+    kept, stats = filter_noop_cron_entries(
+        [cron, tool_use, knowledge, memory_event],
+        ignore_memory_writes=True,
+    )
+
+    assert cron not in kept
+    assert stats.llm_excluded == 1
+
+
+def test_is_noop_cron_execution_ignores_duplicate_target_entry() -> None:
+    day = date(2026, 9, 30)
+    cron = _entry(
+        _iso(day, 10, 0),
+        "cron_executed",
+        meta={"task_name": "watch", "duration_ms": 20000, "status": "completed"},
+    )
+    duplicate = _entry(
+        _iso(day, 10, 0),
+        "cron_executed",
+        meta={"task_name": "watch", "duration_ms": 20000, "status": "completed"},
+    )
+
+    assert is_noop_cron_execution(cron, [cron, duplicate]) is True
 
 
 def test_llm_overlapping_windows_kept() -> None:

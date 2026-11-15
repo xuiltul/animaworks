@@ -886,6 +886,19 @@ class HeartbeatMixin:
                 _hb_meta.update({"status": "failed", "reason": result.reason})
             await self._activity.alog("heartbeat_end", summary=result.summary, meta=_hb_meta)
 
+            # Company timeline: record only runs that actually did something.
+            # Same condition as the episode below, plus skip budget-skipped
+            # runs where the LLM never started.
+            if (
+                result.action != "error"
+                and result.summary
+                and "HEARTBEAT_OK" not in result.summary
+                and result.stop_kind != "budget_skipped"
+            ):
+                from core.hub.timeline_activity import record_activity
+
+                record_activity(self.name, via="heartbeat", text=result.summary)
+
             # Session boundary finalization moved to run_heartbeat()'s finally block,
             # so a hard timeout / cancellation cannot skip it.
 

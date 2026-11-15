@@ -787,3 +787,103 @@ class TestDialogueFreshnessGate:
         monkeypatch.setattr(dp, "_get_recent_dialogue_max_age_hours", lambda: 0)
         old = (now_local() - timedelta(hours=48)).isoformat()
         assert dp._dialogue_is_recent([self._turn(old)]) is True
+
+
+# ══════════════════════════════════════════════════════════
+# 6. TestHeartbeatTimelineActivity (company timeline)
+# ══════════════════════════════════════════════════════════
+
+
+class TestHeartbeatTimelineActivity:
+    """run_heartbeat records only non-error, non-HEARTBEAT_OK work."""
+
+    async def _run(self, data_dir, make_anima, cycle_result: dict):
+        anima_dir = make_anima("alice")
+        shared_dir = data_dir / "shared"
+        calls: list[tuple[tuple, dict]] = []
+
+        def fake_record(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "tl_test"
+
+        with (
+            patch("core.anima.digital_anima.AgentCore"),
+            patch("core.anima.digital_anima.MemoryManager") as MockMM,
+            patch("core.anima.digital_anima.Messenger") as MockMsg,
+            patch("core.anima.heartbeat.load_prompt", return_value="prompt"),
+            patch("core.anima.heartbeat.ConversationMemory") as MockConv,
+            patch("core.hub.timeline_activity.record_activity", side_effect=fake_record),
+        ):
+            MockMM.return_value.read_model_config.return_value = MagicMock()
+            MockMM.return_value.read_heartbeat_config.return_value = "checklist"
+            MockMM.return_value.append_episode = MagicMock()
+            MockMsg.return_value.has_unread.return_value = False
+            MockConv.return_value.load.return_value = MagicMock(turns=[])
+
+            from core.anima.digital_anima import DigitalAnima
+
+            dp = DigitalAnima(anima_dir, shared_dir)
+            dp.agent.reset_reply_tracking = MagicMock()
+            dp.agent.replied_to = set()
+            dp.agent._tool_handler.set_active_session_type = lambda st: active_session_type.set(st)
+
+            async def mock_stream(prompt, trigger="manual", **kwargs):
+                yield {"type": "cycle_done", "cycle_result": cycle_result}
+
+            dp.agent.run_cycle_streaming = mock_stream
+            await dp.run_heartbeat()
+
+        return calls
+
+    async def test_non_ok_result_recorded_in_full(self, data_dir, make_anima):
+        summary = "Processed user request and sent report"
+
+        calls = await self._run(
+            data_dir,
+            make_anima,
+            {"trigger": "heartbeat", "action": "responded", "summary": summary, "duration_ms": 500},
+        )
+
+        assert len(calls) == 1
+        args, kwargs = calls[0]
+        assert args == ("alice",)
+        assert kwargs["via"] == "heartbeat"
+        assert kwargs["text"] == summary
+
+    async def test_heartbeat_ok_not_recorded(self, data_dir, make_anima):
+        calls = await self._run(
+            data_dir,
+            make_anima,
+            {
+                "trigger": "heartbeat",
+                "action": "checked",
+                "summary": "HEARTBEAT_OK: nothing to do",
+                "duration_ms": 50,
+            },
+        )
+
+        assert calls == []
+
+    async def test_error_result_not_recorded(self, data_dir, make_anima):
+        calls = await self._run(
+            data_dir,
+            make_anima,
+            {"trigger": "heartbeat", "action": "error", "summary": "boom", "duration_ms": 50},
+        )
+
+        assert calls == []
+
+    async def test_budget_skipped_not_recorded(self, data_dir, make_anima):
+        calls = await self._run(
+            data_dir,
+            make_anima,
+            {
+                "trigger": "heartbeat",
+                "action": "responded",
+                "summary": "worked hard",
+                "stop_kind": "budget_skipped",
+                "duration_ms": 50,
+            },
+        )
+
+        assert calls == []

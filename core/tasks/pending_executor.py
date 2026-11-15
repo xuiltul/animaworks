@@ -943,6 +943,17 @@ class PendingTaskExecutor:
             ctx=trigger,
             meta={**task_meta, "status": status, "result": result[:200]},
         )
+
+        # Company timeline: one record per completed task.  This successful
+        # ``task_exec_end`` is the single execution-completion point; the
+        # ``task_completed`` activity in ``_deliver_task_wakeups`` is emitted
+        # per wakeup delivery (and only for some recipients), so recording
+        # there would duplicate the same task.
+        if status == "completed":
+            from core.hub.timeline_activity import record_activity
+
+            record_activity(self._anima_name, via="task", text=result, label=title)
+
         _request_background_review(self._anima_dir, "task_end")
         return result
 

@@ -527,3 +527,46 @@ class TestLlmTaskFailurePropagation:
         assert end_call.kwargs["meta"]["status"] == "error"
         assert end_call.kwargs["meta"]["error"] == "stream retry exhausted"
         assert end_call.kwargs["meta"]["error_type"] == "RuntimeError"
+
+
+class TestTaskTimelineActivity:
+    """A completed task is recorded on the company timeline exactly once."""
+
+    @pytest.mark.asyncio
+    async def test_completed_task_recorded_once(self, tmp_path):
+        executor = _make_lane_executor(tmp_path)
+        background_agent = executor._anima.background_agent
+
+        async def _stream_success(*args, **kwargs):
+            yield {
+                "type": "cycle_done",
+                "cycle_result": {"summary": "delivered report", "action": "complete"},
+            }
+
+        background_agent.run_cycle_streaming = MagicMock(side_effect=_stream_success)
+        background_agent.reset_reply_tracking = MagicMock()
+        background_agent.reset_read_paths = MagicMock()
+        background_agent.set_interrupt_event = MagicMock()
+        background_agent.set_task_cwd = MagicMock()
+
+        task_desc = {
+            "task_id": "timeline-task-1",
+            "title": "Write report",
+            "description": "Write the weekly report",
+        }
+
+        with (
+            patch("core.paths.load_prompt", return_value="test prompt"),
+            patch("core.activity.logger.ActivityLogger") as mock_activity,
+            patch("core.hub.timeline_activity.record_activity") as mock_record,
+        ):
+            mock_activity.return_value.alog = AsyncMock()
+            result = await executor._run_llm_task(task_desc)
+
+        assert result == "delivered report"
+        mock_record.assert_called_once_with(
+            "lane-anima",
+            via="task",
+            text="delivered report",
+            label="Write report",
+        )
