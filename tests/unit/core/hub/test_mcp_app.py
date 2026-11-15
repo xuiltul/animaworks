@@ -495,3 +495,97 @@ def test_name_command_rate_limit_is_five_per_day(
 
 def test_help_mentions_name_command(shared_dir: Path, member: HubMember) -> None:
     assert "name <display name>" in run_hub_command(shared_dir, member, "help")
+
+
+def _upload_client(shared_dir: Path) -> httpx.AsyncClient:
+    hub_app, _session_manager = build_hub_mcp_app(lambda: shared_dir)
+    root = Starlette(routes=[Mount("/hub", app=hub_app)])
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=root), base_url="http://127.0.0.1:8000")
+
+
+async def test_avatar_upload_takes_raw_body(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    fetched: list[str] = []
+    monkeypatch.setattr("core.hub.mcp_app.fetch_avatar_url", lambda url: fetched.append(url) or b"")
+
+    async with _upload_client(shared_dir) as client:
+        response = await client.put(
+            "/hub/avatar",
+            content=_avatar_png(),
+            headers={"Authorization": "Bearer token", "Content-Type": "image/png"},
+        )
+
+    assert response.status_code == 200
+    assert response.text.startswith("avatar updated (256x256)")
+    with Image.open(avatar_path(shared_dir, "grok")) as image:
+        assert image.size == (256, 256)
+    state = json.loads(state_path(shared_dir, "grok").read_text(encoding="utf-8"))
+    assert len(state["avatar_updates"]) == 1
+    assert fetched == []
+
+
+async def test_avatar_upload_takes_multipart_file(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    async with _upload_client(shared_dir) as client:
+        response = await client.post(
+            "/hub/avatar",
+            files={"file": ("me.png", _avatar_png(), "image/png")},
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert response.status_code == 200
+    assert avatar_path(shared_dir, "grok").is_file()
+
+
+async def test_avatar_upload_rejects_bad_requests(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+
+    async with _upload_client(shared_dir) as client:
+        no_token = await client.put("/hub/avatar", content=_avatar_png())
+        not_image = await client.put("/hub/avatar", content=b"not an image", headers={"Authorization": "Bearer token"})
+        too_large = await client.put(
+            "/hub/avatar",
+            content=b"x" * (6 * 1024 * 1024),
+            headers={"Authorization": "Bearer token"},
+        )
+        no_file = await client.post(
+            "/hub/avatar",
+            data={"note": "no file here"},
+            files={"other": ("", b"", "application/octet-stream")},
+            headers={"Authorization": "Bearer token"},
+        )
+
+    assert no_token.status_code == 401
+    assert not_image.status_code == 400
+    assert not_image.text.startswith("error: unsupported image")
+    assert too_large.status_code == 413
+    assert no_file.status_code == 400
+    assert not avatar_path(shared_dir, "grok").exists()
+    assert not state_path(shared_dir, "grok").exists() or "avatar_updates" not in json.loads(
+        state_path(shared_dir, "grok").read_text(encoding="utf-8")
+    )
+
+
+async def test_avatar_upload_shares_daily_limit(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch)
+    save_member(shared_dir, member)
+    update_member_state(shared_dir, "grok", avatar_updates=[now_iso()] * 5)
+
+    async with _upload_client(shared_dir) as client:
+        response = await client.put("/hub/avatar", content=_avatar_png(), headers={"Authorization": "Bearer token"})
+
+    assert response.status_code == 429
+    assert "limit reached" in response.text
+    assert not avatar_path(shared_dir, "grok").exists()

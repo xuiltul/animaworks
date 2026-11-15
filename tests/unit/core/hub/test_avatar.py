@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from core.hub.avatar import (
+    USER_AGENT,
     AvatarError,
     avatar_path,
     clear_avatar,
@@ -188,3 +189,20 @@ def test_fetch_avatar_url_rejects_unsafe_urls_and_private_dns(monkeypatch: pytes
         )
         with pytest.raises(AvatarError, match="url not allowed"):
             fetch_avatar_url("https://hub.example.com/a.png")
+
+
+def test_fetch_avatar_url_names_the_hub_in_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hosts such as catbox drop the default ``python-httpx`` agent."""
+    _patch_public(monkeypatch)
+    client = _FakeClient([_FakeResponse(200, body=b"png")])
+    seen: dict[str, object] = {}
+
+    def make_client(**kwargs):
+        seen.update(kwargs)
+        return client
+
+    monkeypatch.setattr("core.hub.avatar.httpx.Client", make_client)
+
+    assert fetch_avatar_url("https://files.example.com/a.png") == b"png"
+    assert seen["headers"] == {"User-Agent": USER_AGENT}
+    assert USER_AGENT.startswith("AnimaWorksHub/")

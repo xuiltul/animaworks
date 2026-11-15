@@ -77,6 +77,14 @@ def _connection_url(hub_config: Any, url: str | None) -> str:
     raise SetupPromptError(t("cli.hub_setup_url_required"))
 
 
+def _avatar_upload_url(connection_url: str) -> str:
+    """Return the ``PUT`` avatar upload URL next to the MCP endpoint."""
+    base = connection_url.rstrip("/")
+    if base.endswith("/mcp"):
+        return base[: -len("/mcp")] + "/avatar"
+    return base.rsplit("/", 1)[0] + "/avatar"
+
+
 def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = None) -> str:
     """Return the Markdown setup document for *member_id*.
 
@@ -113,6 +121,7 @@ def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = No
         "display_name": member.display_name,
         "company_name": company_name or company,
         "url": connection_url,
+        "avatar_upload_url": _avatar_upload_url(connection_url),
         "board": board,
         "roster": roster_lines,
         "first_contact": first_contact,

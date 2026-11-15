@@ -26,6 +26,9 @@ AVATAR_SIZE = 256
 ALLOWED_FORMATS = frozenset({"PNG", "JPEG", "WEBP", "GIF"})
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _MAX_REDIRECTS = 3
+# Some image hosts drop connections from library default agents such as
+# ``python-httpx/x.y`` (files.catbox.moe does), so name the hub explicitly.
+USER_AGENT = "AnimaWorksHub/1.0 (+https://github.com/xuiltul/animaworks)"
 
 
 class AvatarError(ValueError):
@@ -127,7 +130,12 @@ def fetch_avatar_url(url: str) -> bytes:
     current = url
     redirects = 0
     try:
-        with httpx.Client(follow_redirects=False, timeout=10, trust_env=False) as client:
+        with httpx.Client(
+            follow_redirects=False,
+            timeout=10,
+            trust_env=False,
+            headers={"User-Agent": USER_AGENT},
+        ) as client:
             while True:
                 host, port = _validate_avatar_url(current)
                 _public_addresses(host, port)
