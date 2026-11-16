@@ -70,6 +70,7 @@ class TestResilientFallback:
                     "sakura",
                     notification_text="subject\nbody",
                     callback_id="cb1",
+                    notification_key="key-1",
                 )
                 is True
             )
@@ -79,6 +80,7 @@ class TestResilientFallback:
         assert payload["ts"] == "2.0"
         assert payload["anima_name"] == "sakura"
         assert payload["callback_id"] == "cb1"
+        assert payload["notification_key"] == "key-1"
 
     def test_api_failure_returns_false(self, routing_dir: Path) -> None:
         from core.notification import reply_routing
@@ -116,12 +118,19 @@ class TestInternalEndpoint:
         client = TestClient(app)
         resp = client.post(
             "/api/internal/notification-mapping",
-            json={"ts": "9.9", "channel": "C9", "anima_name": "ritsu", "notification_text": "hello"},
+            json={
+                "ts": "9.9",
+                "channel": "C9",
+                "anima_name": "ritsu",
+                "notification_text": "hello",
+                "notification_key": "key-9",
+            },
         )
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
         data = json.loads((routing_dir / "run" / "notification_map.json").read_text())
         assert data["9.9"]["anima"] == "ritsu"
+        assert data["9.9"]["notification_key"] == "key-9"
 
 
 @pytest.fixture

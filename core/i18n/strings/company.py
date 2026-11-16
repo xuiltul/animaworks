@@ -11,4 +11,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "{display_name}の理念。要記入",
         "en": "Vision for {display_name}. To be completed.",
     },
+    "hub.activity_failed_prefix": {
+        "ja": "【失敗】",
+        "en": "[FAILED]",
+    },
 }

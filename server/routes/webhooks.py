@@ -259,7 +259,7 @@ def create_webhooks_router() -> APIRouter:
 
             shared_dir = get_data_dir() / "shared"
             messenger = Messenger(shared_dir, anima_name)
-            messenger.receive_external(
+            message = messenger.receive_external(
                 content=text,
                 source="slack",
                 source_message_id=message_ts,
@@ -268,6 +268,21 @@ def create_webhooks_router() -> APIRouter:
                 external_thread_ts=thread_ts,
                 intent=intent,
             )
+            if message is not None:
+                try:
+                    from core.hub.timeline_human import record_human, resolve_person
+
+                    person = resolve_person(via="slack", external_user_id=user_id)
+                    if person:
+                        record_human(
+                            person=person,
+                            anima=anima_name,
+                            text=raw_text,
+                            via="slack",
+                            ref=str(getattr(message, "id", "") or "") or None,
+                        )
+                except Exception:
+                    logger.warning("Failed to record Slack webhook message on the timeline", exc_info=True)
             logger.info(
                 "Slack message delivered: channel=%s user=%s -> anima=%s (intent=%s)",
                 channel_id,

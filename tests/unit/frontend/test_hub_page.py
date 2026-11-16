@@ -44,6 +44,10 @@ I18N_KEYS = [
     "hub.timeline_filter_all",
     "hub.timeline_filter_unread",
     "hub.timeline_no_unread",
+    "board.timeline_kind_human",
+    "board.timeline_kind_answered",
+    "board.timeline_kind_activity",
+    "board.timeline_show_activity",
 ]
 
 
@@ -86,6 +90,15 @@ def test_hub_i18n_keys_exist_in_all_languages() -> None:
 def test_board_supports_pinned_channel_and_all_timeline() -> None:
     assert "pinnedChannel" in _read("pages/board/index.js")
     assert 'mode === "all"' in _read("pages/board/timeline.js")
+
+
+def test_board_timeline_groups_threads_and_toggles_activity() -> None:
+    timeline = _read("pages/board/timeline.js")
+
+    assert "data-timeline-activity-toggle" in timeline
+    assert "aw.timeline.showActivity" in timeline
+    assert "_threadGroups" in timeline
+    assert '"activity"' in _read("pages/board/index.js")
 
 
 def test_members_escapes_html() -> None:

@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from core.exceptions import AnimaNotFoundError  # noqa: F401
 from core.exceptions import IPCConnectionError as IPCConnError
+from core.hub.timeline_human import record_answered, record_human, resolve_person
 from core.i18n import t
 from server.events import emit, emit_notification
 from server.routes.chat_chunk_handler import _chunk_to_event, _format_sse, _handle_chunk
@@ -45,6 +46,21 @@ from server.routes.chat_ws_effects import _emit_ws_side_effects
 from server.stream_registry import StreamRegistry
 
 logger = logging.getLogger("animaworks.routes.chat")
+
+
+def _human_for_chat(request: Request) -> tuple[str | None, str]:
+    """Return the human principal and the timeline ``via`` for this chat."""
+    user = getattr(request.state, "user", None)
+    username = getattr(user, "username", None)
+    client_header = (request.headers.get("X-AnimaWorks-Client") or "").strip().lower()
+    via = "tui" if client_header == "tui" else "web"
+    person = resolve_person(
+        via=via,
+        auth_via=getattr(request.state, "auth_via", None),
+        username=username,
+        client_header=client_header,
+    )
+    return person, via
 
 
 class CompactRequest(BaseModel):
@@ -137,6 +153,11 @@ def create_chat_router() -> APIRouter:
                 message, status_code = file_error
                 return JSONResponse({"error": message}, status_code=status_code)
 
+        person, human_via = _human_for_chat(request)
+        human_id = (
+            record_human(person=person, anima=name, text=body.message, via=human_via) if person is not None else None
+        )
+
         # Save image and file attachments to disk and build IPC params
         saved_paths = await asyncio.to_thread(save_images, name, body.images) if body.images else []
         saved_files = await asyncio.to_thread(save_files, name, body.files) if body.files else []
@@ -169,6 +190,14 @@ def create_chat_router() -> APIRouter:
 
             response = result.get("response", "")
             clean_response, _ = extract_emotion(response)
+            if human_id and person is not None:
+                record_answered(
+                    anima=name,
+                    person=person,
+                    text=clean_response,
+                    via=human_via,
+                    about=human_id,
+                )
 
             # Broadcast any queued notifications from this cycle
             for notif in result.get("notifications", []):
@@ -350,6 +379,11 @@ def create_chat_router() -> APIRouter:
             last_event_id = body.last_event_id or request.headers.get("Last-Event-ID", "")
             return _handle_resume(registry, body.resume, last_event_id, name, from_person=body.from_person)
 
+        person, human_via = _human_for_chat(request)
+        human_id = (
+            record_human(person=person, anima=name, text=body.message, via=human_via) if person is not None else None
+        )
+
         stream = registry.register(
             name,
             from_person=body.from_person,
@@ -368,6 +402,9 @@ def create_chat_router() -> APIRouter:
                 body=body,
                 saved_paths=saved_paths,
                 saved_files=saved_files,
+                human_id=human_id,
+                human_via=human_via,
+                human_person=person,
             ),
             name=f"producer-{stream.response_id}",
         )

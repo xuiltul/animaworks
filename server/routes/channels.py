@@ -729,6 +729,29 @@ def create_channels_router() -> APIRouter:
         if post.error:
             return JSONResponse(status_code=500, content={"detail": post.error})
 
+        try:
+            from core.hub.timeline_human import mentioned_animas, record_human, resolve_person
+
+            # Only a logged-in browser session is the person.  Localhost posts
+            # also carry the owner's name but come from scripts or operator
+            # sessions on the server, so they are left off the timeline.
+            person = (
+                resolve_person(via="board", actor=body.from_name)
+                if getattr(request.state, "auth_via", "") == "session"
+                else None
+            )
+            if person:
+                record_human(
+                    person=person,
+                    text=body.text,
+                    via="board",
+                    label=name,
+                    ref=str(getattr(post, "id", "") or "") or None,
+                    to=mentioned_animas(body.text),
+                )
+        except Exception:
+            logger.warning("Failed to record board post on the timeline", exc_info=True)
+
         logger.info("Human posted to #%s: %s", name, body.text[:80])
         return {"status": "ok", "channel": name, "post": post.to_dict()}
 

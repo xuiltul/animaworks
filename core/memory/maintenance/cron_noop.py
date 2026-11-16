@@ -74,6 +74,24 @@ _EXTERNAL_ACTION_TOOLS = frozenset(
     }
 )
 
+# Tools that only write the Anima's own memory.  For the company timeline
+# they do not count as "something happened" (user decision).  The episode
+# summary filter keeps its historical behaviour (``ignore_memory_writes``
+# defaults to False).
+_MEMORY_ONLY_TOOLS = frozenset(
+    {
+        "write_memory_file",
+        "archive_memory_file",
+        "report_procedure_outcome",
+        "report_knowledge_outcome",
+        "todo_write",
+    }
+)
+
+# Activity event types written only by the tools above.  ``todo_write`` is
+# logged as a ``tool_use`` entry, so it is covered by ``_MEMORY_ONLY_TOOLS``.
+_MEMORY_ONLY_ACTIVITY_TYPES = frozenset({"memory_write", "knowledge_outcome", "procedure_outcome"})
+
 # Command-line verbs that cause an external side effect when invoked
 # via ``animaworks-tool <tool> <verb> ...`` (case-insensitive).
 _EXTERNAL_BASH_RE = re.compile(
@@ -119,12 +137,19 @@ def _is_llm_cron(entry: Any) -> bool:
     return isinstance(duration, (int, float)) and duration and "status" in meta
 
 
-def _tool_has_external_action(entry: Any) -> bool:
-    """Whether a ``tool_use`` entry performs an external, side-effecting action."""
+def _tool_has_external_action(entry: Any, *, ignore_memory_writes: bool = False) -> bool:
+    """Whether a ``tool_use`` entry performs an external, side-effecting action.
+
+    With ``ignore_memory_writes`` the tools that only touch the Anima's own
+    memory are treated as read-only, so a run consisting solely of memory
+    writes is "noop" for the company timeline.
+    """
     tool = getattr(entry, "tool", None) or ""
     base_tool = tool
     if base_tool.startswith("mcp__aw__"):
         base_tool = base_tool[len("mcp__aw__") :]
+    if ignore_memory_writes and base_tool in _MEMORY_ONLY_TOOLS:
+        return False
     if base_tool in _EXTERNAL_ACTION_TOOLS:
         return True
 
@@ -143,6 +168,8 @@ def _llm_cron_is_noop(
     idx: int,
     window_start: datetime,
     window_end: datetime,
+    *,
+    ignore_memory_writes: bool = False,
 ) -> bool:
     """Return whether LLM cron *idx* "did nothing" within its time window.
 
@@ -152,6 +179,9 @@ def _llm_cron_is_noop(
     - no non-tool entry (message, memory write, task update, heartbeat,
       inbox/task execution, ...) falls inside the window
     - no ``tool_use`` inside the window performs an external action
+
+    When ``ignore_memory_writes`` is true, memory-only activity entries and
+    memory-only tools are skipped instead of counting as activity.
     """
     entry = entries[idx]
     meta = getattr(entry, "meta", None) or {}
@@ -173,10 +203,12 @@ def _llm_cron_is_noop(
             continue
         other_type = getattr(other, "type", None)
         if other_type == "tool_use":
-            if _tool_has_external_action(other):
+            if _tool_has_external_action(other, ignore_memory_writes=ignore_memory_writes):
                 return False
             continue
         if other_type == "tool_result":
+            continue
+        if ignore_memory_writes and other_type in _MEMORY_ONLY_ACTIVITY_TYPES:
             continue
         if _is_command_cron(other):
             # A command cron inside the window is not "something happened".
@@ -185,7 +217,10 @@ def _llm_cron_is_noop(
     return True
 
 
-def filter_noop_cron_entries(entries: Iterable[Any]) -> tuple[list[Any], NoopStats]:
+def filter_noop_cron_entries(
+    entries: Iterable[Any],
+    ignore_memory_writes: bool = False,
+) -> tuple[list[Any], NoopStats]:
     """Return entries to keep after removing "did nothing" cron executions.
 
     Applies the Phase A noop-cron filter described in the consolidation
@@ -196,6 +231,9 @@ def filter_noop_cron_entries(entries: Iterable[Any]) -> tuple[list[Any], NoopSta
     Args:
         entries: Activity entries (objects with ``ts``, ``type``,
             ``content``, ``meta``, ``tool`` attributes).
+        ignore_memory_writes: Treat memory-only tools and activity entries
+            as "nothing happened".  Used by the company timeline; the
+            episode-summary caller keeps the default (False).
 
     Returns:
         A ``(kept_entries, stats)`` pair.  The activity log is untouched.
@@ -221,7 +259,15 @@ def filter_noop_cron_entries(entries: Iterable[Any]) -> tuple[list[Any], NoopSta
             llm_crons.append((idx, start, end))
 
     for idx, start, end in llm_crons:
-        if not _llm_cron_is_noop(all_entries, timestamps, llm_crons, idx, start, end):
+        if not _llm_cron_is_noop(
+            all_entries,
+            timestamps,
+            llm_crons,
+            idx,
+            start,
+            end,
+            ignore_memory_writes=ignore_memory_writes,
+        ):
             continue
         if idx in excluded:
             continue
@@ -239,3 +285,41 @@ def filter_noop_cron_entries(entries: Iterable[Any]) -> tuple[list[Any], NoopSta
                 stats.tool_entries_excluded += 1
 
     return [entry for idx, entry in enumerate(all_entries) if idx not in excluded], stats
+
+
+def is_noop_cron_execution(
+    cron_entry: Any,
+    window_entries: Iterable[Any],
+    ignore_memory_writes: bool = False,
+) -> bool:
+    """Return whether one LLM cron execution did nothing.
+
+    ``window_entries`` should contain the activity entries inside the
+    execution window ``[cron_entry.ts - duration_ms, cron_entry.ts]``.  A
+    duplicate of ``cron_entry`` in that list is ignored so it cannot look
+    like an overlapping second LLM cron.
+    """
+    target_meta = getattr(cron_entry, "meta", None)
+    target_task = target_meta.get("task_name") if isinstance(target_meta, dict) else None
+    target_duration = target_meta.get("duration_ms") if isinstance(target_meta, dict) else None
+    target_type = getattr(cron_entry, "type", None)
+    target_ts = getattr(cron_entry, "ts", None)
+    target_key = (target_ts, target_type, target_task, target_duration)
+
+    entries = []
+    for entry in window_entries:
+        meta = getattr(entry, "meta", None)
+        task = meta.get("task_name") if isinstance(meta, dict) else None
+        duration = meta.get("duration_ms") if isinstance(meta, dict) else None
+        if (getattr(entry, "ts", None), getattr(entry, "type", None), task, duration) == target_key:
+            # The window reader returns this run's own ``cron_executed``
+            # entry.  Drop it so it is not mistaken for another run; the
+            # caller-supplied target is appended once below.
+            continue
+        entries.append(entry)
+
+    kept, _ = filter_noop_cron_entries(
+        [*entries, cron_entry],
+        ignore_memory_writes=ignore_memory_writes,
+    )
+    return not any(entry is cron_entry for entry in kept)

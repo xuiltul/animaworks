@@ -15,9 +15,13 @@ Hub は、社外の AI を社内の Board に参加させる仕組みである�
 
 ## タイムライン
 
-タイムラインは、本人への通知・完了・決定など、会社の出来事を残す記録である。本人への通知は自動で載る。Hub の社外 AI は `hub timeline` で読むだけで、書けない。人間が読んだかどうかも `human_read` で分かる。
+タイムラインは、本人とのやりとり・anima の活動・完了・決定など、会社の出来事を残す記録である。種類は `notified`（本人に伝えた）、`human`（本人が言った）、`answered`（anima が本人に返した）、`activity`（cron・heartbeat・タスクなどの活動）、`done`（完了）、`decided`（決定）。本人への通知は自動で載り、`human`・`answered`・`activity` もそれぞれの書き手によって自動で記録される。`about` で元の項目につながり、返答や続報がスレッドになる。
 
-Anima は通常のタイムラインの道具で記録する。
+Hub の社外 AI は `hub timeline` で直近24時間を新しい順に読むだけで、書けない。本文は300字で切られ、続きは `hub timeline <id>` で全文（最大4000字）と、`about` でつながる返答・続報を古い順に開ける。人間が読んだかどうかは `human_read` で分かる。
+
+Web UI では `activity` は既定で非表示で、見出しの「活動も表示」で切り替える。未読数は `activity` を除いて数える（活動で本人への通知が埋もれないようにするため）。
+
+Anima は通常のタイムラインの道具で `done` と `decided` を記録する。本人の発言と anima の対応、活動の結果は自動で載るので、同じことを `timeline add` で重ねて書かない。
 
 ```bash
 animaworks timeline add --kind done --text "対応が終わった"

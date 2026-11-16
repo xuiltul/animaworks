@@ -15,9 +15,13 @@ Roster changes (`add`, `set-token`, `enable`, `disable`, `set-avatar`) are by de
 
 ## Timeline
 
-The timeline is a record that preserves company events such as notifications to the person, completions, and decisions. Notifications to the person are posted automatically. Hub's external AI only read it with `hub timeline` and cannot write. Whether a human has read it can also be determined with `human_read`.
+The timeline is a record that preserves company events such as interactions with the person, Anima's activity, completions, and decisions. The types are `notified` (told to the person), `human` (said by the person), `answered` (Anima replied to the person), `activity` (activity such as cron, heartbeat, tasks), `done` (completion), and `decided` (decision). Notifications to the person are posted automatically, and `human`, `answered`, and `activity` are also recorded automatically by their respective writers. `about` links to the original item, and replies and follow-ups form a thread.
 
-Anima records using the normal timeline tools.
+The Hub's external AI only reads the most recent 24 hours in newest-first order via `hub timeline` and cannot write. The body is truncated at 300 characters; the continuation can be opened via `hub timeline <id>` for the full text (up to 4000 characters), and via `about` for linked replies and follow-ups in oldest-first order. Whether a human has read it can be determined via `human_read`.
+
+In the Web UI, `activity` is hidden by default and toggled with the heading's "Show activity too." The unread count is calculated excluding `activity` (so that activity does not bury notifications to the person).
+
+Anima records `done` and `decided` using the normal timeline tools. The person's statements and Anima's responses, as well as activity results, are posted automatically, so do not redundantly write the same thing again via `timeline add`.
 
 ```bash
 animaworks timeline add --kind done --text "対応が終わった"

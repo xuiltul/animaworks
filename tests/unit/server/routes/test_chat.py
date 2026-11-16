@@ -706,3 +706,121 @@ class TestChatCompact:
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/api/animas/alice/chat/compact", json={"thread_id": "default"})
         assert resp.status_code == 504
+
+
+class TestChatTimelineHuman:
+    async def test_chat_records_human_and_answered(self):
+        alice = _make_mock_anima("alice")
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        with (
+            patch("server.routes.chat._human_for_chat", return_value=("alice", "web")),
+            patch("server.routes.chat.record_human", return_value="tl_1234567890abcdef") as record_human,
+            patch("server.routes.chat.record_answered") as record_answered,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/animas/alice/chat",
+                    json={"message": "こんにちは"},
+                )
+        assert resp.status_code == 200
+        record_human.assert_called_once_with(person="alice", anima="alice", text="こんにちは", via="web")
+        record_answered.assert_called_once_with(
+            anima="alice",
+            person="alice",
+            text="Hello from Alice",
+            via="web",
+            about="tl_1234567890abcdef",
+        )
+
+    async def test_chat_failure_records_human_but_not_answered(self):
+        alice = _make_mock_anima("alice")
+        alice.process_message = AsyncMock(side_effect=RuntimeError("boom"))
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        with (
+            patch("server.routes.chat._human_for_chat", return_value=("alice", "web")),
+            patch("server.routes.chat.record_human", return_value="tl_1234567890abcdef") as record_human,
+            patch("server.routes.chat.record_answered") as record_answered,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/animas/alice/chat",
+                    json={"message": "失敗"},
+                )
+        assert resp.status_code == 500
+        record_human.assert_called_once_with(person="alice", anima="alice", text="失敗", via="web")
+        record_answered.assert_not_called()
+
+    async def test_chat_does_not_record_without_human(self):
+        alice = _make_mock_anima("alice")
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        with (
+            patch("server.routes.chat._human_for_chat", return_value=(None, "web")),
+            patch("server.routes.chat.record_human") as record_human,
+            patch("server.routes.chat.record_answered") as record_answered,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/animas/alice/chat",
+                    json={"message": "ローカル"},
+                )
+        assert resp.status_code == 200
+        record_human.assert_not_called()
+        record_answered.assert_not_called()
+
+
+class TestChatStreamTimelineHuman:
+    async def test_stream_records_human_and_answered_on_done(self):
+        alice = _make_mock_anima("alice")
+
+        async def mock_stream(msg, from_person="human", intent=""):
+            yield {"type": "text_delta", "text": "Hello"}
+            yield {"type": "cycle_done", "cycle_result": {"summary": "Hello"}}
+
+        alice.process_message_stream = mock_stream
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        with (
+            patch("server.routes.chat._human_for_chat", return_value=("alice", "tui")),
+            patch("server.routes.chat.record_human", return_value="tl_1234567890abcdef") as record_human,
+            patch("core.hub.timeline_human.record_answered") as record_answered,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/animas/alice/chat/stream",
+                    json={"message": "Hi"},
+                )
+        assert resp.status_code == 200
+        assert "event: done" in resp.text
+        record_human.assert_called_once_with(person="alice", anima="alice", text="Hi", via="tui")
+        record_answered.assert_called_once_with(
+            anima="alice",
+            person="alice",
+            text="Hello",
+            via="tui",
+            about="tl_1234567890abcdef",
+        )
+
+    async def test_stream_error_does_not_record_answered(self):
+        alice = _make_mock_anima("alice")
+
+        async def mock_stream(msg, from_person="human", intent=""):
+            yield {"type": "error", "message": "boom"}
+
+        alice.process_message_stream = mock_stream
+        app = _make_test_app({"alice": alice})
+        transport = ASGITransport(app=app)
+        with (
+            patch("server.routes.chat._human_for_chat", return_value=("alice", "web")),
+            patch("server.routes.chat.record_human", return_value="tl_1234567890abcdef"),
+            patch("core.hub.timeline_human.record_answered") as record_answered,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/animas/alice/chat/stream",
+                    json={"message": "Hi"},
+                )
+        assert resp.status_code == 200
+        record_answered.assert_not_called()

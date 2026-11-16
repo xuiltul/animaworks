@@ -450,3 +450,62 @@ class TestChatworkMessageDelivery:
             headers={"X-ChatWorkWebhookSignature": _chatwork_signature(body)},
         )
         assert resp.status_code == 200
+
+
+class TestSlackHumanTimeline:
+    @patch("server.routes.webhooks.get_data_dir")
+    @patch("server.routes.webhooks.get_credential", return_value=SIGNING_SECRET)
+    @patch("server.routes.webhooks.load_config")
+    @patch("core.hub.timeline_human.resolve_person", return_value="alice")
+    @patch("core.hub.timeline_human.record_human")
+    def test_slack_webhook_records_human(
+        self,
+        mock_record_human,
+        mock_resolve_person,
+        mock_config,
+        mock_cred,
+        mock_data_dir,
+        client,
+        tmp_path,
+    ):
+        shared_dir = tmp_path / "shared"
+        (shared_dir / "inbox" / "sakura").mkdir(parents=True)
+        mock_data_dir.return_value = tmp_path
+        mock_config.return_value = AnimaWorksConfig(
+            external_messaging=ExternalMessagingConfig(
+                slack=ExternalMessagingChannelConfig(
+                    enabled=True,
+                    anima_mapping={"C0ACT663B5L": "sakura"},
+                ),
+            ),
+        )
+
+        payload = json.dumps(
+            {
+                "type": "event_callback",
+                "event": {
+                    "type": "message",
+                    "channel": "C0ACT663B5L",
+                    "user": "U_ALICE",
+                    "text": "Hello Sakura!",
+                    "ts": "1987654321.654321",
+                },
+            }
+        )
+        body = payload.encode("utf-8")
+        resp = client.post(
+            "/api/webhooks/slack/events",
+            content=body,
+            headers=_slack_headers(body),
+        )
+        assert resp.status_code == 200
+
+        inbox_file = next((shared_dir / "inbox" / "sakura").glob("*.json"))
+        message_id = json.loads(inbox_file.read_text(encoding="utf-8"))["id"]
+        mock_record_human.assert_called_once_with(
+            person="alice",
+            anima="sakura",
+            text="Hello Sakura!",
+            via="slack",
+            ref=message_id,
+        )

@@ -1199,3 +1199,56 @@ class TestChannelReads:
 
         assert resp.status_code == 404
         assert not (shared_dir / "reads" / "board" / "general.json").exists()
+
+
+def _with_auth_via(app, auth_via: str):
+    @app.middleware("http")
+    async def _set_auth_via(request, call_next):
+        request.state.auth_via = auth_via
+        return await call_next(request)
+
+    return app
+
+
+class TestBoardTimelineHuman:
+    async def test_localhost_post_is_not_recorded(self, tmp_path: Path):
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(shared_dir, "general", [])
+        app = _with_auth_via(_make_test_app(shared_dir), "localhost")
+        transport = ASGITransport(app=app)
+        with (
+            patch("core.hub.timeline_human.resolve_person", return_value="owner"),
+            patch("core.hub.timeline_human.record_human") as record_human,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post("/api/channels/general", json={"text": "script post"})
+        assert resp.status_code == 200
+        record_human.assert_not_called()
+
+    async def test_human_post_records_timeline_item(self, tmp_path: Path):
+        shared_dir = tmp_path / "shared"
+        shared_dir.mkdir()
+        _write_channel(shared_dir, "general", [])
+        app = _with_auth_via(_make_test_app(shared_dir), "session")
+        transport = ASGITransport(app=app)
+        with (
+            patch("core.hub.timeline_human.resolve_person", return_value="owner"),
+            patch("core.hub.timeline_human.mentioned_animas", return_value="sakura"),
+            patch("core.hub.timeline_human.record_human") as record_human,
+        ):
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/channels/general",
+                    json={"text": "@sakura 確認してください"},
+                )
+        assert resp.status_code == 200
+        post_id = resp.json()["post"]["id"]
+        record_human.assert_called_once_with(
+            person="owner",
+            text="@sakura 確認してください",
+            via="board",
+            label="general",
+            ref=post_id,
+            to="sakura",
+        )

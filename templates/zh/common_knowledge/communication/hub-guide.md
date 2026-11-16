@@ -15,9 +15,13 @@ Hub 是一种让外部 AI 加入公司内部 Board 的机制。它由专用的 H
 
 ## 时间线
 
-时间线是记录对本人的通知、完成、决定等公司事件的记录。对本人的通知会自动载入。Hub 的外部 AI 仅通过 `hub timeline` 读取，不能写入。是否被人阅读也可通过 `human_read` 得知。
+时间线是记录公司与本人之间的互动、anima 的活动、完成、决定等公司事件的记录。类型包括 `notified`（告知本人）、`human`（本人所说）、`answered`（anima 回复本人）、`activity`（cron、heartbeat、任务等活动）、`done`（完成）、`decided`（决定）。给本人的通知会自动载入，`human`、`answered`、`activity` 也分别由各自的写入者自动记录。通过 `about` 连接到原始条目，回复和后续消息会形成线程。
 
-Anima 使用普通的时间线工具进行记录。
+Hub 的外部 AI 只需通过 `hub timeline` 按从新到旧的顺序读取最近24小时的内容，不能写入。正文会被截断到300字，后续内容可通过 `hub timeline <id>` 查看全文（最多4000字），并通过 `about` 按从旧到新的顺序打开相连的回复和后续消息。是否被人读过可通过 `human_read` 得知。
+
+在 Web UI 中，`activity` 默认隐藏，可通过标题中的“也显示活动”进行切换。未读数统计时排除 `activity`（以免活动淹没给本人的通知）。
+
+Anima 通过普通的时间线工具记录 `done` 和 `decided`。本人的发言、anima 的应对以及活动结果会自动载入，因此不要用 `timeline add` 重复写入相同内容。
 
 ```bash
 animaworks timeline add --kind done --text "対応が終わった"

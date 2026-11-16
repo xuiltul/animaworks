@@ -487,3 +487,27 @@ class TestNtfyChannel:
             call_args = mock_client.post.call_args
             assert len(call_args[1]["headers"]["Title"]) <= 256
             assert len(call_args[1]["content"]) <= 4096
+
+
+class TestSlackNotificationMappingKey:
+    @pytest.mark.asyncio
+    async def test_bot_send_saves_notification_key(self):
+        from core.notification import notification_key_for
+        from core.notification.channels.slack import SlackChannel
+
+        channel = SlackChannel({"bot_token": "xoxb-test", "channel": "C123"})
+        with (
+            patch(
+                "core.channels.slack.post_message",
+                new_callable=AsyncMock,
+                return_value={"ok": True, "ts": "123.456", "channel": "C123"},
+            ),
+            patch(
+                "core.notification.reply_routing.save_notification_mapping_resilient",
+                return_value=True,
+            ) as save_mapping,
+        ):
+            result = await channel.send("Subject", "Body", anima_name="sakura")
+
+        assert result == "slack: OK"
+        assert save_mapping.call_args.kwargs["notification_key"] == notification_key_for("Subject", "Body")

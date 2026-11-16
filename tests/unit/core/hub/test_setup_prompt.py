@@ -190,6 +190,22 @@ def test_setup_prompt_falls_back_to_human_when_roster_empty(tmp_path: Path, monk
     assert "該当する anima はいません" in text
 
 
+@pytest.mark.parametrize("locale", ["ja", "en", "ko", "zh"])
+def test_setup_prompt_documents_timeline_kinds_and_threads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, locale: str
+) -> None:
+    _config(monkeypatch, public_hosts=["hub.example.com"], locale=locale)
+    shared = _shared(tmp_path)
+    save_member(shared, _member())
+
+    text = build_setup_prompt(shared, "muse")
+
+    assert "kind=human" in text
+    assert "about=<id>" in text
+    assert "hub timeline <id>" in text
+    assert "{" not in text.replace("{{", "")
+
+
 def test_setup_prompt_uses_the_configured_locale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _config(monkeypatch, public_hosts=["hub.example.com"], locale="en")
     shared = tmp_path / "shared"

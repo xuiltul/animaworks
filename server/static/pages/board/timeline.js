@@ -17,12 +17,32 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const FETCH_LIMIT = 200;
 const DISPLAY_LIMIT = 50;
 const READ_DEBOUNCE_MS = 800;
+const SHOW_ACTIVITY_KEY = "aw.timeline.showActivity";
 
 const KIND_KEYS = {
   notified: "board.timeline_kind_notified",
   done: "board.timeline_kind_done",
   decided: "board.timeline_kind_decided",
+  human: "board.timeline_kind_human",
+  answered: "board.timeline_kind_answered",
+  activity: "board.timeline_kind_activity",
 };
+
+function _readShowActivity() {
+  try {
+    return window.localStorage.getItem(SHOW_ACTIVITY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function _saveShowActivity(value) {
+  try {
+    window.localStorage.setItem(SHOW_ACTIVITY_KEY, value ? "1" : "0");
+  } catch {
+    // Storage can be unavailable (private mode); the toggle still works this session.
+  }
+}
 
 function _ts(value) {
   const parsed = Date.parse(String(value || ""));
@@ -64,6 +84,7 @@ function _safeRef(ref) {
 }
 
 function _sourceKind(store, item) {
+  if (item.source === "human") return "human";
   if (item.from === "system" || item.source === "system") return "system";
   if (store && store.hasAnima(item.from)) return "anima";
   if (item.from === "human") return "human";
@@ -72,12 +93,15 @@ function _sourceKind(store, item) {
 
 function _fromMarkup(item, store) {
   const name = String(item.from || "");
-  if (_sourceKind(store, item) === "system") {
+  const kind = _sourceKind(store, item);
+  if (kind === "system") {
     return `<span class="board-timeline-system" title="${escapeAttr(t("board.kind_operator"))}">${escapeHtml(t("board.kind_operator"))}</span>`;
   }
-  const kind = store && store.hasAnima(name) ? "anima" : "human";
   const url = store ? store.avatarUrl(name) : null;
-  return `<span class="board-timeline-from">${avatarMarkup({ name, kind, url, size: "xs" })}<span class="board-timeline-from-name">${escapeHtml(name || "?")}</span></span>`;
+  const direction = item.to
+    ? `<span class="board-timeline-to">→ ${escapeHtml(String(item.to))}</span>`
+    : "";
+  return `<span class="board-timeline-from">${avatarMarkup({ name, kind, url, size: "xs" })}<span class="board-timeline-from-name">${escapeHtml(name || "?")}</span>${direction}</span>`;
 }
 
 function _kindMarkup(kind) {
@@ -152,6 +176,7 @@ export function createTimelineView({ element, store, mode = "recent", scrollRoot
     enabled: false,
     mode: mode === "all" ? "all" : "recent",
     filter: "all",
+    showActivity: _readShowActivity(),
     company: "",
     items: [],
     unread: 0,
@@ -211,80 +236,74 @@ export function createTimelineView({ element, store, mode = "recent", scrollRoot
     return value !== null && Date.now() - value <= DAY_MS;
   }
 
-  function _recentRows() {
+  function _isVisible(item) {
+    return state.showActivity || item.kind !== "activity";
+  }
+
+  /** Follow `about` to the topmost parent, grouping every descendant under it. */
+  function _threadGroups() {
     const byId = new Map(state.items.map((item) => [item.id, item]));
-    const candidates = new Map();
+    const groups = new Map();
     for (const item of state.items) {
-      if (!item.read || _isRecent(item)) candidates.set(item.id, item);
+      if (!_isVisible(item)) continue;
+      const chain = [item];
+      const seen = new Set([item.id]);
+      let cursor = item;
+      while (cursor.about && byId.has(String(cursor.about))) {
+        const parent = byId.get(String(cursor.about));
+        if (seen.has(parent.id)) break;
+        seen.add(parent.id);
+        chain.push(parent);
+        cursor = parent;
+      }
+      let root = chain[chain.length - 1];
+      if (!_isVisible(root)) {
+        // The topmost parent is hidden activity. Attach the thread to the
+        // highest visible item below it (a lone human reply becomes a
+        // standalone row) so hiding activity never hides human messages.
+        root = chain.slice(0, -1).reverse().find(_isVisible) || item;
+      }
+      const list = groups.get(root.id) || [];
+      if (!list.some((entry) => entry.id === item.id)) list.push(item);
+      groups.set(root.id, list);
     }
-    // A newly arrived update keeps its original on screen even when the
-    // original itself is older than 24h and already read.
-    const updatesByBase = new Map();
-    for (const item of state.items) {
-      if (!item.about || !candidates.has(item.id)) continue;
-      const original = byId.get(String(item.about));
-      if (!original) continue;
-      candidates.set(original.id, original);
+    return groups;
+  }
+
+  function _rowsFromGroups(groups, { unreadOnly = false } = {}) {
+    const rows = [];
+    for (const [rootId, group] of groups) {
+      const root = group.find((item) => item.id === rootId);
+      if (!root) continue;
+      const updates = group
+        .filter((item) => item.id !== rootId)
+        .sort((a, b) => _newer(a, b) || String(a.id).localeCompare(String(b.id)));
+      if (unreadOnly && root.read && !updates.some((item) => !item.read)) continue;
+      rows.push({ item: root, updates });
     }
-    for (const item of state.items) {
-      if (!item.about) continue;
-      const base = String(item.about);
-      if (!candidates.has(base) || !byId.has(base)) continue;
-      const list = updatesByBase.get(base) || [];
-      if (!list.some((update) => update.id === item.id)) list.push(item);
-      updatesByBase.set(base, list);
+    return rows.sort((a, b) => _newer(b.item, a.item) || String(b.item.id).localeCompare(String(a.item.id)));
+  }
+
+  function _recentRows() {
+    const groups = _threadGroups();
+    const rows = [];
+    for (const [rootId, group] of groups) {
+      const root = group.find((item) => item.id === rootId);
+      if (!root) continue;
+      // A newly arrived update keeps its original on screen even when the
+      // original itself is older than 24h and already read.
+      if (!group.some((item) => !item.read || _isRecent(item))) continue;
+      const updates = group
+        .filter((item) => item.id !== rootId)
+        .sort((a, b) => _newer(a, b) || String(a.id).localeCompare(String(b.id)));
+      rows.push({ item: root, updates });
     }
-    const rows = [...candidates.values()]
-      .filter((item) => !(item.about && candidates.has(String(item.about)) && byId.has(String(item.about))))
-      .sort((a, b) => _newer(b, a) || String(b.id).localeCompare(String(a.id)))
-      .slice(0, DISPLAY_LIMIT);
-    return rows.map((item) => ({
-      item,
-      updates: (updatesByBase.get(item.id) || []).sort((a, b) => _newer(b, a)),
-    }));
+    rows.sort((a, b) => _newer(b.item, a.item) || String(b.item.id).localeCompare(String(a.item.id)));
+    return rows.slice(0, DISPLAY_LIMIT);
   }
 
   function _allRows() {
-    const byId = new Map(state.items.map((item) => [item.id, item]));
-    const candidateIds = new Set();
-    for (const item of state.items) {
-      if (item.about) continue;
-      if (state.filter === "unread") {
-        const unreadUpdate = state.items.some(
-          (update) => String(update.about || "") === item.id && !update.read,
-        );
-        if (item.read && !unreadUpdate) continue;
-      }
-      candidateIds.add(item.id);
-    }
-    // A fetched update can outlive its original (or the original can be
-    // outside the fetched page). Keep the original as the parent when it is
-    // present; otherwise show the update itself rather than dropping it.
-    for (const item of state.items) {
-      const base = String(item.about || "");
-      if (!base) continue;
-      if (!byId.has(base)) {
-        if (state.filter !== "unread" || !item.read) candidateIds.add(item.id);
-        continue;
-      }
-      if (state.filter === "unread" && !item.read) candidateIds.add(base);
-    }
-    const updatesByBase = new Map();
-    for (const item of state.items) {
-      const base = String(item.about || "");
-      if (!base || !candidateIds.has(base) || !byId.has(base)) continue;
-      const list = updatesByBase.get(base) || [];
-      if (!list.some((update) => update.id === item.id)) list.push(item);
-      updatesByBase.set(base, list);
-    }
-    const rows = [...candidateIds]
-      .map((id) => byId.get(id))
-      .filter(Boolean)
-      .sort((a, b) => _newer(b, a) || String(b.id).localeCompare(String(a.id)));
-    return rows.map((item) => ({
-      item,
-      updates: (updatesByBase.get(item.id) || []).sort((a, b) => _newer(b, a)),
-    }));
+    return _rowsFromGroups(_threadGroups(), { unreadOnly: state.filter === "unread" });
   }
 
   /** Build the top-level rows plus updates nested under their original. */
@@ -382,7 +401,9 @@ export function createTimelineView({ element, store, mode = "recent", scrollRoot
         if (!item.read && _atOrAfter(uptoTs, item.ts)) {
           item.read = true;
           item.changed = false;
-          newlyRead += 1;
+          // Activity is excluded from the server unread count, so it must not
+          // decrement the heading badge either.
+          if (item.kind !== "activity") newlyRead += 1;
         }
       }
       state.unread = Math.max(0, state.unread - newlyRead);
@@ -440,9 +461,11 @@ export function createTimelineView({ element, store, mode = "recent", scrollRoot
     const body = rows.length
       ? _rowsMarkup(rows)
       : `<div class="board-timeline-empty" data-timeline-empty>${escapeHtml(t(emptyKey))}</div>`;
+    const activityToggle = `<button type="button" class="board-timeline-activity-toggle${state.showActivity ? " is-active" : ""}" data-timeline-activity-toggle aria-pressed="${state.showActivity ? "true" : "false"}">${escapeHtml(t("board.timeline_show_activity"))}</button>`;
     element.innerHTML = `<header class="board-timeline-head">
       <h2 class="board-timeline-title" data-timeline-title>${escapeHtml(t("board.timeline_title"))}</h2>
       ${unreadMarkup}
+      ${activityToggle}
       ${_filtersMarkup()}
     </header>
     <div class="board-timeline-list" data-timeline-list>${body}</div>`;
@@ -494,12 +517,23 @@ export function createTimelineView({ element, store, mode = "recent", scrollRoot
     const added = _upsert(raw, { authoritative: false });
     if (!added) return;
     _sort();
-    if (!raw.read && !_atOrAfter(state.reader.upto_ts, raw.ts)) state.unread += 1;
+    // Activity is informational and hidden by default; it must not advance the
+    // heading badge that people use to spot human notifications.
+    if (raw.kind !== "activity" && !raw.read && !_atOrAfter(state.reader.upto_ts, raw.ts)) {
+      state.unread += 1;
+    }
     render();
     _loadAvatars();
   }
 
   element.addEventListener("click", (event) => {
+    const activityToggle = event.target.closest("[data-timeline-activity-toggle]");
+    if (activityToggle) {
+      state.showActivity = !state.showActivity;
+      _saveShowActivity(state.showActivity);
+      render();
+      return;
+    }
     const filter = event.target.closest("[data-timeline-filter]");
     if (filter) {
       const next = filter.dataset.timelineFilter;

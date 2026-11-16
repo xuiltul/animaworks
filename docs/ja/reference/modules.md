@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 92b512d8ad8bfc119271d269229a57ce9e8b5b064fd0d2201e55daea9befac71 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: e30d28752b173c9f41ecaeed6d2da0551122b80c43d9e2aeda3de09c9cbaf00a -->
 
 # モジュール一覧
 
@@ -68,7 +68,7 @@
 |---|---:|---|
 | `cli.tui` | 207 | — |
 | `cli.tui.app` | 1936 | — |
-| `cli.tui.client` | 394 | — |
+| `cli.tui.client` | 395 | — |
 | `cli.tui.commands` | 251 | — |
 | `cli.tui.keybindings` | 90 | Keybinding configuration for the TUI. |
 | `cli.tui.markdown` | 535 | Markdown → Rich renderables, tuned for a terminal transcript. |
@@ -117,7 +117,7 @@
 |---|---:|---|
 | `core.activity` | 24 | — |
 | `core.activity.audit` | 290 | — |
-| `core.activity.conversation` | 1421 | — |
+| `core.activity.conversation` | 1422 | — |
 | `core.activity.event_export` | 33 | — |
 | `core.activity.format` | 571 | — |
 | `core.activity.logger` | 584 | — |
@@ -158,11 +158,11 @@ Digital Anima のライフサイクルと実行時オブジェクト。
 | `core.anima.emotion_tag` | 84 | Shared emotion-tag extraction for LLM responses. |
 | `core.anima.export` | 234 | Export an Anima workspace in OpenClaw or Hermes Agent layout. |
 | `core.anima.factory` | 876 | Anima creation factory: create new Digital Animas from templates, blank, or MD files. |
-| `core.anima.heartbeat` | 1022 | — |
+| `core.anima.heartbeat` | 1035 | — |
 | `core.anima.image_artifacts` | 219 | — |
-| `core.anima.inbox` | 1089 | — |
+| `core.anima.inbox` | 1130 | — |
 | `core.anima.inbox_overflow` | 100 | — |
-| `core.anima.lifecycle` | 1662 | — |
+| `core.anima.lifecycle` | 1683 | — |
 | `core.anima.messaging` | 1332 | — |
 | `core.anima.response_normalize` | 141 | — |
 | `core.anima.roster` | 83 | — |
@@ -394,11 +394,13 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 167 | — |
-| `core.hub.mcp_app` | 588 | — |
+| `core.hub.mcp_app` | 660 | — |
 | `core.hub.members` | 328 | — |
 | `core.hub.setup_prompt` | 163 | — |
 | `core.hub.silence` | 123 | — |
-| `core.hub.timeline` | 298 | — |
+| `core.hub.timeline` | 361 | — |
+| `core.hub.timeline_activity` | 159 | — |
+| `core.hub.timeline_human` | 297 | — |
 | `core.hub.wake` | 378 | — |
 
 ## `core.i18n`
@@ -409,14 +411,14 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 |---|---:|---|
 | `core.i18n` | 135 | Lightweight i18n support for runtime strings. |
 | `core.i18n.strings.communication` | 46 | Domain-specific i18n strings. |
-| `core.i18n.strings.company` | 14 | Localized strings for company management. |
+| `core.i18n.strings.company` | 18 | Localized strings for company management. |
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 820 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 828 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
-| `core.i18n.strings.memory` | 440 | Domain-specific i18n strings. |
+| `core.i18n.strings.memory` | 452 | Domain-specific i18n strings. |
 | `core.i18n.strings.migrate` | 124 | — |
 | `core.i18n.strings.misc` | 542 | Domain-specific i18n strings. |
 | `core.i18n.strings.misc_routes` | 21 | Domain-specific i18n strings (legacy route modules). |
@@ -582,7 +584,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
 | `core.memory.conversation.prompt` | 270 | Prompt building functions for conversation memory. |
 | `core.memory.conversation.shortterm` | 313 | Short-term memory (短期記憶) management. |
-| `core.memory.conversation.state_update` | 49 | State update functions for conversation memory finalization. |
+| `core.memory.conversation.state_update` | 55 | State update functions for conversation memory finalization. |
 | `core.memory.conversation.streaming_journal` | 473 | — |
 | `core.memory.facts.chunking` | 91 | — |
 | `core.memory.facts.config` | 85 | — |
@@ -604,7 +606,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.maintenance.background_review` | 565 | — |
 | `core.memory.maintenance.consolidation` | 1190 | — |
 | `core.memory.maintenance.cron_logger` | 159 | — |
-| `core.memory.maintenance.cron_noop` | 241 | — |
+| `core.memory.maintenance.cron_noop` | 325 | — |
 | `core.memory.maintenance.distillation` | 548 | — |
 | `core.memory.maintenance.forgetting` | 588 | — |
 | `core.memory.maintenance.housekeeping` | 1952 | — |
@@ -623,7 +625,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory.priming.engine` | 503 | — |
 | `core.memory.priming.format` | 124 | — |
 | `core.memory.priming.items` | 59 | — |
-| `core.memory.priming.outbound` | 194 | — |
+| `core.memory.priming.outbound` | 245 | — |
 | `core.memory.priming.policy` | 25 | — |
 | `core.memory.priming.result` | 76 | — |
 | `core.memory.priming.utils` | 284 | — |
@@ -778,12 +780,12 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.discord` | 251 | — |
 | `core.notification.channels.line` | 86 | — |
 | `core.notification.channels.ntfy` | 87 | — |
-| `core.notification.channels.slack` | 261 | — |
+| `core.notification.channels.slack` | 263 | — |
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
-| `core.notification.interactive` | 613 | — |
-| `core.notification.notifier` | 312 | — |
-| `core.notification.reply_routing` | 535 | — |
+| `core.notification.interactive` | 630 | — |
+| `core.notification.notifier` | 318 | — |
+| `core.notification.reply_routing` | 584 | — |
 | `core.notification.slack_names` | 67 | — |
 
 ## `core.notification.channels`
@@ -971,7 +973,7 @@ anima メインの実行時コンポーネント、プロセス間通信、タ�
 | `core.tasks.external.sources.gmail` | 124 | Gmail external tasks collector (unread inbox, last 7 days). |
 | `core.tasks.external.sources.slack` | 184 | Slack external tasks collector (unreplied mentions via message cache). |
 | `core.tasks.external.store` | 51 | Atomic JSON snapshot store for external tasks. |
-| `core.tasks.pending_executor` | 1708 | Execute claimed TaskStore work in background lanes. |
+| `core.tasks.pending_executor` | 1719 | Execute claimed TaskStore work in background lanes. |
 | `core.tasks.queue` | 516 | — |
 | `core.tasks.waiting` | 81 | — |
 | `core.tasks.wake` | 70 | Cross-process wake fan-out for the PendingTaskExecutor. |
@@ -1141,11 +1143,11 @@ LLM 利用量とコストの記録・集計。
 |---|---:|---|
 | `server.gateways` | 1 | Inbound chat/meeting gateways (Slack, Discord, Zoom, GitHub) run by the server. |
 | `server.gateways.discord_channel_sync` | 278 | — |
-| `server.gateways.discord_gateway` | 738 | — |
+| `server.gateways.discord_gateway` | 753 | — |
 | `server.gateways.github_gateway` | 534 | — |
 | `server.gateways.slack_channel_sync` | 515 | — |
 | `server.gateways.slack_interactive` | 239 | — |
-| `server.gateways.slack_socket` | 1183 | — |
+| `server.gateways.slack_socket` | 1243 | — |
 | `server.gateways.zoom_gateway` | 700 | — |
 
 ## `server.routes`
@@ -1160,37 +1162,37 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.assets` | 1738 | — |
 | `server.routes.attachment_preview` | 741 | — |
 | `server.routes.auth` | 147 | — |
-| `server.routes.channels` | 914 | — |
-| `server.routes.chat` | 459 | — |
+| `server.routes.channels` | 937 | — |
+| `server.routes.chat` | 496 | — |
 | `server.routes.chat_chunk_handler` | 265 | — |
 | `server.routes.chat_emotion` | 8 | — |
 | `server.routes.chat_files` | 99 | — |
 | `server.routes.chat_images` | 80 | — |
 | `server.routes.chat_models` | 60 | — |
-| `server.routes.chat_producer` | 346 | — |
+| `server.routes.chat_producer` | 364 | — |
 | `server.routes.chat_resume` | 114 | — |
 | `server.routes.chat_ui_state` | 101 | — |
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
 | `server.routes.hub` | 99 | — |
-| `server.routes.internal` | 1604 | — |
+| `server.routes.internal` | 1606 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
 | `server.routes.memory_routes` | 532 | — |
 | `server.routes.phone` | 419 | — |
 | `server.routes.phone_stream` | 258 | — |
-| `server.routes.sessions` | 949 | — |
+| `server.routes.sessions` | 951 | — |
 | `server.routes.setup` | 604 | — |
 | `server.routes.skills` | 132 | — |
 | `server.routes.system` | 1217 | — |
 | `server.routes.taskboard` | 237 | — |
-| `server.routes.timeline` | 241 | — |
+| `server.routes.timeline` | 249 | — |
 | `server.routes.usage_routes` | 844 | — |
 | `server.routes.users` | 299 | — |
 | `server.routes.vault_routes` | 536 | — |
 | `server.routes.voice` | 227 | Voice chat WebSocket endpoint; per-Anima status.json settings use shared helpers. |
-| `server.routes.webhooks` | 503 | — |
+| `server.routes.webhooks` | 518 | — |
 | `server.routes.websocket_route` | 50 | — |
 
 ## `server.services`

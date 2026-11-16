@@ -235,6 +235,7 @@ class AnimaWorksClient:
                 "POST",
                 f"{self.base_url}/api/animas/{anima}/chat/stream",
                 json=payload,
+                headers={"X-AnimaWorks-Client": "tui"},
             ) as resp:
                 resp.raise_for_status()
                 async for event in aiter_sse(resp):

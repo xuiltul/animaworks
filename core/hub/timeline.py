@@ -25,11 +25,12 @@ from core.time_utils import now_iso, now_local
 
 logger = logging.getLogger(__name__)
 
-KINDS: frozenset[str] = frozenset({"notified", "done", "decided"})
-SOURCES: frozenset[str] = frozenset({"anima", "system"})
+KINDS: frozenset[str] = frozenset({"notified", "done", "decided", "human", "answered", "activity"})
+SOURCES: frozenset[str] = frozenset({"anima", "system", "human"})
 PRIORITIES: frozenset[str] = frozenset({"low", "normal", "high", "urgent"})
-MAX_TEXT_CHARS = 400
+MAX_TEXT_CHARS = 4000
 _ABOUT_RE = re.compile(r"^tl_[0-9a-f]{16}$")
+_VIA_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 
 
 def timeline_dir(shared_dir: Path) -> Path:
@@ -119,6 +120,29 @@ def find_item(shared_dir: Path, item_id: str) -> dict[str, Any] | None:
     return None
 
 
+def find_latest(
+    shared_dir: Path,
+    *,
+    company: str,
+    key: str | None = None,
+    callback_id: str | None = None,
+    ref: str | None = None,
+    kind: str | None = None,
+) -> dict[str, Any] | None:
+    """Return the newest item matching every supplied condition.
+
+    Conditions set to ``None`` are ignored.  With no conditions at all there
+    is nothing specific to look for, so ``None`` is returned.
+    """
+    conditions = {"key": key, "callback_id": callback_id, "ref": ref, "kind": kind}
+    if all(value is None for value in conditions.values()):
+        return None
+    for item in list_items(shared_dir, company=company, limit=100_000):
+        if all(value is None or item.get(field) == value for field, value in conditions.items()):
+            return item
+    return None
+
+
 def append_item(
     shared_dir: Path,
     *,
@@ -132,6 +156,11 @@ def append_item(
     ref: str | None = None,
     priority: str | None = None,
     delivered: bool | None = None,
+    to: str | None = None,
+    via: str | None = None,
+    label: str | None = None,
+    key: str | None = None,
+    callback_id: str | None = None,
 ) -> dict[str, Any]:
     """Append one timeline item and return the stored record."""
     kind_value = str(kind or "")
@@ -140,10 +169,20 @@ def append_item(
     source_value = str(source or "")
     if source_value not in SOURCES:
         raise ValueError(f"Invalid timeline source: {source_value!r}")
+    if source_value == "human" and kind_value != "human":
+        raise ValueError("Timeline source 'human' requires kind 'human'")
+    if kind_value == "human" and source_value != "human":
+        raise ValueError("Timeline kind 'human' requires source 'human'")
     if priority is not None:
         priority = str(priority)
         if priority not in PRIORITIES:
             raise ValueError(f"Invalid timeline priority: {priority!r}")
+
+    via_value: str | None = None
+    if via is not None:
+        via_value = str(via)
+        if not _VIA_RE.fullmatch(via_value):
+            raise ValueError(f"Invalid timeline via: {via_value!r}")
 
     text_value = str(text or "").strip()
     if not text_value:
@@ -176,6 +215,11 @@ def append_item(
         "source": source_value,
         "priority": priority,
         "delivered": None if delivered is None else bool(delivered),
+        "to": None if to is None else str(to),
+        "via": via_value,
+        "label": None if label is None else str(label)[:200],
+        "key": None if key is None else str(key),
+        "callback_id": None if callback_id is None else str(callback_id),
     }
     append_jsonl_locked(_month_path(shared_dir, ts[:7]), item)
     return item
@@ -236,6 +280,9 @@ def _ts_at_least(value: object, reference: object) -> bool:
 
 def is_read_for_reader(item: dict[str, Any], reads: dict[str, Any], reader: str) -> bool:
     """Return whether *reader* has read *item*."""
+    if item.get("source") == "human" and reader == f"human:{item.get('from')}":
+        # The person wrote it themselves, so it is never "unread" to them.
+        return True
     item_id = str(item.get("id") or "")
     if item_id and item_id in reads.get("picked", {}).get(reader, []):
         return True
@@ -247,6 +294,9 @@ def is_read_for_reader(item: dict[str, Any], reads: dict[str, Any], reader: str)
 
 def is_read_by_human(item: dict[str, Any], reads: dict[str, Any]) -> bool:
     """Return whether any human reader has read *item* (position or picked)."""
+    if item.get("source") == "human":
+        # A message the person sent is inherently read by the person.
+        return True
     readers = reads.get("readers", {})
     picked = reads.get("picked", {})
     if not isinstance(readers, dict):
@@ -259,6 +309,19 @@ def is_read_by_human(item: dict[str, Any], reads: dict[str, Any]) -> bool:
         if isinstance(reader, str) and reader.startswith("human:")
     }
     return any(is_read_for_reader(item, reads, reader) for reader in human_readers)
+
+
+def count_unread(
+    items: list[dict[str, Any]],
+    reads: dict[str, Any],
+    reader: str,
+    *,
+    exclude_kinds: frozenset[str] = frozenset(),
+) -> int:
+    """Count unread items for *reader*, optionally skipping some kinds."""
+    return sum(
+        1 for item in items if item.get("kind") not in exclude_kinds and not is_read_for_reader(item, reads, reader)
+    )
 
 
 def decorate_items(

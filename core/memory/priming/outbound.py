@@ -22,6 +22,14 @@ logger = logging.getLogger("animaworks.priming")
 
 _HUMAN_NOTIFY_BUDGET_TOKENS = 500
 HUMAN_NOTIFICATION_CHANNELS: frozenset[str] = frozenset({"chat", "heartbeat"})
+# The timeline is rendered in two frames so a busy day of activity cannot
+# push what the person actually said (or was told) out of the 24h window.
+_TIMELINE_HUMAN_KINDS: frozenset[str] = frozenset({"notified", "human", "answered"})
+_TIMELINE_ACTIVITY_KINDS: frozenset[str] = frozenset({"activity", "done", "decided"})
+_TIMELINE_HUMAN_LIMIT = 15
+_TIMELINE_ACTIVITY_LIMIT = 10
+_TIMELINE_FETCH_LIMIT = 1000
+_TIMELINE_TEXT_CHARS = 120
 
 
 def _timestamp_rank(value: str) -> float:
@@ -93,6 +101,52 @@ async def collect_recent_outbound(anima_dir: Path, max_entries: int = 3) -> str:
     return ItemizedMemory(render_items(items, t("priming.outbound_header")), items) if items else ""
 
 
+def _timeline_line(item: dict, reads: dict) -> str:
+    """Render one compact timeline line for the priming prompt."""
+    from core.hub.timeline import is_read_by_human
+
+    ts = str(item.get("ts") or "")
+    time_str = ts[11:16] if len(ts) >= 16 else ts
+    text = " ".join(str(item.get("text") or "").split())[:_TIMELINE_TEXT_CHARS]
+    marks = ""
+    if not is_read_by_human(item, reads):
+        marks += t("priming.timeline_unread_mark")
+    if item.get("about"):
+        marks += t("priming.timeline_update_mark")
+
+    kind = str(item.get("kind") or "")
+    from_name = str(item.get("from") or "")
+    to_name = str(item.get("to") or "")
+    if kind in ("human", "answered") and to_name:
+        return t(
+            "priming.timeline_direction_line",
+            time_str=time_str,
+            kind=kind,
+            from_name=from_name,
+            to_name=to_name,
+            text=text,
+            marks=marks,
+        )
+    if kind == "activity" and item.get("label"):
+        return t(
+            "priming.timeline_labeled_line",
+            time_str=time_str,
+            label=str(item.get("label")),
+            kind=kind,
+            from_name=from_name,
+            text=text,
+            marks=marks,
+        )
+    return t(
+        "priming.timeline_line",
+        time_str=time_str,
+        kind=kind,
+        from_name=from_name,
+        text=text,
+        marks=marks,
+    )
+
+
 def _collect_timeline_section(anima_dir: Path) -> str:
     """Render the company timeline for the last 24 hours, or an empty string."""
     try:
@@ -105,37 +159,34 @@ def _collect_timeline_section(anima_dir: Path) -> str:
         if not readable or company != hub.company:
             return ""
 
-        from core.hub.timeline import is_read_by_human, list_items, load_timeline_reads
+        from core.hub.timeline import list_items, load_timeline_reads
         from core.paths import get_shared_dir
 
         shared_dir = get_shared_dir()
         since = (now_local() - timedelta(hours=24)).isoformat()
-        items = list_items(shared_dir, company=hub.company, since=since, limit=15)
+        items = list_items(
+            shared_dir,
+            company=hub.company,
+            since=since,
+            limit=_TIMELINE_FETCH_LIMIT,
+        )
         if not items:
             return ""
         reads = load_timeline_reads(shared_dir)
+        self_name = anima_dir.name
 
-        lines: list[str] = []
-        for item in items:
-            ts = str(item.get("ts") or "")
-            time_str = ts[11:16] if len(ts) >= 16 else ts
-            text = " ".join(str(item.get("text") or "").split())[:120]
-            marks = ""
-            if not is_read_by_human(item, reads):
-                marks += t("priming.timeline_unread_mark")
-            if item.get("about"):
-                marks += t("priming.timeline_update_mark")
-            lines.append(
-                t(
-                    "priming.timeline_line",
-                    time_str=time_str,
-                    kind=str(item.get("kind") or ""),
-                    from_name=str(item.get("from") or ""),
-                    text=text,
-                    marks=marks,
-                )
-            )
-        return "\n".join([t("priming.timeline_header"), *lines])
+        human_items = [item for item in items if item.get("kind") in _TIMELINE_HUMAN_KINDS][:_TIMELINE_HUMAN_LIMIT]
+        activity_items = [
+            item for item in items if item.get("kind") in _TIMELINE_ACTIVITY_KINDS and item.get("from") != self_name
+        ][:_TIMELINE_ACTIVITY_LIMIT]
+        if not human_items and not activity_items:
+            return ""
+
+        lines = [t("priming.timeline_header"), *[_timeline_line(item, reads) for item in human_items]]
+        if activity_items:
+            lines.append(t("priming.timeline_activity_header"))
+            lines.extend(_timeline_line(item, reads) for item in activity_items)
+        return "\n".join(lines)
     except Exception:
         logger.warning("Failed to build timeline priming section", exc_info=True)
         return ""

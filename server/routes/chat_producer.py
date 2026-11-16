@@ -36,6 +36,9 @@ async def _run_producer(
     body: ChatRequest,
     saved_paths: list[str],
     saved_files: list[dict[str, Any]] | None = None,
+    human_id: str | None = None,
+    human_via: str | None = None,
+    human_person: str | None = None,
 ) -> None:
     """Background task: consume IPC stream and write events to StreamRegistry.
 
@@ -43,6 +46,7 @@ async def _run_producer(
     kill this task, allowing the Anima to finish processing.
     """
     stream_done = False
+    answered_text = ""
     saved_files = saved_files or []
     ipc_chunk_count = 0
     keepalive_count = 0
@@ -112,6 +116,7 @@ async def _run_producer(
                     len(clean_text),
                 )
                 stream.add_event("done", cycle_result or {"summary": clean_text, "emotion": emotion})
+                answered_text = clean_text
                 stream_done = True
                 break
 
@@ -142,6 +147,7 @@ async def _run_producer(
                         evt_name, evt_payload = result
                         stream.add_event(evt_name, evt_payload)
                         if evt_name == "done":
+                            answered_text = str(evt_payload.get("summary") or "")
                             stream_done = True
                 except json.JSONDecodeError:
                     # Raw text chunk fallback
@@ -158,8 +164,20 @@ async def _run_producer(
                 cycle_result["summary"] = clean_text
                 cycle_result["emotion"] = emotion
                 stream.add_event("done", cycle_result or {"summary": clean_text, "emotion": emotion})
+                answered_text = clean_text
                 stream_done = True
                 break
+
+        if stream_done and human_id and answered_text.strip():
+            from core.hub.timeline_human import record_answered
+
+            record_answered(
+                anima=name,
+                person=human_person or body.from_person,
+                text=answered_text,
+                via=human_via,
+                about=human_id,
+            )
 
         # Stream ended without done event
         if not stream_done:

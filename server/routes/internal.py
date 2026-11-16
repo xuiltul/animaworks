@@ -136,6 +136,7 @@ class NotificationMappingRequest(BaseModel):
     anima_name: str
     notification_text: str = ""
     callback_id: str = ""
+    notification_key: str = ""
 
 
 class InteractionCreateRequest(BaseModel):
@@ -676,6 +677,7 @@ def create_internal_router() -> APIRouter:
             body.anima_name,
             notification_text=body.notification_text,
             callback_id=body.callback_id,
+            notification_key=body.notification_key,
         )
         return {"ok": ok}
 

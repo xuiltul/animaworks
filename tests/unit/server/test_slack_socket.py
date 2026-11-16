@@ -769,3 +769,68 @@ class TestSlackBoardRouting:
         assert len(records) == 1
         assert records[0]["text"] == "A manual mapping still works"
         assert records[0]["source"] == "slack"
+
+
+class TestSlackHumanTimeline:
+    @patch("core.notification.reply_routing.route_thread_reply", return_value=False)
+    @patch("core.hub.timeline_human.record_human")
+    @patch("core.hub.timeline_human.resolve_person", return_value="alice")
+    @patch("server.gateways.slack_socket._route_to_board")
+    @patch("server.gateways.slack_socket.get_credential", return_value="fake_token")
+    @patch("server.gateways.slack_socket.get_data_dir")
+    @patch("server.gateways.slack_socket.Messenger")
+    @patch("server.gateways.slack_socket.load_config")
+    async def test_slack_message_records_human_once(
+        self,
+        mock_config,
+        mock_messenger_cls,
+        mock_get_data_dir,
+        mock_get_credential,
+        mock_route_to_board,
+        mock_resolve_person,
+        mock_record_human,
+        mock_route_thread_reply,
+        tmp_path,
+    ):
+        from server.gateways.slack_socket import SlackSocketModeManager
+
+        slack_cfg = MagicMock(enabled=True, mode="socket", anima_mapping={"C_TEST_CHAN": "sakura"})
+        slack_cfg.resolve_anima.return_value = "sakura"
+        mock_config.return_value = MagicMock(
+            external_messaging=MagicMock(slack=slack_cfg),
+        )
+        mock_get_data_dir.return_value = tmp_path
+        mock_messenger_cls.return_value.receive_external.return_value = SimpleNamespace(id="msg-1")
+
+        captured_handlers: dict[str, list] = {}
+        mock_app = MagicMock()
+
+        def _capture_event(event_type):
+            def decorator(func):
+                captured_handlers.setdefault(event_type, []).append(func)
+                return func
+
+            return decorator
+
+        mock_app.event = _capture_event
+        mgr = SlackSocketModeManager()
+        mgr._bot_user_ids = {"__shared__": "U_SHARED"}
+        mgr._register_shared_handler(mock_app, "U_SHARED")
+        handler_fn = captured_handlers["message"][0]
+        event = {
+            "channel": "C_TEST_CHAN",
+            "user": "U_ALICE",
+            "text": "Hello from Slack",
+            "ts": "9876543210.123456",
+        }
+
+        await handler_fn(event=event, say=AsyncMock())
+        await handler_fn(event=event, say=AsyncMock())
+
+        mock_record_human.assert_called_once_with(
+            person="alice",
+            anima="sakura",
+            text="Hello from Slack",
+            via="slack",
+            ref="msg-1",
+        )

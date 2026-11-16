@@ -120,6 +120,46 @@ def _record_board_mention_picks(shared_dir: Any, anima_name: str, items: list[In
             )
 
 
+def _record_inbox_answers(items: list[InboxItem], anima_name: str, text: str) -> None:
+    """Link this inbox reply to every recorded human message it answers."""
+    if not text.strip():
+        return
+    try:
+        from core.hub.timeline_human import find_human_item, record_answered
+
+        answered: set[str] = set()
+        for item in items:
+            msg = item.msg
+            meta = msg.meta if isinstance(msg.meta, dict) else {}
+            board_post_id = meta.get("board_post_id")
+            if getattr(msg, "source", "anima") == "anima" and not board_post_id:
+                # Anima-to-anima messages never have a human item; skip the
+                # timeline scan for the bulk of inbox traffic.
+                continue
+            refs = [msg.id]
+            if board_post_id:
+                refs.append(str(board_post_id))
+            for ref in refs:
+                human = find_human_item(str(ref) if ref else None)
+                human_id = str(human.get("id") or "") if human else ""
+                if not human or not human_id or human_id in answered:
+                    continue
+                answered.add(human_id)
+                record_answered(
+                    anima=anima_name,
+                    person=str(human.get("from") or ""),
+                    text=text,
+                    via=human.get("via"),
+                    about=human_id,
+                )
+    except Exception:
+        logger.warning(
+            "[%s] Failed to record inbox answers on the timeline",
+            anima_name,
+            exc_info=True,
+        )
+
+
 def _run_trigger_entries(items: list[InboxItem]) -> tuple[dict[str, str], ...]:
     """Describe the inbox messages that triggered this run.
 
@@ -650,6 +690,7 @@ class InboxMixin:
                                 "thread_id": _INBOX_THREAD_ID,
                             },
                         )
+                        _record_inbox_answers(inbox_result.inbox_items, self.name, accumulated_text)
 
                     # ── Slack auto-response: post LLM reply back to Slack ──
                     if not cycle_failed and accumulated_text.strip() and _is_auto_response_enabled():

@@ -198,6 +198,7 @@ class SlackChannel(NotificationChannel):
                 try:
                     import asyncio
 
+                    from core.notification import notification_key_for
                     from core.notification.reply_routing import (
                         save_notification_mapping_resilient,
                     )
@@ -211,6 +212,7 @@ class SlackChannel(NotificationChannel):
                         anima_name,
                         notification_text=f"{subject}\n{body}"[:2000],
                         callback_id=interaction.callback_id if interaction is not None else "",
+                        notification_key=notification_key_for(subject, body),
                     )
                     if not saved:
                         logger.warning(

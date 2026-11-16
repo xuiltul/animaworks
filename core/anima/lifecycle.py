@@ -1376,7 +1376,7 @@ class LifecycleMixin:
                     )
 
                     # Activity log: cron executed
-                    await self._activity.alog(
+                    cron_entry = await self._activity.alog(
                         "cron_executed",
                         summary=t("anima.cron_task_summary", task=task_name),
                         content=result.summary[:500] if result else "",
@@ -1390,6 +1390,27 @@ class LifecycleMixin:
                             "skill_warnings": warning_dicts,
                         },
                     )
+
+                    # Company timeline: only LLM cron runs that actually did
+                    # something.  The noop decision reads the activity log
+                    # window [ts - duration_ms, ts], so command-cron output
+                    # follow-ups are judged by the same rule.  Command-only
+                    # runs never reach this method and are never recorded.
+                    from core.hub.timeline_activity import record_cron_activity
+
+                    # Reading the activity window is file I/O; keep it off the
+                    # event loop.
+                    await asyncio.to_thread(
+                        record_cron_activity,
+                        self.name,
+                        activity=self._activity,
+                        cron_entry=cron_entry,
+                        task_name=task_name,
+                        text=result.summary,
+                        failed=result.action == "error",
+                        stop_kind=result.stop_kind,
+                    )
+
                     if warning_dicts:
                         await self._activity.alog(
                             "cron_skill_warning",

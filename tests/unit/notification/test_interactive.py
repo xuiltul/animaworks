@@ -315,3 +315,54 @@ class TestBuildTextFallback:
         result = build_text_fallback(req, web_base_url="https://example.com")
         assert "https://example.com/api/approve/test123" in result
         assert "tok" in result
+
+
+class TestInteractionTimelineWiring:
+    @pytest.mark.asyncio
+    async def test_resolve_records_approval_human_once(self, _patch_dirs):
+        from types import SimpleNamespace
+
+        from core.notification.interactive import get_interaction_router
+
+        router = get_interaction_router()
+        req = await router.create("test_anima", "approval", ["approve", "reject"])
+
+        with (
+            patch("core.messaging.messenger.Messenger") as mock_messenger,
+            patch("core.hub.timeline_human.resolve_person", return_value="tester"),
+            patch("core.hub.timeline_human.find_notified", return_value="tl_1234567890abcdef") as find_notified,
+            patch("core.hub.timeline_human.record_human") as record_human,
+        ):
+            mock_messenger.return_value.receive_external.return_value = SimpleNamespace(id="msg-1")
+            result = await router.resolve(req.callback_id, "approve", "tester", "slack")
+
+        assert result is not None
+        find_notified.assert_called_once_with(callback_id=req.callback_id)
+        record_human.assert_called_once_with(
+            person="tester",
+            anima="test_anima",
+            text="approve",
+            via="approval",
+            about="tl_1234567890abcdef",
+            ref="msg-1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_resolve_records_approval_with_comment(self, _patch_dirs):
+        from types import SimpleNamespace
+
+        from core.notification.interactive import get_interaction_router
+
+        router = get_interaction_router()
+        req = await router.create("test_anima", "approval", ["approve", "reject"])
+
+        with (
+            patch("core.messaging.messenger.Messenger") as mock_messenger,
+            patch("core.hub.timeline_human.resolve_person", return_value="tester"),
+            patch("core.hub.timeline_human.find_notified", return_value=None),
+            patch("core.hub.timeline_human.record_human") as record_human,
+        ):
+            mock_messenger.return_value.receive_external.return_value = SimpleNamespace(id="msg-2")
+            await router.resolve(req.callback_id, "approve", "tester", "web", comment="この内容で進めて")
+
+        assert record_human.call_args.kwargs["text"] == "approve: この内容で進めて"

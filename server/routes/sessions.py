@@ -783,6 +783,7 @@ def create_sessions_router() -> APIRouter:
             raise HTTPException(status_code=400, detail="Reply text is required")
         actor = getattr(getattr(request.state, "user", None), "username", "") or "human"
         callback_id = str(notification.get("callback_id") or "")
+        notification_key = str(notification.get("notification_key") or "")
 
         from core.notification.reply_routing import (
             _notification_context,
@@ -811,6 +812,7 @@ def create_sessions_router() -> APIRouter:
             thread_context=_notification_context(name, notification_text),
             notification_id=body.notification_id,
             callback_id=callback_id,
+            notification_key=notification_key,
         )
         if not routed:
             raise HTTPException(status_code=400, detail="Reply could not be delivered")

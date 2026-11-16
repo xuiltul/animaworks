@@ -77,6 +77,107 @@ async def test_timeline_replaces_activity_notifications(
 
 
 @pytest.mark.asyncio
+async def test_activity_cannot_push_human_notifications_out(
+    anima_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_company(anima_dir, "a")
+    _set_hub(monkeypatch, timeline_enabled=True, company="a")
+    for index in range(20):
+        append_item(
+            get_shared_dir(),
+            from_name="bob",
+            company="a",
+            kind="activity",
+            text=f"heartbeat {index}",
+            source="anima",
+        )
+    append_item(
+        get_shared_dir(),
+        from_name="alice",
+        company="a",
+        kind="notified",
+        text="Person-facing notification",
+        source="anima",
+    )
+
+    text = await collect_pending_human_notifications(anima_dir, channel="chat")
+
+    assert "Person-facing notification" in text
+    assert t("priming.timeline_activity_header") in text
+    assert text.index("Person-facing notification") < text.index(t("priming.timeline_activity_header"))
+
+
+@pytest.mark.asyncio
+async def test_activity_frame_excludes_own_activity(
+    anima_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_company(anima_dir, "a")
+    _set_hub(monkeypatch, timeline_enabled=True, company="a")
+    append_item(
+        get_shared_dir(),
+        from_name="rin",
+        company="a",
+        kind="activity",
+        text="own heartbeat",
+        source="anima",
+    )
+    append_item(
+        get_shared_dir(),
+        from_name="bob",
+        company="a",
+        kind="activity",
+        text="other activity",
+        source="anima",
+    )
+
+    text = await collect_pending_human_notifications(anima_dir, channel="chat")
+
+    assert t("priming.timeline_activity_header") in text
+    assert "other activity" in text
+    assert "own heartbeat" not in text
+
+
+@pytest.mark.asyncio
+async def test_human_and_answered_show_direction(
+    anima_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_company(anima_dir, "a")
+    _set_hub(monkeypatch, timeline_enabled=True, company="a")
+    append_item(
+        get_shared_dir(),
+        from_name="alice",
+        company="a",
+        kind="human",
+        text="Please check the report",
+        source="human",
+        to="rin",
+        via="web",
+    )
+    append_item(
+        get_shared_dir(),
+        from_name="rin",
+        company="a",
+        kind="answered",
+        text="I will check it",
+        source="anima",
+        to="alice",
+        about=None,
+    )
+
+    text = await collect_pending_human_notifications(anima_dir, channel="chat")
+    lines = text.splitlines()
+
+    human_line = next(line for line in lines if " human " in line)
+    answered_line = next(line for line in lines if " answered " in line)
+    assert "alice" in human_line and "rin" in human_line
+    assert "rin" in answered_line and "alice" in answered_line
+    assert t("priming.timeline_unread_mark") not in human_line
+
+
+@pytest.mark.asyncio
 async def test_timeline_requires_matching_company(
     anima_dir: Path,
     monkeypatch: pytest.MonkeyPatch,

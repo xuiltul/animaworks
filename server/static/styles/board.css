@@ -2781,6 +2781,45 @@
   color: var(--aw-color-warning-text);
 }
 
+.board-timeline-kind-human {
+  border-color: var(--aw-color-accent);
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-accent);
+}
+
+.board-timeline-kind-answered {
+  border-color: var(--aw-color-success-border);
+  background: var(--aw-color-success-bg);
+  color: var(--aw-color-success-text);
+}
+
+.board-timeline-kind-activity {
+  border-color: var(--aw-color-border-subtle);
+  background: var(--aw-color-bg-subtle);
+  color: var(--aw-color-text-muted);
+  font-weight: 600;
+}
+
+.board-timeline-activity-toggle {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--aw-color-border-subtle);
+  border-radius: 999px;
+  background: var(--aw-color-bg-secondary);
+  color: var(--aw-color-text-secondary);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.board-timeline-activity-toggle.is-active,
+.board-timeline-activity-toggle[aria-pressed="true"] {
+  border-color: var(--aw-color-accent);
+  background: var(--aw-color-accent-bg);
+  color: var(--aw-color-accent);
+}
+
 .board-timeline-from {
   display: inline-flex;
   min-width: 0;
@@ -2793,6 +2832,15 @@
   overflow: hidden;
   max-width: 9em;
   color: var(--aw-color-text-secondary);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-timeline-to {
+  overflow: hidden;
+  max-width: 9em;
+  color: var(--aw-color-text-muted);
   font-size: 0.67rem;
   text-overflow: ellipsis;
   white-space: nowrap;
