@@ -177,6 +177,8 @@ class TestLifespan:
             patch("core.org.org_sync.sync_org_structure"),
             patch("core.org.org_sync.detect_orphan_animas"),
             patch("server.app._reconcile_assets_at_startup", new_callable=AsyncMock),
+            # The warmup loads embedding models from the network; it is not under test here.
+            patch("server.app._run_model_warmup", new_callable=AsyncMock),
             patch("server.app._prepare_child_env_urls"),
             patch("server.app._startup_animas_background", new=fake_startup_animas),
             patch("core.config.global_permissions.GlobalPermissionsCache.get") as mock_gp,
