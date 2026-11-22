@@ -42,8 +42,9 @@ untouched; ``--apply`` also enables pf if it is off and stops pf from
 skipping lo0 (otherwise loopback would bypass the rules).  pf matches ``user``
 only for TCP and UDP, so the same limits apply to those protocols.  pf also
 fails, now and then, to find the socket of a packet; such packets match no
-``user`` rule, so the pf rules also drop SYNs and UDP datagrams of unknown
-owner that leave from this host's addresses (for every user of the host).
+``user`` rule, so the pf rules also drop SYNs of unknown owner that leave
+from this host's addresses (for every user of the host).  UDP of unknown
+owner is left alone (Tailscale's STUN and NAT-PMP have no owner either).
 """
 
 from __future__ import annotations
@@ -174,16 +175,15 @@ def build_pf_ruleset(
         lines.append("table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }")
     if local_addresses:
         lines.append("table <aw_enclave_local> persist { " + ", ".join(local_addresses) + " }")
-        # pf sometimes cannot find the socket of a new connection's first SYN or of a UDP
-        # datagram (measured on macOS: about 1 in 3,000-6,000 under load).  Such a packet
-        # matches no ``user`` rule and passes by default, so the enclave would leak it.
-        # Block such packets when they leave from this host's own addresses: a dropped SYN
-        # is retransmitted and then matched normally; forwarded traffic is left alone.
-        # This affects every user of the host, not only the enclave.
-        lines += [
-            "block return out quick proto tcp from <aw_enclave_local> to any flags S/SA user unknown",
-            "block return out quick proto udp from <aw_enclave_local> to any user unknown",
-        ]
+        # pf sometimes cannot find the socket of a new connection's first SYN (measured on
+        # macOS: about 1 in 3,000-6,000 under load).  Such a SYN matches no ``user`` rule
+        # and passes by default, so the enclave would open the connection.  Drop SYNs of
+        # unknown owner that leave from this host's own addresses: a dropped SYN is
+        # retransmitted and then matched normally; forwarded traffic is left alone.  This
+        # affects every user of the host.  UDP is left alone: Tailscale's STUN and NAT-PMP
+        # packets always have an unknown owner, so the enclave's UDP can still leak at the
+        # same rate.
+        lines.append("block return out quick proto tcp from <aw_enclave_local> to any flags S/SA user unknown")
     lines += [
         # Only sockets owned by the enclave uid match ``user``, so other
         # users' traffic never reaches the final block rule.

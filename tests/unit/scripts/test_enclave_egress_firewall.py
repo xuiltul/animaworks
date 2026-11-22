@@ -161,7 +161,7 @@ def test_pf_ruleset_drops_packets_whose_owner_pf_cannot_find(firewall) -> None:
     lines = ruleset.strip().splitlines()
     assert lines[0] == "table <aw_enclave_local> persist { 127.0.0.1, 192.168.100.21, ::1 }"
     assert lines[1] == "block return out quick proto tcp from <aw_enclave_local> to any flags S/SA user unknown"
-    assert lines[2] == "block return out quick proto udp from <aw_enclave_local> to any user unknown"
+    assert not any("udp" in line and "unknown" in line for line in lines)
     assert lines[-1] == "block return out quick proto { tcp, udp } from any to any user 299"
 
 
