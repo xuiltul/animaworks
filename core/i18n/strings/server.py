@@ -295,6 +295,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "zh": "仅限成员的看板至少需要一名成员",
         "ko": "멤버 전용 보드에는 최소 한 명의 멤버가 필요합니다",
     },
+    "server.channel_settings_company_unresolved": {
+        "ja": "このボードは会社が決まっていません。いまのメンバーの会社が1つに決まらないため、社内に公開できません",
+        "en": "This board has no company, and its current members do not share one company, so it cannot be opened to the company",
+        "zh": "此看板未设置公司，且当前成员不属于同一家公司，因此无法对公司内公开",
+        "ko": "이 보드에는 회사가 지정되어 있지 않으며 현재 멤버의 회사가 하나로 정해지지 않아 회사 내 공개로 바꿀 수 없습니다",
+    },
     "server.channel_settings_members_added": {
         "ja": "メンバーに {names} を足しました",
         "en": "Added {names} to the members",

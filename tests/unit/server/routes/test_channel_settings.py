@@ -83,7 +83,13 @@ def shared_dir(data_dir: Path) -> Path:
     (shared / "channels").mkdir(parents=True, exist_ok=True)
     for anima in ("sakura", "mio"):
         (data_dir / "animas" / anima).mkdir(parents=True, exist_ok=True)
+        (data_dir / "animas" / anima / "status.json").write_text("{}", encoding="utf-8")
     return shared
+
+
+def _set_company(shared_dir: Path, anima: str, company: str) -> None:
+    status = shared_dir.parent / "animas" / anima / "status.json"
+    status.write_text(json.dumps({"company": company}), encoding="utf-8")
 
 
 OWNER = AuthUser(username="owner", role="owner")
@@ -402,3 +408,63 @@ class TestResponseShape:
         assert list_resp.status_code == 200
         entry = next(channel for channel in list_resp.json() if channel["name"] == "general")
         assert put_resp.json() == entry
+
+
+class TestOpenLegacyBoardCompany:
+    async def test_open_inherits_the_members_company(self, shared_dir: Path):
+        from core.messaging.board import anima_principal, board_access
+
+        _set_company(shared_dir, "sakura", "a")
+        _set_company(shared_dir, "mio", "a")
+        _write_channel(shared_dir, "board-a")
+        _write_meta(shared_dir, "board-a", members=["sakura", "mio"], company="")
+        app = _make_test_app(shared_dir, OWNER)
+
+        resp = await _put(app, "board-a", {"access": "open"})
+
+        assert resp.status_code == 200
+        meta = _read_meta(shared_dir, "board-a")
+        assert meta is not None
+        assert meta.members == []
+        assert meta.company == "a"
+        principal = anima_principal("mio", animas_dir=shared_dir.parent / "animas")
+        assert board_access(shared_dir, "board-a", principal, "write").allowed
+
+    async def test_open_rejects_members_of_different_companies(self, shared_dir: Path):
+        _set_company(shared_dir, "sakura", "a")
+        _set_company(shared_dir, "mio", "fs")
+        _write_channel(shared_dir, "board-a")
+        _write_meta(shared_dir, "board-a", members=["sakura", "mio"], company="")
+        app = _make_test_app(shared_dir, OWNER)
+
+        resp = await _put(app, "board-a", {"access": "open"})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == t("server.channel_settings_company_unresolved")
+        meta = _read_meta(shared_dir, "board-a")
+        assert meta is not None
+        assert meta.members == ["sakura", "mio"]
+        assert meta.company == ""
+        assert _read_posts(shared_dir, "board-a") == []
+
+    async def test_open_rejects_an_unreadable_member_company(self, shared_dir: Path):
+        (shared_dir.parent / "animas" / "mio" / "status.json").unlink()
+        _write_channel(shared_dir, "board-a")
+        _write_meta(shared_dir, "board-a", members=["mio"], company="")
+        app = _make_test_app(shared_dir, OWNER)
+
+        resp = await _put(app, "board-a", {"access": "open"})
+
+        assert resp.status_code == 400
+        assert _read_meta(shared_dir, "board-a").company == ""
+
+    async def test_open_keeps_an_existing_company(self, shared_dir: Path):
+        _set_company(shared_dir, "sakura", "fs")
+        _write_channel(shared_dir, "board-a")
+        _write_meta(shared_dir, "board-a", members=["sakura"], company="a")
+        app = _make_test_app(shared_dir, OWNER)
+
+        resp = await _put(app, "board-a", {"access": "open"})
+
+        assert resp.status_code == 200
+        assert _read_meta(shared_dir, "board-a").company == "a"
