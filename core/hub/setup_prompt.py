@@ -144,6 +144,7 @@ def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = No
         "url": connection_url,
         "avatar_upload_url": _avatar_upload_url(connection_url),
         "board": board,
+        "boards": ", ".join(f"#{name}" for name in boards),
         "extra_boards_note": _extra_boards_note(shared_dir, boards),
         "roster": roster_lines,
         "first_contact": first_contact,

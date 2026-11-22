@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/modules.md -->
-<!-- i18n: source-sha256=d11d72783470ae8ae056de22b10e3784e6d4c16add52fe77552abe2e3f5ecc96 generated=2026-11-15 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=958636378740e9fd8463d86547a9ea5858401bf56cbb597a4ba734a17f2ae292 generated=2026-11-15 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 모듈 목록
 
@@ -397,7 +397,7 @@ Slack, Discord, Chatwork의 공통 전송 클라이언트 및 토큰 해석.
 | `core.hub.boards` | 61 | — |
 | `core.hub.mcp_app` | 722 | — |
 | `core.hub.members` | 328 | — |
-| `core.hub.setup_prompt` | 185 | — |
+| `core.hub.setup_prompt` | 186 | — |
 | `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 361 | — |
 | `core.hub.timeline_activity` | 159 | — |

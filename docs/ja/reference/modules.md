@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 3d6eb97806ae08005ddd490fa47e775668538784f48b407dc0feeb224ee2bd39 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 633233a6b7fdb01c7afddf9238cba65c2e19bc6cf632dc24960d122fc3e9a0d8 -->
 
 # モジュール一覧
 
@@ -397,7 +397,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.hub.boards` | 61 | — |
 | `core.hub.mcp_app` | 722 | — |
 | `core.hub.members` | 328 | — |
-| `core.hub.setup_prompt` | 185 | — |
+| `core.hub.setup_prompt` | 186 | — |
 | `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 361 | — |
 | `core.hub.timeline_activity` | 159 | — |
