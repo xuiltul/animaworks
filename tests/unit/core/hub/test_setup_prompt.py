@@ -206,6 +206,10 @@ def test_setup_prompt_describes_extra_boards_when_configured(tmp_path: Path, mon
     assert "#board-b（雑談）" in text
     assert "hub post --board board-a" in text
     assert "全部の板の新着" in text
+    # The rules must cover every board, not only the default one.
+    assert "1. anima との連絡は、必ずハブの板（#hub, #board-a, #board-b）で行う。" in text
+    assert "8. ハブの板（#hub, #board-a, #board-b）の投稿は「依頼」です。" in text
+    assert "必ず #hub で行う" not in text
     assert "{" not in text.replace("{{", "")
 
 
@@ -218,6 +222,7 @@ def test_setup_prompt_omits_extra_boards_note_when_empty(tmp_path: Path, monkeyp
 
     assert "hub post --board" not in text
     assert "■ 誰がいるか" in text
+    assert "1. anima との連絡は、必ずハブの板（#hub）で行う。" in text
 
 
 @pytest.mark.parametrize("locale", ["ja", "en", "ko", "zh"])
