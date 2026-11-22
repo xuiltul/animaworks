@@ -700,7 +700,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "bd34ef14de27d1ded90c938706259a20845447b477885d9d7e8822067d99259b",
+      "source_sha256": "445247b7dce4cddf8f32e12d63350187d2fdf56f2216892676bc598ef815e410",
       "statuses": [
         "translated"
       ],
@@ -1142,7 +1142,7 @@
         "8445e4f09d392fea61e1542adeae7cc307acd86905d9e8d46ef0e7137a156fcf"
       ],
       "source": "docs/ja/reference/config.md",
-      "source_sha256": "ee60555182064bdba002ab8b3f958a80b4e8a1b16696077c8f1d058316fe0461",
+      "source_sha256": "65134bcd3d2e4e0c1791022d18c8ff28e468aad64beb611660f51c64060a24b3",
       "statuses": [
         "translated",
         "translated",
@@ -1278,7 +1278,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "f48c67a57b7a3afae4d8c66869c4a5ce87582f81c152361c930c56888e04d91a",
+      "source_sha256": "d11d72783470ae8ae056de22b10e3784e6d4c16add52fe77552abe2e3f5ecc96",
       "statuses": [
         "translated",
         "translated",
@@ -2166,7 +2166,7 @@
         "69fc9f98d468132ae81b36ce8ae41796c64f9ad4f4c619ea31c4027e964babbe"
       ],
       "source": "docs/ja/reference/README.md",
-      "source_sha256": "bd34ef14de27d1ded90c938706259a20845447b477885d9d7e8822067d99259b",
+      "source_sha256": "445247b7dce4cddf8f32e12d63350187d2fdf56f2216892676bc598ef815e410",
       "statuses": [
         "translated"
       ],
@@ -2608,7 +2608,7 @@
         "8445e4f09d392fea61e1542adeae7cc307acd86905d9e8d46ef0e7137a156fcf"
       ],
       "source": "docs/ja/reference/config.md",
-      "source_sha256": "ee60555182064bdba002ab8b3f958a80b4e8a1b16696077c8f1d058316fe0461",
+      "source_sha256": "65134bcd3d2e4e0c1791022d18c8ff28e468aad64beb611660f51c64060a24b3",
       "statuses": [
         "translated",
         "translated",
@@ -2744,7 +2744,7 @@
         "825dd1b1fe848dd30757a9737402c2837c0bb495a0334943d5589d1d4e4a720b"
       ],
       "source": "docs/ja/reference/modules.md",
-      "source_sha256": "f48c67a57b7a3afae4d8c66869c4a5ce87582f81c152361c930c56888e04d91a",
+      "source_sha256": "d11d72783470ae8ae056de22b10e3784e6d4c16add52fe77552abe2e3f5ecc96",
       "statuses": [
         "translated",
         "translated",

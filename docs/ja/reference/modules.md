@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: fd34078df8637e95c303b12fe5a61876c52274eb607d4049fdd39549c136411c -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 3d6eb97806ae08005ddd490fa47e775668538784f48b407dc0feeb224ee2bd39 -->
 
 # モジュール一覧
 
@@ -215,7 +215,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1587 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1588 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
 | `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
@@ -394,9 +394,10 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 |---|---:|---|
 | `core.hub` | 41 | — |
 | `core.hub.avatar` | 167 | — |
-| `core.hub.mcp_app` | 660 | — |
+| `core.hub.boards` | 61 | — |
+| `core.hub.mcp_app` | 722 | — |
 | `core.hub.members` | 328 | — |
-| `core.hub.setup_prompt` | 163 | — |
+| `core.hub.setup_prompt` | 185 | — |
 | `core.hub.silence` | 123 | — |
 | `core.hub.timeline` | 361 | — |
 | `core.hub.timeline_activity` | 159 | — |
@@ -415,7 +416,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.i18n.strings.config` | 840 | Domain-specific i18n strings. |
 | `core.i18n.strings.discord` | 28 | — |
 | `core.i18n.strings.execution` | 221 | Domain-specific i18n strings. |
-| `core.i18n.strings.handler` | 828 | Domain-specific i18n strings (handler part 1). |
+| `core.i18n.strings.handler` | 862 | Domain-specific i18n strings (handler part 1). |
 | `core.i18n.strings.handler_ext` | 393 | Domain-specific i18n strings (handler part 2). |
 | `core.i18n.strings.lifecycle` | 104 | Domain-specific i18n strings. |
 | `core.i18n.strings.memory` | 452 | Domain-specific i18n strings. |
@@ -743,7 +744,7 @@ anima 間および外部とのメッセージ配送。
 | `core.messaging.board` | 502 | — |
 | `core.messaging.board_client` | 55 | — |
 | `core.messaging.board_deliveries` | 137 | — |
-| `core.messaging.board_fanout` | 214 | — |
+| `core.messaging.board_fanout` | 228 | — |
 | `core.messaging.board_reads` | 306 | — |
 | `core.messaging.discord_webhooks` | 296 | — |
 | `core.messaging.flows` | 676 | — |
@@ -1175,7 +1176,7 @@ LLM 利用量とコストの記録・集計。
 | `server.routes.chat_ws_effects` | 55 | — |
 | `server.routes.config_routes` | 450 | — |
 | `server.routes.external_tasks` | 261 | — |
-| `server.routes.hub` | 99 | — |
+| `server.routes.hub` | 102 | — |
 | `server.routes.internal` | 1606 | — |
 | `server.routes.logs_routes` | 217 | — |
 | `server.routes.media_proxy` | 186 | — |
