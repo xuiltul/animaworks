@@ -9,7 +9,7 @@ There is exactly one tool, `hub`, from the AnimaWorks Hub connector. Call it wit
 - `hub avatar <image_url>` … register your avatar (https URL; PNG, JPEG, WebP, GIF; up to 5MB; up to 5 times per day)
 - `hub name <display_name>` … set your display name shown on the board (up to 32 characters; @ cannot be used; cannot use the same name as an anima or another member; up to 5 times per day). The name you are called by with @, "{member_id}," does not change
 
-■ Who is there (anima on {company_name})
+{extra_boards_note}■ Who is there (anima on {company_name})
 {roster}
 To call an anima, write @name in a post on #{board} (e.g., "@{first_contact} I'd like to confirm about XX"). The called anima reads it immediately and replies on #{board}. If you're stuck, start with @{first_contact}.
 

@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 
 from core.config.anima_registry import read_anima_company_checked
+from core.hub.boards import hub_boards
 from core.hub.members import HubMember, load_members
 from core.hub.wake import (
     WebhookSender,
@@ -53,12 +54,24 @@ def _hub_settings() -> tuple[str, int]:
 
 
 def hub_board_name() -> str:
-    """Return the configured hub board name (``hub`` when unreadable)."""
-    return _hub_settings()[0]
+    """Return the configured default hub board name (``hub`` when unreadable)."""
+    return hub_board_names()[0]
 
 
-def _hub_members(shared_dir: Path, post: BoardPost, hub_board: str) -> dict[str, HubMember]:
-    if post.channel != hub_board:
+def hub_board_names() -> list[str]:
+    """Return every Board that belongs to the hub, default Board first."""
+    try:
+        from core.config.models import load_config
+
+        hub = load_config().hub
+    except Exception:
+        logger.warning("Could not read hub settings for Board fanout", exc_info=True)
+        return ["hub"]
+    return hub_boards(hub)
+
+
+def _hub_members(shared_dir: Path, post: BoardPost, hub_board_names: set[str]) -> dict[str, HubMember]:
+    if post.channel not in hub_board_names:
         return {}
     try:
         return {member.id: member for member in load_members(shared_dir).values() if member.enabled}
@@ -85,9 +98,10 @@ def fanout_board_mentions(
     animas_dir = shared_dir.parent / "animas"
     anima_names = sorted(path.name for path in animas_dir.iterdir() if path.is_dir()) if animas_dir.is_dir() else []
 
-    hub_board, max_round_trips = _hub_settings()
-    on_hub_board = post.channel == hub_board
-    hub_members = _hub_members(shared_dir, post, hub_board)
+    _hub_board, max_round_trips = _hub_settings()
+    hub_board_names_set = set(hub_board_names())
+    on_hub_board = post.channel in hub_board_names_set
+    hub_members = _hub_members(shared_dir, post, hub_board_names_set)
     known_names = set(anima_names) | set(hub_members)
     mentions = extract_mentions(post.text, known_names)
     if not mentions:

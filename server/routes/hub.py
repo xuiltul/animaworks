@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 
 from core.config.models import load_config
 from core.hub.avatar import avatar_path
+from core.hub.boards import hub_boards
 from core.hub.members import MEMBER_ID_RE, last_seen, load_members
 from core.hub.silence import is_overdue
 from core.paths import get_shared_dir
@@ -44,6 +45,7 @@ def create_hub_router() -> APIRouter:
         if config is None or not bool(getattr(config, "enabled", False)):
             return {"enabled": False}
         board = str(getattr(config, "board", "") or "hub")
+        boards = hub_boards(config)
         unread = 0
         try:
             unread = int(_human_unread(_shared_dir(request), board, _request_username(request)))
@@ -52,6 +54,7 @@ def create_hub_router() -> APIRouter:
         return {
             "enabled": True,
             "board": board,
+            "boards": boards,
             "company": str(getattr(config, "company", "") or ""),
             "timeline_enabled": bool(getattr(config, "timeline_enabled", False)),
             "unread": unread,

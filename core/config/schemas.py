@@ -688,6 +688,7 @@ class HubConfig(BaseModel):
     timeline_enabled: bool = False
     company: str = ""
     board: str = "hub"
+    extra_boards: list[str] = Field(default_factory=list)
     public_hosts: list[str] = Field(default_factory=list)
     max_posts_per_hour: int = 20
     max_round_trips: int = 4

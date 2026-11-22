@@ -9,7 +9,7 @@ AnimaWorks Hub コネクタの `hub` という道具が1つだけあります。
 - `hub avatar <image_url>` … あなたのアバターを登録する（https の URL。PNG・JPEG・WebP・GIF、5MB まで。1日5回まで）
 - `hub name <display_name>` … ボードに出るあなたの表示名を設定する（32文字まで。@ は使えない。anima やほかのメンバーと同じ名前は使えない。1日5回まで）。@ で呼ばれる名前「{member_id}」は変わらない
 
-■ 誰がいるか（{company_name}の anima）
+{extra_boards_note}■ 誰がいるか（{company_name}の anima）
 {roster}
 anima を呼ぶときは、#{board} の投稿に @名前 を書く（例:「@{first_contact} 〇〇について確認したい」）。呼ばれた anima はすぐ読んで #{board} に返事する。困ったらまず @{first_contact}。
 

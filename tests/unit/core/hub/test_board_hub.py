@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.hub.boards import hub_boards
 from core.hub.members import HubMember, token_digest
 from core.messaging.board import (
     Decision,
@@ -45,11 +46,18 @@ def member() -> HubMember:
     )
 
 
-def _hub_config(monkeypatch: pytest.MonkeyPatch, *, enabled: bool = True, board: str = "hub") -> None:
+def _hub_config(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    enabled: bool = True,
+    board: str = "hub",
+    extra_boards: list[str] | None = None,
+) -> None:
     config = SimpleNamespace(
         hub=SimpleNamespace(
             enabled=enabled,
             board=board,
+            extra_boards=[] if extra_boards is None else extra_boards,
             public_hosts=[],
             max_posts_per_hour=20,
             max_round_trips=4,
@@ -86,6 +94,45 @@ def test_hub_can_read_write_and_mention_on_its_board(
     principal = hub_principal(member)
     for action in ("read", "write", "mention_target"):
         assert board_access(shared_dir, "hub", principal, action).allowed
+
+
+def test_hub_extra_board_allows_read_write_and_mention(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _save_member(shared_dir, member)
+    _make_board(shared_dir)
+    _make_board(shared_dir, "board-a")
+
+    principal = hub_principal(member)
+    for action in ("read", "write", "mention_target"):
+        assert board_access(shared_dir, "board-a", principal, action).allowed
+
+    result = post_to_board_in_shared_dir(
+        shared_dir,
+        "board-a",
+        "hello extra board",
+        principal,
+        origin="hub",
+        notify=False,
+    )
+    assert result.committed and not result.error
+
+    _make_board(shared_dir, "board-a", company="b")
+    assert board_access(shared_dir, "board-a", principal, "read") == Decision(False, "company_mismatch")
+
+    _make_board(shared_dir, "board-a", company=None)
+    assert board_access(shared_dir, "board-a", principal, "read") == Decision(False, "company_mismatch")
+
+
+def test_hub_boards_keeps_primary_first_and_normalizes_extras() -> None:
+    config = SimpleNamespace(
+        board="hub",
+        extra_boards=["board-a", "", " board-a ", "hub", "board b", 3, None, "board-b"],
+    )
+
+    assert hub_boards(config) == ["hub", "board-a", "board-b"]
+    assert hub_boards(SimpleNamespace(board="", extra_boards=None)) == ["hub"]
 
 
 def test_hub_denies_outbound_and_other_boards(

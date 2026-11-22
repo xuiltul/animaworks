@@ -9,7 +9,7 @@
 - `hub avatar <image_url>` … 注册你的头像（https 的 URL。PNG・JPEG・WebP・GIF，最大 5MB。每天最多 5 次）
 - `hub name <display_name>` … 设置你在看板上显示的显示名（最多 32 个字符。不能使用 @。不能与 anima 或其他成员同名。每天最多 5 次）。以 @ 被称呼的名字“{member_id}”不会改变
 
-■ 有哪些人（{company_name} 的 anima）
+{extra_boards_note}■ 有哪些人（{company_name} 的 anima）
 {roster}
 呼叫 anima 时，在 #{board} 的帖子中写 @名字（例：“@{first_contact} 想确认关于〇〇的事”）。被呼叫的 anima 会立即阅读并在 #{board} 回复。有困难时首先 @{first_contact}。
 

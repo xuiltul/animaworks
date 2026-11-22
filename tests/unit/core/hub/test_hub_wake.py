@@ -43,13 +43,20 @@ def _clear_hooks():
     ActivityLogger._live_rate_limiter.reset()
 
 
-def _hub_config(monkeypatch: pytest.MonkeyPatch, *, board: str = "hub", max_round_trips: int = 4) -> None:
+def _hub_config(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    board: str = "hub",
+    extra_boards: list[str] | None = None,
+    max_round_trips: int = 4,
+) -> None:
     config = SimpleNamespace(
         hub=SimpleNamespace(
             enabled=True,
             timeline_enabled=False,
             company="a",
             board=board,
+            extra_boards=[] if extra_boards is None else extra_boards,
             public_hosts=[],
             max_posts_per_hour=20,
             max_round_trips=max_round_trips,
@@ -57,6 +64,11 @@ def _hub_config(monkeypatch: pytest.MonkeyPatch, *, board: str = "hub", max_roun
         human_notification=SimpleNamespace(channels=[], web_ui=False),
     )
     monkeypatch.setattr("core.config.models.load_config", lambda: config)
+
+
+def _make_board(shared: Path, name: str, *, company: str = "a") -> None:
+    (shared / "channels" / f"{name}.jsonl").touch()
+    save_channel_meta(shared, name, ChannelMeta(members=[], company=company))
 
 
 def _shared(tmp_path: Path) -> Path:
@@ -281,6 +293,69 @@ def test_member_is_not_a_target_on_other_boards(tmp_path: Path, monkeypatch: pyt
 
     assert notified == []
     assert not_notified == {}
+
+
+def test_member_on_extra_board_is_woken_by_mention(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    shared = _shared(tmp_path)
+    _make_board(shared, "board-a")
+    _anima(shared, "alice")
+    save_member(shared, _member("muse", message_route={"type": "poll"}))
+
+    result = post_to_board_in_shared_dir(
+        shared,
+        "board-a",
+        "@muse check board-a",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="anima",
+        notify=False,
+    )
+
+    assert result.committed
+    assert result.notified == []
+    assert result.not_notified == {"muse": "polls"}
+    assert load_deliveries(shared, "board-a")[result.id]["not_notified"] == {"muse": "polls"}
+
+
+def test_webhook_wake_on_extra_board_carries_that_board(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    shared = _shared(tmp_path)
+    _make_board(shared, "board-a")
+    _anima(shared, "alice")
+    save_member(
+        shared,
+        _member(
+            "grokbot",
+            message_route={"type": "webhook", "url_ref": "hub.url", "key_ref": "hub.key"},
+        ),
+    )
+    vault = VaultManager(tmp_path)
+    vault.store("shared", "hub.url", "https://hooks.example.com/wake")
+    vault.store("shared", "hub.key", "s3cret")
+
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        wake_module,
+        "send_webhook",
+        lambda _url, _key, payload: calls.append(payload) or (True, ""),
+    )
+
+    result = post_to_board_in_shared_dir(
+        shared,
+        "board-a",
+        "@grokbot check board-a",
+        anima_principal("alice", animas_dir=shared.parent / "animas"),
+        origin="anima",
+        notify=False,
+    )
+    wake_module.wait_for_pending_wakes(timeout=5.0)
+
+    assert result.committed
+    assert len(calls) == 1
+    assert calls[0]["board"] == "board-a"
+    assert calls[0]["post_id"] == result.id
+    assert calls[0]["from"] == "alice"
+    assert calls[0]["text"] == "@grokbot check board-a"
 
 
 def test_external_all_wakes_nobody_and_anima_all_skips_external(

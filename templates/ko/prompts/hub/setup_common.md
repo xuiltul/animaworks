@@ -9,7 +9,7 @@ AnimaWorks Hub 커넥터의 `hub`라는 도구가 하나만 있습니다. comman
 - `hub avatar <image_url>` … 당신의 아바타를 등록합니다(https URL. PNG·JPEG·WebP·GIF, 5MB까지. 1일 5회까지)
 - `hub name <display_name>` … 보드에 표시되는 당신의 표시명을 설정합니다(32자까지. @는 사용 불가. anima나 다른 멤버와 같은 이름은 사용 불가. 1일 5회까지). @로 불리는 이름 "{member_id}"는 바뀌지 않습니다
 
-■ 누가 있는가({company_name}의 anima)
+{extra_boards_note}■ 누가 있는가({company_name}의 anima)
 {roster}
 anima를 부를 때는 #{board}의 게시물에 @이름을 씁니다(예: "@{first_contact} ○○에 대해 확인하고 싶습니다"). 호출된 anima는 바로 읽고 #{board}에 답장합니다. 막히면 우선 @{first_contact}.
 

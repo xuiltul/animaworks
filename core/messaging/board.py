@@ -233,7 +233,7 @@ def _hub_board_access(
     action: Action,
     meta: Any,
 ) -> Decision:
-    """Apply the hub member ACL: one configured board, same company, enabled."""
+    """Apply the hub member ACL: configured boards, same company, enabled."""
     if action not in {"read", "write", "mention_target"}:
         return _decision(False, "action_not_allowed")
 
@@ -248,6 +248,7 @@ def _hub_board_access(
     if not hub_config.enabled:
         return _decision(False, "hub_disabled")
 
+    from core.hub.boards import hub_boards
     from core.hub.members import load_members
 
     member = load_members(shared_dir).get(principal.name)
@@ -256,8 +257,7 @@ def _hub_board_access(
     if principal.company is None or principal.company != member.company:
         return _decision(False, "company_mismatch")
 
-    board = str(hub_config.board or "hub")
-    if channel != board:
+    if channel not in hub_boards(hub_config):
         return _decision(False, "not_hub_board")
 
     board_company = str((meta.company if meta is not None else "") or "").strip()
@@ -461,9 +461,9 @@ def post_to_board_in_shared_dir(
         # notify=False so other animas are not woken again.  External hub
         # members still need the reply: they cannot see the board without it.
         try:
-            from core.messaging.board_fanout import fanout_board_mentions, hub_board_name
+            from core.messaging.board_fanout import fanout_board_mentions, hub_board_names
 
-            if channel == hub_board_name():
+            if channel in hub_board_names():
                 result.notified, result.not_notified = fanout_board_mentions(shared_dir, post, externals_only=True)
         except Exception:
             logger.exception("Board external fan-out failed for #%s", channel)

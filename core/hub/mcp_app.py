@@ -32,6 +32,7 @@ from starlette.responses import PlainTextResponse, Response
 from core.config.models import load_config
 from core.hub import timeline
 from core.hub.avatar import MAX_AVATAR_BYTES, AvatarError, fetch_avatar_url, normalize_avatar, save_avatar
+from core.hub.boards import hub_boards
 from core.hub.members import (
     HubMember,
     find_member_by_token,
@@ -57,20 +58,23 @@ logger = logging.getLogger(__name__)
 
 TOOL_DESCRIPTION = (
     "One tool for the AnimaWorks hub. Commands: `help`, `timeline`, `read`, "
-    "`post [--reply-to ID] [--request-id ID]` (put the message body in `text`), "
+    "`post [--board NAME] [--reply-to ID] [--request-id ID]` (put the message body in `text`), "
     "`avatar <https image URL>` (register your avatar; or PUT the image file to "
     "this server's /hub/avatar with the same Authorization header), "
     "`name <display name>` (set the name shown for you; your @id stays). "
-    "Talk to animas only by posting in #hub. Learn the current situation from "
+    "`read` returns new posts from every hub Board (the default Board is #hub; "
+    "`help` lists the Boards, and another Board is posted with `post --board NAME`). "
+    "Talk to animas only by posting on the hub Boards. Learn the current situation from "
     "`timeline` (use `timeline <item id>` for the full text and replies). "
     "Before notifying the human directly, check `timeline`; do not "
     "send what is already there (especially items the human has already read). "
-    "Except for urgent matters, do not message the human directly; post in #hub "
+    "Except for urgent matters, do not message the human directly; post on a hub Board "
     "instead."
 )
 
 HELP_SUMMARY = (
-    "commands: help | timeline [<item id>] | read | post [--reply-to ID] [--request-id ID] | "
+    "commands: help | timeline [<item id>] | read | "
+    "post [--board NAME] [--reply-to ID] [--request-id ID] | "
     "avatar <https image URL> | name <display name>"
 )
 
@@ -83,8 +87,10 @@ HELP_TEXT = (
     "activity = a scheduled/heartbeat/task result; done = finished work; decided = a decision. "
     "`about` links a reply to the item it answers. Use `timeline <item id>` for the full text and "
     "every reply/answer connected to that item.\n"
-    "- read: new #hub posts since your last read (oldest first, mentions first).\n"
-    "- post: post to #hub; put the message body in `text`.\n"
+    "- read: new posts since your last read from every hub Board (oldest first, mentions first). "
+    "Each line starts with #<board>.\n"
+    "- post: post to the default hub Board; put the message body in `text`. "
+    "Use `--board NAME` for another hub Board, and `--reply-to ID` to reply in that post's Board.\n"
     "- avatar: register a square avatar from an https image URL (PNG/JPEG/WebP/GIF, 5MB, 5 per day).\n"
     "  If you can send HTTP requests, upload the file instead: PUT the image bytes to the hub URL with "
     "/avatar in place of /mcp, with the same Authorization header "
@@ -92,8 +98,8 @@ HELP_TEXT = (
     "multipart -F file=@me.png also works).\n"
     "- name: set the name shown for you (1-32 characters; or put it in `text`). "
     "Your id for @mentions does not change.\n"
-    "Rules: talk to animas only in #hub. Check timeline before notifying the human and do not repeat "
-    "what is already there. Post in #hub for non-urgent matters.\n" + t("hub.tool.help_bilingual_ja")
+    "Rules: talk to animas only on the hub Boards. Check timeline before notifying the human and do not repeat "
+    "what is already there. Post on a hub Board for non-urgent matters.\n" + t("hub.tool.help_bilingual_ja")
 )
 
 _MAX_TIMELINE_LINES = 300
@@ -146,12 +152,63 @@ def _timeline_line(
     )
 
 
-def _read_line(entry: dict[str, Any], *, to_me: bool) -> str:
+def _read_line(entry: dict[str, Any], *, to_me: bool, board: str) -> str:
     prefix = "[to you] " if to_me else ""
     return (
-        f"{prefix}{entry.get('id', '?')} {entry.get('ts', '?')} "
+        f"{prefix}#{board} {entry.get('id', '?')} {entry.get('ts', '?')} "
         f"from={entry.get('from', '?')} kind={entry.get('kind', '?')}: {_one_line(entry.get('text'))}"
     )
+
+
+def _board_list_line(boards: list[str]) -> str:
+    labels = [f"#{board}" + (" (default)" if index == 0 else "") for index, board in enumerate(boards)]
+    return "boards: " + ", ".join(labels)
+
+
+def _help_text() -> str:
+    try:
+        boards = hub_boards(load_config().hub)
+    except Exception:
+        logger.warning("Could not read hub settings for help", exc_info=True)
+        boards = ["hub"]
+    return f"{HELP_TEXT}\n{_board_list_line(boards)}"
+
+
+def _run_read(shared_dir: Path, member: HubMember, boards: list[str]) -> tuple[str, str]:
+    reader = f"hub:{member.id}"
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for board in boards:
+        entries = read_board_entries(shared_dir, board)
+        reads = load_reads(shared_dir, board)
+        record = reads.get("readers", {}).get(reader)
+        previous_ts = str(record.get("upto_ts") or "") if isinstance(record, dict) else ""
+        for entry in entries_after_ts(entries, previous_ts):
+            if entry.get("from") == member.id:
+                continue
+            candidates.append((board, entry))
+
+    candidates.sort(key=lambda item: str(item[1].get("ts") or ""))
+    selected = candidates[:_MAX_READ_POSTS]
+    if not selected:
+        return t("hub.tool.no_new_posts", now=now_iso()), "ok"
+
+    # The selection is a chronological prefix, so the last selected entry of
+    # each Board is that Board's new read position.
+    last_by_board: dict[str, dict[str, Any]] = {}
+    for board, entry in selected:
+        last_by_board[board] = entry
+
+    mentions = [item for item in selected if extract_mentions(str(item[1].get("text") or ""), {member.id})]
+    mention_ids = {id(entry) for _board, entry in mentions}
+    ordered = mentions + [item for item in selected if id(item[1]) not in mention_ids]
+    lines = [_read_line(entry, to_me=id(entry) in mention_ids, board=board) for board, entry in ordered]
+
+    for board, entry in last_by_board.items():
+        post_id = entry.get("id")
+        post_ts = entry.get("ts")
+        if isinstance(post_id, str) and isinstance(post_ts, str):
+            advance_upto(shared_dir, board, reader, post_id=post_id, post_ts=post_ts)
+    return "\n".join(lines), "ok"
 
 
 def _run_timeline(shared_dir: Path, member: HubMember) -> tuple[str, str]:
@@ -230,70 +287,54 @@ def _run_timeline_item(shared_dir: Path, member: HubMember, item_id: str) -> tup
     return "\n".join(lines), "ok"
 
 
-def _run_read(shared_dir: Path, member: HubMember) -> tuple[str, str]:
-    config = load_config().hub
-    board = str(config.board or "hub")
-    entries = read_board_entries(shared_dir, board)
-    reads = load_reads(shared_dir, board)
-    reader = f"hub:{member.id}"
-    record = reads.get("readers", {}).get(reader)
-    previous_ts = str(record.get("upto_ts") or "") if isinstance(record, dict) else ""
-
-    fresh = [entry for entry in entries_after_ts(entries, previous_ts) if entry.get("from") != member.id]
-    fresh = fresh[:_MAX_READ_POSTS]
-    if not fresh:
-        return t("hub.tool.no_new_posts", now=now_iso()), "ok"
-
-    mentions = [entry for entry in fresh if extract_mentions(str(entry.get("text") or ""), {member.id})]
-    mention_ids = {id(entry) for entry in mentions}
-    ordered = mentions + [entry for entry in fresh if id(entry) not in mention_ids]
-    lines = [_read_line(entry, to_me=id(entry) in mention_ids) for entry in ordered]
-
-    last = fresh[-1]
-    last_id = last.get("id")
-    last_ts = last.get("ts")
-    if isinstance(last_id, str) and isinstance(last_ts, str):
-        advance_upto(shared_dir, board, reader, post_id=last_id, post_ts=last_ts)
-    return "\n".join(lines), "ok"
-
-
-def _parse_post_args(tokens: list[str]) -> tuple[str | None, str | None]:
+def _parse_post_args(tokens: list[str]) -> tuple[str | None, str | None, str | None]:
     reply_to: str | None = None
     request_id: str | None = None
+    board: str | None = None
     index = 0
     while index < len(tokens):
         token = tokens[index]
-        if token not in {"--reply-to", "--request-id"}:
+        if token not in {"--board", "--reply-to", "--request-id"}:
             raise ValueError(f"unexpected argument: {token}")
         if index + 1 >= len(tokens):
             raise ValueError(f"{token} requires a value")
         value = tokens[index + 1]
         if not value:
             raise ValueError(f"{token} requires a value")
-        if token == "--reply-to":
+        if token == "--board":
+            board = value
+        elif token == "--reply-to":
             reply_to = value
         else:
             request_id = value
         index += 2
-    return reply_to, request_id
+    return reply_to, request_id, board
 
 
-def _post_limit_reached(shared_dir: Path, board: str, member: HubMember, limit: int) -> bool:
+def _post_limit_reached(shared_dir: Path, boards: list[str], member: HubMember, limit: int) -> bool:
     if limit <= 0:
         return False
     cutoff = (now_local() - timedelta(hours=1)).isoformat()
     count = 0
-    for entry in read_board_entries(shared_dir, board):
-        if entry.get("from") != member.id:
-            continue
-        if is_after_ts(entry.get("ts", ""), cutoff):
-            count += 1
+    for board in boards:
+        for entry in read_board_entries(shared_dir, board):
+            if entry.get("from") != member.id:
+                continue
+            if is_after_ts(entry.get("ts", ""), cutoff):
+                count += 1
     return count >= limit
+
+
+def _find_reply_board(shared_dir: Path, boards: list[str], post_id: str) -> str | None:
+    for board in boards:
+        if any(entry.get("id") == post_id for entry in read_board_entries(shared_dir, board)):
+            return board
+    return None
 
 
 def _run_post(shared_dir: Path, member: HubMember, tokens: list[str], text: str) -> tuple[str, str]:
     try:
-        reply_to, request_id = _parse_post_args(tokens)
+        reply_to, request_id, requested_board = _parse_post_args(tokens)
     except ValueError as exc:
         return _error(str(exc)), "invalid_argument"
 
@@ -304,12 +345,25 @@ def _run_post(shared_dir: Path, member: HubMember, tokens: list[str], text: str)
         return _error(f"post text must be at most {MAX_POST_CHARS} characters"), "invalid_argument"
 
     config = load_config().hub
-    board = str(config.board or "hub")
-    if reply_to is not None:
-        if not any(entry.get("id") == reply_to for entry in read_board_entries(shared_dir, board)):
-            return _error(f"reply target not found in #{board}: {reply_to}"), "invalid_argument"
+    boards = hub_boards(config)
+    default_board = boards[0]
+    board = default_board
+    if requested_board is not None:
+        if requested_board not in boards:
+            return _error(t("hub.tool.unknown_board", board=requested_board)), "invalid_argument"
+        board = requested_board
 
-    if _post_limit_reached(shared_dir, board, member, int(config.max_posts_per_hour)):
+    if reply_to is not None:
+        if requested_board is not None:
+            if not any(entry.get("id") == reply_to for entry in read_board_entries(shared_dir, board)):
+                return _error(f"reply target not found in #{board}: {reply_to}"), "invalid_argument"
+        else:
+            reply_board = _find_reply_board(shared_dir, boards, reply_to)
+            if reply_board is None:
+                return _error(f"reply target not found in #{default_board}: {reply_to}"), "invalid_argument"
+            board = reply_board
+
+    if _post_limit_reached(shared_dir, boards, member, int(config.max_posts_per_hour)):
         return _error(f"post limit reached ({config.max_posts_per_hour} per hour)"), "rate_limited"
 
     result = post_to_board(
@@ -446,20 +500,28 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
     if name == "help":
         if args:
             return _error("help takes no arguments")
-        return HELP_TEXT
+        return _help_text()
 
-    # Every data command is scoped to the hub's own company and board: a member
-    # of another company sees neither this company's timeline nor its #hub.
+    # Every data command is scoped to the hub's own company and boards: a member
+    # of another company sees neither this company's timeline nor its hub Boards.
     hub_config = load_config().hub
     if not hub_config.company or member.company != hub_config.company:
         return _error("this hub belongs to another company")
     if name == "read":
         from core.messaging.board import board_access
 
-        board = str(hub_config.board or "hub")
-        decision = board_access(shared_dir, board, hub_principal(member), "read")
-        if not decision.allowed:
-            return _error(f"cannot read #{board} ({decision.reason})")
+        boards = hub_boards(hub_config)
+        readable: list[str] = []
+        reasons: dict[str, str] = {}
+        for board in boards:
+            decision = board_access(shared_dir, board, hub_principal(member), "read")
+            if decision.allowed:
+                readable.append(board)
+            else:
+                reasons[board] = decision.reason
+        if not readable:
+            board = boards[0]
+            return _error(f"cannot read #{board} ({reasons.get(board, 'not_hub_board')})")
     if name == "timeline":
         if len(args) > 1:
             return _error("timeline takes at most one item id")
@@ -471,7 +533,7 @@ def run_hub_command(shared_dir: Path, member: HubMember, command: str, text: str
     if name == "read":
         if args:
             return _error("read takes no arguments")
-        return _run_read(shared_dir, member)[0]
+        return _run_read(shared_dir, member, readable)[0]
     if name == "avatar":
         return _run_avatar(shared_dir, member, args, text)[0]
     if name == "name":
@@ -610,7 +672,7 @@ def build_hub_mcp_app(
     config = load_config().hub
     mcp = FastMCP(
         "AnimaWorks Hub",
-        instructions="Use the one `hub` tool. Talk to animas only in #hub.",
+        instructions="Use the one `hub` tool. Talk to animas on the hub Boards; `read` covers every hub Board.",
         stateless_http=True,
         json_response=True,
         streamable_http_path="/mcp",

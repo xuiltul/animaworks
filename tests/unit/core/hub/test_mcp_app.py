@@ -61,6 +61,7 @@ def _hub_config(
     enabled: bool = True,
     timeline_enabled: bool = True,
     board: str = "hub",
+    extra_boards: list[str] | None = None,
     max_posts_per_hour: int = 20,
 ) -> None:
     config = SimpleNamespace(
@@ -69,6 +70,7 @@ def _hub_config(
             timeline_enabled=timeline_enabled,
             company="a",
             board=board,
+            extra_boards=[] if extra_boards is None else extra_boards,
             public_hosts=[],
             max_posts_per_hour=max_posts_per_hour,
             max_round_trips=4,
@@ -272,11 +274,170 @@ def test_read_lists_new_posts_mentions_first_and_advances(
     )
 
     output = run_hub_command(shared_dir, member, "read")
-    assert output.splitlines()[0].startswith("[to you] p1")
+    assert output.splitlines()[0].startswith("[to you] #hub p1")
     assert "p2" in output
     assert "p3" not in output
 
     assert "新着なし" in run_hub_command(shared_dir, member, "read")
+
+
+def test_read_merges_extra_boards_with_per_board_cursors(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _make_board(shared_dir)
+    _make_board(shared_dir, "board-a")
+    save_member(shared_dir, member)
+    _append_board(
+        shared_dir,
+        [
+            {"id": "h1", "ts": "2026-01-01T00:00:01+00:00", "from": "bob", "text": "hub one", "kind": "anima"},
+            {"id": "h2", "ts": "2026-01-01T00:00:03+00:00", "from": "bob", "text": "hub two", "kind": "anima"},
+        ],
+    )
+    _append_board(
+        shared_dir,
+        [
+            {"id": "a1", "ts": "2026-01-01T00:00:02+00:00", "from": "carol", "text": "board-a one", "kind": "anima"},
+            {
+                "id": "a2",
+                "ts": "2026-01-01T00:00:04+00:00",
+                "from": "carol",
+                "text": "@grok board-a two",
+                "kind": "anima",
+            },
+        ],
+        name="board-a",
+    )
+
+    lines = run_hub_command(shared_dir, member, "read").splitlines()
+
+    assert [line.split("#", 1)[1].split()[1] for line in lines] == ["a2", "h1", "a1", "h2"]
+    assert lines[0].startswith("[to you] #board-a a2")
+    assert lines[1].startswith("#hub h1")
+    assert lines[2].startswith("#board-a a1")
+
+    hub_reads = json.loads((shared_dir / "reads" / "board" / "hub.json").read_text(encoding="utf-8"))
+    board_reads = json.loads((shared_dir / "reads" / "board" / "board-a.json").read_text(encoding="utf-8"))
+    assert hub_reads["readers"]["hub:grok"]["upto_ts"] == "2026-01-01T00:00:03+00:00"
+    assert board_reads["readers"]["hub:grok"]["upto_ts"] == "2026-01-01T00:00:04+00:00"
+
+    assert "新着なし" in run_hub_command(shared_dir, member, "read")
+    _append_board(
+        shared_dir,
+        [{"id": "a3", "ts": "2026-01-01T00:00:05+00:00", "from": "carol", "text": "board-a three", "kind": "anima"}],
+        name="board-a",
+    )
+    assert run_hub_command(shared_dir, member, "read").startswith("#board-a a3")
+
+
+def test_read_caps_across_boards_and_leaves_overflow_for_next_read(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _make_board(shared_dir)
+    _make_board(shared_dir, "board-a")
+    save_member(shared_dir, member)
+    for index in range(35):
+        board = "hub" if index % 2 == 0 else "board-a"
+        _append_board(
+            shared_dir,
+            [
+                {
+                    "id": f"p{index:02d}",
+                    "ts": f"2026-01-01T00:{index:02d}:00+00:00",
+                    "from": "bob",
+                    "text": f"post {index}",
+                    "kind": "anima",
+                }
+            ],
+            name=board,
+        )
+
+    first = run_hub_command(shared_dir, member, "read").splitlines()
+    second = run_hub_command(shared_dir, member, "read").splitlines()
+
+    assert len(first) == 30
+    assert [line.split()[1] for line in first] == [f"p{index:02d}" for index in range(30)]
+    assert [line.split()[1] for line in second] == [f"p{index:02d}" for index in range(30, 35)]
+
+
+def test_read_skips_denied_board_and_errors_when_all_are_denied(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _make_board(shared_dir, company="b")
+    _make_board(shared_dir, "board-a")
+    save_member(shared_dir, member)
+    _append_board(
+        shared_dir,
+        [{"id": "a1", "ts": "2026-01-01T00:00:01+00:00", "from": "carol", "text": "board-a only", "kind": "anima"}],
+        name="board-a",
+    )
+
+    output = run_hub_command(shared_dir, member, "read")
+    assert output.startswith("#board-a a1")
+    assert "#hub" not in output
+
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _make_board(shared_dir, "board-a", company="b")
+    assert run_hub_command(shared_dir, member, "read").startswith("error: cannot read #hub (company_mismatch)")
+
+
+def test_help_lists_configured_boards(shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch) -> None:
+    _hub_config(monkeypatch)
+    assert "boards: #hub (default)" in run_hub_command(shared_dir, member, "help")
+
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    help_text = run_hub_command(shared_dir, member, "help")
+    assert "boards: #hub (default), #board-a" in help_text
+    assert "--board NAME" in run_hub_command(shared_dir, member, "help")
+
+
+def test_post_to_extra_board_and_reply_routing(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"])
+    _make_board(shared_dir)
+    _make_board(shared_dir, "board-a")
+    save_member(shared_dir, member)
+    _append_board(
+        shared_dir,
+        [{"id": "a1", "ts": now_iso(), "from": "carol", "text": "parent on board-a", "kind": "anima"}],
+        name="board-a",
+    )
+
+    explicit = run_hub_command(shared_dir, member, "post --board board-a", "hello board-a")
+    assert explicit.startswith("posted ")
+    posted = json.loads((shared_dir / "channels" / "board-a.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert posted["text"] == "hello board-a"
+
+    reply = run_hub_command(shared_dir, member, "post --reply-to a1", "reply without board")
+    assert reply.startswith("posted ")
+    reply_record = json.loads((shared_dir / "channels" / "board-a.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert reply_record["reply_to"] == "a1"
+
+    assert run_hub_command(shared_dir, member, "post --board missing", "x").startswith("error: ")
+    assert "missing" in run_hub_command(shared_dir, member, "post --board missing", "x")
+    assert "reply target not found" in run_hub_command(
+        shared_dir, member, "post --board hub --reply-to a1", "wrong board"
+    )
+
+
+def test_post_limit_counts_every_hub_board(
+    shared_dir: Path, member: HubMember, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _hub_config(monkeypatch, extra_boards=["board-a"], max_posts_per_hour=1)
+    _make_board(shared_dir)
+    _make_board(shared_dir, "board-a")
+    save_member(shared_dir, member)
+    _append_board(
+        shared_dir,
+        [{"id": "a1", "ts": now_iso(), "from": "grok", "text": "my board-a post", "kind": "external_agent"}],
+        name="board-a",
+    )
+
+    assert "post limit reached" in run_hub_command(shared_dir, member, "post", "blocked")
 
 
 def test_post_writes_to_hub_and_supports_idempotency(
