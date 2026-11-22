@@ -286,14 +286,14 @@
     },
     "docs/en/integrations/hub.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "1088999c6055705461da9518bd888799a0b63518c30fadadedbc6d18ef71cf53",
         "a59976722af7dfadaa760fc02ba3f0e59f629203dbe9828aac8b95df1418d071",
-        "e8d9fd431e4b848f2767e8dec56b2e77fbae7789f7f0e53c599365d9241df238",
-        "8beed11c20e233b6474b52661083c88bd8d9dbab559f588fadee60ec5225425f",
-        "9b8d3c54b2138dadb8162d6f2941c604556970ac565aa069e3af441e00aebbee",
+        "c74ba6c8f93a5ae8b5d431610b8d17f31a639f391c13e159695834aafed89af4",
+        "584aa364f4a4abe3d7a3e75ffe65eba3a7c463a04a08918d61218d2044b4a20c",
+        "a29b95e99d07a9abeb7a29e71555e29e1a86267bebbd57b12a462d5e3c8d9ab6",
         "50952c1444e8f43a72e5f1762cb7a6f7104b05efc317155d5d09406221f81e17",
         "07f96eade159d39fcbcd0408d54d55a7494b70a3181da28079487fe562844106",
         "de079852012c7dc323d10dffaf859ebabe28359148534df97558b1d621c47103",
@@ -305,7 +305,7 @@
         "b715a8781299418644f66a37d544283cd39579ab2997f24c100a491d53f82e4b"
       ],
       "source": "docs/ja/integrations/hub.md",
-      "source_sha256": "be99b40ffb070d3417fa6d97f535c8d7710165fe6f55d9a7fb9e378e54326206",
+      "source_sha256": "7614ba60b1079862ca0990348773cf83a53f373c1ff79b2267a20ed70e4574e5",
       "statuses": [
         "translated",
         "translated",
@@ -1752,14 +1752,14 @@
     },
     "docs/ko/integrations/hub.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "1088999c6055705461da9518bd888799a0b63518c30fadadedbc6d18ef71cf53",
         "a59976722af7dfadaa760fc02ba3f0e59f629203dbe9828aac8b95df1418d071",
-        "e8d9fd431e4b848f2767e8dec56b2e77fbae7789f7f0e53c599365d9241df238",
-        "8beed11c20e233b6474b52661083c88bd8d9dbab559f588fadee60ec5225425f",
-        "9b8d3c54b2138dadb8162d6f2941c604556970ac565aa069e3af441e00aebbee",
+        "c74ba6c8f93a5ae8b5d431610b8d17f31a639f391c13e159695834aafed89af4",
+        "584aa364f4a4abe3d7a3e75ffe65eba3a7c463a04a08918d61218d2044b4a20c",
+        "a29b95e99d07a9abeb7a29e71555e29e1a86267bebbd57b12a462d5e3c8d9ab6",
         "50952c1444e8f43a72e5f1762cb7a6f7104b05efc317155d5d09406221f81e17",
         "07f96eade159d39fcbcd0408d54d55a7494b70a3181da28079487fe562844106",
         "de079852012c7dc323d10dffaf859ebabe28359148534df97558b1d621c47103",
@@ -1771,7 +1771,7 @@
         "b715a8781299418644f66a37d544283cd39579ab2997f24c100a491d53f82e4b"
       ],
       "source": "docs/ja/integrations/hub.md",
-      "source_sha256": "be99b40ffb070d3417fa6d97f535c8d7710165fe6f55d9a7fb9e378e54326206",
+      "source_sha256": "7614ba60b1079862ca0990348773cf83a53f373c1ff79b2267a20ed70e4574e5",
       "statuses": [
         "translated",
         "translated",
@@ -3818,20 +3818,20 @@
     },
     "templates/en/common_knowledge/communication/hub-guide.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "f3c7fba0acd21bac8fea5355acb70c3e833c250feb7e26ce39e3633cdf8f8ec8",
         "aa422eea048aac3f553033ab189cfa2639a650ffb85e3637409e0bedd17d3a75",
         "7dc605e365e883d106280b2e3dd152d67030be678ad0972130c53bf7dd1d77fc",
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
-        "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
+        "5696098f027b5f7a58adce6016e88b7a1975d642022ed24ce0c6619c20750ccf",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
         "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "3f923d2b24894138008b89a898c99a6cef05946274c7c9fefa1a12542122bf37",
+      "source_sha256": "682c367093e34814a714f2c0b364a5dce6af232bc0c1e8067375ed05213dc65b",
       "statuses": [
         "translated",
         "translated",
@@ -5954,13 +5954,13 @@
     },
     "templates/en/prompts/hub/setup_common.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "1e2ec17e38bacd52fbbac39064046b34904ea474499b161af3a315b826896c8a"
+        "eae1eaf5ec0dcbdee1183bd444f9c4fd1bbcc5b9be70c914def6f5c52b9e236a"
       ],
       "source": "templates/ja/prompts/hub/setup_common.md",
-      "source_sha256": "02a1b16c7dbfb7ce199d6427523cd89e533863716f550d44a7df73cda1abf82f",
+      "source_sha256": "d208b4ebdfcc14ec23042e5e3110b50b8670d0b4cf41744c6e20f4dcfa211885",
       "statuses": [
         "translated"
       ],
@@ -9746,20 +9746,20 @@
     },
     "templates/ko/common_knowledge/communication/hub-guide.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "f3c7fba0acd21bac8fea5355acb70c3e833c250feb7e26ce39e3633cdf8f8ec8",
         "aa422eea048aac3f553033ab189cfa2639a650ffb85e3637409e0bedd17d3a75",
         "7dc605e365e883d106280b2e3dd152d67030be678ad0972130c53bf7dd1d77fc",
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
-        "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
+        "5696098f027b5f7a58adce6016e88b7a1975d642022ed24ce0c6619c20750ccf",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
         "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "3f923d2b24894138008b89a898c99a6cef05946274c7c9fefa1a12542122bf37",
+      "source_sha256": "682c367093e34814a714f2c0b364a5dce6af232bc0c1e8067375ed05213dc65b",
       "statuses": [
         "translated",
         "translated",
@@ -11882,13 +11882,13 @@
     },
     "templates/ko/prompts/hub/setup_common.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "1e2ec17e38bacd52fbbac39064046b34904ea474499b161af3a315b826896c8a"
+        "eae1eaf5ec0dcbdee1183bd444f9c4fd1bbcc5b9be70c914def6f5c52b9e236a"
       ],
       "source": "templates/ja/prompts/hub/setup_common.md",
-      "source_sha256": "02a1b16c7dbfb7ce199d6427523cd89e533863716f550d44a7df73cda1abf82f",
+      "source_sha256": "d208b4ebdfcc14ec23042e5e3110b50b8670d0b4cf41744c6e20f4dcfa211885",
       "statuses": [
         "translated"
       ],
@@ -15674,20 +15674,20 @@
     },
     "templates/zh/common_knowledge/communication/hub-guide.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
         "f3c7fba0acd21bac8fea5355acb70c3e833c250feb7e26ce39e3633cdf8f8ec8",
         "aa422eea048aac3f553033ab189cfa2639a650ffb85e3637409e0bedd17d3a75",
         "7dc605e365e883d106280b2e3dd152d67030be678ad0972130c53bf7dd1d77fc",
         "d7944862375415de6dc4a4e072889c69fcb299702ffa5b30d551e85656a3dfbd",
-        "6b794435cac72469a1f235806f84b47884395a9b974b9596d01cc6a39ca69d5c",
+        "5696098f027b5f7a58adce6016e88b7a1975d642022ed24ce0c6619c20750ccf",
         "42162756cb18fcfc4ffa52201d9d178b1b26cb70dcaf0ea4254857dc049a1e39",
         "5b1b3061b47a01220f0689cafb401dc992381dd98402c5e13c524175eb6a5afc",
         "596480e0cf766e11d33511dd60bf223c4aa612e6ad89de56d745ce4a5e8161ad"
       ],
       "source": "templates/ja/common_knowledge/communication/hub-guide.md",
-      "source_sha256": "3f923d2b24894138008b89a898c99a6cef05946274c7c9fefa1a12542122bf37",
+      "source_sha256": "682c367093e34814a714f2c0b364a5dce6af232bc0c1e8067375ed05213dc65b",
       "statuses": [
         "translated",
         "translated",
@@ -17810,13 +17810,13 @@
     },
     "templates/zh/prompts/hub/setup_common.md": {
       "engine": "local",
-      "generated": "2026-11-15",
+      "generated": "2026-11-22",
       "model": "deepseek-v4.1-flash-1017-abl",
       "section_hashes": [
-        "1e2ec17e38bacd52fbbac39064046b34904ea474499b161af3a315b826896c8a"
+        "eae1eaf5ec0dcbdee1183bd444f9c4fd1bbcc5b9be70c914def6f5c52b9e236a"
       ],
       "source": "templates/ja/prompts/hub/setup_common.md",
-      "source_sha256": "02a1b16c7dbfb7ce199d6427523cd89e533863716f550d44a7df73cda1abf82f",
+      "source_sha256": "d208b4ebdfcc14ec23042e5e3110b50b8670d0b4cf41744c6e20f4dcfa211885",
       "statuses": [
         "translated"
       ],
