@@ -154,3 +154,27 @@ def test_pf_apply_loads_into_the_given_anchor(firewall, monkeypatch: pytest.Monk
         "block return out quick proto { tcp, udp } from any to any user 298\n", "com.apple/250.AnimaworksEnclave-isms"
     )
     assert calls[0] == ["pfctl", "-q", "-a", "com.apple/250.AnimaworksEnclave-isms", "-f", "-"]
+
+
+def test_pf_ruleset_drops_packets_whose_owner_pf_cannot_find(firewall) -> None:
+    ruleset = firewall.build_pf_ruleset(299, None, [18620], [], ["127.0.0.1", "192.168.100.21", "::1"])
+    lines = ruleset.strip().splitlines()
+    assert lines[0] == "table <aw_enclave_local> persist { 127.0.0.1, 192.168.100.21, ::1 }"
+    assert lines[1] == "block return out quick proto tcp from <aw_enclave_local> to any flags S/SA user unknown"
+    assert lines[2] == "block return out quick proto udp from <aw_enclave_local> to any user unknown"
+    assert lines[-1] == "block return out quick proto { tcp, udp } from any to any user 299"
+
+
+def test_local_addresses_leave_out_link_local(firewall, monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Done:
+        stdout = (
+            "lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384\n"
+            "\tinet 127.0.0.1 netmask 0xff000000\n"
+            "\tinet6 ::1 prefixlen 128\n"
+            "\tinet6 fe80::1%lo0 prefixlen 64 scopeid 0x1\n"
+            "en0: flags=8863<UP,BROADCAST,RUNNING> mtu 1500\n"
+            "\tinet 192.168.100.21 netmask 0xffffff00 broadcast 192.168.100.255\n"
+        )
+
+    monkeypatch.setattr(firewall.subprocess, "run", lambda *a, **k: _Done())
+    assert firewall._local_addresses() == ["127.0.0.1", "192.168.100.21", "::1"]

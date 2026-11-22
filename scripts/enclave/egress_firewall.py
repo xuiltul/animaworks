@@ -40,7 +40,10 @@ with ``--name``), which the stock ``/etc/pf.conf``
 evaluates through its ``anchor "com.apple/*"`` line, so ``pf.conf`` is left
 untouched; ``--apply`` also enables pf if it is off and stops pf from
 skipping lo0 (otherwise loopback would bypass the rules).  pf matches ``user``
-only for TCP and UDP, so the same limits apply to those protocols.
+only for TCP and UDP, so the same limits apply to those protocols.  pf also
+fails, now and then, to find the socket of a packet; such packets match no
+``user`` rule, so the pf rules also drop SYNs and UDP datagrams of unknown
+owner that leave from this host's addresses (for every user of the host).
 """
 
 from __future__ import annotations
@@ -161,6 +164,7 @@ def build_pf_ruleset(
     region: str | None,
     loopback_ports: list[int],
     endpoints: list[tuple[str, int]] | None = None,
+    local_addresses: list[str] | None = None,
 ) -> str:
     v4, v6 = _region_ranges(region)
     ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
@@ -168,6 +172,18 @@ def build_pf_ruleset(
     if v4:
         # Tables are local to the anchor, so each enclave's anchor has its own.
         lines.append("table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }")
+    if local_addresses:
+        lines.append("table <aw_enclave_local> persist { " + ", ".join(local_addresses) + " }")
+        # pf sometimes cannot find the socket of a new connection's first SYN or of a UDP
+        # datagram (measured on macOS: about 1 in 3,000-6,000 under load).  Such a packet
+        # matches no ``user`` rule and passes by default, so the enclave would leak it.
+        # Block such packets when they leave from this host's own addresses: a dropped SYN
+        # is retransmitted and then matched normally; forwarded traffic is left alone.
+        # This affects every user of the host, not only the enclave.
+        lines += [
+            "block return out quick proto tcp from <aw_enclave_local> to any flags S/SA user unknown",
+            "block return out quick proto udp from <aw_enclave_local> to any user unknown",
+        ]
     lines += [
         # Only sockets owned by the enclave uid match ``user``, so other
         # users' traffic never reaches the final block rule.
@@ -197,6 +213,25 @@ def _pf_apply(ruleset: str, anchor: str = PF_ANCHOR) -> None:
     info = subprocess.run(["pfctl", "-s", "info"], capture_output=True, text=True, check=False)
     if "Status: Enabled" not in info.stdout:
         subprocess.run(["pfctl", "-q", "-e"], check=True)
+
+
+def _local_addresses() -> list[str]:
+    """Return this host's addresses from ``ifconfig`` (link-local ones are left out: pf tables have no scope)."""
+    out = subprocess.run(["ifconfig", "-a"], capture_output=True, text=True, check=True).stdout
+    found: set[str] = set()
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 2 or parts[0] not in ("inet", "inet6"):
+            continue
+        try:
+            ip = ipaddress.ip_address(parts[1].split("%", 1)[0])
+        except ValueError:
+            continue
+        if not ip.is_link_local:
+            found.add(str(ip))
+    if not found:
+        raise SystemExit("could not read this host's addresses from ifconfig")
+    return sorted(found, key=lambda a: (ipaddress.ip_address(a).version, ipaddress.ip_address(a)))
 
 
 def _nft(args: list[str], stdin: str | None = None) -> None:
@@ -277,7 +312,7 @@ def main() -> int:
     endpoints = _parse_endpoints(args.allow_endpoints) + _resolve_hosts(args.allow_hosts)
     region = args.region or None
     if args.backend == "pf":
-        ruleset = build_pf_ruleset(uid, region, ports, endpoints)
+        ruleset = build_pf_ruleset(uid, region, ports, endpoints, _local_addresses())
     else:
         ruleset = build_ruleset(uid, region, ports, endpoints, table=table)
     if not args.apply:
