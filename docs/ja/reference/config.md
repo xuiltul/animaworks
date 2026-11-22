@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 2cf99fa7db2f29177959733e68fc74680778ed8e2ac3b2dc57767f918d62ee21 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: 0d4f1cbb997a5c2b212d21b336d7d37b40747468e12d0ed623774cac29556cc4 -->
 
 # 設定リファレンス
 
@@ -482,6 +482,7 @@
 | `hub.timeline_enabled` | `bool` | `false` | — |
 | `hub.company` | `str` | `""` | — |
 | `hub.board` | `str` | `"hub"` | — |
+| `hub.extra_boards` | `list[str]` | `[]` | — |
 | `hub.public_hosts` | `list[str]` | `[]` | — |
 | `hub.max_posts_per_hour` | `int` | `20` | — |
 | `hub.max_round_trips` | `int` | `4` | — |

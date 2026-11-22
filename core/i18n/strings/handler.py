@@ -611,9 +611,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "ja": "新着なし ({now})",
         "en": "No new posts ({now})",
     },
+    "hub.tool.unknown_board": {
+        "ja": "ボードがありません: {board}",
+        "en": "unknown board: {board}",
+        "ko": "보드가 없습니다: {board}",
+        "zh": "看板不存在：{board}",
+    },
     "hub.tool.help_bilingual_ja": {
-        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
-        "en": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、#hub の新着は read、投稿は post。anima との連絡は必ず #hub で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は #hub に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
+        "ja": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、ハブの板（既定 #hub、ほかの板は post --board）の新着は read、投稿は post。read は全部の板の新着を出します。anima との連絡はハブの板で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は既定の板に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
+        "en": "日本語: 会社のタイムラインは timeline（読み取り専用、項目 id を渡すと全文とつながる返答を表示）、ハブの板（既定 #hub、ほかの板は post --board）の新着は read、投稿は post。read は全部の板の新着を出します。anima との連絡はハブの板で行い、人間への直接通知の前に timeline を確認してください。緊急でない用件は既定の板に投稿してください。表示名は name で変えられます（@ の id は変わりません）。アバターは avatar <画像の URL> か、画像ファイルを /hub/avatar に PUT して登録できます。",
     },
     "cli.hub_parser_help": {
         "ja": "ハブの名簿と外部 AI のメンバーを管理",
@@ -790,6 +796,34 @@ STRINGS: dict[str, dict[str, str]] = {
     "hub.setup_roster_empty": {
         "ja": "- （該当する anima はいません）",
         "en": "- (no matching animas)",
+    },
+    "hub.setup_extra_boards_note": {
+        "ja": (
+            "ほかに {boards} でも話せます。`read` は全部の板の新着を出します。"
+            "ほかの板へは `hub post --board {example}`、返事は `--reply-to <post_id>` だけで"
+            "その板に入ります。"
+        ),
+        "en": (
+            "You can also talk on {boards}. `read` returns new posts from every board. "
+            "To post on another board, use `hub post --board {example}`; a reply reaches "
+            "that board with `--reply-to <post_id>` alone."
+        ),
+        "ko": (
+            "다른 {boards} 보드에서도 이야기할 수 있습니다. `read`는 모든 보드의 새 글을 반환합니다. "
+            "다른 보드에는 `hub post --board {example}`로 쓰고, 답장은 "
+            "`--reply-to <post_id>`만으로 그 보드에 들어갑니다."
+        ),
+        "zh": (
+            "还可以在 {boards} 上交谈。`read` 会返回所有看板的新消息。"
+            "往其他看板写时使用 `hub post --board {example}`，回复只用 "
+            "`--reply-to <post_id>` 就会进入该看板。"
+        ),
+    },
+    "hub.setup_extra_board_item": {
+        "ja": "#{board}（{description}）",
+        "en": "#{board} ({description})",
+        "ko": "#{board}({description})",
+        "zh": "#{board}（{description}）",
     },
     "hub.wake_task": {
         "ja": (

@@ -19,6 +19,7 @@ def _config(
     *,
     public_hosts: list[str] | None = None,
     locale: str = "ja",
+    extra_boards: list[str] | None = None,
 ) -> None:
     config = SimpleNamespace(
         locale=locale,
@@ -26,6 +27,7 @@ def _config(
             enabled=True,
             company="a",
             board="hub",
+            extra_boards=[] if extra_boards is None else extra_boards,
             public_hosts=public_hosts or [],
             max_posts_per_hour=12,
             max_round_trips=3,
@@ -188,6 +190,34 @@ def test_setup_prompt_falls_back_to_human_when_roster_empty(tmp_path: Path, monk
 
     assert "まず @human" in text
     assert "該当する anima はいません" in text
+
+
+def test_setup_prompt_describes_extra_boards_when_configured(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _config(monkeypatch, public_hosts=["hub.example.com"], extra_boards=["board-a", "board-b"])
+    shared = _shared(tmp_path)
+    for board, description in (("board-a", "計画の相談"), ("board-b", "雑談")):
+        (shared / "channels" / f"{board}.jsonl").touch()
+        save_channel_meta(shared, board, ChannelMeta(members=[], company="a", description=description))
+    save_member(shared, _member())
+
+    text = build_setup_prompt(shared, "muse")
+
+    assert "#board-a（計画の相談）" in text
+    assert "#board-b（雑談）" in text
+    assert "hub post --board board-a" in text
+    assert "全部の板の新着" in text
+    assert "{" not in text.replace("{{", "")
+
+
+def test_setup_prompt_omits_extra_boards_note_when_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _config(monkeypatch, public_hosts=["hub.example.com"])
+    shared = _shared(tmp_path)
+    save_member(shared, _member())
+
+    text = build_setup_prompt(shared, "muse")
+
+    assert "hub post --board" not in text
+    assert "■ 誰がいるか" in text
 
 
 @pytest.mark.parametrize("locale", ["ja", "en", "ko", "zh"])

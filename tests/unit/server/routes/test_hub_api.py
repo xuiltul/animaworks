@@ -30,6 +30,7 @@ def _config(
     *,
     enabled: bool = True,
     board: str = "hub",
+    extra_boards: list[str] | None = None,
     company: str = "a",
     timeline_enabled: bool = True,
 ) -> None:
@@ -37,6 +38,7 @@ def _config(
         hub=SimpleNamespace(
             enabled=enabled,
             board=board,
+            extra_boards=[] if extra_boards is None else extra_boards,
             company=company,
             timeline_enabled=timeline_enabled,
         )
@@ -160,13 +162,14 @@ def test_info_is_disabled_when_config_cannot_be_read(tmp_path: Path, monkeypatch
 
 
 def test_info_returns_hub_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _config(monkeypatch, board="company", company="acme", timeline_enabled=True)
+    _config(monkeypatch, board="company", extra_boards=["board-a"], company="acme", timeline_enabled=True)
 
     body = TestClient(_app(tmp_path / "shared")).get("/api/hub/info").json()
 
     assert body == {
         "enabled": True,
         "board": "company",
+        "boards": ["company", "board-a"],
         "company": "acme",
         "timeline_enabled": True,
         "unread": 0,

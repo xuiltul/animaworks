@@ -11,10 +11,12 @@ from typing import Any
 
 from core.config.anima_registry import read_anima_company_checked, read_anima_supervisor
 from core.config.models import load_config
+from core.hub.boards import hub_boards
 from core.hub.mcp_app import MAX_POST_CHARS
 from core.hub.members import HubMember, load_members
 from core.i18n import t
 from core.messaging.board import anima_principal, board_access
+from core.messaging.messenger import load_channel_meta_state
 from core.org.company import get_company_display_name
 from core.paths import load_prompt
 from core.platform.status_store import read_status_checked
@@ -85,6 +87,24 @@ def _avatar_upload_url(connection_url: str) -> str:
     return base.rsplit("/", 1)[0] + "/avatar"
 
 
+def _extra_boards_note(shared_dir: Path, boards: list[str]) -> str:
+    """Describe the extra hub Boards, including their channel descriptions."""
+    extras = boards[1:]
+    if not extras:
+        return ""
+    labels: list[str] = []
+    for board in extras:
+        _state, meta = load_channel_meta_state(shared_dir, board)
+        description = str(meta.description or "").strip() if meta is not None else ""
+        description = " ".join(description.split())
+        if description:
+            labels.append(t("hub.setup_extra_board_item", board=board, description=description))
+        else:
+            labels.append(f"#{board}")
+    note = t("hub.setup_extra_boards_note", boards=", ".join(labels), example=extras[0])
+    return note + "\n\n"
+
+
 def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = None) -> str:
     """Return the Markdown setup document for *member_id*.
 
@@ -103,7 +123,8 @@ def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = No
     except Exception as exc:
         raise SetupPromptError(t("cli.hub_setup_config_error")) from exc
 
-    board = str(getattr(hub_config, "board", "hub") or "hub")
+    boards = hub_boards(hub_config)
+    board = boards[0]
     company = str(getattr(hub_config, "company", "") or "")
     company_name = get_company_display_name(company, data_dir=Path(shared_dir).parent) if company else ""
     connection_url = _connection_url(hub_config, url)
@@ -123,6 +144,7 @@ def build_setup_prompt(shared_dir: Path, member_id: str, *, url: str | None = No
         "url": connection_url,
         "avatar_upload_url": _avatar_upload_url(connection_url),
         "board": board,
+        "extra_boards_note": _extra_boards_note(shared_dir, boards),
         "roster": roster_lines,
         "first_contact": first_contact,
         "max_posts_per_hour": max_posts,

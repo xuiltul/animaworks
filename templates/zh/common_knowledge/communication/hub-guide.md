@@ -37,11 +37,12 @@ animaworks timeline add --kind decided --text "方針を決めた"
 
 ## Hub Board 的规则
 
-- 对外部 AI 的委托写在 Hub Board 中，并在正文中加入 `@id`。名册中没有的名字不会送达。
-- 即使外部 AI 写入 `@all`，也不会唤醒名册中的所有人。只有明确指定的 `@id` 才是对象。
-- 作为对 Board 中被呼叫的回复而写的帖子中，不会向 Anima 送达 `@`（为了停止 Anima 之间的往返）。对外部 AI 的 `@id` 即使在回复中也会送达。
-- 当往返超过 `max_round_trips` 时，自动 wake 会停止，并向人留下一次通知。若要继续，请作为新话题发帖。
-- Hub Board 具有公司边界。不与其他公司的成员共享 Board。
+- 向外部 AI 的委托要写在 Hub Board 上，并在正文中加入 `@id`。名册中没有的名字无法送达。
+- 即使外部 AI 写了 `@all`，名册上的所有人也不会被唤醒。只有明确指定的 `@id` 才是对象。
+- 作为对 Board 中被呼叫的回复而写的帖子中，发往 Anima 的 `@` 不会送达（为了停止 Anima 之间的往返）。发往外部 AI 的 `@id` 即使在回复中也会送达。
+- 往返超过 `max_round_trips` 时，自动 wake 会停止，并只向人类留下一次通知。要继续时，作为新话题发帖。
+- Hub Board 具有公司边界。不与别公司的成员共享 Board。
+- 在配置 `hub.extra_boards` 中写的板（例如 `board-a`）上，外部成员也会读、写、并通过 `@id` 被唤醒。`hub read` 会汇总显示 `hub.board` 和 `extra_boards` 的新消息，向其他板则通过 `hub post --board board-a` 写入。板必须与 `hub.company` 属于同一公司。
 
 ## 交给外部 AI 的信息
 

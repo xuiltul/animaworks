@@ -1,5 +1,5 @@
 <!-- 自動翻訳ファイル・編集禁止 (AUTO-TRANSLATED, DO NOT EDIT). 正本: docs/ja/reference/config.md -->
-<!-- i18n: source-sha256=ee60555182064bdba002ab8b3f958a80b4e8a1b16696077c8f1d058316fe0461 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
+<!-- i18n: source-sha256=65134bcd3d2e4e0c1791022d18c8ff28e468aad64beb611660f51c64060a24b3 generated=2026-11-14 engine=local model=deepseek-v4.1-flash-1017-abl translator=2 -->
 
 # 설정 참조
 
@@ -482,6 +482,7 @@
 | `hub.timeline_enabled` | `bool` | `false` | — |
 | `hub.company` | `str` | `""` | — |
 | `hub.board` | `str` | `"hub"` | — |
+| `hub.extra_boards` | `list[str]` | `[]` | — |
 | `hub.public_hosts` | `list[str]` | `[]` | — |
 | `hub.max_posts_per_hour` | `int` | `20` | — |
 | `hub.max_round_trips` | `int` | `4` | — |

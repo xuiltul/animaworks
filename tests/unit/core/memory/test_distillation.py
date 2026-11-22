@@ -30,6 +30,23 @@ from core.time_utils import now_jst
 # ── Fixtures ──────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _text_clustering(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Use the text-based clustering fallback in every test.
+
+    Vector clustering loads an embedding model from the network, which made
+    these unit tests slow enough to hit the 30-second timeout on CI.
+    """
+
+    def unavailable(*_args: object, **_kwargs: object) -> list[list[dict]]:
+        raise ImportError("RAG unavailable in test")
+
+    monkeypatch.setattr(
+        "core.memory.maintenance.distillation.ProceduralDistiller._cluster_activities_vector",
+        unavailable,
+    )
+
+
 @pytest.fixture
 def anima_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create an isolated anima directory with required subdirectories."""
