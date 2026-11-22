@@ -168,6 +168,45 @@ def test_open_channel_without_company_rejects_assigned_anima(tmp_path: Path) -> 
     assert channel_file.read_text(encoding="utf-8") == ""
 
 
+def test_server_403_on_open_channel_without_company_names_the_cause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server path answers 403; the anima still learns the channel has no company."""
+    from core.messaging.board_client import BoardPostClientError
+
+    def reject(*_args: object, **_kwargs: object) -> dict:
+        raise BoardPostClientError(403, "Forbidden")
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", reject)
+    _make_anima(tmp_path, "alice", "alpha")
+    channels_dir = tmp_path / "shared" / "channels"
+    channels_dir.mkdir(parents=True)
+    (channels_dir / "board-a.jsonl").write_text("", encoding="utf-8")
+    save_channel_meta(tmp_path / "shared", "board-a", ChannelMeta(members=[], company=""))
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_post_channel({"channel": "board-a", "text": "hello"})
+
+    assert result == t("handler.channel_company_unset", channel="board-a")
+
+
+def test_server_403_for_a_non_member_keeps_the_access_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.messaging.board_client import BoardPostClientError
+
+    def reject(*_args: object, **_kwargs: object) -> dict:
+        raise BoardPostClientError(403, "Forbidden")
+
+    monkeypatch.setattr("core.messaging.board_client.post_via_server", reject)
+    _make_anima(tmp_path, "alice", "alpha")
+    _make_anima(tmp_path, "bob", "alpha")
+    _make_channel(tmp_path, "private", ["bob"])
+    handler = _make_handler(tmp_path)
+
+    result = handler._handle_post_channel({"channel": "private", "text": "hello"})
+
+    assert result == t("handler.channel_acl_denied", channel="private")
+
+
 def test_company_scoped_open_channel_same_company_allows_post(tmp_path: Path) -> None:
     _make_anima(tmp_path, "alice", "alpha")
     _make_anima(tmp_path, "bob", "beta")

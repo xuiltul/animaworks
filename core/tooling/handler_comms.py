@@ -447,7 +447,7 @@ class CommsToolsMixin:
             if exc.status_code == 404:
                 return t("handler.channel_not_found", channel=channel)
             if exc.status_code == 403:
-                return t("handler.channel_acl_denied", channel=channel)
+                return self._channel_company_boundary_error(channel) or t("handler.channel_acl_denied", channel=channel)
             if exc.status_code == 400:
                 return _error_result("InvalidArguments", exc.detail)
             return t("handler.channel_post_failed", detail=exc.detail)
