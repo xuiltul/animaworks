@@ -294,6 +294,10 @@ def instance_daemon(inst: Instance) -> dict[str, Any]:
     }
     return {
         "Label": inst.label,
+        # Without a ProcessType launchd throttles the job's CPU and I/O.  On a
+        # busy host the server then takes minutes to import and the anima
+        # runner misses its 15 s socket deadline, so every request fails.
+        "ProcessType": "Interactive",
         "UserName": inst.user,
         "GroupName": inst.group,
         "InitGroups": True,
