@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 633233a6b7fdb01c7afddf9238cba65c2e19bc6cf632dc24960d122fc3e9a0d8 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: 69a07a8dc4183d754656ae82f0562857d97e3653660756be46e5dfe0cfdd0378 -->
 
 # モジュール一覧
 
@@ -246,7 +246,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
 | `core.enclave.raw_store` | 150 | Private storage for unmodified results read by enclave tools. |
 | `core.enclave.secrets` | 150 | Read secrets from the enclave credentials store. |
-| `core.enclave.ssm_tunnel` | 371 | SSM Session Manager port-forward tunnels for enclave SQL sources. |
+| `core.enclave.ssm_tunnel` | 615 | SSM Session Manager port-forward tunnels for enclave SQL sources. |
 
 ## `core.enclave.egress`
 

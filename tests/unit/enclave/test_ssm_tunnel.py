@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -140,7 +142,13 @@ def _setup(
 
     spawned: list[str] = []
 
-    def _fake_start_plugin(config: EnclaveSsmTunnelConfig, session: dict, request: dict) -> _FakeProc:
+    def _fake_start_plugin(
+        config: EnclaveSsmTunnelConfig,
+        session: dict,
+        request: dict,
+        credentials: dict,  # noqa: ARG001
+        port_lock_fd: int | None,  # noqa: ARG001
+    ) -> _FakeProc:
         proc = _FakeProc(ssm_tunnel._plugin_command(config, session, request))
         spawned.append(json.dumps(proc.args))
         return proc
@@ -149,6 +157,18 @@ def _setup(
     monkeypatch.setattr(ssm_tunnel, "_free_port", lambda: 65432)
     monkeypatch.setattr(ssm_tunnel, "_port_open", lambda port: True)
     return boto_session, spawned
+
+
+def _age_state(source_name: str, seconds: float) -> None:
+    path = ssm_tunnel._state_path(source_name)
+    then = time.time() - seconds
+    os.utime(path, (then, then))
+
+
+def _new_process() -> None:
+    """Forget this process's tunnels without stopping them, as a later tool process would start."""
+    ssm_tunnel._TUNNELS.clear()
+    ssm_tunnel._LOCKS.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +340,7 @@ def test_idle_tunnel_is_stopped(
 
     tunnel = ssm_tunnel._TUNNELS["main"]
     tunnel.last_used -= 10
+    _age_state("main", 10)
 
     ssm_tunnel.stop_idle_tunnels()
 
@@ -342,3 +363,138 @@ def test_stop_tunnel_tears_down(
     ssm_tunnel.stop_tunnel("main")
 
     assert "main" not in ssm_tunnel._TUNNELS
+
+
+def test_plugin_signs_with_keys_from_its_environment(
+    data_dir: Path,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_popen(args: list[str], **kwargs: Any) -> _FakeProc:
+        captured["args"] = args
+        captured.update(kwargs)
+        return _FakeProc(args)
+
+    monkeypatch.setenv("AWS_PROFILE", "someone-else")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "stale-token")
+    config = _tunnel_config()
+    # subprocess is shared with the fixtures' cleanup, so patch Popen only around the call.
+    with monkeypatch.context() as patch:
+        patch.setattr(ssm_tunnel.subprocess, "Popen", _fake_popen)
+        ssm_tunnel._start_plugin(
+            config,
+            {"SessionId": "session-id", "TokenValue": "session-token", "StreamUrl": "wss://example"},
+            {"Target": "i-bastion"},
+            {"aws_access_key_id": "access", "aws_secret_access_key": "secret"},
+            7,
+        )
+
+    env = captured["env"]
+    assert env["AWS_ACCESS_KEY_ID"] == "access"
+    assert env["AWS_SECRET_ACCESS_KEY"] == "secret"
+    assert env["AWS_REGION"] == "ap-northeast-1"
+    assert "AWS_PROFILE" not in env
+    assert "AWS_SESSION_TOKEN" not in env
+    assert "secret" not in json.dumps(captured["args"])
+    assert captured["start_new_session"] is True
+    assert captured["pass_fds"] == (7,)
+
+
+def test_later_process_reuses_the_recorded_tunnel(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boto_session, spawned = _setup(data_dir, monkeypatch)
+    monkeypatch.setattr(ssm_tunnel, "_pid_runs_session", lambda pid, sid: pid == 4242 and sid == "session-id")
+    config = _tunnel_config()
+
+    first = ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+    ssm_tunnel._leave_shared_tunnels_at_exit()
+    _age_state("main", 300)
+    _new_process()
+    second = ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+
+    assert first == second == 65432
+    assert len(boto_session._ssm.started) == 1
+    assert len(spawned) == 1
+    # Reuse counts as use: the idle clock restarts.
+    assert time.time() - ssm_tunnel._state_path("main").stat().st_mtime < 5
+
+
+def test_exit_leaves_the_recorded_tunnel_running(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup(data_dir, monkeypatch)
+    ssm_tunnel.ensure_tunnel("main", _tunnel_config(), "rds.example", 3306)
+    tunnel = ssm_tunnel._TUNNELS["main"]
+
+    ssm_tunnel._leave_shared_tunnels_at_exit()
+
+    assert tunnel.process.terminated is False
+    assert ssm_tunnel._state_path("main").exists()
+
+
+def test_idle_recorded_tunnel_is_replaced_and_its_session_ended(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boto_session, _ = _setup(data_dir, monkeypatch)
+    monkeypatch.setattr(ssm_tunnel, "_pid_runs_session", lambda pid, sid: pid == 4242 and sid == "session-id")
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(ssm_tunnel.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    config = _tunnel_config(idle_shutdown_s=60)
+
+    ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+    ssm_tunnel._leave_shared_tunnels_at_exit()
+    _age_state("main", 120)
+    _new_process()
+    ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+
+    assert len(boto_session._ssm.started) == 2
+    assert boto_session._ssm.terminated == {"SessionId": "session-id"}
+    assert killed == [(4242, ssm_tunnel.signal.SIGTERM)]
+
+
+def test_dead_recorded_tunnel_is_replaced_without_signalling(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boto_session, _ = _setup(data_dir, monkeypatch)
+    monkeypatch.setattr(ssm_tunnel, "_pid_runs_session", lambda pid, sid: False)
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(ssm_tunnel.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    config = _tunnel_config()
+
+    ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+    ssm_tunnel._leave_shared_tunnels_at_exit()
+    _new_process()
+    ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+
+    assert len(boto_session._ssm.started) == 2
+    assert killed == []
+
+
+def test_recorded_tunnel_to_another_target_is_not_reused(
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boto_session, _ = _setup(data_dir, monkeypatch)
+    monkeypatch.setattr(ssm_tunnel, "_pid_runs_session", lambda pid, sid: True)
+    monkeypatch.setattr(ssm_tunnel.os, "kill", lambda pid, sig: None)
+    config = _tunnel_config()
+
+    ssm_tunnel.ensure_tunnel("main", config, "rds.example", 3306)
+    ssm_tunnel._leave_shared_tunnels_at_exit()
+    _new_process()
+    ssm_tunnel.ensure_tunnel("main", config, "other-rds.example", 3306)
+
+    assert len(boto_session._ssm.started) == 2
+    assert boto_session._ssm.started[1]["Parameters"]["host"] == ["other-rds.example"]
+
+
+def test_pid_check_rejects_a_reused_pid() -> None:
+    # This test process is alive but is not the plugin of that session.
+    assert ssm_tunnel._pid_runs_session(os.getpid(), "session-that-is-not-here") is False
+    assert ssm_tunnel._pid_runs_session(0, "session-id") is False

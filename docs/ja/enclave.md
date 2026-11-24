@@ -79,7 +79,7 @@ id -u "$HOST_USER"
 
 `allowed_llm_credentials` には、隔離側の各 anima が実際に使う認証情報名だけを列挙する。`external_tasks.enabled` は初期値が `true` なので、隔離側では `false` にする。新しく作った anima の `permissions.json` は `file_roots` が `["/"]` になっているため、anima 自身のディレクトリなど必要な範囲に書き換える（そのままだと起動時ガードが起動を拒否する）。隔離モードでは Slack・Discord・Zoom・GitHub Webhook のゲートウェイを起動しない。ほかの起動時ガードも満たす必要があるため、イベントエクスポートや外部メッセージ連携を有効にせず、各 anima の `permissions.json` でファイルアクセスを必要な範囲に制限する。entry anima の外部ツールを制限する場合は `enclave_records` を許可する。
 
-異なる thread の ask を gateway の `max_concurrency` まで並列実行するには、entry anima の `status.json` に `chat_max_concurrency`（1〜10）を設定し、gateway の `max_concurrency` 以上にする。SQL ソースの SSM トンネルを固定ポート（`tunnel.local_port`）で使う場合は、`tunnel.local_port_count` を同時実行数にそろえる。各プロセスは `local_port` から始まる連続ポートのうち空いているものを1つ予約して使う。egress firewall の `--loopback-ports` にはその範囲を `33061-33070` のように渡す。
+異なる thread の ask を gateway の `max_concurrency` まで並列実行するには、entry anima の `status.json` に `chat_max_concurrency`（1〜10）を設定し、gateway の `max_concurrency` 以上にする。SQL ソースの SSM トンネルは、ソースごとに1本をすべてのプロセスで共有する（同時に走るクエリは1本のトンネルの中で多重化される）。固定ポート（`tunnel.local_port`）で使う場合、トンネルを張り直すときは `local_port` から始まる連続ポートのうち空いているものを1つ予約する。前のトンネルがポートを手放す前に張り直すことがあるので、`tunnel.local_port_count` は 2 以上にする。egress firewall の `--loopback-ports` にはその範囲を `33061-33070` のように渡す。
 
 masker の `profile` は `default` と `personal_dates` から選ぶ。`default` は日付をすべて `[MASK-DATE]` にする。`personal_dates` は、生年月日などの見出しが付いた日付・「生まれ」が続く日付・和暦の日付・2015年より前の日付だけを伏字にし、障害の発生日時のような日付は残す。不具合の調査結果を返す用途では `personal_dates` を使う。
 
@@ -285,6 +285,8 @@ install -m 0600 -o root -g root aws-creds  /etc/credstore/animaworks-enclave/aw-
   }
 }
 ```
+
+トンネル（`session-manager-plugin` のプロセス）は、張ったプロセスが終わっても残り、次のクエリのプロセスがそのまま使う。`idle_shutdown_s` のあいだ使われなければ、次に使うプロセスか、張ったプロセスがまだ動いていればその見回りが閉じる。どちらも無いときは Session Manager のアイドルタイムアウトで切れる。トンネルの記録は `<data_dir>/run/ssm-tunnels/<ソース名>.json`（`0600`）に置く。`aws_secret` の鍵は、プラグインの環境変数で渡す（コマンドラインには載せない）。プラグインはこの鍵で `OpenDataChannel` に SigV4 で署名する。AWS は 2027-05-28 から、この署名と IAM の `ssmmessages:OpenDataChannel` の許可を必須にする。プラグインは 1.2.764.0 以上を使い、IAM ユーザーには自分のセッション（`arn:aws:ssm:*:*:session/${aws:username}-*`）への `ssmmessages:OpenDataChannel` を許可する。
 
 `app_key_secret` は Laravel の APP_KEY を 1 行 1 鍵で保存した秘密ファイル名です。`base64:` 形式と UTF-8 の鍵を扱い、先頭行を現行鍵、後続行を旧鍵として試します。`decrypt_columns` は結果列名（alias 適用後）に `re.search` で照合する正規表現です。対応する列の文字列セルは Laravel AES-256-CBC 形式の復号を試し、復号できない値はそのまま返します。SQL の取得行は復号後・セル切り詰め前に raw ファイルへ保存され、ツール結果の `raw_path` から全文を Read できます。SSL は既定で必須です。RDS の CA を使う場合は `ssl_ca` に CA のパス、ホスト名検証の無効化が必要なら `ssl_verify_identity: false`（既定）のままトンネル越しのためホスト名一致しない点を考慮してください。
 
