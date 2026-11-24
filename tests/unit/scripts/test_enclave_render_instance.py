@@ -207,6 +207,14 @@ def test_check_matches_installed_files_and_reports_drift(render, tmp_path: Path)
     assert any("commands differ" in p for p in problems)
 
 
+def test_instance_daemon_is_not_throttled(render) -> None:
+    # launchd throttles a job without ProcessType; the hand-written example must agree.
+    inst = render.load_instance(_spec())
+    assert render.instance_daemon(inst)["ProcessType"] == "Interactive"
+    example = _REPO / "templates" / "_shared" / "launchd" / "com.animaworks.enclave.plist"
+    assert plistlib.loads(example.read_bytes())["ProcessType"] == "Interactive"
+
+
 def test_check_reports_missing_installs(render, tmp_path: Path) -> None:
     inst = render.load_instance(_spec(boot_prep_script=str(tmp_path / "missing.sh")))
     problems = render.check(inst, tmp_path)

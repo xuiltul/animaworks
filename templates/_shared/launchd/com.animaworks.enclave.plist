@@ -14,6 +14,10 @@
 <dict>
 	<key>Label</key>
 	<string>com.animaworks.enclave</string>
+	<!-- Without it launchd throttles CPU and I/O: on a busy host the anima
+	     runner misses its 15 s socket deadline and every request fails. -->
+	<key>ProcessType</key>
+	<string>Interactive</string>
 	<key>UserName</key>
 	<string>_awenclave</string>
 	<key>GroupName</key>
