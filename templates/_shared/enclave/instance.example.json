@@ -17,7 +17,8 @@
     "region": "",
     "loopback_ports": "18630",
     "allow_endpoints": ["192.0.2.10:4100"],
-    "allow_hosts": ["llm.example.com:443"]
+    "allow_hosts": ["llm.example.com:443"],
+    "public_ports": []
   },
   "egress_stages": [
     {"type": "masker", "profile": "default"}

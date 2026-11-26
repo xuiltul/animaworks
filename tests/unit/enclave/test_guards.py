@@ -199,12 +199,19 @@ def test_guard3_external_messaging(data_dir: Path, channel_key: str) -> None:
 
 @pytest.mark.parametrize(
     "field",
-    ["github_webhook", "phone", "human_notification"],
+    ["github_webhook", "phone"],
 )
 def test_guard3_other_integrations(data_dir: Path, field: str) -> None:
     _prepare_data_dir(data_dir)
     config = _make_config(enclave=_enclave(), **{field: {"enabled": True}})
     assert _has(_violations(config, data_dir), field)
+
+
+def test_guard3_human_notification_is_allowed(data_dir: Path) -> None:
+    # Notifications leave only through the egress stages (HumanNotifier), so call_human may stay on.
+    _prepare_data_dir(data_dir)
+    config = _make_config(enclave=_enclave(), human_notification={"enabled": True})
+    assert not _has(_violations(config, data_dir), "human_notification")
 
 
 # ---------------------------------------------------------------------------

@@ -254,16 +254,34 @@ class HumanNotifier:
         if priority not in PRIORITY_LEVELS:
             priority = "normal"
 
-        results = await asyncio.gather(
-            *[
-                ch.send(subject, body, priority, anima_name=anima_name, interaction=interaction)
-                for ch in self._channels
-            ],
-            return_exceptions=True,
-        )
+        channels = list(self._channels)
+        sends = [
+            ch.send(subject, body, priority, anima_name=anima_name, interaction=interaction)
+            for ch in channels
+            if ch.channel_type == "web"
+        ]
+        external = [ch for ch in channels if ch.channel_type != "web"]
+        ordered = [ch for ch in channels if ch.channel_type == "web"]
+        blocked: list[str] = []
+        if external:
+            # The egress stages may run a command stage; keep it off the event loop.
+            masked = await asyncio.to_thread(_mask_for_enclave, subject, body, anima_name=anima_name)
+            if masked is None:
+                blocked = [f"{ch.channel_type}: ERROR - blocked by the enclave egress stages" for ch in external]
+            else:
+                out_subject, out_body, enclave_mode = masked
+                # The enclave's own Web UI keeps the interaction; external channels
+                # get only the masked text, since interaction fields are not masked.
+                out_interaction = None if enclave_mode else interaction
+                sends += [
+                    ch.send(out_subject, out_body, priority, anima_name=anima_name, interaction=out_interaction)
+                    for ch in external
+                ]
+                ordered += external
+        results = await asyncio.gather(*sends, return_exceptions=True)
 
-        status: list[str] = []
-        for ch, result in zip(self._channels, results, strict=False):
+        status: list[str] = list(blocked)
+        for ch, result in zip(ordered, results, strict=False):
             if isinstance(result, BaseException):
                 msg = f"{ch.channel_type}: ERROR - {result}"
                 logger.error("Notification failed for %s: %s", ch.channel_type, result)
@@ -277,9 +295,9 @@ class HumanNotifier:
                 "Human notification partial failure: subject=%s priority=%s channels=%d failed=%d success=%d",
                 subject[:50],
                 priority,
-                len(self._channels),
+                len(channels),
                 failed_count,
-                len(self._channels) - failed_count,
+                len(channels) - failed_count,
             )
         else:
             logger.info(
@@ -300,6 +318,55 @@ class HumanNotifier:
 
 
 _builtins_registered = False
+
+
+def _mask_for_enclave(subject: str, body: str, *, anima_name: str = "") -> tuple[str, str, bool] | None:
+    """Prepare an external notification's text; in an enclave, run it through egress.
+
+    Outside enclave mode the text is returned unchanged.  In an enclave the
+    subject and body go through the same audited egress pipeline as gateway
+    answers, so a notification carries no more than an answer would.  A blocked
+    or failing pipeline returns ``None`` and nothing leaves (fail closed).
+    The third value tells whether the enclave pipeline was applied.
+    """
+    try:
+        from core.config.models import load_config
+
+        config = load_config()
+    except Exception:
+        logger.warning("Could not load config to check enclave mode for a notification", exc_info=True)
+        return subject, body, False
+    enclave = getattr(config, "enclave", None)
+    if getattr(enclave, "enabled", False) is not True:
+        return subject, body, False
+
+    from uuid import uuid4
+
+    from core.enclave.egress.config import load_egress_config
+    from core.enclave.egress.models import EgressBlockedError, EgressRequest, Fact
+    from core.enclave.egress.pipeline import EgressPipeline
+    from core.paths import get_data_dir
+
+    try:
+        pipeline = EgressPipeline(config=load_egress_config(enclave.egress), data_dir=get_data_dir())
+        result = pipeline.run(
+            EgressRequest(
+                request_id=uuid4().hex,
+                case_id="human_notification",
+                from_anima=anima_name,
+                facts=[Fact(fact=subject), Fact(fact=body)],
+            )
+        )
+    except EgressBlockedError as exc:
+        logger.warning("Enclave egress blocked a human notification (audit_id=%s reason=%s)", exc.audit_id, exc.reason)
+        return None
+    except Exception:
+        logger.warning("Enclave egress failed for a human notification", exc_info=True)
+        return None
+    if len(result.facts) != 2:
+        logger.warning("Enclave egress changed the notification shape (audit_id=%s); not sent", result.audit_id)
+        return None
+    return result.facts[0].fact, result.facts[1].fact, True
 
 
 def _ensure_channels_registered() -> None:

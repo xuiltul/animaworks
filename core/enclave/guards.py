@@ -88,10 +88,11 @@ def collect_enclave_violations(
     ):
         if getattr(channel, "enabled", False):
             violations.append(t("enclave.guard.external_enabled", locale=locale, channel=label))
+    # human_notification is allowed: HumanNotifier runs every external
+    # notification through the enclave's egress stages before it leaves.
     for label, cfg in (
         ("github_webhook", config.github_webhook),
         ("phone", config.phone),
-        ("human_notification", config.human_notification),
         ("external_tasks", config.external_tasks),
     ):
         if getattr(cfg, "enabled", False):

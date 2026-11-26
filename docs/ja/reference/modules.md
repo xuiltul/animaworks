@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: a2fe06d0301db84d4c37f31f6a5bcc0ae198600943410809dc9f692f98dfe405 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: d622e3c9deba09c368fd17c9903eff2af5789da1022de62d183596598a06643a -->
 
 # モジュール一覧
 
@@ -240,7 +240,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.enclave.egress.stages` | 236 | Stage implementations for the egress pipeline. |
 | `core.enclave.gateway` | 521 | Gateway: the ingress point of an enclave instance. |
 | `core.enclave.gateway_server` | 219 | Lifecycle and Unix-socket wiring for the enclave gateway. |
-| `core.enclave.guards` | 273 | Startup guards for enclave mode. |
+| `core.enclave.guards` | 274 | Startup guards for enclave mode. |
 | `core.enclave.jobs` | 254 | Persistent query jobs for the enclave gateway. |
 | `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
 | `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
@@ -551,7 +551,7 @@ LLM エラー分類、レート制御、リトライの共通機能。
 | `core.llm.guard.error_classifier` | 805 | Centralized LLM API error classification for coordinated recovery. |
 | `core.llm.guard.rate_guard` | 341 | Cross-process LLM rate guard (fleet-wide circuit breaker). |
 | `core.llm.helper_completion` | 145 | — |
-| `core.llm.oneshot` | 974 | Shared LLM helper utilities for memory-management modules. |
+| `core.llm.oneshot` | 990 | Shared LLM helper utilities for memory-management modules. |
 
 ## `core.llm.guard`
 
@@ -785,7 +785,7 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 630 | — |
-| `core.notification.notifier` | 318 | — |
+| `core.notification.notifier` | 385 | — |
 | `core.notification.reply_routing` | 584 | — |
 | `core.notification.slack_names` | 67 | — |
 
