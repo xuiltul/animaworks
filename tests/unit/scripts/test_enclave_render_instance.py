@@ -167,6 +167,9 @@ def test_install_refuses_ids_owned_by_someone_else(render) -> None:
         ("egress", {"allow_endpoints": ["llm.example.com:443"]}),
         ("egress", {"allow_hosts": ["llm.example.com"]}),
         ("egress", {"loopback_ports": "18640;x"}),
+        ("egress", {"public_ports": "80,443"}),
+        ("egress", {"public_ports": [0]}),
+        ("egress", {"public_ports": [True]}),
         ("egress_stages", []),
     ],
 )
@@ -219,3 +222,25 @@ def test_check_reports_missing_installs(render, tmp_path: Path) -> None:
     inst = render.load_instance(_spec(boot_prep_script=str(tmp_path / "missing.sh")))
     problems = render.check(inst, tmp_path)
     assert sum("not installed" in p for p in problems) == 4
+
+
+def test_public_ports_reach_the_egress_daemon(render) -> None:
+    spec = _spec(egress={"loopback_ports": "18640", "allow_hosts": ["llm.example.com:443"], "public_ports": [443, 80]})
+    args = render.egress_daemon(render.load_instance(spec))["ProgramArguments"]
+    assert args[args.index("--public-ports") + 1] == "80,443"
+    assert args[-1] == "--apply"
+
+
+def test_no_public_ports_by_default(render) -> None:
+    args = render.egress_daemon(render.load_instance(_spec()))["ProgramArguments"]
+    assert "--public-ports" not in args
+
+
+def test_the_egress_probe_uses_a_port_the_enclave_keeps_closed(render) -> None:
+    def probe(**egress) -> list[str]:
+        spec = _spec(egress={"loopback_ports": "18640", **egress})
+        files = render.render(render.load_instance(spec))
+        return json.loads(files["enclave-config.json"])["enclave"]["egress_probe"]
+
+    assert probe()[-1] == "1.1.1.1:443"
+    assert probe(public_ports=[80, 443])[-1] == "1.1.1.1:853"

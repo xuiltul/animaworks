@@ -178,3 +178,41 @@ def test_local_addresses_leave_out_link_local(firewall, monkeypatch: pytest.Monk
 
     monkeypatch.setattr(firewall.subprocess, "run", lambda *a, **k: _Done())
     assert firewall._local_addresses() == ["127.0.0.1", "192.168.100.21", "::1"]
+
+
+def test_pf_public_ports_open_the_internet_but_not_the_host_or_private_ranges(firewall) -> None:
+    ruleset = firewall.build_pf_ruleset(310, None, [18620], [("192.0.2.20", 443)], public_ports=[443, 80])
+    lines = ruleset.strip().splitlines()
+    assert lines[0].startswith("table <aw_enclave_nonpublic> const { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10,")
+    assert "192.168.0.0/16" in lines[0] and "fc00::/7" in lines[0]
+    rules = [line for line in lines if not line.startswith("table")]
+    lo0_block = rules.index("block return out quick on lo0 proto { tcp, udp } from any to any user 310")
+    nonpublic = rules.index("block return out quick proto { tcp, udp } from any to <aw_enclave_nonpublic> user 310")
+    public = rules.index("pass out quick proto tcp from any to any port { 80, 443 } user 310")
+    # Allowed loopback ports and endpoints first, then close the host and private ranges, then the internet.
+    assert rules.index("pass out quick proto tcp from any to 192.0.2.20 port 443 user 310") < lo0_block
+    assert lo0_block < nonpublic < public
+    assert rules[-1] == "block return out quick proto { tcp, udp } from any to any user 310"
+
+
+def test_nft_public_ports_open_the_internet_but_not_the_host_or_private_ranges(firewall) -> None:
+    ruleset = firewall.build_ruleset(310, None, [18620], public_ports=[443, 80])
+    lines = [line.strip() for line in ruleset.splitlines()]
+    assert any(line.startswith("set nonpublic_v4 {") and "100.64.0.0/10" in line for line in lines)
+    order = [
+        "oif lo reject",
+        "ip daddr @nonpublic_v4 reject",
+        "ip6 daddr @nonpublic_v6 reject",
+        "tcp dport { 80, 443 } accept",
+    ]
+    positions = [lines.index(rule) for rule in order]
+    assert positions == sorted(positions)
+    assert positions[0] > lines.index("oif lo meta l4proto { tcp, udp } th sport { 53, 18620 } accept")
+    assert positions[-1] < lines.index("reject")
+
+
+def test_without_public_ports_nothing_extra_is_opened(firewall) -> None:
+    pf = firewall.build_pf_ruleset(310, None, [18620])
+    nft = firewall.build_ruleset(310, None, [18620])
+    assert "nonpublic" not in pf and "nonpublic" not in nft
+    assert "port { 80" not in pf and "dport { 80" not in nft
