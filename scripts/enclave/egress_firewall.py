@@ -17,6 +17,9 @@ The enclave user may only reach:
   with EC2, so this cannot tell an AWS API from a host someone runs on EC2 in
   that region; it closes the LAN, the host's other local services and the
   rest of the internet.  Leave ``--region`` out when the enclave needs no AWS.
+* any internet address on the TCP ports given with ``--public-ports`` (e.g.
+  ``80,443`` for the web).  The LAN, the tailnet, other private ranges and the
+  host's own addresses stay closed.
 
 Only packets owned by that uid enter the restricting chain; packets without a
 socket (FIN/ACK of closed sockets of other users) pass untouched.  Everything
@@ -63,6 +66,12 @@ AWS_RANGES_URL = "https://ip-ranges.amazonaws.com/ip-ranges.json"
 TABLE = "aw_enclave_egress"
 PF_ANCHOR = "com.apple/250.AnimaworksEnclave"
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+# Addresses that are not the internet: --public-ports never opens these.
+NONPUBLIC_V4 = (
+    "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12",
+    "192.0.0.0/24", "192.168.0.0/16", "198.18.0.0/15", "224.0.0.0/3",
+)  # fmt: skip
+NONPUBLIC_V6 = ("::/127", "fc00::/7", "fe80::/10", "ff00::/8")
 
 
 def instance_targets(name: str | None) -> tuple[str, str]:
@@ -123,10 +132,18 @@ def build_ruleset(
     endpoints: list[tuple[str, int]] | None = None,
     *,
     table: str = TABLE,
+    public_ports: list[int] | None = None,
 ) -> str:
     v4, v6 = _region_ranges(region)
     ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
     lines = [f"table inet {table} {{"]
+    if public_ports:
+        lines.append(
+            "  set nonpublic_v4 { type ipv4_addr; flags interval; elements = { " + ", ".join(NONPUBLIC_V4) + " } }"
+        )
+        lines.append(
+            "  set nonpublic_v6 { type ipv6_addr; flags interval; elements = { " + ", ".join(NONPUBLIC_V6) + " } }"
+        )
     if v4:
         lines.append("  set aws_v4 { type ipv4_addr; flags interval; elements = { " + ", ".join(v4) + " } }")
     if v6:
@@ -151,6 +168,15 @@ def build_ruleset(
         lines.append(f"    {family} daddr {host} tcp dport {port} accept")
     if v6:
         lines.append("    ip6 daddr @aws_v6 tcp dport 443 accept")
+    if public_ports:
+        # Close the host itself (its own addresses route over lo) and the
+        # private ranges before opening the ports to everything else.
+        lines += [
+            "    oif lo reject",
+            "    ip daddr @nonpublic_v4 reject",
+            "    ip6 daddr @nonpublic_v6 reject",
+            "    tcp dport { " + ", ".join(str(p) for p in sorted(set(public_ports))) + " } accept",
+        ]
     lines += [
         '    limit rate 6/minute burst 5 packets log prefix "aw-enclave-egress-drop "',
         "    reject",
@@ -166,10 +192,14 @@ def build_pf_ruleset(
     loopback_ports: list[int],
     endpoints: list[tuple[str, int]] | None = None,
     local_addresses: list[str] | None = None,
+    *,
+    public_ports: list[int] | None = None,
 ) -> str:
     v4, v6 = _region_ranges(region)
     ports = ", ".join(str(p) for p in sorted({53, *loopback_ports}))
     lines = []
+    if public_ports:
+        lines.append("table <aw_enclave_nonpublic> const { " + ", ".join([*NONPUBLIC_V4, *NONPUBLIC_V6]) + " }")
     if v4:
         # Tables are local to the anchor, so each enclave's anchor has its own.
         lines.append("table <aw_enclave_aws> persist { " + ", ".join([*v4, *v6]) + " }")
@@ -197,6 +227,16 @@ def build_pf_ruleset(
         lines.append(f"pass out quick proto tcp from any to <aw_enclave_aws> port 443 user {uid}")
     for host, port in endpoints or []:
         lines.append(f"pass out quick proto tcp from any to {host} port {port} user {uid}")
+    if public_ports:
+        # The host's own addresses route over lo0, so closing lo0 here also
+        # keeps the host's services on its public addresses out of reach.
+        lines += [
+            f"block return out quick on lo0 proto {{ tcp, udp }} from any to any user {uid}",
+            f"block return out quick proto {{ tcp, udp }} from any to <aw_enclave_nonpublic> user {uid}",
+            "pass out quick proto tcp from any to any port { "
+            + ", ".join(str(p) for p in sorted(set(public_ports)))
+            + f" }} user {uid}",
+        ]
     lines.append(f"block return out quick proto {{ tcp, udp }} from any to any user {uid}")
     return "\n".join(lines) + "\n"
 
@@ -291,6 +331,11 @@ def main() -> int:
         default="",
         help="comma-separated NAME:PORT resolved at apply time, e.g. a cloud LLM API",
     )
+    parser.add_argument(
+        "--public-ports",
+        default="",
+        help="comma-separated TCP ports or LOW-HIGH ranges open to any internet address (LAN, tailnet and the host stay closed)",
+    )
     parser.add_argument("--backend", choices=("nft", "pf"), default="nft")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--remove", action="store_true")
@@ -310,11 +355,14 @@ def main() -> int:
     uid = pwd.getpwnam(args.user).pw_uid
     ports = _parse_ports(args.loopback_ports)
     endpoints = _parse_endpoints(args.allow_endpoints) + _resolve_hosts(args.allow_hosts)
+    public_ports = _parse_ports(args.public_ports)
+    if any(not 1 <= p <= 65535 for p in public_ports):
+        parser.error("--public-ports must be in 1-65535")
     region = args.region or None
     if args.backend == "pf":
-        ruleset = build_pf_ruleset(uid, region, ports, endpoints, _local_addresses())
+        ruleset = build_pf_ruleset(uid, region, ports, endpoints, _local_addresses(), public_ports=public_ports)
     else:
-        ruleset = build_ruleset(uid, region, ports, endpoints, table=table)
+        ruleset = build_ruleset(uid, region, ports, endpoints, table=table, public_ports=public_ports)
     if not args.apply:
         sys.stdout.write(ruleset)
         return 0

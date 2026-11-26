@@ -86,6 +86,7 @@ class Instance:
     loopback_ports: str
     allow_endpoints: list[str]
     allow_hosts: list[str]
+    public_ports: list[int]
     lang: str
     environment: dict[str, str]
     uv: str
@@ -197,6 +198,12 @@ def _endpoints(value: Any) -> list[str]:
     return endpoints
 
 
+def _public_ports(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        raise SpecError("'egress.public_ports' must be a list of ports")
+    return sorted({_int_in(p, "egress.public_ports", range(1, 65536)) for p in value})
+
+
 def _host_uid(spec: dict[str, Any], host_user: str) -> int:
     if "host_uid" in spec:
         return _int_in(spec["host_uid"], "host_uid", range(0, 2**31))
@@ -263,6 +270,7 @@ def load_instance(spec: dict[str, Any]) -> Instance:
         loopback_ports=_match(_PORTS_RE, str(egress.get("loopback_ports", port)), "egress.loopback_ports"),
         allow_endpoints=_endpoints(egress.get("allow_endpoints", [])),
         allow_hosts=_str_list(egress.get("allow_hosts", []), "egress.allow_hosts", _HOST_PORT_RE),
+        public_ports=_public_ports(egress.get("public_ports", [])),
         lang=_match(re.compile(r"^[A-Za-z_]+(\.[A-Za-z0-9-]+)?$"), spec.get("lang", "ja_JP.UTF-8"), "lang"),
         environment=dict(environment),
         uv=_path(spec.get("uv", "/opt/homebrew/bin/uv"), "uv"),
@@ -332,6 +340,8 @@ def egress_daemon(inst: Instance) -> dict[str, Any]:
         args += ["--allow-endpoints", ",".join(inst.allow_endpoints)]
     if inst.allow_hosts:
         args += ["--allow-hosts", ",".join(inst.allow_hosts)]
+    if inst.public_ports:
+        args += ["--public-ports", ",".join(str(p) for p in inst.public_ports)]
     args.append("--apply")
     log = f"/var/log/{inst.log_stem}-egress.log"
     return {
