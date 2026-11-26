@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: 69a07a8dc4183d754656ae82f0562857d97e3653660756be46e5dfe0cfdd0378 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: c918682f102b0d4ffed2ec72b7a918477028b07362835eae505029d9c1fdc8d8 -->
 
 # モジュール一覧
 
@@ -240,7 +240,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.enclave.egress.stages` | 236 | Stage implementations for the egress pipeline. |
 | `core.enclave.gateway` | 521 | Gateway: the ingress point of an enclave instance. |
 | `core.enclave.gateway_server` | 219 | Lifecycle and Unix-socket wiring for the enclave gateway. |
-| `core.enclave.guards` | 273 | Startup guards for enclave mode. |
+| `core.enclave.guards` | 274 | Startup guards for enclave mode. |
 | `core.enclave.jobs` | 254 | Persistent query jobs for the enclave gateway. |
 | `core.enclave.laravel_crypt` | 115 | Helpers for decrypting Laravel ``Crypt::encryptString`` payloads. |
 | `core.enclave.ops` | 78 | Operational helpers for enclave health checks and audit summaries. |
@@ -785,7 +785,7 @@ anima 間および外部とのメッセージ配送。
 | `core.notification.channels.telegram` | 91 | — |
 | `core.notification.channels.web` | 65 | — |
 | `core.notification.interactive` | 630 | — |
-| `core.notification.notifier` | 318 | — |
+| `core.notification.notifier` | 385 | — |
 | `core.notification.reply_routing` | 584 | — |
 | `core.notification.slack_names` | 67 | — |
 
