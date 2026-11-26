@@ -133,7 +133,10 @@ def patch_litellm(*responses: MagicMock):
     saved = sys.modules.get("litellm")
     try:
         sys.modules["litellm"] = mock_module
-        yield mock_fn
+        # One-shot calls skip LiteLLM for a Claude model with no Anthropic key;
+        # the mocked LiteLLM needs no key, so keep its stage enabled.
+        with patch("core.llm.oneshot._litellm_lacks_anthropic_key", return_value=False):
+            yield mock_fn
     finally:
         if saved is None:
             sys.modules.pop("litellm", None)

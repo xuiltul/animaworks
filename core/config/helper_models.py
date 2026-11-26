@@ -4,7 +4,22 @@ from __future__ import annotations
 # Copyright (C) 2026 AnimaWorks Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Single source of truth for helper-model selection."""
+"""Single source of truth for helper-model selection.
+
+Background LLM work falls into two groups:
+
+* **Self roles** reflect on the Anima's own experience (episode summaries,
+  project/weekly consolidation, reconsolidation, distillation).  They run on
+  the Anima's own main model and credential unless the role itself names a
+  model in ``status.json`` or ``config.json`` ``helper_models.<role>``.
+* **Helper roles** (fact extraction/reconcile, conversation compression, asset
+  reconcile) run on the configured helper chain.  Only when nothing is
+  configured for them do they use the Anima's own model instead of the
+  hard-coded ``DEFAULT_CONSOLIDATION_MODEL``.
+
+"Own model" is the main ``model``/``credential`` from the Anima's model config,
+never its ``background_model`` or main-lane fallbacks.
+"""
 
 import logging
 from collections.abc import Mapping
@@ -34,6 +49,26 @@ HELPER_MODEL_ROLES: tuple[str, ...] = (
     "asset_reconcile",
 )
 
+# Roles that reflect on the Anima's own experience and run on its own model.
+SELF_HELPER_ROLES: frozenset[str] = frozenset(
+    {
+        "episode_summary",
+        "project_consolidation",
+        "weekly_consolidation",
+        "reconsolidation",
+        "distillation",
+    }
+)
+
+# Execution modes with a one-shot backend (LiteLLM, Agent SDK, Codex SDK).
+# An Anima in any other mode cannot serve its own helper calls.
+ONE_SHOT_EXECUTION_MODES: frozenset[str] = frozenset({"A", "S", "C"})
+
+# ``source`` values of a resolution that runs on the Anima's own model.
+SELF_SOURCE = "anima.self"
+SELF_UNCONFIGURED_HELPER_SOURCE = "anima.self.unconfigured_helper"
+_SELF_SOURCES = frozenset({SELF_SOURCE, SELF_UNCONFIGURED_HELPER_SOURCE})
+
 
 @dataclass(frozen=True)
 class ResolvedHelperModel:
@@ -45,6 +80,11 @@ class ResolvedHelperModel:
     allow_agent_sdk_fallback: bool
     max_output_tokens: int | None
     source: str
+
+    @property
+    def is_self(self) -> bool:
+        """True when the primary model is the Anima's own main model."""
+        return self.source in _SELF_SOURCES
 
 
 @dataclass(frozen=True)
@@ -154,6 +194,11 @@ def _config_legacy_candidates(role: str, config: Any) -> list[_ModelCandidate]:
         if model is None:
             continue
         credential = _nonempty_string(_get(consolidation, credential_field))
+        if model_field == "llm_model" and model == DEFAULT_CONSOLIDATION_MODEL and credential is None:
+            # save_config writes every field, so a saved config.json always
+            # carries llm_model at its schema default. With no credential it
+            # cannot be told apart from an unset key and is not a choice.
+            continue
         candidates.append(
             _ModelCandidate(
                 model,
@@ -229,17 +274,70 @@ def _field_from_layers(
     return False, None, ""
 
 
+def _anima_self_candidate(anima_dir: Path | None, config: Any) -> _ModelCandidate | None:
+    """Return the Anima's own main model when it can serve one-shot helper calls.
+
+    This mirrors ``load_model_config`` (status.json merged over
+    ``anima_defaults``) against *config*, and takes only the main model and
+    credential, never ``background_model`` or main-lane fallbacks.
+    """
+    if anima_dir is None:
+        return None
+    try:
+        from core.config.model_mode import resolve_execution_mode
+        from core.config.resolver import resolve_anima_config
+
+        anima_path = Path(anima_dir)
+        resolved, _credential = resolve_anima_config(config, anima_path.name, anima_dir=anima_path)
+        model = _nonempty_string(resolved.model)
+        if model is None:
+            return None
+        mode = resolve_execution_mode(config, model, resolved.execution_mode)
+    except Exception:
+        logger.debug("Anima %s has no usable own model for helper roles", anima_dir, exc_info=True)
+        return None
+    if str(mode).upper() not in ONE_SHOT_EXECUTION_MODES:
+        return None
+    return _ModelCandidate(model, _nonempty_string(resolved.credential), SELF_SOURCE)
+
+
+def _dedupe_fallbacks(
+    items: list[HelperModelFallback],
+    *,
+    exclude: tuple[str, str | None],
+) -> list[HelperModelFallback]:
+    seen: set[tuple[str, str | None]] = {exclude}
+    result: list[HelperModelFallback] = []
+    for item in items:
+        key = (item.model, item.credential)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
 def resolve_helper_model(
     role: str,
     anima_dir: Path | None = None,
     *,
     config: Any | None = None,
 ) -> ResolvedHelperModel:
-    """Resolve one helper role without consulting main/background model settings.
+    """Resolve one helper role.
 
-    Priority is per-anima ``status.json`` role override, the legacy status
-    extraction keys, ``config.json`` role override, the role's legacy config
-    keys, ``helper_models.default``, then ``DEFAULT_CONSOLIDATION_MODEL``.
+    The helper chain is the per-anima ``status.json`` role override, the
+    legacy status extraction keys, ``config.json`` role override, the role's
+    legacy config keys, ``helper_models.default``, then
+    ``DEFAULT_CONSOLIDATION_MODEL``.
+
+    Self roles (``SELF_HELPER_ROLES``) use the Anima's own main model unless
+    ``status.json`` or ``config.json`` ``helper_models.<role>.model`` is set;
+    a configured helper-chain model is then kept as the first fallback.
+    Helper roles use the helper chain, and the Anima's own model only when the
+    chain has nothing configured. The own model is possible only with an
+    *anima_dir* whose execution mode has a one-shot backend
+    (``ONE_SHOT_EXECUTION_MODES``). A self resolution allows the Agent SDK
+    fallback unless the role's own status/config layer sets it.
     """
     if role not in HELPER_MODEL_ROLES:
         raise ValueError(f"Unknown helper-model role: {role!r}")
@@ -361,6 +459,30 @@ def resolve_helper_model(
         if candidate_tokens > 0:
             max_output_tokens = candidate_tokens
 
+    if role in SELF_HELPER_ROLES:
+        # Only a model named on the role itself opts a self role out.
+        use_self = not (status_model or _nonempty_string(getattr(config_role, "model", None)))
+    else:
+        use_self = not model_candidates
+    own = _anima_self_candidate(anima_dir, config) if use_self else None
+    if own is not None:
+        chain_fallbacks = list(fallbacks)
+        if role in SELF_HELPER_ROLES and model_candidates:
+            # Keep the configured helper as a fallback for a failed self call.
+            chain_fallbacks.insert(0, HelperModelFallback(model=selected.model, credential=credential))
+        # save_config writes helper_models.default in full, so its
+        # allow_agent_sdk_fallback=false is always "explicit" on disk. Only the
+        # role's own layers may turn the SDK off for a self resolution.
+        self_allow_is_explicit, self_allow_value, _ = _field_from_layers(layers[:2], "allow_agent_sdk_fallback")
+        return ResolvedHelperModel(
+            model=own.model,
+            credential=own.credential,
+            fallbacks=_dedupe_fallbacks(chain_fallbacks, exclude=(own.model, own.credential)),
+            allow_agent_sdk_fallback=bool(self_allow_value) if self_allow_is_explicit else True,
+            max_output_tokens=max_output_tokens,
+            source=SELF_SOURCE if role in SELF_HELPER_ROLES else SELF_UNCONFIGURED_HELPER_SOURCE,
+        )
+
     # Do not list the selected model/credential a second time as a fallback.
     fallbacks = [item for item in fallbacks if (item.model, item.credential) != (selected.model, credential)]
     return ResolvedHelperModel(
@@ -455,6 +577,10 @@ def validate_helper_model_credentials(
             except Exception as exc:
                 diagnostics.append(f"role={role} anima={anima_name} resolution={type(exc).__name__}")
                 continue
+            if resolved.is_self:
+                # The Anima's own model and credential are what its own turns
+                # already run on (Mode S ignores a non-Anthropic credential name).
+                continue
             credential_name = resolved.credential
             issue = ""
             if credential_name and credential_name not in credentials:
@@ -491,6 +617,10 @@ def validate_helper_model_credentials(
 
 __all__ = [
     "HELPER_MODEL_ROLES",
+    "ONE_SHOT_EXECUTION_MODES",
+    "SELF_HELPER_ROLES",
+    "SELF_SOURCE",
+    "SELF_UNCONFIGURED_HELPER_SOURCE",
     "ResolvedHelperModel",
     "resolve_helper_model",
     "validate_helper_model_credentials",

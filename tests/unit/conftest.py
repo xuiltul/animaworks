@@ -49,6 +49,37 @@ def _reset_config_caches_for_unit_tests(
 
 
 @pytest.fixture(autouse=True)
+def _block_real_llm_sdk_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any unit test that would open a real Claude Agent SDK or Codex SDK session.
+
+    Helper calls on an Anima's own model may fall back to the Agent SDK, which
+    on a developer machine would reach the real Claude login. Tests that stub
+    ``claude_agent_sdk`` / ``openai_codex`` in ``sys.modules`` are unaffected.
+    """
+    import importlib
+
+    def _real_class(module_name: str, class_name: str) -> type | None:
+        try:
+            cls = getattr(importlib.import_module(module_name), class_name)
+        except Exception:
+            return None
+        return cls if isinstance(cls, type) else None
+
+    async def _blocked_connect(self, *args, **kwargs):
+        raise RuntimeError("unit tests must not open a real Claude Agent SDK session")
+
+    def _blocked_init(self, *args, **kwargs):
+        raise RuntimeError("unit tests must not open a real Codex SDK session")
+
+    sdk_client = _real_class("claude_agent_sdk", "ClaudeSDKClient")
+    if sdk_client is not None:
+        monkeypatch.setattr(sdk_client, "connect", _blocked_connect)
+    codex_client = _real_class("openai_codex", "AsyncCodex")
+    if codex_client is not None:
+        monkeypatch.setattr(codex_client, "__init__", _blocked_init)
+
+
+@pytest.fixture(autouse=True)
 def _disable_unsolicited_background_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prevent unrelated unit tests from launching background LLM calls."""
     from core.memory.maintenance import background_review

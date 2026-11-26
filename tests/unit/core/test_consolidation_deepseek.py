@@ -89,9 +89,10 @@ def test_episode_summary_fallback_model_sits_right_after_primary() -> None:
 
 
 @pytest.mark.asyncio
-async def test_one_shot_agent_sdk_fallback_skipped_when_disabled() -> None:
+async def test_one_shot_agent_sdk_fallback_skipped_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
     from core import llm
 
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")  # LiteLLM runs only with a key
     calls: dict = {}
 
     async def fake_litellm_stage(prompt, **kwargs):
@@ -119,9 +120,10 @@ async def test_one_shot_agent_sdk_fallback_skipped_when_disabled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_anthropic_temperature_zero_dropped_for_litellm() -> None:
+async def test_anthropic_temperature_zero_dropped_for_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
     from core import llm
 
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")  # LiteLLM runs only with a key
     captured: dict = {}
 
     async def fake_litellm_stage(prompt, *, resolved_model, llm_kwargs, **kwargs):

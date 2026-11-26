@@ -284,6 +284,24 @@ def _is_anthropic_model(model: str) -> bool:
     return bool(_ANTHROPIC_MODEL_RE.match(model))
 
 
+_ANTHROPIC_API_MODEL_RE = re.compile(r"^(anthropic/)?claude-")
+
+
+def _litellm_lacks_anthropic_key(model: str, llm_kwargs: dict[str, Any]) -> bool:
+    """Return True when LiteLLM would call the Anthropic API with no key at all.
+
+    That happens with a ``claude_code_login`` credential, or a credential of
+    another provider (e.g. ``codex_login``) named for a Claude model. LiteLLM
+    then always fails with "Missing Anthropic API Key". Bedrock and Vertex
+    Claude models authenticate differently and are never skipped.
+    """
+    if not _ANTHROPIC_API_MODEL_RE.match(model):
+        return False
+    if llm_kwargs.get("api_key") or llm_kwargs.get("extra_headers"):
+        return False
+    return not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+
+
 def supports_structured_output(model: str) -> bool:
     """Return True for API-family models that support structured JSON output.
 
@@ -744,8 +762,11 @@ async def one_shot_completion(
     """Execute a one-shot LLM completion with automatic backend selection.
 
     Fallback chain:
-      1. LiteLLM (if API key available) -- fast, no subprocess
-      2. Agent SDK one-shot (if installed and Anthropic model) -- Max plan compatible
+      1. LiteLLM (if API key available) -- fast, no subprocess. Skipped for
+         Anthropic API models when neither the credential nor the environment
+         holds an Anthropic key (e.g. a ``claude_code_login`` credential).
+      2. Agent SDK one-shot (if installed, Anthropic model and
+         ``allow_agent_sdk_fallback``) -- Max plan compatible
       3. Return None -- caller handles gracefully
 
     Args:
@@ -803,28 +824,34 @@ async def one_shot_completion(
                 logger.warning("Codex SDK one-shot failed: %s", e)
         return None
 
-    # 1. Try LiteLLM (under the fleet rate guard, keyed on the LiteLLM realm)
-    outcome, text = await _litellm_stage_with_guard(
-        prompt,
-        system_prompt=system_prompt,
-        resolved_model=resolved_model,
-        max_tokens=max_tokens,
-        llm_kwargs=llm_kwargs,
-        log_prefix="one-shot",
-        guard=guard,
-        family=family,
-        guard_key=guard_key(family, litellm_realm_of(resolved_model)),
-    )
-    if outcome == "success":
-        return text
-    if outcome == "terminal":
-        return None
+    # 1. Try LiteLLM (under the fleet rate guard, keyed on the LiteLLM realm),
+    # unless it has no Anthropic key and can only fail.
+    litellm_skipped = _litellm_lacks_anthropic_key(resolved_model, llm_kwargs)
+    if litellm_skipped:
+        logger.debug("one-shot LiteLLM skipped for %s: no Anthropic API key", resolved_model)
+    else:
+        outcome, text = await _litellm_stage_with_guard(
+            prompt,
+            system_prompt=system_prompt,
+            resolved_model=resolved_model,
+            max_tokens=max_tokens,
+            llm_kwargs=llm_kwargs,
+            log_prefix="one-shot",
+            guard=guard,
+            family=family,
+            guard_key=guard_key(family, litellm_realm_of(resolved_model)),
+        )
+        if outcome == "success":
+            return text
+        if outcome == "terminal":
+            return None
 
     # 2. Try Agent SDK (Anthropic models only), unless the Mode-S realm is guarded.
     if not allow_agent_sdk_fallback:
         logger.warning(
-            "one-shot Agent SDK fallback disabled for %s after LiteLLM failure",
+            "one-shot Agent SDK fallback disabled for %s after LiteLLM %s",
             resolved_model,
+            "was skipped (no Anthropic API key)" if litellm_skipped else "failure",
         )
     elif _is_anthropic_model(resolved_model) and not _sdk_stage_guarded(
         guard, guard_key(family, _mode_s_realm()), "one-shot", "Agent SDK"

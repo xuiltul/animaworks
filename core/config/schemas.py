@@ -425,12 +425,21 @@ class HelperModelFallback(BaseModel):
 class HelperModelRole(BaseModel):
     """Model selection and one-shot policy for a single helper role."""
 
-    model: str | None = Field(default=None, description="Primary helper model identifier.")
+    model: str | None = Field(
+        default=None,
+        description=(
+            "Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, "
+            "reconsolidation, distillation) use the Anima's own model unless this is set on the role."
+        ),
+    )
     credential: str | None = Field(default=None, description="Credential name for the primary model.")
     fallbacks: list[HelperModelFallback] = Field(default_factory=list, description="Ordered explicit fallback models.")
     allow_agent_sdk_fallback: bool = Field(
         default=False,
-        description="Allow one-shot calls for this role to fall back to the Claude Agent SDK.",
+        description=(
+            "Allow one-shot calls for this role to fall back to the Claude Agent SDK. "
+            "On the Anima's own model it is allowed unless the role itself sets false."
+        ),
     )
     max_output_tokens: int | None = Field(
         default=None,

@@ -238,10 +238,11 @@ class TestExtractPrompt:
         assert result == "1girl, cached prompt"
 
     @pytest.mark.asyncio
-    async def test_synthesizes_via_llm(self, tmp_path: Path) -> None:
+    async def test_synthesizes_via_llm(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Calls LLM when no regex match and no cache, with appearance table."""
         from core.anima.asset_reconciler import _extract_prompt
 
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")  # LiteLLM runs only with a key
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
         (anima_dir / "IDENTITY.md").write_text(
@@ -269,10 +270,11 @@ class TestExtractPrompt:
         assert result == "1girl, black hair, red eyes, full body, standing, white background"
 
     @pytest.mark.asyncio
-    async def test_saves_to_prompt_txt(self, tmp_path: Path) -> None:
+    async def test_saves_to_prompt_txt(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLM synthesis result is saved to assets/prompt.txt."""
         from core.anima.asset_reconciler import _extract_prompt
 
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")  # LiteLLM runs only with a key
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
         (anima_dir / "IDENTITY.md").write_text(
@@ -347,12 +349,13 @@ class TestExtractPrompt:
             result = await _extract_prompt(anima_dir)
         assert result is None
 
-    def test_prompt_synthesis_model_ignores_local_and_anima_models(self, tmp_path: Path) -> None:
+    def test_prompt_synthesis_model_uses_code_default_when_anima_cannot_run(self, tmp_path: Path) -> None:
         from core.anima.asset_reconciler import _resolve_prompt_synthesis_model
         from core.config.schemas import AnimaWorksConfig
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
+        # The Anima's credential is not configured, so it has no usable own model.
         config = AnimaWorksConfig.model_validate(
             {
                 "anima_defaults": {
@@ -383,13 +386,32 @@ class TestExtractPrompt:
 
         assert result == ("openai/qwen3.6-35b-a3b", "vllm-lb")
 
-    def test_prompt_synthesis_model_falls_back_to_registry_code_default(self, tmp_path: Path) -> None:
+    def test_prompt_synthesis_model_uses_anima_model_when_no_helper_is_configured(self, tmp_path: Path) -> None:
         from core.anima.asset_reconciler import _resolve_prompt_synthesis_model
         from core.config.schemas import AnimaWorksConfig
 
         anima_dir = tmp_path / "anima"
         anima_dir.mkdir()
-        config = AnimaWorksConfig.model_validate({"anima_defaults": {"model": "codex/gpt-5.4-mini"}})
+        config = AnimaWorksConfig.model_validate(
+            {
+                "credentials": {"openai": {"type": "codex_login"}},
+                "anima_defaults": {"model": "codex/gpt-5.4-mini", "credential": "openai"},
+            }
+        )
+
+        with patch("core.config.io.load_config", return_value=config):
+            result = _resolve_prompt_synthesis_model(anima_dir)
+
+        assert result == ("codex/gpt-5.4-mini", "openai")
+
+    def test_prompt_synthesis_model_falls_back_to_code_default_without_one_shot_mode(self, tmp_path: Path) -> None:
+        from core.anima.asset_reconciler import _resolve_prompt_synthesis_model
+        from core.config.schemas import AnimaWorksConfig
+
+        anima_dir = tmp_path / "anima"
+        anima_dir.mkdir()
+        # Mode G (Gemini CLI) has no one-shot backend.
+        config = AnimaWorksConfig.model_validate({"anima_defaults": {"model": "gemini/gemini-3-pro"}})
 
         with patch("core.config.io.load_config", return_value=config):
             result = _resolve_prompt_synthesis_model(anima_dir)
@@ -699,12 +721,16 @@ async def test_first_profile_wait_does_not_record_asset_failure(tmp_path):
     assert _asset_failure_records == {}
 
 
-def test_asset_helper_ignores_codex_anima_model(tmp_path):
+def test_asset_helper_prefers_configured_helper_over_codex_anima_model(tmp_path):
     from core.anima.asset_reconciler import _resolve_prompt_synthesis_model
     from core.config import AnimaWorksConfig
+    from core.config.schemas import CredentialConfig
 
     config = AnimaWorksConfig()
+    config.credentials["openai"] = CredentialConfig(type="codex_login")
     config.anima_defaults.model = "codex/account-model"
     config.anima_defaults.credential = "openai"
+    config.helper_models.default.model = "ollama/helper"
+    config.helper_models.default.credential = "anthropic"
     with patch("core.config.io.load_config", return_value=config):
-        assert _resolve_prompt_synthesis_model(tmp_path) == ("claude-sonnet-5-5", "anthropic")
+        assert _resolve_prompt_synthesis_model(tmp_path) == ("ollama/helper", "anthropic")

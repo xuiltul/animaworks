@@ -170,16 +170,16 @@ def test_fact_roles_accept_legacy_status_extraction_keys(tmp_path: Path) -> None
         assert resolved.source == "status.extraction_model"
 
 
-def test_status_background_and_anima_fallbacks_never_select_helper_models(tmp_path: Path) -> None:
+def test_background_model_and_main_lane_fallbacks_never_select_helper_models(tmp_path: Path) -> None:
     anima_dir = tmp_path / "alice"
     _write_status(
         anima_dir,
         {
             "model": "claude-opus-5-5",
             "credential": "anthropic",
-            "background_model": "claude-opus-5-5",
+            "background_model": "openai/background-only",
             "background_credential": "anthropic",
-            "fallback_model": "anthropic/claude-opus-5-5",
+            "fallback_model": "anthropic/claude-fallback-only",
             "fallback_models": ["openai/deepseek-v4-flash-0731"],
         },
     )
@@ -187,7 +187,7 @@ def test_status_background_and_anima_fallbacks_never_select_helper_models(tmp_pa
         {
             "anima_defaults": {
                 "model": "claude-opus-5-5",
-                "background_model": "claude-opus-5-5",
+                "background_model": "openai/background-only",
                 "fallback_models": ["openai/deepseek-v4-flash-0731"],
             }
         }
@@ -195,9 +195,13 @@ def test_status_background_and_anima_fallbacks_never_select_helper_models(tmp_pa
 
     resolved = [resolve_helper_model(role, anima_dir, config=config) for role in HELPER_MODEL_ROLES]
 
-    assert all(item.model != "claude-opus-5-5" for item in resolved)
-    assert all("claude-opus-5-5" not in item.model for item in resolved)
-    assert all(not any("deepseek-v4-flash-0731" in fallback.model for fallback in item.fallbacks) for item in resolved)
+    # "Own model" is the main model only, never the background model or main-lane fallbacks.
+    assert {(item.model, item.credential) for item in resolved} == {("claude-opus-5-5", "anthropic")}
+    assert all(item.is_self for item in resolved)
+    for item in resolved:
+        used = [item.model, *(fallback.model for fallback in item.fallbacks)]
+        assert not any(model in {"openai/background-only", "anthropic/claude-fallback-only"} for model in used)
+        assert not any("deepseek-v4-flash-0731" in model for model in used)
 
 
 def test_daily_summary_candidates_use_only_registry_fallbacks(tmp_path: Path) -> None:
@@ -207,7 +211,8 @@ def test_daily_summary_candidates_use_only_registry_fallbacks(tmp_path: Path) ->
     _write_status(
         anima_dir,
         {
-            "background_model": "claude-opus-5-5",
+            "model": "claude-opus-5-5",
+            "background_model": "openai/background-only",
             "fallback_models": ["openai/deepseek-v4-flash-0731"],
         },
     )
@@ -223,7 +228,7 @@ def test_daily_summary_candidates_use_only_registry_fallbacks(tmp_path: Path) ->
     )
     base = ModelConfig(
         model="claude-opus-5-5",
-        background_model="claude-opus-5-5",
+        background_model="openai/background-only",
         fallback_models=["openai/deepseek-v4-flash-0731"],
     )
     helper = resolve_helper_model("episode_summary", anima_dir, config=config)
@@ -236,12 +241,15 @@ def test_daily_summary_candidates_use_only_registry_fallbacks(tmp_path: Path) ->
         helper_model=helper,
     )
 
+    # Own model first, then the configured helper chain as fallbacks.
     assert [(item.model, item.credential) for item in candidates] == [
+        ("claude-opus-5-5", "anthropic"),
         ("codex/gpt-6-luna", "openai"),
         ("openai/deepseek-v4-flash", "gpu40-direct"),
     ]
-    assert all("claude-opus" not in item.model for item in candidates)
+    assert all(item.model != "openai/background-only" for item in candidates)
     assert all("deepseek-v4-flash-0731" not in item.model for item in candidates)
+    assert all(item.background_model is None and item.fallback_models == [] for item in candidates)
 
 
 def test_legacy_llm_fallback_maps_only_to_compatible_helper_roles() -> None:

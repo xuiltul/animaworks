@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py config -->
-<!-- generator: gen_reference/1  kind: config  source-sha256: 0d4f1cbb997a5c2b212d21b336d7d37b40747468e12d0ed623774cac29556cc4 -->
+<!-- generator: gen_reference/1  kind: config  source-sha256: ec7dd8acc357b7f6e3187e32ef6ad63f42cd64b2d136820018988670b1bb47db -->
 
 # 設定リファレンス
 
@@ -168,84 +168,84 @@
 |---|---|---|---|
 | `helper_models` | `HelperModelsConfig` | `{HelperModelsConfig}` | 補助LLM呼び出しごとのモデル、認証情報、明示的な代替候補、one-shot方針。 |
 | `helper_models.episode_summary` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.episode_summary.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.episode_summary.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.episode_summary.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.episode_summary.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.episode_summary.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.episode_summary.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.episode_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.episode_summary.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.episode_summary.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.fact_extraction` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.fact_extraction.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.fact_extraction.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.fact_extraction.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.fact_extraction.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.fact_extraction.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.fact_extraction.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.fact_extraction.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.fact_extraction.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.fact_extraction.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.fact_reconcile` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.fact_reconcile.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.fact_reconcile.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.fact_reconcile.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.fact_reconcile.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.fact_reconcile.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.fact_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.fact_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.fact_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.fact_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.weekly_consolidation` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.weekly_consolidation.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.weekly_consolidation.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.weekly_consolidation.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.weekly_consolidation.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.weekly_consolidation.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.weekly_consolidation.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.weekly_consolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.weekly_consolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.weekly_consolidation.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.project_consolidation` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.project_consolidation.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.project_consolidation.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.project_consolidation.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.project_consolidation.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.project_consolidation.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.project_consolidation.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.project_consolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.project_consolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.project_consolidation.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.conversation_compression` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.conversation_compression.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.conversation_compression.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.conversation_compression.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.conversation_compression.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.conversation_compression.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.conversation_compression.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.conversation_compression.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.conversation_compression.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.conversation_compression.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.distillation` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.distillation.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.distillation.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.distillation.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.distillation.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.distillation.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.distillation.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.distillation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.distillation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.distillation.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.reconsolidation` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.reconsolidation.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.reconsolidation.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.reconsolidation.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.reconsolidation.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.reconsolidation.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.reconsolidation.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.reconsolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.reconsolidation.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.reconsolidation.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.asset_reconcile` | `HelperModelRole \| None` | `null` | — |
-| `helper_models.asset_reconcile.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.asset_reconcile.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.asset_reconcile.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.asset_reconcile.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.asset_reconcile.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.asset_reconcile.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.asset_reconcile.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.asset_reconcile.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 | `helper_models.default` | `HelperModelRole` | `{HelperModelRole}` | — |
-| `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. |
+| `helper_models.default.model` | `str \| None` | `null` | Primary helper model identifier. Self roles (episode_summary, project/weekly consolidation, reconsolidation, distillation) use the Anima's own model unless this is set on the role. |
 | `helper_models.default.credential` | `str \| None` | `null` | Credential name for the primary model. |
 | `helper_models.default.fallbacks` | `list[HelperModelFallback]` | `[]` | Ordered explicit fallback models. |
 | `helper_models.default.fallbacks.model` | `str` | `"—"` | Fallback model identifier. |
 | `helper_models.default.fallbacks.credential` | `str \| None` | `null` | Credential name for the fallback model. |
-| `helper_models.default.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. |
+| `helper_models.default.allow_agent_sdk_fallback` | `bool` | `false` | Allow one-shot calls for this role to fall back to the Claude Agent SDK. On the Anima's own model it is allowed unless the role itself sets false. |
 | `helper_models.default.max_output_tokens` | `int \| None` | `null` | Maximum output tokens for one-shot calls made by this role. |
 
 ### `background_review`

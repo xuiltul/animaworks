@@ -156,7 +156,9 @@ async def _generate_compression_summary(
     anima_dir: Path | None = None,
 ) -> tuple[str, str, str, str]:
     """Use the conversation-compression role, then deterministic compression only."""
-    del model_config  # Main-lane models are deliberately not a helper fallback.
+    # The helper registry picks the model; it uses the Anima's own model only
+    # when no conversation_compression helper is configured.
+    del model_config
     try:
         summary = await _call_compression_llm(old_summary, turn_text, anima_dir=anima_dir)
         if summary and summary.strip():

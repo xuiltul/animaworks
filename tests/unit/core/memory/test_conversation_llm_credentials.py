@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-"""Tests for ConversationMemory._call_llm() consolidation model usage.
+"""Tests for ConversationMemory._call_llm() helper-model usage.
 
-Since _call_llm() always uses the consolidation model (via core.llm.oneshot),
-these tests verify that the consolidation model kwargs are correctly
-applied and that anima-specific provider kwargs are NOT injected.
+_call_llm() goes through the helper registry and core.llm.oneshot, so these
+tests verify that the resolved LiteLLM kwargs are applied and that provider
+kwargs from the ConversationMemory's ModelConfig are NOT injected.
 """
 
 from pathlib import Path
@@ -31,7 +31,7 @@ def _make_acompletion_mock() -> AsyncMock:
 
 
 class TestCallLlmConsolidationModel:
-    """_call_llm always uses the consolidation model, not the anima's model."""
+    """_call_llm uses the helper-resolved kwargs, not the ModelConfig's provider kwargs."""
 
     @pytest.mark.asyncio
     async def test_uses_consolidation_model(self, anima_dir: Path) -> None:
@@ -69,7 +69,7 @@ class TestCallLlmConsolidationModel:
         conv = ConversationMemory(anima_dir, cfg)
         mock_ac = _make_acompletion_mock()
 
-        consolidation_kwargs = {"model": "anthropic/claude-sonnet-4-6"}
+        consolidation_kwargs = {"model": "anthropic/claude-sonnet-4-6", "api_key": "test-key"}
         with (
             patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value=consolidation_kwargs),
             patch("litellm.acompletion", mock_ac),
@@ -89,7 +89,13 @@ class TestCallLlmConsolidationModel:
             assert key not in kw.kwargs
 
     @pytest.mark.asyncio
-    async def test_consolidation_model_without_api_key(self, anima_dir: Path) -> None:
+    async def test_keyless_anthropic_model_goes_straight_to_agent_sdk(
+        self,
+        anima_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
         cfg = ModelConfig(model="claude-sonnet-4-6")
         from core.memory.conversation.memory import ConversationMemory
 
@@ -100,9 +106,10 @@ class TestCallLlmConsolidationModel:
         with (
             patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value=consolidation_kwargs),
             patch("litellm.acompletion", mock_ac),
+            patch("core.llm.oneshot._try_agent_sdk", new_callable=AsyncMock, return_value="sdk summary") as sdk,
         ):
-            await conv._call_llm("sys", "user msg")
+            assert await conv._call_llm("sys", "user msg") == "sdk summary"
 
-        kw = mock_ac.call_args
-        assert kw.kwargs["model"] == "anthropic/claude-sonnet-4-6"
-        assert "api_key" not in kw.kwargs
+        # LiteLLM cannot authenticate without a key, so it is not attempted.
+        mock_ac.assert_not_called()
+        assert sdk.await_args.kwargs["model"] == "anthropic/claude-sonnet-4-6"
