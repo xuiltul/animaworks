@@ -204,6 +204,15 @@ def _public_ports(value: Any) -> list[int]:
     return sorted({_int_in(p, "egress.public_ports", range(1, 65536)) for p in value})
 
 
+def _probe_port(public_ports: list[int]) -> int:
+    """A port 1.1.1.1 answers on that the enclave's rules still close.
+
+    The enclave refuses to start when a probe connects, so the probe must use a
+    port that ``public_ports`` leaves closed (853 is DNS over TLS).
+    """
+    return next(p for p in (443, 853, 53) if p not in public_ports)
+
+
 def _host_uid(spec: dict[str, Any], host_user: str) -> int:
     if "host_uid" in spec:
         return _int_in(spec["host_uid"], "host_uid", range(0, 2**31))
@@ -400,7 +409,7 @@ def enclave_config(inst: Instance) -> dict[str, Any]:
             "egress": {"stages": inst.egress_stages},
             # The startup guard refuses to boot while these are reachable,
             # i.e. before the pf rules are loaded.
-            "egress_probe": [f"127.0.0.1:{inst.host_api_port}", "1.1.1.1:443"],
+            "egress_probe": [f"127.0.0.1:{inst.host_api_port}", f"1.1.1.1:{_probe_port(inst.public_ports)}"],
         },
         "external_tasks": {"enabled": False},
     }

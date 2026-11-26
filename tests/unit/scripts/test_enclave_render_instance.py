@@ -234,3 +234,13 @@ def test_public_ports_reach_the_egress_daemon(render) -> None:
 def test_no_public_ports_by_default(render) -> None:
     args = render.egress_daemon(render.load_instance(_spec()))["ProgramArguments"]
     assert "--public-ports" not in args
+
+
+def test_the_egress_probe_uses_a_port_the_enclave_keeps_closed(render) -> None:
+    def probe(**egress) -> list[str]:
+        spec = _spec(egress={"loopback_ports": "18640", **egress})
+        files = render.render(render.load_instance(spec))
+        return json.loads(files["enclave-config.json"])["enclave"]["egress_probe"]
+
+    assert probe()[-1] == "1.1.1.1:443"
+    assert probe(public_ports=[80, 443])[-1] == "1.1.1.1:853"
