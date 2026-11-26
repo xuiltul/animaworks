@@ -423,7 +423,11 @@ def patch_anthropic_compression(summary_text: str = "Compressed summary."):
         sys.modules["litellm"] = mock_mod
 
     try:
-        with patch("litellm.acompletion", mock_acompletion):
+        # Keep the LiteLLM stage on: the mock needs no Anthropic key (see patch_litellm).
+        with (
+            patch("litellm.acompletion", mock_acompletion),
+            patch("core.llm.oneshot._litellm_lacks_anthropic_key", return_value=False),
+        ):
             yield mock_acompletion
     finally:
         if saved is None:

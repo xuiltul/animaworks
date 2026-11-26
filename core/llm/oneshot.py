@@ -485,10 +485,23 @@ async def _try_agent_sdk(
         options = ClaudeAgentOptions(**options_kwargs)
 
     chunks: list[str] = []
+    failure: str | None = None
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
             async for message in client.receive_response():
+                # Same failure envelope as the Mode S executor: an assistant
+                # ``error`` (e.g. authentication_failed) or an error result.
+                # The CLI then sends its error text ("Not logged in · Please
+                # run /login") as ordinary content, which must not pass as an answer.
+                assistant_error = getattr(message, "error", None)
+                if isinstance(assistant_error, str) and assistant_error:
+                    failure = assistant_error
+                subtype = getattr(message, "subtype", "")
+                if getattr(message, "is_error", False) is True or (
+                    isinstance(subtype, str) and subtype.startswith("error_")
+                ):
+                    failure = failure or subtype or "error_result"
                 if hasattr(message, "content"):
                     for block in message.content:
                         if hasattr(block, "text"):
@@ -497,6 +510,9 @@ async def _try_agent_sdk(
         logger.warning("Agent SDK one-shot failed: %s", e)
         return None
 
+    if failure:
+        logger.warning("Agent SDK one-shot returned an error (%s): %s", failure, "".join(chunks)[:120])
+        return None
     return "".join(chunks) or None
 
 
