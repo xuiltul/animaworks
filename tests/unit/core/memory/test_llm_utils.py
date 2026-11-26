@@ -247,6 +247,11 @@ class TestEnsureCredentialsInEnv:
 class TestOneShotCompletion:
     """Tests for one_shot_completion() and its fallback behavior."""
 
+    @pytest.fixture(autouse=True)
+    def _anthropic_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # LiteLLM is skipped for an Anthropic model with no key at all.
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+
     @pytest.mark.asyncio
     @patch("core.llm.oneshot.get_llm_kwargs_for_model")
     @patch("core.llm.oneshot._try_agent_sdk")

@@ -26,6 +26,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
+from core.config.helper_models import ONE_SHOT_EXECUTION_MODES
 from core.execution.fallback_activity import run_with_model_fallback
 from core.i18n import t
 from core.paths import load_prompt
@@ -205,10 +206,29 @@ def _helper_model_variants(helper_model: Any) -> list[Any]:
             model=fallback.model,
             credential=fallback.credential,
             fallbacks=[],
+            # A fallback is never the Anima's own model, even after a self primary.
+            source=f"fallback:{helper_model.source}",
         )
         for fallback in helper_model.fallbacks
     )
     return variants
+
+
+def _is_self_helper(helper_model: Any) -> bool:
+    return getattr(helper_model, "is_self", False) is True
+
+
+def _own_model_config(base_model_config: Any, helper_model: Any) -> Any:
+    """Run a self-role agent turn exactly as the Anima runs, minus main-lane fallbacks."""
+    return base_model_config.model_copy(
+        update={
+            "max_tokens": helper_model.max_output_tokens or getattr(base_model_config, "max_tokens", 8192),
+            "fallback_model": None,
+            "fallback_models": [],
+            "background_model": None,
+            "background_credential": None,
+        }
+    )
 
 
 def _consolidation_model_config(
@@ -276,7 +296,9 @@ def _consolidation_model_config(
 
 def _consolidation_model_configs(base_model_config: Any, helper_model: Any, cfg: Any) -> list[Any]:
     return [
-        _consolidation_model_config(base_model_config, candidate, cfg)
+        _own_model_config(base_model_config, candidate)
+        if _is_self_helper(candidate)
+        else _consolidation_model_config(base_model_config, candidate, cfg)
         for candidate in _helper_model_variants(helper_model)
     ]
 
@@ -345,7 +367,7 @@ def _split_episode_prompt_to_limit(
 
 
 # Execution modes that one_shot_completion can serve (LiteLLM, Agent SDK, Codex SDK).
-_ONE_SHOT_MODES = frozenset({"a", "s", "c"})
+_ONE_SHOT_MODES = frozenset(mode.lower() for mode in ONE_SHOT_EXECUTION_MODES)
 
 
 def _episode_summary_model_configs(
@@ -369,7 +391,8 @@ def _episode_summary_model_configs(
             mode = resolve_execution_mode(cfg, candidate.model)
         except Exception:
             mode = "A"
-        if mode.lower() not in _ONE_SHOT_MODES:
+        # The resolver already checked the Anima's own (possibly explicit) mode.
+        if mode.lower() not in _ONE_SHOT_MODES and not _is_self_helper(candidate):
             continue
         key = (candidate.model, candidate.credential)
         if key in seen:

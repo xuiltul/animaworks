@@ -49,6 +49,13 @@ def _no_backoff_sleep():
 
 
 @pytest.fixture(autouse=True)
+def _anthropic_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give LiteLLM an Anthropic key so its stage runs (it is skipped without one)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _fixed_mode_s_realm(data_dir: Path):
     """Pin the Mode-S auth realm through the temporary config file."""
     from core.config import invalidate_cache
@@ -318,3 +325,115 @@ async def test_unknown_error_degrades_to_current_fallback(
     assert mock_litellm.await_count == 1
     agent_sdk_client.assert_called_once()
     assert guard.blocked_remaining("anthropic:api") == 0.0
+
+
+# ── LiteLLM is skipped when it has no Anthropic key ─────────────────────────
+
+
+def _no_anthropic_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+
+
+@pytest.mark.parametrize("model", ["claude-opus-5-5", "anthropic/claude-sonnet-4-6"])
+async def test_keyless_anthropic_model_skips_litellm_and_uses_agent_sdk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    agent_sdk_client: MagicMock,
+    model: str,
+) -> None:
+    # claude_code_login (or a codex_login named for a Claude model) has no key.
+    _no_anthropic_key_env(monkeypatch)
+    guard = _make_guard(tmp_path)
+    mock_litellm = AsyncMock(return_value="should-not-run")
+    with (
+        caplog.at_level(logging.DEBUG, logger="core.llm.oneshot"),
+        patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value={"model": model}),
+        patch("litellm.acompletion", new=mock_litellm),
+        patch("core.llm.guard.rate_guard.get_rate_guard", return_value=guard),
+    ):
+        result = await llm_utils.one_shot_completion("hi", model=model, credential="anthropic")
+
+    assert result == "sdk"
+    mock_litellm.assert_not_called()
+    agent_sdk_client.assert_called_once()
+    assert not any(rec.levelno >= logging.ERROR for rec in caplog.records)
+    assert guard.blocked_remaining("anthropic:api") == 0.0
+
+
+async def test_keyless_anthropic_model_without_sdk_fallback_returns_none(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    agent_sdk_client: MagicMock,
+) -> None:
+    _no_anthropic_key_env(monkeypatch)
+    mock_litellm = AsyncMock(return_value="should-not-run")
+    with (
+        caplog.at_level(logging.DEBUG, logger="core.llm.oneshot"),
+        patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value={"model": "claude-opus-5-5"}),
+        patch("litellm.acompletion", new=mock_litellm),
+        patch("core.llm.guard.rate_guard.get_rate_guard", return_value=_make_guard(tmp_path)),
+    ):
+        result = await llm_utils.one_shot_completion("hi", model="claude-opus-5-5", allow_agent_sdk_fallback=False)
+
+    assert result is None
+    mock_litellm.assert_not_called()
+    agent_sdk_client.assert_not_called()
+    assert not any("human attention" in rec.message for rec in caplog.records)
+
+
+def test_sync_one_shot_skips_keyless_litellm_too(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    agent_sdk_client: MagicMock,
+) -> None:
+    _no_anthropic_key_env(monkeypatch)
+    mock_litellm = AsyncMock(return_value="should-not-run")
+    with (
+        patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value={"model": "claude-opus-5-5"}),
+        patch("litellm.acompletion", new=mock_litellm),
+        patch("core.llm.guard.rate_guard.get_rate_guard", return_value=_make_guard(tmp_path)),
+    ):
+        result = llm_utils.one_shot_completion_sync("hi", model="claude-opus-5-5")
+
+    assert result == "sdk"
+    mock_litellm.assert_not_called()
+    agent_sdk_client.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "env"),
+    [
+        ({"model": "claude-opus-5-5", "api_key": "sk-from-credential"}, {}),
+        ({"model": "claude-opus-5-5"}, {"ANTHROPIC_API_KEY": "sk-env"}),
+        ({"model": "claude-opus-5-5"}, {"ANTHROPIC_AUTH_TOKEN": "token-env"}),
+        ({"model": "bedrock/jp.anthropic.claude-sonnet-4-6"}, {}),
+        ({"model": "vertex_ai/claude-sonnet-4-6"}, {}),
+        ({"model": "openai/gpt-test"}, {}),
+    ],
+)
+async def test_litellm_still_runs_when_it_can_authenticate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    agent_sdk_client: MagicMock,
+    kwargs: dict,
+    env: dict,
+) -> None:
+    _no_anthropic_key_env(monkeypatch)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    mock_litellm = AsyncMock(
+        return_value=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="litellm"))])
+    )
+    with (
+        patch("core.llm.oneshot.get_llm_kwargs_for_model", return_value=dict(kwargs)),
+        patch("litellm.acompletion", new=mock_litellm),
+        patch("core.llm.guard.rate_guard.get_rate_guard", return_value=_make_guard(tmp_path)),
+    ):
+        result = await llm_utils.one_shot_completion("hi", model=kwargs["model"])
+
+    assert result == "litellm"
+    mock_litellm.assert_awaited_once()
+    agent_sdk_client.assert_not_called()

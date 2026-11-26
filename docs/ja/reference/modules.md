@@ -1,5 +1,5 @@
 <!-- 自動生成ファイル・編集禁止。再生成: uv run python scripts/gen_reference.py modules -->
-<!-- generator: gen_reference/1  kind: modules  source-sha256: c918682f102b0d4ffed2ec72b7a918477028b07362835eae505029d9c1fdc8d8 -->
+<!-- generator: gen_reference/1  kind: modules  source-sha256: d622e3c9deba09c368fd17c9903eff2af5789da1022de62d183596598a06643a -->
 
 # モジュール一覧
 
@@ -162,7 +162,7 @@ Digital Anima のライフサイクルと実行時オブジェクト。
 | `core.anima.image_artifacts` | 219 | — |
 | `core.anima.inbox` | 1130 | — |
 | `core.anima.inbox_overflow` | 100 | — |
-| `core.anima.lifecycle` | 1683 | — |
+| `core.anima.lifecycle` | 1706 | — |
 | `core.anima.messaging` | 1332 | — |
 | `core.anima.response_normalize` | 141 | — |
 | `core.anima.roster` | 83 | — |
@@ -203,7 +203,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.env_slots` | 92 | — |
 | `core.config.file_access_policy` | 608 | — |
 | `core.config.global_permissions` | 259 | — |
-| `core.config.helper_models` | 497 | — |
+| `core.config.helper_models` | 627 | — |
 | `core.config.io` | 530 | Configuration I/O: singleton cache, load, and save. |
 | `core.config.local_llm` | 69 | Helpers for local Ollama-backed model defaults and role presets. |
 | `core.config.migrate` | 201 | — |
@@ -215,7 +215,7 @@ Slack、Discord、Chatwork の共通送信クライアントとトークン解�
 | `core.config.onepassword` | 126 | Thin wrapper around the 1Password ``op`` CLI. |
 | `core.config.ops` | 203 | Application operations for reading and updating AnimaWorks configuration. |
 | `core.config.resolver` | 160 | Configuration resolution: status.json merge with anima_defaults. |
-| `core.config.schemas` | 1588 | Pydantic configuration schemas for AnimaWorks. |
+| `core.config.schemas` | 1597 | Pydantic configuration schemas for AnimaWorks. |
 | `core.config.vault` | 476 | Credential vault with PyNaCl SealedBox encryption. |
 | `core.config.vault_ops` | 615 | Core operator operations for the vault and its 1Password mapping. |
 | `core.config.vault_sources` | 219 | Mapping between vault keys and 1Password references. |
@@ -551,7 +551,7 @@ LLM エラー分類、レート制御、リトライの共通機能。
 | `core.llm.guard.error_classifier` | 805 | Centralized LLM API error classification for coordinated recovery. |
 | `core.llm.guard.rate_guard` | 341 | Cross-process LLM rate guard (fleet-wide circuit breaker). |
 | `core.llm.helper_completion` | 145 | — |
-| `core.llm.oneshot` | 947 | Shared LLM helper utilities for memory-management modules. |
+| `core.llm.oneshot` | 990 | Shared LLM helper utilities for memory-management modules. |
 
 ## `core.llm.guard`
 
@@ -579,7 +579,7 @@ Model Context Protocol サーバーとクライアント。
 | `core.memory` | 20 | — |
 | `core.memory._llm_parse（非公開）` | 185 | Shared LLM-output parsing helpers for the memory pipeline. |
 | `core.memory.config_reader` | 31 | — |
-| `core.memory.conversation.compression` | 322 | Compression logic for conversation memory. |
+| `core.memory.conversation.compression` | 324 | Compression logic for conversation memory. |
 | `core.memory.conversation.finalize` | 493 | Session finalization for conversation memory. |
 | `core.memory.conversation.memory` | 349 | Conversation memory (会話記憶 / ワーキングメモリ) management. |
 | `core.memory.conversation.models` | 149 | Data classes and constants for conversation memory. |
