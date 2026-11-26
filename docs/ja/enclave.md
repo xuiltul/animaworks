@@ -77,7 +77,7 @@ id -u "$HOST_USER"
 }
 ```
 
-`allowed_llm_credentials` には、隔離側の各 anima が実際に使う認証情報名だけを列挙する。`external_tasks.enabled` は初期値が `true` なので、隔離側では `false` にする。新しく作った anima の `permissions.json` は `file_roots` が `["/"]` になっているため、anima 自身のディレクトリなど必要な範囲に書き換える（そのままだと起動時ガードが起動を拒否する）。隔離モードでは Slack・Discord・Zoom・GitHub Webhook のゲートウェイを起動しない。ほかの起動時ガードも満たす必要があるため、イベントエクスポートや外部メッセージ連携を有効にせず、各 anima の `permissions.json` でファイルアクセスを必要な範囲に制限する。entry anima の外部ツールを制限する場合は `enclave_records` を許可する。
+`allowed_llm_credentials` には、隔離側の各 anima が実際に使う認証情報名だけを列挙する。`external_tasks.enabled` は初期値が `true` なので、隔離側では `false` にする。新しく作った anima の `permissions.json` は `file_roots` が `["/"]` になっているため、anima 自身のディレクトリなど必要な範囲に書き換える（そのままだと起動時ガードが起動を拒否する）。隔離モードでは Slack・Discord・Zoom・GitHub Webhook のゲートウェイを起動しない。`human_notification`（call_human の送り先）は有効にできる。外部の送り先へ出る件名と本文は、ゲートウェイの答えと同じ egress のステージを通って監査記録に残り、ステージが止めたものは外へ出ない（隔離側の Web UI には元の文面で届く）。送り先へ通信するには、pf の外向き制限でその宛先を許可しておく。ほかの起動時ガードも満たす必要があるため、イベントエクスポートや外部メッセージ連携を有効にせず、各 anima の `permissions.json` でファイルアクセスを必要な範囲に制限する。entry anima の外部ツールを制限する場合は `enclave_records` を許可する。
 
 異なる thread の ask を gateway の `max_concurrency` まで並列実行するには、entry anima の `status.json` に `chat_max_concurrency`（1〜10）を設定し、gateway の `max_concurrency` 以上にする。SQL ソースの SSM トンネルは、ソースごとに1本をすべてのプロセスで共有する（同時に走るクエリは1本のトンネルの中で多重化される）。固定ポート（`tunnel.local_port`）で使う場合、トンネルを張り直すときは `local_port` から始まる連続ポートのうち空いているものを1つ予約する。前のトンネルがポートを手放す前に張り直すことがあるので、`tunnel.local_port_count` は 2 以上にする。egress firewall の `--loopback-ports` にはその範囲を `33061-33070` のように渡す。
 

@@ -297,3 +297,53 @@ def test_has_external_channels_reflects_configured_channels():
         )
     )
     assert with_ntfy.has_external_channels is True
+
+
+# ── Enclave egress for external notifications ───────────────
+
+
+class _WebMock(MockChannel):
+    @property
+    def channel_type(self) -> str:
+        return "web"
+
+
+def _enclave_config(stages: list[dict[str, Any]]) -> SimpleNamespace:
+    return SimpleNamespace(enclave=SimpleNamespace(enabled=True, egress={"stages": stages}))
+
+
+class TestEnclaveEgress:
+    @pytest.fixture(autouse=True)
+    def _data_dir(self, tmp_path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("core.paths.get_data_dir", lambda: tmp_path)
+        monkeypatch.setattr("core.notification.notifier._record_timeline_notification", lambda *a, **k: None)
+        return tmp_path
+
+    @pytest.mark.asyncio
+    async def test_external_text_is_masked_but_web_keeps_the_original(self, monkeypatch: pytest.MonkeyPatch):
+        stages = [{"type": "regex_denylist", "patterns": [{"regex": "PATIENT-[0-9]+", "action": "redact"}]}]
+        monkeypatch.setattr("core.config.models.load_config", lambda: _enclave_config(stages))
+        web, ext = _WebMock({}), MockChannel({})
+        status = await HumanNotifier([web, ext]).notify("about PATIENT-12", "see PATIENT-34 now")
+        assert web.sent[0]["body"] == "see PATIENT-34 now"
+        assert "PATIENT-34" not in ext.sent[0]["body"] and "PATIENT-12" not in ext.sent[0]["subject"]
+        assert all("ERROR" not in s for s in status)
+
+    @pytest.mark.asyncio
+    async def test_blocked_text_never_reaches_external_channels(self, monkeypatch: pytest.MonkeyPatch):
+        stages = [{"type": "regex_denylist", "patterns": [{"regex": "sk-ant-[A-Za-z0-9_-]{20,}", "action": "block"}]}]
+        monkeypatch.setattr("core.config.models.load_config", lambda: _enclave_config(stages))
+        web, ext = _WebMock({}), MockChannel({})
+        status = await HumanNotifier([web, ext]).notify("key", "sk-ant-" + "a" * 30)
+        assert ext.sent == []
+        assert len(web.sent) == 1
+        assert any("blocked by the enclave egress stages" in s for s in status)
+
+    @pytest.mark.asyncio
+    async def test_outside_an_enclave_text_is_unchanged(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(
+            "core.config.models.load_config", lambda: SimpleNamespace(enclave=SimpleNamespace(enabled=False))
+        )
+        ext = MockChannel({})
+        await HumanNotifier([ext]).notify("s", "PATIENT-1")
+        assert ext.sent[0]["body"] == "PATIENT-1"
